@@ -1,0 +1,16 @@
+[build-system]
+requires = ["flit"]
+build-backend = "flit.buildapi"
+
+[tool.flit.metadata]
+module = "big"
+author = "Larry Hastings"
+author-email = "larry@hastings.org"
+home-page = "https://github.com/larryhastings/big/"
+requires-python = ">=3.6"
+description-file = "README.md"
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "Programming Language :: Python :: 3 :: Only",
+    ]
