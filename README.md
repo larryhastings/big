@@ -257,6 +257,9 @@ Functions for working with files, directories, and I/O.
 >
 > If `enumerate` is true, returns a list of tuples of (line_number, line).
 > The first line of the file is line number 1.
+>
+> For simplicity of implementation, the entire file is read in to memory
+> at one time.  If `case_insensitive` is True, a lowercased copy is also used.
 
 
 #### `file_mtime(path)`
@@ -305,6 +308,9 @@ Functions for working with files, directories, and I/O.
 >
 > If `enumerate` is true, returns a list of tuples of `(line_number, line)`.
 > The first line of the file is line number 1.
+>
+> For simplicity of implementation, the entire file is read in to memory
+> at one time.  If `case_insensitive` is True, a lowercased copy is also used.
 >
 > (Tip: to perform a case-insensitive pattern match, pass in the
 > `re.IGNORECASE` flag into flags for this function (if pattern is a string
