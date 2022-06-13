@@ -172,6 +172,22 @@ section for more information.
 Functions for working with builtins.  (Named `builtin` to avoid a
 name collision with the `builtins` module.)
 
+In general, the idea with these functions is a principle I first
+read about in either
+[Code Complete](http://aroma.vn/web/wp-content/uploads/2016/11/code-complete-2nd-edition-v413hav.pdf)
+or
+[Writing Solid Code:](http://cs.brown.edu/courses/cs190/2008/documents/restricted/Writing%20Solid%20Code.pdf)
+
+> *Don't associate with losers.*
+
+The intent here is, try to design APIs where it's impossible to call them
+the wrong way.  Restrict the inputs to your functions to values you can
+always handle, and you won't ever have to return an error.
+
+The functions in this sub-module are designed to always work.  None of
+them should ever raise an exception--no matter *what* nonsense you pass in.
+(But don't take that as a challenge!)
+
 
 #### `get_float(o, default=_sentinel)`
 
