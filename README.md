@@ -508,17 +508,15 @@ section below for a higher-level view on some of these functions.
 > with one or more lines that are wider than that column's `max_width`.
 > The supported values are:
 >
-> `OverflowStrategy.RAISE`: Raise an OverflowError.  The default.
->
-> `OverflowStrategy.INTRUDE_ALL`: Intrude into all subsequent columns
-> on all lines where the overflowed column is wider than its max_width.
->
-> `OverflowStrategy.DELAY_ALL`: Delay all columns after the overflowed
-> column, not beginning any until after the last overflowed line
-> in the overflowed column.
+> * `OverflowStrategy.RAISE`: Raise an OverflowError.  The default.
+> * `OverflowStrategy.INTRUDE_ALL`: Intrude into all subsequent columns
+>   on all lines where the overflowed column is wider than its `max_width`.
+> * `OverflowStrategy.DELAY_ALL`: Delay all columns after the overflowed
+>   column, not beginning any until after the last overflowed line
+>   in the overflowed column.
 >
 > When `overflow_strategy` is `INTRUDE_ALL` or `DELAY_ALL`, and
-> either overflow_before or overflow_after is nonzero, these
+> either `overflow_before` or `overflow_after` is nonzero, these
 > specify the number of extra lines before or after
 > the overflowed lines in a column.
 
@@ -970,7 +968,8 @@ This implementation also fixes some minor warts with the existing API:
 
 - In Python's implementation, `static_order` and `get_ready`/`done` are mutually exclusive.  If you ever call
   `get_ready` on a graph,  you can never call `static_order`, and vice-versa.  The implementaiton in **big**
-  doesn't have this restriction, because `static_order` internally creates its own view.
+  doesn't have this restriction, because its implementation of `static_order` creates and uses a new view object
+  every time it's called..
 - In Python's implementation, you can only iterate over the graph once, or call `static_order` once.
   The implementation in **big** solves this in several ways: it allows you to create as many views as you
   want, and you can call the new `reset` method on a view to reset it to its initial state.
@@ -978,42 +977,51 @@ This implementation also fixes some minor warts with the existing API:
 #### Graph / view coherence
 
 So what does it mean for a view to no longer be coherent with the graph?
-Let's say we have a graph `g`.  We add an edge:
+Consider the following code:
 
 ```Python
+g = big.TopologicalSorter()
 g.add('B', 'A')
+g.add('C', 'A')
+g.add('D', 'B', 'C')
+g.add('B', 'A')
+v = g.view()
+g.ready() # returns ('A',)
+g.add('A', 'Q')
 ```
 
-'B' now depends on 'A' in the graph.
+First this code creates a graph `g` with a classic "diamond"
+dependency pattern.  Then it creates a new view `v`, and gets
+the currently "ready" nodes, which consists just of the node
+`'A'`.  Finally it adds a new dependency: `'A'` depends on `'Q'`.
 
-Next let's consider a view `v`.  What if `v` has already been iterating
-over the graph, and in view `v`, `B` has already been returned by
-`get_ready`, but `A` _hasn't_ yet been returned by `get_ready`?
-That doesn't make sense.  `B` can't have become ready _before_ `A`.
+At this moment, view `v` is no longer _coherent._  `'A'` has been
+marked as "ready", but `'Q'` has not.  And yet `'A'` depends on `'Q'`.
+All those statements can't be true at the same time!
 So view `v` is no longer _coherent,_  and any attempt to interact
 with `v` raises an exception.
 
 To state it more precisely: if view `v` is a view on graph `g`,
-and you call `g.add('B', 'A')`,
+and you call `g.add('Z', 'Y')`,
 and neither of these statements is true in view `v`:
 
-- 'A' has been marked as `done`.
-- 'B' has not yet been yielded by `get_ready`.
+- 'Y' has been marked as `done`.
+- 'Z' has not yet been yielded by `get_ready`.
 
 then `v` is no longer "coherent".
 
-(If 'A' has been marked as `done`, then it's okay to make 'B' dependent on
-'A' regardless of what state 'B' is in.  Likewise, if 'B' hasn't been yielded
-by `get_ready` yet, then it's okay to make 'B' dependent on 'A' regardless
-of what state 'A' is in.)
+(If 'Y' has been marked as `done`, then it's okay to make 'Z' dependent on
+'Y' regardless of what state 'Y' is in.  Likewise, if 'Z' hasn't been yielded
+by `get_ready` yet, then it's okay to make 'Z' dependent on 'Y' regardless
+of what state 'Y' is in.)
 
 Note that you can restore a view to coherence.  In this case,
-removing either `A` or `B` from `g` would resolve the incoherence
+removing either `Y` or `Z` from `g` would resolve the incoherence
 between `v` and `g`, and `v` would start working again.
 
 Also note that you can have multiple views, in various states of iteration,
 and by modifying the graph you may cause some to become incoherent but not
-others.  The views are completely independent of each other.
+others.  Views are completely independent from each other.
 
 
 ## Bound inner classes
@@ -1037,9 +1045,10 @@ i = o.Inner()
 ```
 
 When `o.method` is called, Python automatically passes in the `o` object as the first parameter
-(generally called `self`). But there's no built-in way for the `o.Inner` object being constructed
-to automatically get a reference to the `o` `Outer` object. If you need one, you must pass it
-in yourself, like so:
+(generally called `self`). But that doesn't happen when `o.Inner` is called.  (It does pass in
+a `self`, but in this case it's the newly-created `Inner` object.)  There's just no built-in way
+for the `o.Inner` object being constructed to automatically get a reference to the `o` `Outer`
+object.  If you need one, you must explicitly pass one in, like so:
 
 ```Python
 class Outer(object):
@@ -1054,20 +1063,21 @@ o.method()
 i = o.Inner(o)
 ```
 
-It seems redundant to have to pass in `o` as an argument to the `Inner` constructor.
-You don't have to pass in `o` explicitly to method calls; why should you have to pass
-it in explicitly to inner classes?  Well--now you can!  You just need to decorate
-the inner class with `@big.BoundInnerClass`.
+This seems redundant.  You don't have to pass in `o` explicitly to method calls;
+why should you have to pass it in explicitly to inner classes?  Well--now you don't have to!
+You just need to decorate the inner class with `@big.BoundInnerClass`.
 
 #### Using bound inner classes
 
-Let's modify the above example to use the recipe:
+Let's modify the above example to use our `BoundInnerClass` decorator:
 
 ```Python
 from big import BoundInnerClass
+
 class Outer(object):
     def method(self):
         pass
+
     @BoundInnerClass
     class Inner(object):
         def __init__(self, outer):
@@ -1080,7 +1090,7 @@ i = o.Inner()
 
 Notice that `Inner.__init__` now accepts an `outer` parameter,
 even though you didn't pass in any arguments to `o.Inner`.
-Thanks, `BoundInnerClass`!
+Thanks, `BoundInnerClass`!  You've saved the day.
 
 #### Inheritance
 
@@ -1089,11 +1099,12 @@ It's not all that difficult, you merely need to obey the following rules:
 
 1. *A bound inner class can inherit normally from any unbound class.*
 
-2. *To subclass from a bound inner class while inside the same outer class,
-or when referencing the inner class from the outer class (as opposed to
-an instance of the outer class), you must actually subclass or reference
-`classname.cls`.*  This is because inside the outer class, the "class" you
-see is actually an instance of a `BoundInnerClass` object.
+2. *To subclass from a bound inner class while still inside the outer
+class scope, or when referencing the inner class from the outer class
+(as opposed to an instance of the outer class), you must actually
+subclass or reference `classname.cls`.*  This is because inside the
+outer class, the "class" you see is actually an instance of a
+`BoundInnerClass` object.
 
 3. *All classes that inherit from a bound inner class must always call the
 superclass's `__init__`. You don't need to pass in the outer parameter;
@@ -1102,8 +1113,8 @@ it'll be automatically passed in to the superclass's `__init__` as before.*
 4. *An inner class that inherits from a bound inner class, and which also wants
 to be bound to the outer object, should be decorated with `BoundInnerClass`.*
 
-5. *An inner class that inherits from a bound inner class, but isn't interested
-in being bound to the outer object, should be decorated with UnboundInnerClass.*
+5. *An inner class that inherits from a bound inner class, but doesn't want
+to be bound to the outer object, should be decorated with UnboundInnerClass.*
 
 Restating the last two rules: every class that descends from any `BoundInnerClass`
 should be decorated with either `BoundInnerClass` or `UnboundInnerClass`.
@@ -1114,10 +1125,12 @@ Here's a simple example using inheritance with bound inner classes:
 from big import BoundInnerClass, UnboundInnerClass
 
 class Outer(object):
+
     @BoundInnerClass
     class Inner(object):
         def __init__(self, outer):
             self.outer = outer
+
     @UnboundInnerClass
     class ChildOfInner(Inner.cls):
         def __init__(self):
@@ -1152,10 +1165,12 @@ its `__init__`, just decorate it with `BoundInnerClass` instead of
 from big import BoundInnerClass
 
 class Outer(object):
+
     @BoundInnerClass
     class Inner(object):
         def __init__(self, outer):
             self.outer = outer
+
     @BoundInnerClass
     class ChildOfInner(Inner.cls):
         def __init__(self, outer):
@@ -1224,3 +1239,8 @@ You can see more complex examples of using inheritance with
   the code to cache the bound inner class instance before a second
   thread could ever get a reference to the outer object.
 
+## Release history
+
+**0.5**
+
+Initial release.
