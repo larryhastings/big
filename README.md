@@ -759,7 +759,7 @@ This trio of functions gives you the following word-wrap superpowers:
 
 * Paragraphs of text representing embedded "code" don't get word-wrapped.
   Instead, their formatting is preserved.
-* Multiple strings can be merged together into columns.
+* Multiple texts can be merged together into multiple columns.
 
 #### Split text array
 
