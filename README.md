@@ -167,7 +167,7 @@ section for more information.
 > be decorated with either `BoundInnerClass` or `UnboundInnerClass`.
 
 
-### `big.builtin`
+## `big.builtin`
 
 Functions for working with builtins.  (Named `builtin` to avoid a
 name collision with the `builtins` module.)
