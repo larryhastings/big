@@ -310,7 +310,7 @@ Functions for working with files, directories, and I/O.
 > The first line of the file is line number 1.
 >
 > For simplicity of implementation, the entire file is read in to memory
-> at one time.  If `case_insensitive` is True, a lowercased copy is also used.
+> at one time.
 >
 > (Tip: to perform a case-insensitive pattern match, pass in the
 > `re.IGNORECASE` flag into flags for this function (if pattern is a string
