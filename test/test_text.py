@@ -384,6 +384,34 @@ class BigTextTests(unittest.TestCase):
             '    -v|--verbose        Causes the program to produce more output.  Specifying it\n                        multiple times raises the volume of output.'
         )
 
+    def test_gently_title(self):
+        def test(s, expected):
+            result = big.gently_title(s)
+            self.assertEqual(result, expected)
+
+        test("", "")
+        test("abcde fgh", "Abcde Fgh")
+        test("peter o'toole", "Peter O'Toole")
+        test("lord d'arcy", "Lord D'Arcy")
+        test("multiple   spaces", "Multiple   Spaces")
+        test("'twas the night before christmas", "'Twas The Night Before Christmas")
+        test("don't sleep on the subway", "Don't Sleep On The Subway")
+        test("everybody's thinking they couldn't've had a v-8", "Everybody's Thinking They Couldn't've Had A V-8")
+        test("""i said "no, i didn't", you idiot""", """I Said "No, I Didn't", You Idiot""")
+        test('multiple «"“quote marks”"»', 'Multiple «"“Quote Marks”"»')
+
+    def test_normalize_whitespace(self):
+        def test(s, expected):
+            result = big.normalize_whitespace(s)
+            self.assertEqual(result, expected)
+
+        test("   a    b    c", " a b c")
+        test("d     e  \t\n  f ", "d e f ")
+        test("ghi", "ghi")
+        test("   j     kl   mnop    ", " j kl mnop ")
+        test("", "")
+        test("   \n\n\t \t     ", " ")
+
 
 import bigtestlib
 

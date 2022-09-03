@@ -54,6 +54,8 @@ notice on the source code.
 
 [`file_size(path)`](#file_sizepath)
 
+[`gently_title(s)`](#gently_titles)
+
 [`get_float(o, default=_sentinel)`](#get_floato-default_sentinel)
 
 [`get_int(o, default=_sentinel)`](#get_into-default_sentinel)
@@ -65,6 +67,8 @@ notice on the source code.
 [`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponsenormal-overflow_before0-overflow_after0)
 
 [`multisplit(text, separators, *, maxsplit=-1)`](#multisplittext-separators--maxsplit-1)
+
+[`normalize_whitespace(s)`](#normalize_whitespaces)
 
 [`parse_timestamp_3339Z(s)`](#parse_timestamp_3339zs)
 
@@ -504,6 +508,55 @@ Methods on a `View` object:
 Functions for working with text strings.  See the
 [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 section below for a higher-level view on some of these functions.
+
+
+#### `gently_title(s)`
+
+> Uppercase the first character of every word in `s`.
+> Leave the other letters alone.
+
+> (For the purposes of this algorithm, words are
+> any blob of non-whitespace characters.)
+
+> Capitalize the letter after an apostrophe if
+>   a) the apostrophe is after whitespace
+>      (or is the first letter of the string), or
+>   b) if the apostrophe is after a letter O or D,
+>      and that O or D is after whitespace (or is
+>      the first letter of the string).  The O or D
+>      here will also be capitalized.
+> Rule a) handles internally quoted strings:
+>   He Said 'No I Did Not'
+> and contractions that start with an apostrophe
+>   'Twas The Night Before christmas
+> Rule b) handles certain Irish, French, and Italian
+> names.
+>   Peter O'Toole
+>   Lord D'Arcy
+>
+> Capitalize the letter after a quote mark if
+> the quote mark is after whitespace (or is the
+> first letter of a string).
+>
+> A run of consecutive apostrophes and/or
+> quote marks is considered one quote mark for
+> the purposes of capitalization.
+>
+> Each of these Unicode code points is considered
+> an apostrophe:
+>    '‘’‚‛
+>
+> Each of these Unicode code points is considered
+> a quote mark:
+>   "“”„‟«»‹›
+
+#### `normalize_whitespace(s)`
+
+> Returns `s`, but with every run of consecutive
+> whitespace characters turned into a single space.
+> Preserves leading and trailing whitespace.
+>
+> `normalize_whitespace("   a    b   c")` returns `" a b c"`.
 
 
 #### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
@@ -1262,6 +1315,16 @@ You can see more complex examples of using inheritance with
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.5.1**
+
+* Added `gently_title` and 'normalize_whitespace' to the `text` module.
+* Changed `translate_filename_to_exfat` to handle translating `:` in a special way.
+  If the colon is followed by a space, then the colon is turned into " -".
+  This yields a more natural translation when colons are used in text, e.g.
+  "xXx: The Return Of Xander Cage" -> "xXx - The Return Of Xander Cage".
+  If the colon is not followed by a space, turns the colon into "-".
+  This is good for tiresome modern gobbledygook like "Re:code" -> "Re-code".
 
 **0.5**
 

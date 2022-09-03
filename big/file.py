@@ -318,7 +318,6 @@ _exfat_translation_dict = {
 
     "/": "-",
     "\\": "-",
-    ":": ".",
     "*": "@",
     "?": ".",
     '"': "'",
@@ -340,7 +339,10 @@ def translate_filename_to_exfat(s):
     """
     if not (isinstance(s, str) and s):
         raise ValueError("filename can't be empty")
-    return s.translate(_exfat_translation_table)
+    s = s.translate(_exfat_translation_table)
+    s = s.replace(": ", " - ")
+    s = s.replace(":", "-")
+    return s
 
 
 # unix filesystem allowed characters:

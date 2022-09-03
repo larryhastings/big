@@ -256,6 +256,112 @@ def multisplit(text, separators, *, maxsplit=-1):
     return segments
 
 
+
+_invalid_state = 0
+_in_word = 1
+_after_whitespace = 2
+_after_whitespace_then_apostrophe_or_quote_mark = 3
+_after_whitespace_then_D_or_O = 4
+_after_whitespace_then_D_or_O_then_apostrophe = 5
+
+@export
+def gently_title(s):
+    """
+    Uppercase the first character of every word in s.
+    Leave the other letters alone.
+
+    (For the purposes of this algorithm, words are
+    any blob of non-whitespace characters.)
+
+    Capitalize the letter after an apostrophe if
+        a) the apostrophe is after whitespace
+           (or is the first letter of the string), or
+        b) if the apostrophe is after a letter O or D,
+           and that O or D is after whitespace (or is
+           the first letter of the string).  The O or D
+           here will also be capitalized.
+    Rule a) handles internally quoted strings:
+            He Said 'No I Did Not'
+        and contractions that start with an apostrophe
+            'Twas The Night Before christmas
+    Rule b) handles certain Irish, French, and Italian
+        names.
+            Peter O'Toole
+            Lord D'Arcy
+
+    Capitalize the letter after a quote mark if
+    the quote mark is after whitespace (or is the
+    first letter of a string).
+
+    A run of consecutive apostrophes and/or
+    quote marks is considered one quote mark for
+    the purposes of capitalization.
+
+    Each of these Unicode code points is considered
+    an apostrophe:
+        '‘’‚‛
+
+    Each of these Unicode code points is considered
+    a quote mark:
+        "“”„‟«»‹›
+    """
+    result = []
+    state = _after_whitespace
+    for c in s:
+        is_space = c.isspace()
+        is_apostrophe = c in "'‘’‚‛"
+        is_quote_mark = c in '"“”„‟«»‹›'
+        if state == _in_word:
+            if is_space:
+                state = _after_whitespace
+        elif state == _after_whitespace:
+            if not is_space:
+                c = c.upper()
+                if (is_apostrophe or is_quote_mark):
+                    state = _after_whitespace_then_apostrophe_or_quote_mark
+                elif c in "DO":
+                    state = _after_whitespace_then_D_or_O
+                else:
+                    state = _in_word
+        elif state == _after_whitespace_then_apostrophe_or_quote_mark:
+            if not (is_apostrophe or is_quote_mark):
+                c = c.upper()
+                state = _in_word
+        elif state == _after_whitespace_then_D_or_O:
+            if is_apostrophe:
+                state = _after_whitespace_then_D_or_O_then_apostrophe
+            else:
+                state = _in_word
+        elif state == _after_whitespace_then_D_or_O_then_apostrophe:
+            c = c.upper()
+            state = _in_word
+        result.append(c)
+    return "".join(result)
+
+
+@export
+def normalize_whitespace(s):
+    """
+    Returns s, but with every run of consecutive
+    whitespace characters turned into a single space.
+    Preserves leading and trailing whitespace.
+
+    normalize_whitespace("   a    b   c") returns " a b c".
+    """
+    if not s:
+        return ''
+    if not s.strip():
+        return ' '
+    words = s.split()
+    cleaned = " ".join(words)
+    del words
+    if s[0].isspace():
+        cleaned = " " + cleaned
+    if s[-1].isspace():
+        cleaned = cleaned + " "
+    return cleaned
+
+
 @export
 def wrap_words(words, margin=79, *, two_spaces=True):
     """
