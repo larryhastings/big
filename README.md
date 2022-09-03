@@ -1318,7 +1318,7 @@ You can see more complex examples of using inheritance with
 
 **0.5.1**
 
-* Added `gently_title` and 'normalize_whitespace' to the `text` module.
+* Added `gently_title` and `normalize_whitespace` to the `text` module.
 * Changed `translate_filename_to_exfat` to handle translating `:` in a special way.
   If the colon is followed by a space, then the colon is turned into " -".
   This yields a more natural translation when colons are used in text, e.g.
