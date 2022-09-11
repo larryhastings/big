@@ -78,11 +78,15 @@ notice on the source code.
 
 [`re_rpartition(text, pattern, *, flags=0)`](#re_rpartitiontext-pattern--flags0)
 
+[`rstripped_lines(s, *, sep=None)`](#rstripped_liness--sepNone)
+
 [`safe_mkdir(path)`](#safe_mkdirpath)
 
 [`safe_unlink(path)`](#safe_unlinkpath)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+
+[`stripped_lines(s, *, sep=None)`](#stripped_liness--sepNone)
 
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
@@ -694,6 +698,18 @@ section below for a higher-level view on some of these functions.
 > If `pattern` is a string, `flags` is passed in
 > as the `flags` argument to `re.compile`.
 
+
+#### `rstripped_lines(s, *, sep=None)`
+
+> Splits `s` at line boundaries, then "rstrips"
+> (strips trailing whitespace) from each line.
+>
+> Returns an iterator yielding lines.
+>
+> `sep` specifies an alternate separator string.
+> If provided, it should match the type of `s`.
+
+
 #### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
 
 > Splits the string `s` into individual words,
@@ -708,6 +724,17 @@ section below for a higher-level view on some of these functions.
 > preserved.  (This will preserve the formatting of code
 > examples when these words are rejoined into lines
 > by `wrap_words`.)
+
+#### `stripped_lines(s, *, sep=None)`
+
+> Splits `s` at line boundaries, then strips
+> whitespace from each line.
+>
+> Returns an iterator yielding lines.
+>
+> `sep` specifies an alternate separator string.
+> If provided, it should match the type of `s`.
+
 
 #### `wrap_words(words, margin=79, *, two_spaces=True)`
 
@@ -1316,6 +1343,11 @@ You can see more complex examples of using inheritance with
 
 ## Release history
 
+**0.5.2**
+
+* Added `stripped_lines` and `rstripped_lines` to the `text` module.
+* Added support for `len` to the `graph.TopologicalSorter` object.
+
 **0.5.1**
 
 * Added `gently_title` and `normalize_whitespace` to the `text` module.
@@ -1328,4 +1360,4 @@ You can see more complex examples of using inheritance with
 
 **0.5**
 
-Initial release.
+* Initial release.

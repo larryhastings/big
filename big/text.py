@@ -363,6 +363,46 @@ def normalize_whitespace(s):
 
 
 @export
+def rstripped_lines(s, *, sep=None):
+    """
+    Splits s at line boundaries, then "rstrips"
+    (strips trailing whitespace) from each line.
+
+    Returns an iterator yielding lines.
+
+    sep specifies an alternate separator string.
+    If provided, it should match the type of s.
+    """
+    if sep is None:
+        if isinstance(s, bytes):
+            sep = b'\n'
+        else:
+            sep = '\n'
+    for line in s.split(sep):
+        yield line.rstrip()
+
+
+@export
+def stripped_lines(s, *, sep=None):
+    """
+    Splits s at line boundaries, then strips
+    whitespace from each line.
+
+    Returns an iterator yielding lines.
+
+    sep specifies an alternate separator string.
+    If provided, it should match the type of s.
+    """
+    if sep is None:
+        if isinstance(s, bytes):
+            sep = b'\n'
+        else:
+            sep = '\n'
+    for line in s.split(sep):
+        yield line.strip()
+
+
+@export
 def wrap_words(words, margin=79, *, two_spaces=True):
     """
     Combines 'words' into lines and returns the result as a string.

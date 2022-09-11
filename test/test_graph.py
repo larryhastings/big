@@ -247,6 +247,10 @@ class TopologicalSortTests(unittest.TestCase):
         order2 = g2.static_order()
         self.assertEqual(list(order1), list(order2))
 
+    def test_len(self):
+        g, g_groups = self.generate_groups()
+        self.assertEqual(len(g), 7)
+
     def test_empty_graph_is_false(self):
         g = TopologicalSorter()
         self.assertFalse(g)

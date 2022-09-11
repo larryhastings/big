@@ -355,6 +355,12 @@ class TopologicalSorter:
         """
         return bool(self._default_view)
 
+    def __len__(self):
+        """
+        Returns the number of nodes in the graph.
+        """
+        return len(self.nodes)
+
     def ready(self):
         """
         Returns a tuple of "ready" nodes--nodes with no

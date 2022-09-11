@@ -412,6 +412,44 @@ class BigTextTests(unittest.TestCase):
         test("", "")
         test("   \n\n\t \t     ", " ")
 
+    def test_stripped_lines(self):
+        def test(s, sep=None):
+            if sep is None:
+                test_sep = '\n'
+            else:
+                test_sep = sep
+
+            rstrip_result = list(big.rstripped_lines(s, sep=sep))
+            rstrip_expected = [line.rstrip() for line in s.split(test_sep)]
+            self.assertEqual(rstrip_result, rstrip_expected)
+
+            strip_result = list(big.stripped_lines(s, sep=sep))
+            strip_expected = [line.strip() for line in s.split(test_sep)]
+            self.assertEqual(strip_result, strip_expected)
+
+            # re-test using bytes
+            s = s.encode('ascii')
+            if sep is not None:
+                sep = sep.encode('ascii')
+            test_sep = test_sep.encode('ascii')
+
+            b_rstrip_result = list(big.rstripped_lines(s, sep=sep))
+            b_rstrip_expected = [line.rstrip() for line in s.split(test_sep)]
+            self.assertEqual(b_rstrip_result, b_rstrip_expected)
+
+            b_strip_result = list(big.stripped_lines(s, sep=sep))
+            b_strip_expected = [line.strip() for line in s.split(test_sep)]
+            self.assertEqual(b_strip_result, b_strip_expected)
+
+        test("  a b \n c=d\n    e = f   \n  g = h   \n i = j")
+
+        s = "\n  \n  a b \n c=d\n    e = f   \n  g = h   \n\n   "
+        test(s)
+        test(s.strip())
+
+        test("  a b X c=dX    e = f   X  g = h   X i = j", sep='X')
+
+
 
 import bigtestlib
 
