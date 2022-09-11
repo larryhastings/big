@@ -526,6 +526,7 @@ section below for a higher-level view on some of these functions.
 
     a) the apostrophe is after whitespace
        (or is the first letter of the string), or
+
     b) if the apostrophe is after a letter O or D,
        and that O or D is after whitespace (or is
        the first letter of the string).  The O or D
@@ -560,7 +561,7 @@ section below for a higher-level view on some of these functions.
 > Each of these Unicode code points is considered
 > a quote mark:
 
-   "“”„‟«»‹›
+    "“”„‟«»‹›
 
 #### `normalize_whitespace(s)`
 
