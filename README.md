@@ -523,21 +523,27 @@ section below for a higher-level view on some of these functions.
 > any blob of non-whitespace characters.)
 
 > Capitalize the letter after an apostrophe if
->   a) the apostrophe is after whitespace
->      (or is the first letter of the string), or
->   b) if the apostrophe is after a letter O or D,
->      and that O or D is after whitespace (or is
->      the first letter of the string).  The O or D
->      here will also be capitalized.
+
+    a) the apostrophe is after whitespace
+       (or is the first letter of the string), or
+    b) if the apostrophe is after a letter O or D,
+       and that O or D is after whitespace (or is
+       the first letter of the string).  The O or D
+       here will also be capitalized.
 > Rule a) handles internally quoted strings:
->   He Said 'No I Did Not'
+
+    He Said 'No I Did Not'
+
 > and contractions that start with an apostrophe
->   'Twas The Night Before christmas
+
+    'Twas The Night Before christmas
+
 > Rule b) handles certain Irish, French, and Italian
 > names.
->   Peter O'Toole
->   Lord D'Arcy
->
+
+    Peter O'Toole
+    Lord D'Arcy
+
 > Capitalize the letter after a quote mark if
 > the quote mark is after whitespace (or is the
 > first letter of a string).
@@ -548,11 +554,13 @@ section below for a higher-level view on some of these functions.
 >
 > Each of these Unicode code points is considered
 > an apostrophe:
->    '‘’‚‛
->
+
+    '‘’‚‛
+
 > Each of these Unicode code points is considered
 > a quote mark:
->   "“”„‟«»‹›
+
+   "“”„‟«»‹›
 
 #### `normalize_whitespace(s)`
 
