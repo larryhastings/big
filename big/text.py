@@ -35,226 +35,617 @@ import sys
 
 __all__ = []
 
-def export(o):
-    __all__.append(o.__name__)
+def _export_name(s):
+    __all__.append(s)
+
+def _export(o):
+    _export_name(o.__name__)
     return o
 
 
-@export
-def re_partition(text, pattern, *, flags=0):
+@_export
+def re_partition(s, pattern, count=1, *, flags=0):
     """
     Like str.partition, but pattern is matched as a regular expression.
 
-    text can be a string or a bytes object.
+    s can be a string or a bytes object.
 
     pattern can be a string, bytes, or an re.Pattern object.
 
-    text and pattern (or pattern.pattern) must be the same type.
+    s and pattern (or pattern.pattern) must be the same type.
 
-    If pattern is found in text, returns a tuple
+    If pattern is found in s, returns a tuple
         (before, match, after)
-    where before is the text before the matched text,
+    where before is the text before the match,
     match is the re.Match object resulting from the match, and
-    after is the text after the matched text.
+    after is the text after the match.
 
-    If pattern appears in text multiple times,
+    If pattern appears in s multiple times,
     re_partition will match against the first (leftmost)
     appearance.
 
-    If pattern is not found in text, returns a tuple
-        (text, None, '')
+    If pattern is not found in s, returns a tuple
+        (s, None, '')
     where the empty string is str or bytes as appropriate.
+
+    Passing in an explicit "count" lets you control how many times
+    re_partition partitions the string.  re_partition will always
+    return a tuple containing (2*count)+1 elements, and
+    odd-numbered elements will be either re.Match objects or None.
+    Passing in a count of 0 will always return a tuple containing s.
 
     If pattern is a string or bytes, flags is passed in
     as the flags argument to re.compile.
     """
     if not isinstance(pattern, re.Pattern):
         pattern = re.compile(pattern, flags=flags)
-    if not (isinstance(text, (str, bytes)) and
-        (type(text) == type(pattern.pattern))):
-        raise ValueError("text must be str or int, and string used in pattern must be the same type")
-    match = pattern.search(text)
-    if not match:
-        empty = '' if isinstance(text, str) else b''
-        return (text, None, empty)
-    before, separator, after = text.partition(match.group(0))
-    return (before, match, after)
+    if not (isinstance(s, (str, bytes)) and
+        (type(s) == type(pattern.pattern))):
+        raise ValueError("s must be str or int, and string used in pattern must be the same type")
+    as_bytes = isinstance(s, bytes)
+    empty = b'' if as_bytes else ''
+
+    if count < 0:
+        raise ValueError("count must be >= 0")
+
+    result = [s]
+    if count == 0:
+        return result
+
+    if count == 1:
+        # much cheaper for the general case
+        match = pattern.search(s)
+        if match:
+            matches = [match]
+        else:
+            matches = ()
+    else:
+        matches = list(pattern.finditer(s))
+        matches.reverse()
+
+    for _ in range(count):
+        if not matches:
+            result.extend((None, empty))
+            continue
+
+        match = matches.pop()
+        s = result.pop()
+
+        before, separator, after = s.partition(match.group(0))
+        result.extend((before, match, after))
+
+    return tuple(result)
 
 
-@export
-def re_rpartition(text, pattern, *, flags=0):
+@_export
+def re_rpartition(s, pattern, count=1, *, flags=0):
     """
     Like str.rpartition, but pattern is matched as a regular expression.
 
-    text can be a string or a bytes object.
+    s can be a string or a bytes object.
 
     pattern can be a string, bytes, or an re.Pattern object.
 
-    text and pattern (or pattern.pattern) must be the same type.
+    s and pattern (or pattern.pattern) must be the same type.
 
-    If pattern is found in text, returns a tuple
+    If pattern is found in s, returns a tuple
         (before, match, after)
-    where before is the text before the matched text,
+    where before is the text before the match,
     match is the re.Match object resulting from the match, and
-    after is the text after the matched text.
+    after is the text after the match.
 
-    If pattern appears in text multiple times,
+    If pattern appears in s multiple times,
     re_partition will match against the last (rightmost)
     appearance.
 
-    If pattern is not found in text, returns a tuple
-        ('', None, text)
+    If pattern is not found in s, returns a tuple
+        ('', None, s)
     where the empty string is str or bytes as appropriate.
+
+    Passing in an explicit "count" lets you control how many times
+    re_rpartition partitions the string.  re_rpartition will always
+    return a tuple containing (2*count)+1 elements, and
+    odd-numbered elements will be either re.Match objects or None.
+    Passing in a count of 0 will always return a tuple containing s.
 
     If pattern is a string, flags is passed in
     as the flags argument to re.compile.
     """
     if not isinstance(pattern, re.Pattern):
         pattern = re.compile(pattern, flags=flags)
-    if not (isinstance(text, (str, bytes)) and
-        (type(text) == type(pattern.pattern))):
-        raise ValueError("text must be str or int, and string used in pattern must be the same type")
-    match = None
-    for match in pattern.finditer(text):
+    if not (isinstance(s, (str, bytes)) and
+        (type(s) == type(pattern.pattern))):
+        raise ValueError("s must be str or int, and string used in pattern must be the same type")
+
+    if count < 0:
+        raise ValueError("count must be >= 0")
+
+    result = [s]
+    if count == 0:
+        return result
+
+    as_bytes = not isinstance(s, str)
+    empty = b'' if as_bytes else ''
+    matches = list(pattern.finditer(s))
+
+    for i in range(count):
+        if not matches:
+            r = [empty, None]
+        else:
+            match = matches.pop()
+            s = result.pop(0)
+            before, separator, after = list(s.rpartition(match.group(0)))
+            r = [before, match, after]
+        r.extend(result)
+        result = r
+    return tuple(result)
+
+
+# a list of all unicode whitespace characters
+_export_name('whitespace')
+whitespace = [
+    '\t'    , #     9 0x0009 - tab
+    '\n'    , #    10 0x000a - newline
+    '\x0b'  , #    11 0x000b - vertical tab
+    '\x0c'  , #    12 0x000c - form feed
+    '\r'    , #    13 0x000d - carriage return
+    '\x1c'  , #    28 0x001c - file separator
+    '\x1d'  , #    29 0x001d - group separator
+    '\x1e'  , #    30 0x001e - record separator
+    '\x1f'  , #    31 0x001f - unit separator
+    ' '     , #    32 0x0020 - space
+    '\x85'  , #   133 0x0085 - next line
+    '\xa0'  , #   160 0x00a0 - non-breaking space
+    '\u1680', #  5760 0x1680 - ogham space mark
+    '\u2000', #  8192 0x2000 - en quad
+    '\u2001', #  8193 0x2001 - em quad
+    '\u2002', #  8194 0x2002 - en space
+    '\u2003', #  8195 0x2003 - em space
+    '\u2004', #  8196 0x2004 - three-per-em space
+    '\u2005', #  8197 0x2005 - four-per-em space
+    '\u2006', #  8198 0x2006 - six-per-em space
+    '\u2007', #  8199 0x2007 - figure space
+    '\u2008', #  8200 0x2008 - punctuation space
+    '\u2009', #  8201 0x2009 - thin space
+    '\u200a', #  8202 0x200a - hair space
+    '\u2028', #  8232 0x2028 - line separator
+    '\u2029', #  8233 0x2029 - paragraph separator
+    '\u202f', #  8239 0x202f - narrow no-break space
+    '\u205f', #  8287 0x205f - medium mathematical space
+    '\u3000', # 12288 0x3000 - ideographic space
+    ]
+
+_export_name('newlines')
+newlines = [
+    '\n'    , #    10 0x000a - newline
+    '\x0b'  , #    11 0x000b - vertical tab
+    '\x0c'  , #    12 0x000c - form feed
+    '\r'    , #    13 0x000d - carriage return
+    '\x1c'  , #    28 0x001c - file separator
+    '\x1d'  , #    29 0x001d - group separator
+    '\x1e'  , #    30 0x001e - record separator
+    '\x85'  , #   133 0x0085 - next line
+    '\u2028', #  8232 0x2028 - line separator
+    '\u2029', #  8233 0x2029 - paragraph separator
+
+    '\r\n'  , #  the classic DOS newline sequence
+    # '\n\r' sorry, Acorn and RISC OS, you have to add this yourselves.
+    # I'm worried this would cause bugs with a malformed DOS newline.
+    ]
+
+def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
+    a = []
+    # all I'm really doing with the try/accept
+    # block is stopping the loop for the ascii
+    # encoding once we hit characters > 127.
+    # since we're sorted, by the time we hit it,
+    # we'll have already handled all the ascii
+    # characters (if we're encoding for ascii).
+    try:
+        for c in iterable:
+            a.append(c.encode(encoding))
+    except UnicodeEncodeError:
         pass
-    if not match:
-        empty = '' if isinstance(text, str) else b''
-        return (empty, None, text)
-    before, separator, after = text.rpartition(match.group(0))
-    return (before, match, after)
+    return type(iterable)(a)
+
+# use these with multisplit if your bytes strings are encoded as ascii.
+_export_name('ascii_whitespace')
+ascii_whitespace = _cheap_encode_iterable_of_strings(whitespace, "ascii")
+_export_name('ascii_newlines')
+ascii_newlines   = _cheap_encode_iterable_of_strings(newlines,   "ascii")
+
+# use these with multisplit if your bytes strings are encoded as utf-8.
+_export_name('utf8_whitespace')
+utf8_whitespace = _cheap_encode_iterable_of_strings(whitespace, "utf-8")
+_export_name('utf8_newlines')
+utf8_newlines   = _cheap_encode_iterable_of_strings(newlines,   "utf-8")
 
 
-@export
-def multisplit(text, separators, *, maxsplit=-1):
+# these omit the DOS convention '\r\n'
+_export_name('newlines_without_dos')
+newlines_without_dos =       [s for s in       newlines if s !=  '\r\n']
+_export_name('ascii_newlines_without_dos')
+ascii_newlines_without_dos = [s for s in ascii_newlines if s != b'\r\n']
+_export_name('utf8_newlines_without_dos')
+utf8_newlines_without_dos =  [s for s in  utf8_newlines if s != b'\r\n']
+
+
+def _re_quote(s):
+    # don't bother escaping whitespace.
+    # re.escape escapes whitespace because of VERBOSE mode,
+    # which we're not using.  (escaping the whitespace doesn't
+    # hurt anything really, but it makes the patterns harder
+    # to read for us humans.)
+    if not s.isspace():
+        s = re.escape(s)
+    if len(s) > 1:
+        if isinstance(s, bytes):
+            s = b"(?:" + s + b")"
+        else:
+            s = f"(?:{s})"
+    return s
+
+def _separators_to_re(separators, as_bytes, separate=False, keep=False):
+    if as_bytes:
+        pipe = b'|'
+        separate_start = b'(?:'
+        separate_end = b')+'
+        keep_start = b'('
+        keep_end = b')'
+    else:
+        pipe = '|'
+        separate_start = '(?:'
+        separate_end = ')+'
+        keep_start = '('
+        keep_end = ')'
+
+    # sort longer separator strings earlier.
+    # re processes | operator from left-to-right,
+    # so you want to match against longer strings first.
+    separators = list(separators)
+    separators.sort(key=lambda o: -len(o))
+    pattern = pipe.join(_re_quote(o) for o in separators)
+    # print(f"  P1 {pattern!r}")
+    if not separate:
+        pattern = separate_start + pattern + separate_end
+    # print(f"  P2 {pattern!r}")
+    if keep:
+        pattern = keep_start + pattern + keep_end
+    # print(f"  P3 {pattern!r}")
+    return pattern
+
+@_export
+def multistrip(s, separators, left=True, right=True):
     """
-    Like str.split, but separators is an iterable of separator strings.
+    Like str.strip, but supports stripping multiple strings.
+
+    Strips from the string "s" all leading and trailing
+    instances of strings found in "separators".
+
+    s should be str or bytes.
+    separators should be an iterable of either str or bytes
+    objects matching the type of s.
+
+    If left is a true value, strips all leading separators
+    from s.
+
+    If right is a true value, strips all trailing separators
+    from s.
+
+    Processing always stops at the first character that
+    doesn't match one of the separators.
+
+    Returns a copy of s with the leading and/or trailing
+    separators stripped.  (If left and right are both
+    false, returns s unchanged.)
+    """
+    if not (left or right):
+        return s
+    as_bytes = isinstance(s, bytes)
+    if as_bytes:
+        head = b'^'
+        tail = b'$'
+        if isinstance(separators, bytes):
+            # not iterable of bytes, literally a bytes string.
+            # split it ourselves.
+            separators = [separators[i:i+1] for i in range(len(separators))]
+    else:
+        head = '^'
+        tail = '$'
+    pattern = _separators_to_re(separators, as_bytes, separate=False, keep=False)
+
+    start = 0
+    end = len(s)
+    if left:
+        left_match = re.match(head + pattern, s)
+        if left_match:
+            start = left_match.end(0)
+    if right:
+        right_match = re.search(pattern + tail, s)
+        if right_match:
+            end = right_match.start(0)
+    return s[start:end]
+
+
+# for keep
+AS_PAIRS="AS_PAIRS"
+_export_name(AS_PAIRS)
+ALTERNATING="ALTERNATING"
+_export_name(ALTERNATING)
+
+# for strip
+NOT_SEPARATE = "NOT_SEPARATE"
+_export_name(NOT_SEPARATE)
+LEFT = "LEFT"
+_export_name(LEFT)
+RIGHT = "RIGHT"
+_export_name(RIGHT)
+STR_SPLIT = "STR_SPLIT"  # not implemented yet
+_export_name(STR_SPLIT)
+
+@_export
+def multisplit(s, separators=None, *,
+    keep=False,
+    maxsplit=-1,
+    reverse=False,
+    separate=False,
+    strip=NOT_SEPARATE,
+    ):
+    """
+    Like str.split, supporting multiple separator strings and tunable behavior.
 
     s can be str or bytes.
 
-    separators should be an iterable.  Each element of separators
-    should be the same type as s.  If separators is a string or bytes
-    object, multisplit behaves as if separators is a tuple containing
-    each individual character.
+    separators should be an iterable of str or bytes, matching s.
 
-    Returns a list of the substrings split from s.
+    Returns an iterator yielding the strings split from s.  If keep
+    is not false, and strip is false, joining these strings together
+    will recreate s.
 
-    maxsplit should be either an integer or None.  If maxsplit is an
+    multisplit is greedy; if two (or more) separator strings match at a
+    particular index in "s", it splits using the largest one.
+
+    "keep" indicates whether or not multisplit should keep the separator
+    strings.  It supports four values:
+        false (the default)
+            Discard the separators.
+        true (apart from ALTERNATING or AS_PAIRS)
+            Append the separators to the end of the split strings.
+        ALTERNATING
+            Yield alternating strings in the output: strings consisting
+            of separators, alternating with strings consisting of
+            non-separators.  If "separate" is true, separator strings
+            will contain exactly one separator, and non-separator strings
+            may be empty; if "separate" is false, separator strings will
+            contain one or more separators, and non-separator strings
+            will never be empty.
+        AS_PAIRS
+            Yield 2-tuples containing a non-separator string and its
+            subsequent separator string.  Either string may be empty,
+            but both strings will never be empty at the same time,
+            unless s was empty.
+
+    "separate" indicates whether multisplit should consider adjacent
+    separator strings in s as one separator or as multiple separators
+    each separated by a zero-length string.  It supports two values:
+        false (the default)
+            Multiple adjacent separators should be considered one
+            separator.
+        true
+            Don't group separators together.  Each separator should
+            split the string individually, even if there are no
+            characters between two separators.
+
+    "strip" indicates whether multisplit should strip separators from
+    the beginning and/or end of s, a la multistrip.  It supports
+    six values:
+        NOT_SEPARATE (the default)
+            Use the opposite value specified for "separate"
+            If separate=True, behaves as if strip=False.
+            If separate=False, behaves as if strip=True.
+        false
+            Don't strip separators from the beginning or end of s.
+        LEFT
+            Strip separators only from the beginning of s
+            (a la str.lstrip).
+        RIGHT
+            Strip separators only from the end of s
+            (a la str.rstrip).
+        true
+            Strip separators from the beginning and end of s
+            (a la str.strip).
+        STR_STRIP (currently unimplemented, equivalent to true)
+            Behave like str.strip.  Strip from the beginning
+            and end of s, unless maxsplit is nonzero and the
+            entire string is not split.  If splitting stops due
+            to maxsplit before the entire string is split, and
+            reverse is false, don't strip the end of the string.
+            If splitting stops due to maxsplit before the entire
+            string is split, and reverse is true, don't strip
+            the beginning of the string.
+
+    "maxsplit" should be either an integer or None.  If maxsplit is an
     integer greater than -1, multisplit will split s no more than
     maxsplit times.
 
-    Example:
-        multisplit('ab:cd,:ef', ':,')
-    returns
-        ["ab", "cd", "ef"]
-
-    Example:
-        multisplit('\tthis is a\n\tbunch of words', (' ', '\t', '\n'))
-    would produce the same result as
-        '\tthis is a\n\tbunch of words'.split()
+    "reverse" affects whether the "maxsplit" splits start at the
+    beginning or the end of the string.  It supports two values:
+        false (the default)
+            Start splitting at the beginning of the string.
+        true
+            Start splitting at the end of the string.
+    "reverse" has no effect when maxsplit is 0, -1, or None.
     """
 
-    if isinstance(separators, bytes):
-        # this tiresome old Python 3 wart.
-        # if you index into a bytes string, you get integers, not bytes strings.
-        # so if separators is a bytes string, use fast magic gunk to convert it
-        # into a tuple of individual bytes strings.
-        length = len(separators)
-        separators = tuple(struct.unpack(str(length) + 'c', separators))
+    as_bytes = isinstance(s, bytes)
+    if separators is None:
+        separators = ascii_whitespace if as_bytes else whitespace
+    if as_bytes:
+        if isinstance(separators, bytes):
+            # not iterable of bytes, literally a bytes string.
+            # split it ourselves.
+            separators = [separators[i:i+1] for i in range(len(separators))]
+        separators_type = bytes
+        empty = b''
+    else:
+        separators_type = str
+        empty = ''
+    for o in separators:
+        if not isinstance(o, separators_type):
+            raise ValueError("separators must be an iterable of objects the same type as s")
 
-    try:
-        separators[0]
-    except TypeError:
-        raise TypeError("separators must be iterable")
+    if strip == NOT_SEPARATE:
+        strip = not separate
 
-    if not(isinstance(text, (str, bytes)) and (type(text) == type(separators[0]))):
-        raise ValueError("text and separators elements must be the same type, either str or bytes")
-    if not (text and separators):
-        return [text]
+    if strip:
+        s = multistrip(s, separators, left=(strip != RIGHT), right=(strip != LEFT))
 
-    # candidates is a sorted list of lists.  each sub-list contains:
-    #   [ first_appearance_index, negative_separator_length, separator_string, len_separator ]
-    # since the lowest appearance is sorted first, you simply split
-    # off based on candidates[0], shift all the first_appearance_indexes
-    # down by how much you lopped off, recompute the first_appearance_index
-    # of candidate[0]'s separator_string, re-sort, and do it again.
-    # (you remove a candidate when there are no more appearances in
-    # the string--when "".find returns -1.)
-    #
-    # negative_separator_length is there so that larger separator strings
-    # sort first.  if you call
-    #         multisplit("xxxABCDxxxx", ("A", "ABCD"))
-    # either separator would work, but you want multisplit to use the
-    # longer one.
-    candidates = []
-    for separator in separators:
-        index = text.find(separator)
-        if index != -1:
-            candidates.append([index, -len(separator), separator, len(separator)])
-
-    if not (candidates and maxsplit):
-        return [text]
-    if len(candidates) == 1:
-        return text.split(candidates[0][2])
-
-    candidates.sort()
-    segments = []
-    empty = '' if isinstance(text, str) else b''
-
-    # edge case: if the string you're splitting
-    # *starts* with a separator, the result needs
-    # to start with an empty string.
-    if not candidates[0][0]:
-        segments.append(empty)
-
-    while True:
-        assert text
-        # print(f"\n{s=}\n{candidates=}\n{splits=}")
-        index, _, separator, len_separator = candidates[0]
-        segment = text[:index]
-        if segment:
-            segments.append(segment)
-        new_start = index + len_separator
-        text = text[new_start:]
-        maxsplit -= 1
-        if not maxsplit:
-            segments.append(text)
-            break
-
-        # print(f"{new_start=} new {s=}")
-        for candidate in candidates:
-            candidate[0] -= new_start
-        index = text.find(separator)
-        if index < 0:
-            # there aren't any more appearances of candidate[0].
-            if len(candidates) == 2:
-                # once we remove candidate[0],
-                # we'll only have one candidate separator left.
-                # so just split normally on that separator and exit.
-                #
-                # note: this is the only way to exit the loop
-                # (without maxsplit).
-                # we always reach it, because at some point
-                # there's only one candidate left.
-
-                # edge case:
-                # we're about to call split() using the final
-                # separator.  but if the string *starts* with
-                # the separator, the array split returns will
-                # start with an empty string, which we don't want.
-                index, _, separator, len_separator = candidates[1]
-                final_segments = text.split(separator)
-                if not index:
-                    final_segments.pop(0)
-                segments.extend(final_segments)
-                break
-            candidates.pop(0)
+    if maxsplit == None:
+        maxsplit = -1
+    if maxsplit == 0:
+        if keep == ALTERNATING:
+            yield s
+        elif keep == AS_PAIRS:
+            yield (s, empty)
         else:
-            candidates[0][0] = index
-            candidates.sort()
+            yield s
+        return
 
-    # print(f"\nfinal {splits=}")
-    return segments
+    # convert maxsplit for use with re.split.
+    #
+    # re.split interprets maxsplit slightly differently:
+    # maxsplit==0 means "allow all splits".
+    # maxsplit==1 means "only allow one split".
+    #
+    # (re.split doesn't have a way to express
+    #  "don't split" with its maxsplit parameter,
+    #  which is why we handled it already.)
+    if maxsplit == -1:
+        maxsplit = 0
 
+    # we may change the values of keep and maxsplit
+    # we pass in to subfunctions, depending.
+    # these are the original values.
+    original_keep = keep
+    original_maxsplit = maxsplit
+
+    if reverse and (maxsplit > 0):
+        # we have to handle reverse maxsplit by hand.
+        # we completely split, then rejoin strings
+        # together to simulate the maxsplit value.
+        # this means that inside the function we have
+        # to keep separators; if the user didn't specify
+        # keep, we'll throw the un-joined ones away.
+        maxsplit = 0
+        keep = True
+    else:
+        # we're not maxsplitting, so reverse is unused.
+        reverse = False
+
+    pattern = _separators_to_re(separators, as_bytes, keep=keep, separate=separate)
+
+    l = re.split(pattern, s, maxsplit)
+    assert l
+
+    if reverse:
+        maxsplit = original_maxsplit
+        keep = original_keep
+        # alternating nonsep, sep strings
+        desired_length = 1 + (2*maxsplit)
+        length = len(l)
+        join_count = length - desired_length + 1
+        if join_count > 1:
+            s = empty.join(l[:join_count])
+            del l[:join_count]
+            l.insert(0, s)
+        if not keep:
+            for i in range(len(l) - 2, 0, -2):
+                del l[i]
+
+    if not keep:
+        for o in l:
+            yield o
+        return
+
+    # from here on out, we only deal with keep=True
+
+    if keep == ALTERNATING:
+        for o in l:
+            yield o
+        return
+
+    if (len(l) % 2) == 1:
+        l.append(empty)
+
+    previous = None
+    for o in l:
+        if previous is None:
+            previous = o
+            continue
+        if keep == AS_PAIRS:
+            if previous or o:
+                yield (previous, o)
+        else:
+            yield previous + o
+        previous = None
+
+
+@_export
+def multipartition(s, separators, count=1, *, reverse=False, separate=True):
+    """
+    Like str.partition, but supports partitioning based on multiple separator
+    strings, and can partition more than once.
+
+    "s" can be str or bytes.
+
+    "separators" should be an iterable of str or bytes, matching "s".
+
+    By default, if any of the strings in "separators" are found in "s",
+    returns a tuple of three strings: the portion of "s" leading up to
+    the earliest separator, the separator, and the portion of "s" after
+    that separator.  Example:
+
+    multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
+
+    If none of the separators are found in the string, returns
+    a tuple containing `s` unchanged followed by two empty strings.
+
+    Passing in an explicit "count" lets you control how many times
+    multipartition partitions the string.  multipartition will always
+    return a tuple containing (2*count)+1 elements.  Passing in a
+    count of 0 will always return a tuple containing s.
+
+    If separate is true, multiple adjacent separator strings behave
+    like one separator.  Example:
+
+    multipartition('aXYbXYc', ('X', 'Y',), separate=True) => ('a', 'XY', 'bXYc')
+
+    If reverse is true, multipartition behaves like str.rpartition.
+    It partitions starting on the right, scanning backwards through
+    s looking for separators.
+    """
+    if count < 0:
+        raise ValueError("count must be positive")
+    result = list(multisplit(s, separators,
+        keep=ALTERNATING,
+        reverse=reverse,
+        separate=separate,
+        strip=False,
+        maxsplit=count))
+    desired_length = (2 * count) + 1
+    result_length = len(result)
+    if result_length < desired_length:
+        as_bytes = isinstance(s, bytes)
+        if as_bytes:
+            empty = b''
+        else:
+            empty = ''
+        extension = [empty] * (desired_length - result_length)
+        if reverse:
+            result = extension + result
+        else:
+            result.extend(extension)
+    return tuple(result)
 
 
 _invalid_state = 0
@@ -264,7 +655,7 @@ _after_whitespace_then_apostrophe_or_quote_mark = 3
 _after_whitespace_then_D_or_O = 4
 _after_whitespace_then_D_or_O_then_apostrophe = 5
 
-@export
+@_export
 def gently_title(s):
     """
     Uppercase the first character of every word in s.
@@ -339,70 +730,332 @@ def gently_title(s):
     return "".join(result)
 
 
-@export
-def normalize_whitespace(s):
+@_export
+def normalize_whitespace(s, separators=None, replacement=None):
     """
     Returns s, but with every run of consecutive
-    whitespace characters turned into a single space.
-    Preserves leading and trailing whitespace.
+    separator characters turned into a replacement string.
+    By default turns all runs of consecutive whitespace
+    characters into a single space character.
 
-    normalize_whitespace("   a    b   c") returns " a b c".
+    s may be str or bytes.
+    separators should be an iterable of either str or bytes,
+    matching s.
+    replacement should be str or bytes, matching s.
+
+    Leading or trailing runs of separator characters will
+    be replaced with the replacement string, e.g.:
+
+       normalize_whitespace("   a    b   c") == " a b c".
     """
+    as_bytes = isinstance(s, bytes)
+    if as_bytes:
+        empty = b''
+        default_replacement = b' '
+        default_separators = ascii_whitespace
+    else:
+        empty = ''
+        default_replacement = ' '
+        default_separators = whitespace
+
     if not s:
-        return ''
-    if not s.strip():
-        return ' '
-    words = s.split()
-    cleaned = " ".join(words)
+        return empty
+
+    if separators is None:
+        separators = default_separators
+    if replacement is None:
+        replacement = default_replacement
+
+    if separators in (whitespace, ascii_whitespace, utf8_whitespace, None):
+        if not s.strip():
+            return replacement
+        words = s.split()
+        cleaned = replacement.join(words)
+        del words
+        if s[:1].isspace():
+            cleaned = replacement + cleaned
+        if s[-1:].isspace():
+            cleaned = cleaned + replacement
+        return cleaned
+
+    words = list(multisplit(s, separators, keep=False, separate=False, strip=True, reverse=False, maxsplit=-1))
+    cleaned = replacement.join(words)
     del words
-    if s[0].isspace():
-        cleaned = " " + cleaned
-    if s[-1].isspace():
-        cleaned = cleaned + " "
+    stripped_left = multistrip(s, separators, left=True, right=False) != s
+    if stripped_left:
+        cleaned = replacement + cleaned
+    stripped_right = multistrip(s, separators, left=False, right=True) != s
+    if stripped_right:
+        cleaned = cleaned + replacement
     return cleaned
 
 
-@export
-def rstripped_lines(s, *, sep=None):
-    """
-    Splits s at line boundaries, then "rstrips"
-    (strips trailing whitespace) from each line.
+@_export
+class LineInfo:
+    def __init__(self, line, line_number, column_number, **kwargs):
+        if not isinstance(line, (str, bytes)):
+            raise TypeError("line must be str or bytes")
+        if not isinstance(line_number, int):
+            raise TypeError("line_number must be int")
+        if not isinstance(column_number, int):
+            raise TypeError("column_number must be int")
+        self.line = line
+        self.line_number = line_number
+        self.column_number = column_number
+        self.__dict__.update(kwargs)
 
-    Returns an iterator yielding lines.
+    def __repr__(self):
+        names = list(self.__dict__)
+        priority_names = ['line', 'line_number', 'column_number']
+        fields = []
+        for name in priority_names:
+            names.remove(name)
+        names.sort()
+        names = priority_names + names
+        for name in names:
+            fields.append(f"{name}={getattr(self, name)!r}")
+        text = ", ".join(fields)
+        return f"LineInfo({text})"
 
-    sep specifies an alternate separator string.
-    If provided, it should match the type of s.
-    """
-    if sep is None:
-        if isinstance(s, bytes):
-            sep = b'\n'
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and (other.__dict__ == self.__dict__)
+
+
+@_export
+class lines:
+    def __init__(self, s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs):
+        """
+        A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
+
+        "s" can be str, bytes, or any iterable.
+
+        By default, if "s" is str, splits "s" by all Unicode line break characters.
+        If "s" is bytes, splits "s" by all ASCII line break characters.
+
+        If "s" is neither str nor bytes, "s" must be an iterable;
+        lines yields successive elements of "s" as lines.
+
+        "separators", if not None, must be an iterable of strings of the
+        same type as "s".  lines will split "s" using those strings as
+        separator strings (using big.multisplit).
+
+        When iterated over, yields 2-tuples:
+            (info, line)
+
+        info is a LineInfo object, which contains three fields by default:
+            * line - the original line, never modified
+            * line_number - the line number of this line, starting at the
+              line_number passed in and adding 1 for each successive line
+            * column_number - the column this line starts on,
+              starting at the column_number passed in, and adjusted when
+              characters are removed from the beginning of line
+
+        tab_width is not used by lines itself, but is stored internally and
+        may be used by other lines modifier functions
+        (e.g. lines_convert_tabs_to_spaces). Similarly, all keyword
+        arguments passed in via kwargs are stored internally and can be
+        accessed by user-defined lines modifier functions.
+
+        Composable with all the lines_ functions from the big.text module.
+        """
+        if not isinstance(line_number, int):
+            raise TypeError("line_number must be int")
+        if not isinstance(column_number, int):
+            raise TypeError("column_number must be int")
+        if not isinstance(tab_width, int):
+            raise TypeError("tab_width must be int")
+
+        as_bytes = isinstance(s, bytes)
+        as_str = isinstance(s, str)
+        if as_bytes or as_str:
+            if not separators:
+                separators = newlines if as_str else ascii_newlines
+            i = multisplit(s, separators, keep=False, separate=True, strip=False)
         else:
-            sep = '\n'
-    for line in s.split(sep):
-        yield line.rstrip()
+            i = iter(s)
 
+        self.s = s
+        self.separators = separators
+        self.line_number = line_number
+        self.column_number = column_number
+        self.tab_width = tab_width
 
-@export
-def stripped_lines(s, *, sep=None):
+        self.i = i
+
+        self.__dict__.update(kwargs)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = next(self.i)
+        return_value = (LineInfo(line, self.line_number, self.column_number), line)
+        self.line_number += 1
+        return return_value
+
+@_export
+def lines_rstrip(li):
     """
-    Splits s at line boundaries, then strips
-    whitespace from each line.
+    A lines modifier function.  Strips trailing whitespace from the
+    lines of a "lines iterator".
 
-    Returns an iterator yielding lines.
-
-    sep specifies an alternate separator string.
-    If provided, it should match the type of s.
+    Composable with all the lines_ functions
+    from the big text module.
     """
-    if sep is None:
-        if isinstance(s, bytes):
-            sep = b'\n'
+    for info, line in li:
+        yield (info, line.rstrip())
+
+@_export
+def lines_strip(li):
+    """
+    A lines modifier function.  Strips leading and trailing whitespace
+    from the lines of a "lines iterator".
+
+    If lines_strip removes leading whitespace from a line, it adds
+    a field to the associated LineInfo object:
+      * leading - the leading whitespace string that was removed
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    for info, line in li:
+        lstripped = line.lstrip()
+        if not lstripped:
+            line = lstripped
         else:
-            sep = '\n'
-    for line in s.split(sep):
-        yield line.strip()
+            original_leading = line[:len(line) - len(lstripped)]
+            if original_leading:
+                leading = original_leading.expandtabs(li.tab_width)
+                info.column_number += len(leading)
+                line = lstripped.rstrip()
+                info.leading = original_leading
+
+        yield (info, line)
+
+@_export
+def lines_filter_comment_lines(li, comment_separators):
+    """
+    A lines modifier function.  Filters out comment lines from the
+    lines of a "lines iterator".  Comment lines are lines whose first
+    non-whitespace characters appear in the iterable of
+    comment_separators strings passed in.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    if not comment_separators:
+        raise ValueError("illegal comment_separators")
+    as_bytes = isinstance(comment_separators[0], bytes)
+    comment_pattern = _separators_to_re(tuple(comment_separators), as_bytes, separate=False, keep=False)
+    comment_re = re.compile(comment_pattern)
+    for info, line in li:
+        s = line.lstrip()
+        if comment_re.match(s):
+            continue
+        yield (info, line)
+
+@_export
+def lines_convert_tabs_to_spaces(li):
+    """
+    A lines modifier function.  Converts tabs to spaces for the lines
+    of a "lines iterator", using the tab_width passed in to lines.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    for info, line in li:
+        yield (info, line.expandtabs(li.tab_width))
 
 
-@export
+@_export
+def lines_strip_indent(li):
+    """
+    A lines modifier function.  Automatically measures and strips indents.
+
+    Sets two new fields on the LineInfo object:
+      * indent - an integer indicating how many indents it's observed
+      * leading - the leading whitespace string that was removed
+
+    Uses an intentionally simple algorithm.
+    Only understands tab and space characters as indent characters.
+    Internally detabs to spaces first for consistency, using the
+    tab_width passed in to lines.
+
+    You can only dedent out to a previous indent.
+    Raises IndentationError if there's an illegal dedent.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    indent = 0
+    leadings = []
+    for info, line in li:
+        lstripped = line.lstrip()
+        original_leading = line[:len(line) - len(lstripped)]
+        leading = original_leading.expandtabs(li.tab_width)
+        len_leading = len(leading)
+        # print(f"{leadings=} {line=} {leading=} {len_leading=}")
+        if leading.rstrip(' '):
+            raise ValueError(f"lines_strip_indent can't handle leading whitespace character {leading[0]!r}")
+        if not leading:
+            indent = 0
+            leadings.clear()
+            new_indent = False
+        elif not leadings:
+            new_indent = True
+        elif leadings[-1] == len_leading:
+            new_indent = False
+        elif len_leading > leadings[-1]:
+            new_indent = True
+        else:
+            # not equal, not greater than... must be less than!
+            new_indent = False
+            assert leadings
+            leadings.pop()
+            indent -= 1
+            while leadings:
+                if leadings[-1] == len_leading:
+                    break
+                if leadings[-1] > len_leading:
+                    new_indent = None
+                    break
+                leadings.pop()
+                indent -= 1
+            if not leadings:
+                new_indent = None
+
+        # print(f"  >> {leadings=} {new_indent=}")
+        if new_indent:
+            leadings.append(len_leading)
+            indent += 1
+        elif new_indent is None:
+            raise IndentationError(f"line {info.line_number} column {len_leading + info.column_number}: unindent does not match any outer indentation level")
+        info.leading = original_leading
+        info.indent = indent
+        if len_leading:
+            info.column_number += len_leading
+            line = lstripped
+
+        yield (info, line)
+
+@_export
+def lines_filter_empty_lines(li):
+    """
+    A lines modifier function.  Filters out the empty lines
+    of a "lines iterator".
+
+    Preserves the line numbers.  If lines 0 through 2 are empty,
+    line 3 is "a", line 4 is empty, and line 5 is "b",
+    will yield:
+        (3, "a")
+        (5, "b")
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    for t in li:
+        if not t[1]:
+            continue
+        yield t
+
+
+
+@_export
 def wrap_words(words, margin=79, *, two_spaces=True):
     """
     Combines 'words' into lines and returns the result as a string.
@@ -693,7 +1346,7 @@ class _column_wrapper_splitter:
 
 
 
-@export
+@_export
 def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True):
     """
     Splits the string s into individual words,
@@ -716,7 +1369,7 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
     return cws.words
 
 
-@export
+@_export
 class OverflowStrategy(enum.Enum):
     """
     Enum providing constants to specify how merge_columns
@@ -729,7 +1382,7 @@ class OverflowStrategy(enum.Enum):
     DELAY_ALL = enum.auto()
     # DELAY_MINIMUM = enum.auto()  # not implemented yet
 
-@export
+@_export
 def merge_columns(*columns, column_separator=" ",
     overflow_strategy=OverflowStrategy.RAISE,
     overflow_before=0,

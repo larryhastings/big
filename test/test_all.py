@@ -29,6 +29,8 @@ for test_module in """
     test_builtin
     test_file
     test_graph
+    test_heap
+    test_scheduler
     test_text
     test_time
 """.strip().split():

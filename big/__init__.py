@@ -31,7 +31,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-__version__ = "0.5.2"
+__version__ = "0.6"
 
 
 __all__ = []
@@ -51,6 +51,14 @@ __all__.extend(file.__all__)
 from .graph import *
 from . import graph
 __all__.extend(graph.__all__)
+
+from .heap import *
+from . import heap
+__all__.extend(heap.__all__)
+
+from .scheduler import *
+from . import scheduler
+__all__.extend(scheduler.__all__)
 
 from .text import *
 from . import text

@@ -62,27 +62,85 @@ notice on the source code.
 
 [`get_int_or_float(o, default=_sentinel)`](#get_int_or_floato-default_sentinel)
 
-[ `grep(path, pattern, *, encoding=None, enumerate=False, flags=0)`](#greppath-pattern--encodingnone-enumeratefalse-flags0)
+[`grep(path, pattern, *, encoding=None, enumerate=False, flags=0)`](#greppath-pattern--encodingnone-enumeratefalse-flags0)
+
+[`Heap(i=None)`](#heapinone)
+
+[`Heap.append(o)`](#heapappendo)
+
+[`Heap.clear()`](#heapclear)
+
+[`Heap.copy()`](#heapcopy)
+
+[`Heap.extend(i)`](#heapextendi)
+
+[`Heap.remove(o)`](#heapremoveo)
+
+[`Heap.popleft()`](#heappopleft)
+
+[`Heap.append_and_popleft(o)`](#heapappendandpoplefto)
+
+[`Heap.popleft_and_append(o)`](#heappopleftandappend0)
+
+[`Heap.queue`](#heapqueue)
+
+[`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsNone--line_number1-column_number1-tab_width8---kwargs)
+
+[`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
+
+[`lines_filter_comment_lines(li, comment_separators)`](#lines_filter_comment_linesli-comment_separators)
+
+[`lines_rstrip(li)`](#lines_rstripli)
+
+[`lines_strip(li)`](#lines_striple)
+
+[`lines_strip_indent(li)`](#lines_strip_indentli)
 
 [`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponsenormal-overflow_before0-overflow_after0)
 
-[`multisplit(text, separators, *, maxsplit=-1)`](#multisplittext-separators--maxsplit-1)
+[`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reverseFalse-separateTrue)
 
-[`normalize_whitespace(s)`](#normalize_whitespaces)
+[`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=NOT_SEPARATE)`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+
+[`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
+
+[`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementNone)
 
 [`parse_timestamp_3339Z(s)`](#parse_timestamp_3339zs)
 
 [`pushd(directory)`](#pushddirectory)
 
-[`re_partition(text, pattern, *, flags=0)`](#re_partitiontext-pattern--flags0)
+[`re_partition(text, pattern, count=1, *, flags=0)`](#re_partitiontext-pattern-count1--flags0)
 
-[`re_rpartition(text, pattern, *, flags=0)`](#re_rpartitiontext-pattern--flags0)
+[`re_rpartition(text, pattern, count=1, *, flags=0)`](#re_rpartitiontext-pattern-count1--flags0)
 
 [`rstripped_lines(s, *, sep=None)`](#rstripped_liness--sepNone)
 
 [`safe_mkdir(path)`](#safe_mkdirpath)
 
 [`safe_unlink(path)`](#safe_unlinkpath)
+
+[`Scheduler(regulator=None)`](#schedulerregulatornone)
+
+[`Scheduler.schedule(o, time, *, absolute=False, priority=DEFAULT_PRIORITY)`](#schedulerscheduleo-time--absolutefalse-prioritydefault_priority)
+
+[`Scheduler.cancel(event)`](#schedulercancelevent)
+
+[`Scheduler.queue`](#schedulerqueue)
+
+[`Scheduler.non_blocking()`](#schedulernon_blocking)
+
+[`Scheduler.Event(time, priority, sequence, event, scheduler)`](#schedulereventtime-priority-sequence-event-scheduler)
+
+[`Scheduler.Event.cancel()`](#schedulereventcancel)
+
+[`Scheduler.Regulator(scheduler)`](#schedulerregulatorscheduler)
+
+[`Scheduler.Regulator.now()`](#schedulerregulatornow)
+
+[`Scheduler.Regulator.sleep(t)`](#schedulerregulatorsleept)
+
+[`Scheduler.Regulator.wake()`](#schedulerregulatorwake)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
@@ -133,6 +191,10 @@ notice on the source code.
 [`View.reset()`](#viewreset)
 
 [`wrap_words(words, margin=79, *, two_spaces=True)`](#wrap_wordswords-margin79--two_spacestrue)
+
+[**The `multi-` family of functions**](#The-multi--family-of-functions)
+
+[**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 
 [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
@@ -507,6 +569,219 @@ Methods on a `View` object:
 > forgetting all "ready" and "done" state.
 
 
+## `big.heap`
+
+Functions for working with heap objects.
+Well, just one heap object really.
+
+#### `Heap(i=None)`
+
+> An object-oriented wrapper around the `heapq` library, designed to be
+> easy to use--and easy to remember how to use.  The `heapq` library
+> implements a [binary heap](https://en.wikipedia.org/wiki/Binary_heap),
+> a data structure used for sorting;
+> you add objects to the heap, and you can then remove
+> objects in sorted order.  Heaps are useful because they have are efficient
+> both in space and in time; they're also inflexible, in that iterating over
+> the sorted items is destructive.
+>
+> Big's `Heap` API mimics the `list` and `collections.deque` objects;
+> this way, all you need to remember is "it works kinda like a `list` object".
+> You `append` new items to the heap, then `popleft` them off in sorted order.
+>
+> By default `Heap` creates an empty heap.  If you pass in an iterable `i`
+> to the constructor, this is equivalent to calling the `extend(i)` on the
+> freshly-constructed `Heap`.
+>
+> In addition to the below methods, `Heap` objects support iteration,
+> `len`, the `in` operator, and use as a boolean expression.  You can
+> also index or slice into a `Heap` object, which behaves as if the
+> heap is a list of objects in sorted order.  Getting the first item
+> (`Heap[0]`, aka *peek*) is cheap, the other operations can get very
+> expensive.
+>
+> Methods on a `Heap` object:
+
+
+#### `Heap.append(o)`
+
+> Adds object `o` to the heap.
+
+#### `Heap.clear()`
+
+> Removes all objects from the heap,
+> resetting it to empty.
+
+#### `Heap.copy()`
+
+> Returns a shallow copy of the heap.
+> Only duplicates the heap data structures itself;
+> does not duplicate the objects *in* the heap.
+
+#### `Heap.extend(i)`
+
+> Adds all the objects from the iterable `i` to the heap.
+
+#### `Heap.remove(o)`
+
+> If object `o` is in the heap, removes it.  If `o` is not
+> in the heap, raises `ValueError`.
+
+#### `Heap.popleft()`
+
+> If the heap is not empty, returns the first item in the
+> heap in sorted order.  If the heap is empty, raises `IndexError`.
+
+#### `Heap.append_and_popleft(o)`
+
+> Equivalent to calling `Heap.append(o)` immediately followed
+> by `Heap.popleft()`.  If `o` is smaller than any other object
+> in the heap at the time it's added, this will return `o`.
+
+#### `Heap.popleft_and_append(o)`
+
+> Equivalent to calling `Heap.popleft()` immediately followed
+> by `Heap.append(o)`.  This method will *never* return `o`,
+> unless `o` was already in the heap before the method was called.
+
+#### `Heap.queue`
+
+> Not a method, a property.  Returns a copy of the contents
+> of the heap, in sorted order.
+
+
+## `big.scheduler`
+
+A replacement for Python's `sched.scheduler` object,
+adding full threading support and a modern Python interface.
+
+Python's `sched.scheduler` object is unfixable; its interface
+means it cannot correctly handle some scenarios:
+
+* If one thread has called `sched.scheduler.run`,
+  and the next scheduled event will occur at time **T**,
+  and a second thread schedules a new event which
+  occurs at a time < **T**, `sched.scheduler.run` won't
+  return any events to the first thread until time **T**.
+* If one thread has called `sched.scheduler.run`,
+  and the next scheduled event will occur at time **T**,
+  and a second thread cancels all events,
+  `sched.scheduler.run` won't exit until time **T**.
+
+Also, `sched.scheduler` is thirty years behind the times in
+Python API design--its design predates many common modern
+Python conventions.  Its events are callbacks, which it
+calls directly.  `Scheduler` fixes this: its events are
+objects, and you iterate over the `Scheduler` object to receive
+events as they become due.
+
+`Scheduler` also benefits from thirty years of improvements
+to `sched.scheduler`.  In particular, big reimplements the
+bulk of the `sched.scheduler` test suite, to ensure that
+`Scheduler` never repeats the historical problems discovered
+over the lifetime of `sched.scheduler`.
+
+#### `Scheduler(regulator=None)`
+
+Implements a thread-safe scheduler.  The only argument is the
+"regulator" object to use; the regulator abstracts away all
+time-related details for the scheduler.  By default `Scheduler`
+creates a new `Scheduler.Regulator` object and uses that.
+
+In addition to the below methods, `Scheduler` objects support
+being evaluated in a boolean context (they are true if they
+contain any events), and they support being iterated over.
+Iterating over a `Scheduler` object blocks until the next
+event comes due, at which point the `Scheduler` yields that
+event.  An empty `Scheduler` that is iterated over raises
+`StopIteration`.  You can reuse `Scheduler` objects, iterating
+over them until empty, then adding more objects and iterating
+over them again.
+
+#### `Scheduler.schedule(o, time, *, absolute=False, priority=DEFAULT_PRIORITY)`
+
+Schedules an object `o` to be yielded as an event by this `schedule` object
+at some time in the future.
+
+By default the `time` value is a relative time value,
+and is added to the current time; using a `time` value of 0
+should schedule this event to be yielded immediately.
+
+If `absolute` is true, `time` is regarded as an absolute time value.
+
+If multiple events are scheduled for the same time, they will
+be yielded by order of `priority`.  Lowever values of
+`priority` represent higher priorities.  The default value
+is `Scheduler.DEFAULT_PRIORITY`, which is 100.  If two events
+are scheduled for the same time, and have the same priority,
+`Scheduler` will yield the events in the order they were added.
+
+Returns an `Event` object, which can be used to cancel the event.
+
+#### `Scheduler.cancel(event)`
+
+Cancels a scheduled event.  `event` must be an object
+returned by this `Scheduler` object.  If `event` is not
+currently scheduled in this `Scheduler` object,
+raises `ValueError`.
+
+#### `Scheduler.queue`
+
+A property, not a method.  Returns a list of the
+current `Event` objects in the scheduler, in order
+that they will be yielded.
+
+#### `Scheduler.non_blocking()`
+
+Returns an iterator for the events in the
+`Scheduler` that only yields the events that
+are currently due.  Never blocks; if the next
+event is not due yet, raises `StopIteration`.
+
+#### `Scheduler.Event(time, priority, sequence, event, scheduler)`
+
+An object representing a scheduled event in a `Scheduler`.
+You shouldn't need to create them manually; `Event` objects
+are created automatically when you add events to a `Scheduler`.
+
+Supports one method:
+
+#### `Scheduler.Event.cancel()`
+
+Cancels this event.  If this event has already been canceled,
+raises `ValueError`.
+
+#### `Scheduler.Regulator(scheduler)`
+
+Creates a regulator object for use with a `Scheduler`.
+Measures time using the `time.monotonic` clock, and
+sleeps using a `threading.Event` object.
+Time values are expressed in seconds, either integer
+or floating point.
+
+You can write your own regulator class and use it with
+`Scheduler`; it must implement the three following methods.
+
+#### `Scheduler.Regulator.now()`
+
+Returns a "time value", an object representing the
+current time. The object returned must support
+simple arithmetic operations (`+` and `-`) and
+rich comparison with other time values.
+
+#### `Scheduler.Regulator.sleep(t)`
+
+Sleeps for a period of time expressed as a
+relative "time value".  Note that `sleep` must
+be interruptable with the `wake` method.
+
+#### `Scheduler.Regulator.wake()`
+
+Wakes up *all* threads that are current sleeping
+using `Scheduler.Regulator.sleep(t)`.  All calls
+to `sleep` on this `Regulator` object must return
+immediately.
+
 ## `big.text`
 
 Functions for working with text strings.  See the
@@ -537,7 +812,7 @@ section below for a higher-level view on some of these functions.
 
 > and contractions that start with an apostrophe
 
-    'Twas The Night Before christmas
+    'Twas The Night Before Christmas
 
 > Rule b) handles certain Irish, French, and Italian
 > names.
@@ -563,14 +838,96 @@ section below for a higher-level view on some of these functions.
 
     "“”„‟«»‹›
 
-#### `normalize_whitespace(s)`
+#### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
 
-> Returns `s`, but with every run of consecutive
-> whitespace characters turned into a single space.
-> Preserves leading and trailing whitespace.
+> A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
 >
-> `normalize_whitespace("   a    b   c")` returns `" a b c"`.
+> `s` can be `str`, `bytes`, or any iterable.
+>
+> By default, if `s` is `str`, splits `s` by all Unicode line break characters.
+> If `s` is `bytes`, splits `s` by all ASCII line break characters.
+>
+> If `s` is neither str nor bytes, `s` must be an iterable;
+> lines yields successive elements of `s` as lines.
+>
+> `separators`, if not `None`, must be an iterable of strings of the
+> same type as `s`.  `lines` will split `s` using those strings as
+> separator strings (using `big.multisplit`).
+>
+> When iterated over, yields 2-tuples:
+>     (info, line)
+>
+> `info` is a `LineInfo` object, which contains three fields by
+> default:
+>
+> * `line` - the original line, never modified
+> * `line_number` - the line number of this line, starting at the
+> `line_number` passed in and adding 1 for each successive line
+> * `column_number` - the column this line starts on,
+> starting at the `column_number` passed in, and adjusted when
+> characters are removed from the beginning of `line`
+>
+> `tab_width` is not used by `lines` itself, but is stored
+> internally and may be used by other lines modifier functions
+> (e.g. `lines_convert_tabs_to_spaces`). Similarly, all keyword
+> arguments passed in via `kwargs` are stored internally and can
+> be accessed by user-defined lines modifier functions.
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
+#### `lines_convert_tabs_to_spaces(li)`
+
+> A lines modifier function.  Converts tabs to spaces for the lines
+> of a "lines iterator", using the `tab_width` passed in to `lines`.
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_filter_comment_lines(li, comment_separators)`
+
+> A lines modifier function.  Filters out comment lines from the
+> lines of a "lines iterator".  Comment lines are lines whose
+> first non-whitespace characters appear in the iterable of
+> `comment_separators` strings passed in.
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_rstrip(li)`
+
+> A lines modifier function.  Strips trailing whitespace from the
+> lines of a "lines iterator".
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_strip(li)`
+
+> A lines modifier function.  Strips leading and trailing whitespace
+> from the lines of a "lines iterator".
+>
+> If `lines_strip` removes leading whitespace from a line, it adds
+> a field to the associated `LineInfo` object:
+>
+> * `leading` - the leading whitespace string that was removed
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_strip_indent(li)`
+
+> A lines modifier function.  Automatically measures and strips indents.
+>
+> Sets two new fields on the associated `LineInfo` object for every line:
+>
+> * `indent` - an integer indicating how many indents it's observed
+> * `leading` - the leading whitespace string that was removed
+>
+> Uses an intentionally simple algorithm.
+> Only understands tab and space characters as indent characters.
+> Internally detabs to spaces first for consistency, using the
+> `tab_width` passed in to lines.
+>
+> You can only dedent out to a previous indent.
+> Raises `IndentationError` if there's an illegal dedent.
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
 
@@ -608,44 +965,173 @@ section below for a higher-level view on some of these functions.
 > specify the number of extra lines before or after
 > the overflowed lines in a column.
 
-#### `multisplit(text, separators, *, maxsplit=-1)`
+#### `multipartition(s, separators, count=1, *, reverse=False, separate=True)`
+
+> Like `str.partition`, but supports partitioning based on multiple
+> separator strings, and can partition more than once.
+>
+> `s` can be str or bytes.
+>
+> `separators` should be an iterable of str or bytes, matching `s`.
+>
+> By default, if any of the strings in `separators` are found in `s`,
+> returns a tuple of three strings: the portion of `s` leading up to
+> the earliest separator, the separator, and the portion of `s` after
+> that separator.  Example:
+>
+>     multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
+>
+> If none of the separators are found in the string, returns
+> a tuple containing `s` unchanged followed by two empty strings.
+>
+> Passing in an explicit `count` lets you control how many times
+> `multipartition` partitions the string.  `multipartition` will always
+> return a tuple containing `(2*count)+1` elements.
+> Passing in a `count` of 0 will always return a tuple containing `s`.
+>
+> If `separate` is true, multiple adjacent separator strings behave
+> like one separator.  Example:
+>
+>     multipartition('aXYbXYc', ('X', 'Y',), separate=True) => ('a', 'XY', 'bXYc')
+>
+> If `reverse` is true, multipartition behaves like `str.rpartition`.
+> It partitions starting on the right, scanning backwards through slooking
+> for separators.
+>
+> For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+
+#### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=NOT_SEPARATE)`
 
 > Like `str.split`, but separators is an iterable of separator strings.
 >
-> `text` can be `str` or `bytes`.
+> `s` can be `str` or `bytes`.
 >
 > `separators` should be an iterable.  Each element of `separators`
 > should be the same type as `text`.  If `separators` is a string or bytes
 > object, `multisplit` behaves as separators is a tuple containing each
 > individual character.
 >
-> Returns a list of the substrings split from `text`.
+> Returns an iterator yielding the strings split from `s`.  If `keep`
+> is not false, and `strip` is false, joining these strings together
+> will recreate `s`.
+>
+> `keep` indicates whether or not multisplit should preserve the separator
+> strings in the strings it yields.  It supports four values:
+>       false (the default)
+>            Discard the separators.
+>       true (apart from ALTERNATING or AS_PAIRS)
+>            Append the separators to the end of the split strings.
+>        ALTERNATING
+>            Yield alternating strings in the output: strings consisting
+>            of separators, alternating with strings consisting of
+>            non-separators.  If "separate" is true, separator strings
+>            will contain exactly one separator, and non-separator strings
+>            may be empty; if "separate" is false, separator strings will
+>            contain one or more separators, and non-separator strings
+>            will never be empty, unless `s` was empty.
+>        AS_PAIRS
+>            Yield 2-tuples containing a non-separator string and its
+>            subsequent separator string.  Either string may be empty,
+>            but both strings will never be empty at the same time.
+>
+> `separate` indicates whether multisplit should consider adjacent
+> separator strings in `s` as one separator or as multiple separators
+> each separated by a zero-length string.  It supports two values:
+>        false (the default)
+>            Multiple adjacent separators should be considered one
+>            separator.
+>        true
+>            Don't group separators together.  Each separator should
+>            split the string individually, even if there are no
+>            characters between two separators.
+>
+> `strip indicates whether multisplit should strip separators from
+> the beginning and/or end of `s`, by using `multistrip`.  It supports
+> six values:
+>        NOT_SEPARATE (the default)
+>            Use the opposite value specified for "separate"
+>            If separate=True, behaves as if strip=False.
+>            If separate=False, behaves as if strip=True.
+>        false
+>            Don't strip separators from the beginning or end of s.
+>        LEFT
+>            Strip separators only from the beginning of s
+>            (a la str.lstrip).
+>        RIGHT
+>            Strip separators only from the end of s
+>            (a la str.rstrip).
+>        true
+>            Strip separators from the beginning and end of s
+>            (a la str.strip).
+>        STR_STRIP (currently unimplemented, equivalent to true)
+>            Behave like str.strip.  Strip from the beginning
+>            and end of s, unless maxsplit is nonzero and the
+>            entire string is not split.  If splitting stops due
+>            to maxsplit before the entire string is split, and
+>            reverse is false, don't strip the end of the string.
+>            If splitting stops due to maxsplit before the entire
+>            string is split, and reverse is true, don't strip
+>            the beginning of the string.
 >
 > `maxsplit` should be either an integer or `None`.  If `maxsplit` is an
 > integer greater than -1, multisplit will split `text` no more than
 > `maxsplit` times.
 >
-> Example:
-> ```Python
->     multisplit('ab:cd,:ef', ':,')
-> ```
-> returns
-> ```Python
->     ["ab", "cd", "ef"]
-> ```
+> `reverse` affects whether the `maxsplit` splits start at the
+> beginning or the end of the string.  It supports two values:
+>        false (the default)
+>            Start splitting at the beginning of the string.
+>        true
+>            Start splitting at the end of the string.
+> `reverse` has no effect when `maxsplit` is 0, -1, or `None`.
 >
-> Example:
-> ```Python
->     multisplit('\tthis is a\n\tbunch of words', (' ', '\t', '\n'))
-> ```
+> For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+
+#### `multistrip(s, separators, left=True, right=True)`
+
+> Like `str.strip`, but supports stripping multiple substrings from `s`.
 >
-> would produce the same result as
-> ```Python
->     '\tthis is a\n\tbunch of words'.split()
-> ```
+> Strips from the string `s` all leading and trailing instances of strings
+> found in `separators`.
+>
+> `s` should be str or bytes.
+>
+> `separators` should be an iterable of either `str` or `bytes`
+> objects matching the type of `s`.
+>
+> If `left` is a true value, strips all leading separators
+> from `s`.
+>
+> If `right` is a true value, strips all trailing separators
+> from `s`.
+>
+> Processing always stops at the first character that
+> doesn't match one of the separators.
+>
+> Returns a copy of `s` with the leading and/or trailing
+> separators stripped.  (If `left` and `right` are both
+> false, returns `s` unchanged.)
+>
+> For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
+#### `normalize_whitespace(s, separators=None, replacement=None)`
 
-#### `re_partition(text, pattern, *, flags=0)`
+> Returns `s`, but with every run of consecutive
+> separator characters turned into a replacement string.
+> By default turns all runs of consecutive whitespace
+> characters into a single space character.
+>
+> 's' may be 'str' or 'bytes'.
+> 'separators' should be an iterable of either 'str' or 'bytes',
+> matching 's'.
+> 'replacement' should be 'str' or 'bytes', also matching 's'.
+>
+> Leading or trailing runs of separator characters will
+> be replaced with the replacement string, e.g.:
+>
+>     normalize_whitespace("   a    b   c") == " a b c"
+
+#### `re_partition(text, pattern, count=1, *, flags=0)`
 
 > Like `str.partition`, but `pattern` is matched as a regular expression.
 >
@@ -673,10 +1159,16 @@ section below for a higher-level view on some of these functions.
 > ```
 > where the empty string is `str` or `bytes` as appropriate.
 >
+> Passing in an explicit `count` lets you control how many times
+> `re_partition` partitions the string.  `re_partition` will always
+> return a tuple containing `(2*count)+1` elements, and
+> odd-numbered elements will be either `re.Match` objects or `None`.
+> Passing in a `count` of 0 will always return a tuple containing `s`.
+>
 > If `pattern` is a string or bytes object, `flags` is passed in
 > as the `flags` argument to `re.compile`.
 
-#### `re_rpartition(text, pattern, *, flags=0)`
+#### `re_rpartition(text, pattern, count=1, *, flags=0)`
 
 > Like `str.rpartition`, but `pattern` is matched as a regular expression.
 >
@@ -704,20 +1196,14 @@ section below for a higher-level view on some of these functions.
 > ```
 > where the empty string is `str` or `bytes` as appropriate.
 >
+> Passing in an explicit `count` lets you control how many times
+> `re_rpartition` partitions the string.  `re_rpartition` will always
+> return a tuple containing `(2*count)+1` elements, and
+> odd-numbered elements will be either `re.Match` objects or `None`.
+> Passing in a `count` of 0 will always return a tuple containing `s`.
+>
 > If `pattern` is a string, `flags` is passed in
 > as the `flags` argument to `re.compile`.
-
-
-#### `rstripped_lines(s, *, sep=None)`
-
-> Splits `s` at line boundaries, then "rstrips"
-> (strips trailing whitespace) from each line.
->
-> Returns an iterator yielding lines.
->
-> `sep` specifies an alternate separator string.
-> If provided, it should match the type of `s`.
-
 
 #### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
 
@@ -733,17 +1219,6 @@ section below for a higher-level view on some of these functions.
 > preserved.  (This will preserve the formatting of code
 > examples when these words are rejoined into lines
 > by `wrap_words`.)
-
-#### `stripped_lines(s, *, sep=None)`
-
-> Splits `s` at line boundaries, then strips
-> whitespace from each line.
->
-> Returns an iterator yielding lines.
->
-> `sep` specifies an alternate separator string.
-> If provided, it should match the type of `s`.
-
 
 #### `wrap_words(words, margin=79, *, two_spaces=True)`
 
@@ -838,6 +1313,130 @@ to make it easy to use best practices.
 
 # Subsystem notes
 
+## The `multi-` family of functions
+
+This family of functions was inspired by Python's `str.strip`,
+`str.rstrip`, and `str.splitlines` functions.  These functions
+are well-designed, and often do what you want.  But they're
+all surprisingly opinionated.  And... what if you want to do
+something slightly different?  What if `str.strip` *doesn't*
+do what you want?  If you want to split your string in a
+slightly different way, you can't use `str.strip` anymore.
+So what *can* you use?  There's `re.strip`, but it's hard to
+use.  Now there's a new answer: you can use `multistrip`.
+
+The goal of `multistrip` is to be the be-all end-all text
+splitting function.  You pass in the string you want to split,
+and an iterable containing the separator strings you want to
+split on.  It returns an iterator yielding the split strings.
+It's designed to replace every mode of operation for
+`str.split`, `str.rstrip`, and `str.splitlines`, and it
+can even be used to replace `str.partition` and `str.rpartition`
+too.
+
+The cornerstone of `multistrip` is the `separators` argument.
+This is an iterable of strings, of the same type (`str` or `bytes`)
+as the string you want to split (`s`).  `multistrip` will split
+the string at *each* non-overlapping instance of any string
+specified in `separators`.  The keyword-only parameters to
+`multistrip` let you tune this behavior:
+
+* `keep` lets you include the separator strings in the output,
+  in a number of different ways.
+* `separate` lets you specify whether adjacent separator strings
+  should be grouped together (like `str.strip` operating on
+  whitespace) or regarded as separate (like `str.strip` when
+  you pass in an explicit `sep` separator).
+* `strip` lets you strip separator strings from the beginning,
+  end, or both ends of the string you're splitting.
+* `maxsplit` lets you specify the maximum number of times to
+  split the string (like the `maxsplit` argument to `str.strip`).
+* `reverse` lets you apply `maxsplit` to the end of the string
+  and splitting backwards (like using `str.rstrip` instead of
+  `str.strip`).
+
+`multistrip` also inspired `multisplit` and `multipartition`,
+which also take this same `separators` arguments.  There are
+other functions that take a `separators` argument, and the
+parameter name always has the word `separators` in it.
+(For example, `comment_separators` for `lines_filter_comment_lines`.)
+
+The downside of `multistrip` is that, since it *is* so
+sophisticated and tunable, it can be hard to use.  It takes
+five keyword-only parameters, after all.  However, these
+are designed to be memorable, and they all default to `False`
+(except `strip`).  Also, the best way to combat the
+complexity of `multistrip` is to use it as a building block
+for your own presumably easier-to-use text splitting functions.
+For example, `multistrip` is used to implement `multipartition`,
+`normalize_whitespace`,  and `lines`.
+
+## `lines` and lines modifier functions
+
+`lines` creates an iterator that yields individual lines
+split from a string.  It's designed to make it easy to write
+well-behaved simple text parsers.
+
+For example, every yielded line is accompanied by a `LinesInfo`
+object which provides the line number and starting column number
+for each line.  This makes it easy for your parser to provide
+line and column information for error messages.
+
+The output of `lines` can be modified by "lines modifier"
+functions.  These are functions that iterate over a lines
+iterator and re-yield the values, possibly modifying or
+discarding them along the way.  For example, passing
+a `lines` iterator into `lines_filter_empty_lines` results
+in an iterator that skips over the empty lines.
+All the lines modifier functions that ship with big
+start with the string `lines_`.
+
+Actually there are additional constraints on the names
+of lines modifier functions.  The second word of the name
+of the function, immediately after `lines_`, tells you what
+the function will do.  Some examples:
+
+* `filter` means this lines modifier may remove some
+  lines from the output.  `lines_filter_empty_lines`
+  will only yield a line if it isn't empty.
+* `strip` means this lines modifier may remove one or
+  more substrings from the line.  A lines modifier that
+  removes the initial part of a line will add a
+  `leading` field to the accompanying `LineInfo` object
+  containing the substring removed from the beginning
+  of the line, and will also update the `column_number`
+  of the line to reflect the change to the line.
+* `convert` means this lines modifier may change one
+  or more substrings in the line.
+
+All lines modifier functions are composable with each
+other; you can "stack" them together simply by passing
+the output of one into the input of another.  For example,
+
+     with open("textfile.txt", "rt") as f:
+         for info, lines in big.lines_filter_empty_lines(
+     	     big.lines_rstrip(lines(f.read()))):
+     	     ...
+
+will iterate over the lines of `textfile.txt`, skipping
+over all empty lines and lines that consist only of
+whitespace.
+
+When you stack line modifiers in this way, note that the
+*outer* modifiers happen *later*.  In the above example,
+each line is first "r-stripped", and then discarded
+if it is empty.  If you stacked the line modifiers in
+the opposite order:
+
+     with open("textfile.txt", "rt") as f:
+         for info, lines in big.lines_rstrip(
+     	     big.lines_filter_empty_lines(lines(f.read()))):
+     	     ...
+
+then you would filter out empty lines first, and *then*
+"r-strip" the lines.  So lines in the input that contained
+only whitespace would still get yielded as empty lines,
+which in this case is probably not what you wanted.
 
 ## Word wrapping and formatting
 
@@ -1351,6 +1950,44 @@ You can see more complex examples of using inheritance with
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6**
+
+A **big** upgrade!
+
+* Completely retooled and upgraded `multisplit`, and added `multistrip`
+  and `multipartition`, collectively called
+  [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+  (Thanks to Eric Smith for suggesting `multipartition`!  Well, sort of.)
+  * `multisplit` now supports five (!) keyword-only
+    parameters, allowing the caller to tune its behavior to an amazing degree.
+  * Also, the original implementation of `multisplit` got its semantics
+    a bit wrong; it was inconsistent and maybe a little buggy.
+  * `multistrip` is like `str.strip` but accepts an iterable of
+    separator strings.  It can strip from the left, right, both, or
+    neither (in which case it does nothing).
+  * `multipartition` is like `str.partition`, but accepts an iterable
+    of separator strings.  It can also partition more than once,
+    and supports `reverse=True` which causes it to partition from the right
+    (like `str.rpartition`).
+  * Also added useful predefined lists of separators for use with all
+    the `multi` functions: `whitespace` and `newlines`, with
+    `ascii_` and `utf8_` versions of each, and `without_dos` variants of
+    all three newlines variants.
+* Added the `Scheduler` and `Heap` classes.  `Scheduler` is a
+  replacement for Python's `sched.scheduler` class, with a modernized
+  interface and a major upgrade in functionality.  `Heap` is an
+  object-oriented interface to Python's `heapq` module, used by
+  `Scheduler`.
+* Added `lines` and all the `lines_` modifiers.  These are great
+  for writing little text parsers.  For more information, please
+  see the section on
+  [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+* Removed`stripped_lines` and `rstripped_lines` from the `text` module,
+  as they're superceded by the far superior `lines` family.
+* Enhanced `normalize_whitespace`.  Added the `separators` and
+  `replacement` parameters, and added support for `bytes` objects.
+* Added the `count` parameter to `re_partition` and `re_rpartition`.
 
 **0.5.2**
 

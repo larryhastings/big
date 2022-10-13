@@ -24,7 +24,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import copy
 import big
+import big.text
+import math
 import re
 import unittest
 
@@ -42,14 +45,36 @@ def to_bytes(o): # pragma: no cover
     return o
 
 
+known_separators = [
+    (big.whitespace, "big.whitespace"),
+    (big.newlines,   "big.newlines"),
+    (big.newlines_without_dos,   "big.newlines_without_dos"),
+
+    (big.ascii_whitespace, "big.ascii_whitespace"),
+    (big.ascii_newlines,   "big.ascii_newlines"),
+    (big.ascii_newlines_without_dos,   "big.ascii_newlines_without_dos"),
+
+    (big.utf8_whitespace, "big.utf8_whitespace"),
+    (big.utf8_newlines,   "big.utf8_newlines"),
+    (big.utf8_newlines_without_dos,   "big.utf8_newlines_without_dos"),
+]
+
+def printable_separators(separators):
+    for known, name in known_separators:
+        if separators == known:
+            return f"{name}"
+    return separators
+
 class BigTextTests(unittest.TestCase):
 
     def test_re_partition(self):
         def group0(re_partition_result):
-            before, match, after = re_partition_result
-            if match is not None:
-                return (before, match.group(0), after)
-            return (before, match, after)
+            result = []
+            for i, o in enumerate(re_partition_result):
+                if (i % 2) and (o is not None):
+                    o = o.group(0)
+                result.append(o)
+            return tuple(result)
 
         for c in (unchanged, to_bytes):
             pattern = c("[0-9]+")
@@ -97,6 +122,30 @@ class BigTextTests(unittest.TestCase):
                 self.assertEqual(match.group(0), c("number 89"))
                 self.assertEqual(match.group(1), c("89"))
 
+            def test_re_partition(s, pattern, count, expected):
+                self.assertEqual(group0(big.re_partition(s, pattern, count)),
+                    expected )
+
+            test_re_partition("a:b:c:d", ":", 0, ("a:b:c:d",))
+            test_re_partition("a:b:c:d", ":", 1, ("a", ":", "b:c:d"))
+            test_re_partition("a:b:c:d", ":", 2, ("a", ":", "b", ":", "c:d"))
+            test_re_partition("a:b:c:d", ":", 3, ("a", ":", "b", ":", "c", ":", "d"))
+            test_re_partition("a:b:c:d", ":", 4, ("a", ":", "b", ":", "c", ":", "d", None, ''))
+            test_re_partition("a:b:c:d", ":", 5, ("a", ":", "b", ":", "c", ":", "d", None, '', None, ''))
+
+            def test_re_rpartition(s, pattern, count, expected):
+                self.assertEqual(group0(big.re_rpartition(s, pattern, count)),
+                    expected )
+
+            test_re_rpartition("a:b:c:d", ":", 0, ("a:b:c:d",))
+            test_re_rpartition("a:b:c:d", ":", 1, ("a:b:c", ':' ,"d"))
+            test_re_rpartition("a:b:c:d", ":", 2, ("a:b", ":", "c", ':' ,"d"))
+            test_re_rpartition("a:b:c:d", ":", 3, ("a", ":", "b", ":", "c", ':' ,"d"))
+            test_re_rpartition("a:b:c:d", ":", 4, ("", None, "a", ":", "b", ":", "c", ':' ,"d"))
+            test_re_rpartition("a:b:c:d", ":", 5, ("", None, "", None, "a", ":", "b", ":", "c", ':' ,"d"))
+
+
+
         s = "abc123def456ghi"
         pattern = b"[0-9]+"
         with self.assertRaises(ValueError):
@@ -109,37 +158,695 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.re_rpartition(s, pattern)
 
+        with self.assertRaises(ValueError):
+            big.re_partition('a:b', ':', -1)
+        with self.assertRaises(ValueError):
+            big.re_partition(b'a:b', b':', -1)
+        with self.assertRaises(ValueError):
+            big.re_rpartition('a:b', ':', -1)
+        with self.assertRaises(ValueError):
+            big.re_rpartition(b'a:b', b':', -1)
+    def test_multistrip(self):
+        def test_multistrip(left, s, right, separators):
+            for _ in range(2):
+                if _ == 1:
+                    left = left.encode('ascii')
+                    s = s.encode('ascii')
+                    right = right.encode('ascii')
+                    if separators == big.whitespace:
+                        separators = big.ascii_whitespace
+                    elif separators == big.newlines:
+                        separators = big.ascii_newlines
+                    else:
+                        assert isinstance(separators, str)
+                        separators = separators.encode('ascii')
+
+                self.assertEqual(big.multistrip(s, separators, left=False, right=False), s)
+                self.assertEqual(big.multistrip(s, separators, left=False, right=True ), s)
+                self.assertEqual(big.multistrip(s, separators, left=True,  right=False), s)
+                self.assertEqual(big.multistrip(s, separators, left=True,  right=True ), s)
+
+                ls = left + s
+                self.assertEqual(big.multistrip(ls, separators, left=False, right=False), ls)
+                self.assertEqual(big.multistrip(ls, separators, left=False, right=True ), ls)
+                self.assertEqual(big.multistrip(ls, separators, left=True,  right=False), s)
+                self.assertEqual(big.multistrip(ls, separators, left=True,  right=True ), s)
+
+                sr = s + right
+                self.assertEqual(big.multistrip(sr, separators, left=False, right=False), sr)
+                self.assertEqual(big.multistrip(sr, separators, left=False, right=True ), s)
+                self.assertEqual(big.multistrip(sr, separators, left=True,  right=False), sr)
+                self.assertEqual(big.multistrip(sr, separators, left=True,  right=True ), s)
+
+                lsr = left + s + right
+                self.assertEqual(big.multistrip(lsr, separators, left=False, right=False), lsr)
+                self.assertEqual(big.multistrip(lsr, separators, left=False, right=True ), ls)
+                self.assertEqual(big.multistrip(lsr, separators, left=True,  right=False), sr)
+                self.assertEqual(big.multistrip(lsr, separators, left=True,  right=True ), s)
+
+        test_multistrip(" \t \n ", "abcde", " \n \t ", " \t\n")
+        test_multistrip(" \t \n ", "abcde", " \n \t ", big.whitespace)
+        test_multistrip("\r\n\n\r", "abcde", "\n\r\r\n", big.newlines)
+        test_multistrip("\r\n\n\r", "abcde", "\n\r\r\n", big.whitespace)
+        test_multistrip("xXXxxxXx", "iiiiiii", "yyYYYyyyyy", "xyXY")
+
     def test_multisplit(self):
         for c in (unchanged, to_bytes):
-            self.assertEqual(big.multisplit(c(''), c('abcde')), c(['']))
-            self.assertEqual(big.multisplit(c('abcde'), c('fghij')), c(['abcde']))
-            self.assertEqual(big.multisplit(c('abcde'), c('fghijc')), c(['ab', 'de']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde')), c(['x', 'x', 'x', 'x', 'x', 'x']))
+            def multisplit(*a, **kw): return list(big.multisplit(*a, **kw))
+            self.assertEqual(multisplit(c('aaaXaaaYaaa'), c('abc')), c(['X', 'Y']))
+            self.assertEqual(multisplit(c('abcXbcaYcba'), c('abc')), c(['X', 'Y']))
 
-            self.assertEqual(big.multisplit(c('ab:cd,ef'), c(':,')), c(["ab", "cd", "ef"]))
-            self.assertEqual(big.multisplit(c('ab:cd,ef:'), c(':,')), c(["ab", "cd", "ef", '']))
-            self.assertEqual(big.multisplit(c(',ab:cd,ef:'), c(':,')), c(['', "ab", "cd", "ef", '']))
-            self.assertEqual(big.multisplit(c(':ab:cd,ef'), c(':,')), c(['', "ab", "cd", "ef"]))
-            self.assertEqual(big.multisplit(c('WWabXXcdYYabZZ'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(big.multisplit(c('WWabXXcdYYabZZab'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ', '']))
-            self.assertEqual(big.multisplit(c('abWWabXXcdYYabZZ'), c(('ab', 'cd'))), c(['', 'WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(big.multisplit(c('WWabXXcdYYabZZcd'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ', '']))
-            self.assertEqual(big.multisplit(c('XXabcdYY'), c(('a', 'abcd'))), c(['XX', 'YY']))
-            self.assertEqual(big.multisplit(c('XXabcdabcdYY'), c(('ab', 'cd'))), c(['XX', 'YY']))
-            self.assertEqual(big.multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd'))), c(['', 'XX', 'YY', '']))
+            self.assertEqual(multisplit(c(''), c('abcde'), maxsplit=None), c(['']))
+            self.assertEqual(multisplit(c('abcde'), c('fghij')), c(['abcde']))
+            self.assertEqual(multisplit(c('abcde'), c('fghijc')), c(['ab', 'de']))
+            self.assertEqual(multisplit(c('1a2b3c4d5e6'), c('abcde')), c(['1', '2', '3', '4', '5', '6']))
 
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=0), c(['xaxbxcxdxex']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=1), c(['x', 'xbxcxdxex']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=2), c(['x', 'x', 'xcxdxex']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=3), c(['x', 'x', 'x', 'xdxex']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=4), c(['x', 'x', 'x', 'x', 'xex']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=5), c(['x', 'x', 'x', 'x', 'x', 'x']))
-            self.assertEqual(big.multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=6), c(['x', 'x', 'x', 'x', 'x', 'x']))
+            self.assertEqual(multisplit(c('ab:cd,ef'), c(':,')), c(["ab", "cd", "ef"]))
+            self.assertEqual(multisplit(c('ab:cd,ef:'), c(':,')), c(["ab", "cd", "ef"]))
+            self.assertEqual(multisplit(c(',ab:cd,ef:'), c(':,')), c(["ab", "cd", "ef"]))
+            self.assertEqual(multisplit(c(':ab:cd,ef'), c(':,')), c(["ab", "cd", "ef"]))
+            self.assertEqual(multisplit(c('WWabXXcdYYabZZ'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(multisplit(c('WWabXXcdYYabZZab'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(multisplit(c('abWWabXXcdYYabZZ'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(multisplit(c('WWabXXcdYYabZZcd'), c(('ab', 'cd'))), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(multisplit(c('XXabcdYY'), c(('a', 'abcd'))), c(['XX', 'YY']))
+            self.assertEqual(multisplit(c('XXabcdabcdYY'), c(('ab', 'cd'))), c(['XX', 'YY']))
+            self.assertEqual(multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd'))), c(['XX', 'YY']))
+
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=0), c(['xaxbxcxdxex']))
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=1), c(['x', 'xbxcxdxex']))
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=2), c(['x', 'x', 'xcxdxex']))
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=3), c(['x', 'x', 'x', 'xdxex']))
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=4), c(['x', 'x', 'x', 'x', 'xex']))
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=5), c(['x', 'x', 'x', 'x', 'x', 'x']))
+            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=6), c(['x', 'x', 'x', 'x', 'x', 'x']))
+
+            # test greedy separators
+            self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'), c(['a', 'abc', 'abcde'])), c(['-', '-', '-', '-', '-', '-']))
+
+            # regression test: don't ever end with a tuple containing two empty strings
+            self.assertEqual(multisplit(c('\na\nb\nc\n'), c(('\n',)), keep=big.AS_PAIRS, strip=False), c([ ('', '\n'), ('a', '\n'), ('b', '\n'), ('c', '\n') ]))
 
         with self.assertRaises(TypeError):
-            big.multisplit('s', None)
+            multisplit('s', 3.1415)
         with self.assertRaises(ValueError):
-            big.multisplit('s', b'abc')
+            multisplit('s', b'abc')
+
+    def test_advanced_multisplit(self):
+        def simple_test_multisplit(s, separators, expected, **kwargs):
+            for _ in range(2):
+                if _ == 1:
+                    # encode!
+                    s = s.encode('ascii')
+                    if separators == big.whitespace:
+                        separators = big.ascii_whitespace
+                    elif isinstance(separators, str):
+                        separators = separators.encode('ascii')
+                    else:
+                        separators = big.text._cheap_encode_iterable_of_strings(separators)
+                    expected = list(big.text._cheap_encode_iterable_of_strings(expected))
+                # print()
+                # print(f"{s=} {expected=}\n{separators=}")
+                result = list(big.multisplit(s, separators, **kwargs))
+                self.assertEqual(result, expected)
+
+        for i in range(8):
+            spaces = " " * i
+            simple_test_multisplit(spaces + "a  b  c" + spaces, (" ",), ['a', 'b', 'c'])
+            simple_test_multisplit(spaces + "a  b  c" + spaces, big.whitespace, ['a', 'b', 'c'])
+
+
+        simple_test_multisplit("first line!\nsecond line.\nthird line.", big.newlines,
+            ["first line!", "second line.", "third line."])
+        simple_test_multisplit("first line!\nsecond line.\nthird line.\n", big.newlines,
+            ["first line!\n", "second line.\n", "third line."], keep=True, strip=True)
+        simple_test_multisplit("first line!\nsecond line.\nthird line.\n", big.newlines,
+            ["first line!\n", "second line.\n", "third line.\n", ""], keep=True, strip=False)
+        simple_test_multisplit("first line!\n\nsecond line.\n\n\nthird line.", big.newlines,
+            ["first line!", '', "second line.", '', '', "third line."], separate=True)
+        simple_test_multisplit("first line!\n\nsecond line.\n\n\nthird line.", big.newlines,
+            ["first line!\n", '\n', "second line.\n", '\n', '\n', "third line."], keep=True, separate=True)
+
+
+        simple_test_multisplit("a,b,,,c", ",", ['a', 'b', '', '', 'c'], separate=True)
+
+        simple_test_multisplit("a,b,,,c", (",",), ['a', 'b', ',,c'], separate=True, maxsplit=2)
+
+        simple_test_multisplit("a,b,,,c", (",",), ['a,b,', '', 'c'], separate=True, maxsplit=2, reverse=True)
+
+    def test_multisplit_against_split(self):
+        # can't test against split(None), we don't have strip=STR_SPLIT yet
+        def test_split_with_separator(s, separator, maxsplit):
+            expected = s.split(separator, maxsplit)
+            result = list(big.multisplit(s, separator, keep=False, separate=True, strip=False, reverse=False, maxsplit=maxsplit))
+            self.assertEqual(expected, result)
+
+        def test_rsplit_with_separator(s, separator, maxsplit):
+            expected = s.rsplit(separator, maxsplit)
+            result = list(big.multisplit(s, separator, keep=False, separate=True, strip=False, reverse=True, maxsplit=maxsplit))
+            self.assertEqual(expected, result)
+
+        for base_s in (
+            "",
+            "a",
+            "a b c",
+            "a b  c d   e",
+            ):
+            for leading in range(10):
+                for trailing in range(10):
+                    s = (" " * leading) + base_s + (" " * trailing)
+                    for maxsplit in range(-1, 8):
+                        test_split_with_separator(s, " ", maxsplit)
+                        test_rsplit_with_separator(s, " ", maxsplit)
+
+
+    def test_multisplit_exhaustively(self):
+        def multisplit_tester(*segments):
+            """
+            segments represent split-up text segments.
+            each segment is either
+              a) in separators, or
+              b) contains no separators at all.
+            you don't need to start or end with empty strings.
+
+            and, the last positional argument is actually "separators".
+            as in, the separators argument for multisplit.
+
+            tests Every. Possible. Permutation. of inputs to multisplit()
+            based on the segments you pass in.  this includes
+                * as strings and encoded to bytes (ascii)
+                * with and without the left separators
+                * with and without the right separators
+                * with every combination of every value of
+                    * keep
+                    * maxsplit (all values that produce different results, plus a couple extra Just In Case)
+                    * reverse
+                    * separate
+                    * strip
+
+            p.s it takes a minute to run!
+            """
+
+            # want_prints = True
+            want_prints = False
+
+            if want_prints: # pragma: no cover
+                print("_" * 69)
+                print()
+                print("test exhaustively")
+                print("_" * 69)
+
+            segments = list(segments)
+            separators = segments.pop()
+
+            if separators is not None:
+                separators_set = set(separators)
+            else:
+                separators_set = set(big.whitespace)
+            assert '' not in separators_set
+
+            # strip off the leading and trailing separators.
+
+            # leading looks like this:
+            #   [ '', separator, separator, separator, ... ]
+            # yes, that is always an empty string, you'll see why
+            # in a moment.
+
+            leading = ['']
+            while True:
+                if segments[0] not in separators_set:
+                    break
+                leading.append(segments.pop(0))
+
+            # trailing contains just the trailing (right)
+            # separators, as individual strings.
+            # trailing just looks like this:
+            #   [ separator, separator, ... ]
+
+            trailing = []
+            while True:
+                if want_prints: # pragma: no cover
+                    print(f"splitting segments: {segments[-1]=} {separators_set=} not in? {segments[-1] not in separators_set}")
+                if segments[-1] not in separators_set:
+                    break
+                trailing.append(segments.pop())
+            trailing.reverse()
+
+            # splits is a list of lists.  each sublist, or "split",
+            # inside splits, looks like this:
+            #   [ non-separator-string, separator, separator, ... ]
+            # (yes, leading and an individual split list look identical, that's why.)
+            # every split in splits is has at least one separator
+            # EXCEPT the last one which only has the non-sep string.
+            #
+            # this is only an intermediate form, we'll massage this
+            # into a more useful form in a minute.
+            splits = []
+            split = []
+            def flush():
+                nonlocal split
+                if split:
+                    splits.append(split)
+                    split = []
+
+            for segment in segments:
+                if segment in separators_set:
+                    assert split
+                    split.append(segment)
+                    continue
+                assert (not split) or (split[-1] in separators_set), f"{split=} {split[-1]=} {separators_set=}"
+                flush()
+                split.append(segment)
+            flush()
+
+            if want_prints: # pragma: no cover
+                print(f"{leading=}")
+                print(f"{splits=}")
+                print(f"{trailing=}")
+            assert splits[-1][-1] not in separators_set, f"{splits[-1][-1]=} is in {separators_set=}!"
+
+            # leading and trailing must both have at least
+            # one sep string.
+            assert (len(leading) >= 2) and trailing
+
+            # note one invariant: if you join leading, splits, and trailing
+            # together into one big string, it is our original input string.
+            # that will never change.
+
+            originals = leading, splits, trailing
+
+            for as_bytes in (False, True):
+                if want_prints: # pragma: no cover
+                    print(f"[loop 0] {as_bytes=}")
+                if as_bytes:
+                    leading, splits, trailing = copy.deepcopy(originals)
+                    leading = big.text._cheap_encode_iterable_of_strings(leading)
+                    splits = [big.text._cheap_encode_iterable_of_strings(split) for split in splits]
+                    trailing = big.text._cheap_encode_iterable_of_strings(trailing)
+                    originals = [leading, splits, trailing]
+                    empty = b''
+                    if separators is None:
+                        separators_set = set(big.ascii_whitespace)
+                    else:
+                        separators = big.text._cheap_encode_iterable_of_strings(separators)
+                        separators_set = set(separators)
+                    non_sep_marker = b"&NONSEP&"
+                else:
+                    empty = ''
+                    non_sep_marker = "&NONSEP&"
+
+                for use_leading in (False, True):
+                    for use_trailing in (False, True):
+                        # we're going to hack up these lists,
+                        # so start with copies.
+                        leading, splits, trailing = copy.deepcopy(originals)
+
+                        if want_prints: # pragma: no cover
+                            print(f"[loop 1,2] {use_leading=} {use_trailing=}")
+                            print(f"         {leading=} {split=} {trailing=}")
+
+                        input_strings = []
+                        if use_leading:
+                            input_strings.extend(leading)
+                        for split in splits:
+                            input_strings.extend(split)
+                        if use_trailing:
+                            input_strings.extend(trailing)
+
+                        input_string = empty.join(input_strings)
+
+                        for separate in (False, True):
+                            leading, splits, trailing = copy.deepcopy(originals)
+                            # now we're going to change leading / splits / trailing
+                            # so that they collectively alternate
+                            #    nonsep, sep
+
+                            if want_prints: # pragma: no cover
+                                print(f"[loop 3] {separate=}")
+                                print(f"    {leading=} {splits=} {trailing=}")
+
+                            if not separate:
+                                # blob the separators together
+                                l2 = [empty]
+                                if want_prints: # pragma: no cover
+                                    print(f"    blob together {empty=} {leading=}")
+                                l2.append(empty.join(leading))
+                                leading = l2
+                                if want_prints: # pragma: no cover
+                                    print(f"    blobbed {leading=}")
+
+                                for split in splits:
+                                    if len(split) > 1:
+                                        joined = empty.join(split[1:])
+                                        del split[1:]
+                                        split.append(joined)
+
+                                trailing = [empty.join(trailing), empty]
+                            else:
+                                # turn leading, splits, and trailing
+                                # into suitable form for testing with "separate".
+                                #   * every list is a list of alternating sep and nonsep.
+                                #   * splits now has empty strings between sep and nonsep.
+                                assert len(leading) >= 2
+                                separate_leading = list(leading[:2])
+                                for s in leading[2:]:
+                                    separate_leading.append(empty)
+                                    separate_leading.append(s)
+                                leading = separate_leading
+                                if want_prints: # pragma: no cover
+                                    print(f"    {leading=}")
+
+                                separate_splits = []
+                                for split in splits:
+                                    if len(split) == 1:
+                                        assert split == splits[-1]
+                                        separate_splits.append(split)
+                                        break
+                                    assert len(split) >= 2
+                                    separate_splits.append(list(split[:2]))
+                                    for s in split[2:]:
+                                        separate_splits.append([empty, s])
+                                splits = separate_splits
+                                if want_prints: # pragma: no cover
+                                    print(f"    {splits=}")
+
+                                separate_trailing = []
+                                for s in trailing:
+                                    if s: # skip the trailing empty
+                                        separate_trailing.append(s)
+                                        separate_trailing.append(empty)
+                                trailing = separate_trailing
+                                if want_prints: # pragma: no cover
+                                    print(f"    {trailing=}")
+
+                            # time to check!  every list or sublist
+                            # should now have an even length,
+                            # EXCEPT splits[-1] which is length 1.
+                            assert len(leading) % 2 == 0
+                            for split in splits[:-1]:
+                                assert len(split) % 2 == 0
+                            assert len(splits[-1]) == 1
+                            assert len(trailing) % 2 == 0
+
+                            for strip in (False, big.LEFT, big.RIGHT, True):
+                                expected = []
+                                if want_prints: # pragma: no cover
+                                    print(f"[loop 4] {strip=}")
+                                    print(f"         {leading=} {splits=} {trailing=}")
+
+                                if use_leading and (strip in (False, big.RIGHT)):
+                                    expected.extend(leading)
+                                if want_prints: # pragma: no cover
+                                    print(f"     leading: {expected=}")
+
+                                for split in splits:
+                                    expected.extend(split)
+                                if want_prints: # pragma: no cover
+                                    print(f"      splits: {expected=}")
+
+                                if use_trailing and (strip in (False, big.LEFT)):
+                                    expected.extend(trailing)
+                                if want_prints: # pragma: no cover
+                                    print(f"    trailing: {expected=}")
+
+                                # expected now looks like this:
+                                #   * it has an odd number of items
+                                #   * even numbered items are nonsep
+                                #   * odd numbered items are sep
+                                assert len(expected) % 2 == 1, f"{expected=} doesn't have an odd # of elements!"
+                                for i in range(0, len(expected), 2):
+                                    assert expected[i] not in separators_set
+                                for i in range(1, len(expected), 2):
+                                    assert not big.multistrip(expected[i], separators_set), f"expected[{i}]={expected[i]!r} not in {separators_set=} !"
+
+                                # how many splits can we have?
+                                # Technically the maximum number of splits possible
+                                # is
+                                #    (len(expected) // 2) - 1
+                                # 'a b c d e' would split by whitespace into 9 elements,
+                                # only using four splits.
+                                # Anyway we test a couple supernumerary maxsplit values.
+                                max_maxsplit = (len(expected) // 2) + 1
+
+                                expected_original = expected
+
+                                if want_prints: # pragma: no cover
+                                    print(f"    {expected_original=}")
+
+                                for reverse in (False, True):
+                                    for maxsplit in range(-1, max_maxsplit):
+                                        expected = list(expected_original)
+                                        if want_prints: # pragma: no cover
+                                            print(f"[loop 5,6] {reverse=} {maxsplit=} // {expected=}")
+                                        if maxsplit == 0:
+                                            joined = empty.join(expected)
+                                            expected = [joined]
+                                        elif maxsplit > 0:
+                                            if not reverse:
+                                                # we're in "alternating" mode,
+                                                # so odd-numbered indexes are
+                                                # splits
+                                                #
+                                                # length 7
+                                                #  0    1    2    3    4    5    6   index
+                                                # ['a', ' ', 'b', ' ', 'c', ' ', 'd']
+                                                #  0         1          2        3   maxsplit
+                                                start = maxsplit * 2
+                                                end = len(expected)
+                                                if start < end:
+                                                    if want_prints: # pragma: no cover
+                                                        print(f"    not reverse: expected[{start}:{end}] = {expected[start:end]}")
+                                                    joined = non_sep_marker + empty.join(expected[start:end])
+                                                    del expected[start:end]
+                                                    if want_prints: # pragma: no cover
+                                                        print(f"    {expected=} {joined=} {empty=}")
+                                                    expected.append(joined)
+                                            else:
+                                                # reverse and maxsplit
+                                                #
+                                                # length 7
+                                                #  0    1    2    3    4    5    6   index
+                                                # ['a', ' ', 'b', ' ', 'c', ' ', 'd',  ]
+                                                #       3         2         1         0   maxsplit
+                                                start = 0
+                                                end = len(expected) - (maxsplit * 2)
+                                                joined = non_sep_marker + empty.join(expected[start:end])
+                                                if want_prints: # pragma: no cover
+                                                    print(f"    reverse: expected[{start}:{end}] = {expected[start:end]}  /// {joined=}")
+                                                del expected[start:end]
+                                                if want_prints: # pragma: no cover
+                                                    print(f"    {expected=} {joined=}")
+                                                expected.insert(0, joined)
+                                        expected_original2 = expected
+                                        for keep in (False, True, big.ALTERNATING, big.AS_PAIRS):
+                                            expected = list(expected_original2)
+                                            if want_prints: # pragma: no cover
+                                                print(f"[loop 7] {keep=} // {expected=}")
+                                            if not keep:
+                                                expected = [s.replace(non_sep_marker, empty) for i, s in enumerate(expected) if i % 2 == 0]
+                                            elif keep == big.AS_PAIRS:
+                                                new_expected = []
+                                                waiting = None
+                                                def append(s):
+                                                    nonlocal waiting
+                                                    s = s.replace(non_sep_marker, empty)
+                                                    if waiting is None:
+                                                        waiting = s
+                                                        return
+                                                    if waiting or s:
+                                                        new_expected.append((waiting, s))
+                                                    waiting = None
+                                                for s in expected:
+                                                    append(s)
+                                                # manual flush
+                                                if waiting is not None:
+                                                    append(empty)
+                                                expected = new_expected
+                                            elif keep == big.ALTERNATING:
+                                                # strip non_sep_marker hack
+                                                expected = [s.replace(non_sep_marker, empty) for s in expected]
+                                            elif keep:
+                                                new_expected = []
+                                                waiting = None
+                                                def append(s):
+                                                    nonlocal waiting
+                                                    is_sep = s in separators_set
+                                                    s = s.replace(non_sep_marker, empty)
+                                                    if (waiting is None) and (not is_sep):
+                                                        waiting = s
+                                                        return
+                                                    if waiting is not None:
+                                                        s = waiting + s
+                                                    new_expected.append(s)
+                                                    waiting = None
+                                                for s in expected:
+                                                    append(s)
+                                                # manual flush
+                                                if waiting is not None:
+                                                    new_expected.append(waiting)
+                                                expected = new_expected
+                                                if want_prints: # pragma: no cover
+                                                    print(f"    now {expected=}")
+
+                                            result = list(big.multisplit(input_string, separators,
+                                                keep=keep,
+                                                maxsplit=maxsplit,
+                                                reverse=reverse,
+                                                separate=separate,
+                                                strip=strip,
+                                                ))
+                                            if want_prints: # pragma: no cover
+                                                print(f"{as_bytes=} {use_leading=} {use_trailing=}")
+                                                print(f"multisplit({input_string!r}, separators={printable_separators(separators)}, {keep=}, {separate=}, {strip=}, {reverse=}, {maxsplit=})")
+                                                print(f"  {result=}")
+                                                print(f"{expected=}")
+                                                print("________")
+                                                print()
+                                            self.assertEqual(result, expected, f"{as_bytes=} {use_leading=} {use_trailing=} multisplit({input_string=}, separators={printable_separators(separators)}, {keep=}, {separate=}, {strip=}, {reverse=}, {maxsplit=})")
+
+
+        test_string = [
+            ' ',
+            'a',
+            ' ',
+            'b',
+            ' ',
+            'c',
+            ' ',
+            ]
+
+        multisplit_tester(
+            *test_string,
+            (' ',),
+            )
+
+        multisplit_tester(
+            *test_string,
+            None,
+            )
+
+
+        multisplit_tester(
+            ' ',
+            '\t',
+            ' ',
+            '\n',
+            ' ',
+
+            'a',
+
+            ' ',
+            '\t',
+            ' ',
+            '\n',
+
+            'b',
+
+            '\t',
+            ' ',
+            '\n',
+
+            'c',
+
+            ' ',
+            ' ',
+            '\n',
+
+            big.whitespace,
+            )
+
+
+        multisplit_tester(
+            'x',
+            'y',
+            'x',
+            'y',
+
+            'a',
+
+            'x',
+            'y',
+            'x',
+            'y',
+            'x',
+
+            'b',
+
+            'y',
+
+            'c',
+
+            'x',
+            'y',
+            'x',
+            'y',
+            'x',
+            'y',
+
+            'd',
+
+            'y',
+            'x',
+
+            'e',
+
+            'y',
+            'y',
+            'y',
+            'y',
+
+            'f',
+
+            'x',
+            'x',
+            'x',
+            'x',
+            'x',
+            'x',
+
+            ('x', 'y'),
+            )
+
+    def test_multipartition(self):
+        def test_multipartition(s, separator, count, expected, *, reverse=False):
+            for _ in range(2):
+                if _ == 1:
+                    # encode!
+                    s = s.encode('ascii')
+                    separator = separator.encode('ascii')
+                    expected = big.text._cheap_encode_iterable_of_strings(expected)
+
+                # print()
+                separators = (separator,)
+                # print(f"multipartition({s=}, {separators=}, {count=}, *, {reverse=}):")
+                # print(f"    {expected=}")
+                got = big.multipartition(s, separators, count, reverse=reverse)
+                # print(f"    {got!r}")
+                self.assertEqual(expected, got)
+
+        test_multipartition("a:b:c:d", ":", 0, ("a:b:c:d",))
+        test_multipartition("a:b:c:d", ":", 1, ("a", ":", "b:c:d"))
+        test_multipartition("a:b:c:d", ":", 2, ("a", ":", "b", ":", "c:d"))
+        test_multipartition("a:b:c:d", ":", 3, ("a", ":", "b", ":", "c", ":", "d"))
+        test_multipartition("a:b:c:d", ":", 4, ("a", ":", "b", ":", "c", ":", "d", '', ''))
+        test_multipartition("a:b:c:d", ":", 5, ("a", ":", "b", ":", "c", ":", "d", '', '', '', ''))
+
+        test_multipartition("a:b:c:d", ":", 0, ("a:b:c:d",), reverse=True)
+        test_multipartition("a:b:c:d", ":", 1, ("a:b:c", ':' ,"d"), reverse=True)
+        test_multipartition("a:b:c:d", ":", 2, ("a:b", ":", "c", ':' ,"d"), reverse=True)
+        test_multipartition("a:b:c:d", ":", 3, ("a", ":", "b", ":", "c", ':' ,"d"), reverse=True)
+        test_multipartition("a:b:c:d", ":", 4, ("", "", "a", ":", "b", ":", "c", ':' ,"d"), reverse=True)
+        test_multipartition("a:b:c:d", ":", 5, ("", "", "", "", "a", ":", "b", ":", "c", ':' ,"d"), reverse=True)
+
+        test_multipartition("a:b:c:d", "x", 1, ("a:b:c:d", "", ""))
+        test_multipartition("a:b:c:d", "x", 0, ("a:b:c:d",))
+        test_multipartition("a:b:c:d", "x", 2, ("a:b:c:d", "", "", "", ""))
+        test_multipartition("a:b:c:d", "x", 3, ("a:b:c:d", "", "", "", "", "", ""))
+
+        test_multipartition("a:b:c:d", "x", 0, ("a:b:c:d",), reverse=True)
+        test_multipartition("a:b:c:d", "x", 1, ("", "", "a:b:c:d"), reverse=True)
+        test_multipartition("a:b:c:d", "x", 2, ("", "", "", "", "a:b:c:d"), reverse=True)
+        test_multipartition("a:b:c:d", "x", 3, ("", "", "", "", "", "", "a:b:c:d"), reverse=True)
 
     def test_wrap_words(self):
         def test(words, expected, margin=79):
@@ -397,57 +1104,320 @@ class BigTextTests(unittest.TestCase):
         test("'twas the night before christmas", "'Twas The Night Before Christmas")
         test("don't sleep on the subway", "Don't Sleep On The Subway")
         test("everybody's thinking they couldn't've had a v-8", "Everybody's Thinking They Couldn't've Had A V-8")
+        test("don't come home if you don't get 1st", "Don't Come Home If You Don't Get 1st")
         test("""i said "no, i didn't", you idiot""", """I Said "No, I Didn't", You Idiot""")
         test('multiple «"“quote marks”"»', 'Multiple «"“Quote Marks”"»')
 
     def test_normalize_whitespace(self):
-        def test(s, expected):
-            result = big.normalize_whitespace(s)
+        def test(s, expected, *, separators=None, replacement=" "):
+            result = big.normalize_whitespace(s, separators=separators, replacement=replacement)
+            self.assertEqual(result, expected)
+
+            s = s.encode('ascii')
+            expected = expected.encode('ascii')
+            if separators:
+                separators = [s.encode('ascii') for s in separators]
+            if replacement:
+                replacement = replacement.encode('ascii')
+
+            result = big.normalize_whitespace(s, separators=separators, replacement=replacement)
             self.assertEqual(result, expected)
 
         test("   a    b    c", " a b c")
+
         test("d     e  \t\n  f ", "d e f ")
-        test("ghi", "ghi")
+        test("ghi", "ghi", replacement=None)
         test("   j     kl   mnop    ", " j kl mnop ")
         test("", "")
         test("   \n\n\t \t     ", " ")
 
-    def test_stripped_lines(self):
-        def test(s, sep=None):
-            if sep is None:
-                test_sep = '\n'
-            else:
-                test_sep = sep
+        test("   j     kl   mnop    ", "XjXklXmnopX", replacement="X")
+        test("   j     kl   mnop    ", "QQjQQklQQmnopQQ", replacement="QQ")
 
-            rstrip_result = list(big.rstripped_lines(s, sep=sep))
-            rstrip_expected = [line.rstrip() for line in s.split(test_sep)]
-            self.assertEqual(rstrip_result, rstrip_expected)
+        test("abcDEFabacabGHIaaa", "+DEF+GHI+", separators=("a", "b", "c"), replacement="+")
 
-            strip_result = list(big.stripped_lines(s, sep=sep))
-            strip_expected = [line.strip() for line in s.split(test_sep)]
-            self.assertEqual(strip_result, strip_expected)
+        with self.assertRaises(ValueError):
+            big.multipartition("abc", "b", -1)
 
-            # re-test using bytes
-            s = s.encode('ascii')
-            if sep is not None:
-                sep = sep.encode('ascii')
-            test_sep = test_sep.encode('ascii')
 
-            b_rstrip_result = list(big.rstripped_lines(s, sep=sep))
-            b_rstrip_expected = [line.rstrip() for line in s.split(test_sep)]
-            self.assertEqual(b_rstrip_result, b_rstrip_expected)
+    def test_lines(self):
+        def test(i, expected):
+            got = list(i)
+            self.assertEqual(got, expected)
 
-            b_strip_result = list(big.stripped_lines(s, sep=sep))
-            b_strip_expected = [line.strip() for line in s.split(test_sep)]
-            self.assertEqual(b_strip_result, b_strip_expected)
+        LI = big.LineInfo
 
-        test("  a b \n c=d\n    e = f   \n  g = h   \n i = j")
+        test(big.lines("a\nb\nc\nd\ne\n"),
+            [
+            (LI('a', 1, 1), 'a'),
+            (LI('b', 2, 1), 'b'),
+            (LI('c', 3, 1), 'c'),
+            (LI('d', 4, 1), 'd'),
+            (LI('e', 5, 1), 'e'),
+            (LI('',  6, 1), ''),
+            ])
 
-        s = "\n  \n  a b \n c=d\n    e = f   \n  g = h   \n\n   "
-        test(s)
-        test(s.strip())
+        lines = ['first line', '\tsecond line', 'third line']
+        test(big.lines_strip(big.lines(lines)),
+            [
+            (LI('first line', 1, 1), 'first line'),
+            (LI('\tsecond line', 2, 9, leading='\t'), 'second line'),
+            (LI('third line', 3, 1), 'third line'),
+            ])
 
-        test("  a b X c=dX    e = f   X  g = h   X i = j", sep='X')
+        test(big.lines_filter_comment_lines(big.lines("""
+    # comment
+    a = b
+    // another comment
+    c = d
+    / not a comment
+    /// is a comment!
+    ## another comment!
+    #! a third comment!
+""".lstrip('\n')), ('#', '//')),
+            [
+            (LI('    a = b',           2, 1), '    a = b'),
+            (LI('    c = d',           4, 1), '    c = d'),
+            (LI('    / not a comment', 5, 1), '    / not a comment'),
+            (LI('',                    9, 1), ''),
+            ])
+
+        test(big.lines_rstrip(big.lines(
+"    a = b  \n"
+"    c = d     \n"
+)),
+            [
+            (LI('    a = b  ',    1, 1), '    a = b'),
+            (LI('    c = d     ', 2, 1), '    c = d'),
+            (LI('',               3, 1), ''),
+            ])
+
+        test(big.lines_strip(big.lines(
+"    a = b  \n"
+"    c = d     \n"
+)),
+            [
+            (LI('    a = b  ',    1, 5, leading='    '), 'a = b'),
+            (LI('    c = d     ', 2, 5, leading='    '), 'c = d'),
+            (LI('',               3, 1), ''),
+            ])
+
+        test(big.lines_filter_empty_lines(big.lines("""
+
+    a = b
+
+
+    c = d
+
+"""[1:])),
+            [
+            (LI('    a = b', 2, 1), '    a = b'),
+            (LI('    c = d', 5, 1), '    c = d'),
+            ])
+
+        test(big.lines_convert_tabs_to_spaces(big.lines(
+            "\tfirst line\n"
+            "\t\tsecond line\n"
+            "  \tthird line\n",
+            tab_width=8)),
+            [
+                (LI("\tfirst line", 1, 1), "        first line"),
+                (LI("\t\tsecond line", 2, 1), "                second line"),
+                (LI("  \tthird line", 3, 1), "        third line"),
+                (LI("", 4, 1), ""),
+            ])
+
+
+        test(big.lines_filter_empty_lines(big.lines_filter_comment_lines(big.lines_strip(big.lines(
+"   \n" +
+"    a = b \n" +
+"   \n" +
+"    # comment line \n" +
+"    \n" +
+"    \n" +
+"    c = d  \n" +
+"     \n")), '#')),
+            [
+            (LI('    a = b ',  2, 5, leading='    '), 'a = b'),
+            (LI('    c = d  ', 7, 5, leading='    '), 'c = d'),
+            ])
+
+
+    def test_lines_strip_indent(self):
+        def test(lines, expected, *, tab_width=8):
+            got = list(big.lines_strip_indent(big.lines(lines, tab_width=tab_width)))
+            self.assertEqual(got, expected)
+
+
+        from big import LineInfo
+
+        lines = """
+left margin
+if 3:
+    text
+else:
+    if 1:
+          other text
+          other text
+    more text
+      different indent
+    outdent
+outdent
+  new indent
+outdent
+"""
+
+        expected = [
+            (LineInfo(line='', line_number=1, column_number=1, indent=0, leading=''),
+                ''),
+            (LineInfo(line='left margin', line_number=2, column_number=1, indent=0, leading=''),
+                'left margin'),
+            (LineInfo(line='if 3:', line_number=3, column_number=1, indent=0, leading=''),
+                'if 3:'),
+            (LineInfo(line='    text', line_number=4, column_number=5, indent=1, leading='    '),
+                'text'),
+            (LineInfo(line='else:', line_number=5, column_number=1, indent=0, leading=''),
+                'else:'),
+            (LineInfo(line='    if 1:', line_number=6, column_number=5, indent=1, leading='    '),
+                'if 1:'),
+            (LineInfo(line='          other text', line_number=7, column_number=11, indent=2, leading='          '),
+                'other text'),
+            (LineInfo(line='          other text', line_number=8, column_number=11, indent=2, leading='          '),
+                'other text'),
+            (LineInfo(line='    more text', line_number=9, column_number=5, indent=1, leading='    '),
+                'more text'),
+            (LineInfo(line='      different indent', line_number=10, column_number=7, indent=2, leading='      '),
+                'different indent'),
+            (LineInfo(line='    outdent', line_number=11, column_number=5, indent=1, leading='    '),
+                'outdent'),
+            (LineInfo(line='outdent', line_number=12, column_number=1, indent=0, leading=''),
+                'outdent'),
+            (LineInfo(line='  new indent', line_number=13, column_number=3, indent=1, leading='  '),
+                'new indent'),
+            (LineInfo(line='outdent', line_number=14, column_number=1, indent=0, leading=''),
+                'outdent'),
+            (LineInfo(line='', line_number=15, column_number=1, indent=0, leading=''),
+                ''),
+            ]
+
+        test(lines, expected)
+
+
+        ##
+        ## test tab to spaces
+        ##
+
+        lines = (
+        "left margin\n"
+        "\teight\n"
+        "  \t    twelve\n"
+        "        eight is enough\n"
+        )
+
+        expected = [
+            (LineInfo(line='left margin', line_number=1, column_number=1, indent=0, leading=''),
+                'left margin'),
+            (LineInfo(line='\teight', line_number=2, column_number=9, indent=1, leading='\t'),
+                'eight'),
+            (LineInfo(line='  \t    twelve', line_number=3, column_number=13, indent=2, leading='  \t    '),
+                'twelve'),
+            (LineInfo(line='        eight is enough', line_number=4, column_number=9, indent=1, leading='        '),
+                'eight is enough'),
+            (LineInfo(line='', line_number=5, column_number=1, indent=0, leading=''),
+                '')
+            ]
+
+        test(lines, expected)
+
+        lines = (
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "  \t\tfigure eight is double four\n"
+            "    figure four is half of eight\n"
+            )
+
+        expected = [
+            (LineInfo(line='left margin', line_number=1, column_number=1, indent=0, leading=''),
+                'left margin'),
+            (LineInfo(line='\tfour', line_number=2, column_number=5, indent=1, leading='\t'),
+                'four'),
+            (LineInfo(line='  \t    eight', line_number=3, column_number=9, indent=2, leading='  \t    '),
+                'eight'),
+            (LineInfo(line='  \t\tfigure eight is double four', line_number=4, column_number=9, indent=2, leading='  \t\t'),
+                'figure eight is double four'),
+            (LineInfo(line='    figure four is half of eight', line_number=5, column_number=5, indent=1, leading='    '),
+                'figure four is half of eight'),
+            (LineInfo(line='', line_number=6, column_number=1, indent=0, leading=''),
+                '')]
+
+        test(lines, expected, tab_width=4)
+
+        ##
+        ## test raising for illegal outdents
+        ##
+
+        # when it's between two existing indents
+        lines = (
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "      six?!\n"
+            "left margin again\n"
+            )
+
+        with self.assertRaises(IndentationError):
+            test(lines, [], tab_width=4)
+
+
+        # when it's less than the first indent
+        lines = (
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "  two?!\n"
+            "left margin again\n"
+            )
+
+        with self.assertRaises(IndentationError):
+            test(lines, [], tab_width=4)
+
+        with self.assertRaises(ValueError):
+            test("first line\n  \u3000  second line\nthird line\n", [])
+
+    def test_lines_misc(self):
+        ## repr
+        li = big.LineInfo('', 1, 1, indent=0)
+        self.assertEqual(repr(li), "LineInfo(line='', line_number=1, column_number=1, indent=0)")
+
+        ## error handling
+        with self.assertRaises(TypeError):
+            big.lines("", line_number=math.pi)
+        with self.assertRaises(TypeError):
+            big.lines("", column_number=math.pi)
+        with self.assertRaises(TypeError):
+            big.lines("", tab_width=math.pi)
+
+        with self.assertRaises(TypeError):
+            big.LineInfo(math.pi, 1, 1)
+        with self.assertRaises(TypeError):
+            big.LineInfo('', math.pi, 1)
+        with self.assertRaises(TypeError):
+            big.LineInfo('', 1, math.pi)
+
+        with self.assertRaises(ValueError):
+            list(big.lines_filter_comment_lines("", []))
+        with self.assertRaises(TypeError):
+            list(big.lines_filter_comment_lines("", math.pi))
+
+        ## test kwargs
+        i = big.lines('', quark=22)
+        self.assertTrue(hasattr(i, 'quark'))
+        self.assertEqual(getattr(i, 'quark'), 22)
+
+        info = big.LineInfo('', 1, 1, quark=35)
+        self.assertTrue(hasattr(info, 'quark'))
+        self.assertEqual(getattr(info, 'quark'), 35)
 
 
 
