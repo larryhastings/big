@@ -998,6 +998,9 @@ section below for a higher-level view on some of these functions.
 > either `overflow_before` or `overflow_after` is nonzero, these
 > specify the number of extra lines before or after
 > the overflowed lines in a column.
+>
+> For more information, see the section on
+> [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 
 #### `multipartition(s, separators, count=1, *, reverse=False, separate=True)`
 
@@ -1278,6 +1281,10 @@ section below for a higher-level view on some of these functions.
 > preserved.  (This will preserve the formatting of code
 > examples when these words are rejoined into lines
 > by `wrap_words`.)
+>
+> For more information, see the section on
+> [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
+
 
 #### `whitespace`
 
@@ -1303,10 +1310,10 @@ section below for a higher-level view on some of these functions.
 
 #### `wrap_words(words, margin=79, *, two_spaces=True)`
 
-> Combines 'words' into lines and returns the result as a string.
+> Combines `words` into lines and returns the result as a string.
 > Similar to `textwrap.wrap`.
 >
-> 'words' should be an iterator containing text split at word
+> `words` should be an iterator containing text split at word
 > boundaries.  Example:
 > ```Python
 >      "this is an example of text split at word boundaries".split()
@@ -1315,17 +1322,20 @@ section below for a higher-level view on some of these functions.
 > A single `'\n'` indicates a line break.
 > If you want a paragraph break, embed two `'\n'` characters in a row.
 >
-> 'margin' specifies the maximum length of each line. The length of
-> every line will be less than or equal to 'margin', unless the length
-> of an individual element inside 'words' is greater than 'margin'.
+> `margin` specifies the maximum length of each line. The length of
+> every line will be less than or equal to `margin`, unless the length
+> of an individual element inside `words` is greater than `margin`.
 >
-> If 'two_spaces' is true, elements from 'words' that end in
-> sentence-ending punctuation ('.', '?', and '!') will be followed
-> by two spaces, not one.
+> If `two_spaces` is true, elements from `words` that end in
+> sentence-ending punctuation (`'.'`, `'?'`, and `'!'`)
+> will be followed by two spaces, not one.
 >
-> Elements in 'words' are not modified; any leading or trailing
+> Elements in `words` are not modified; any leading or trailing
 > whitespace will be preserved.  You can use this to preserve
 > whitespace where necessary, like in code examples.
+>
+> For more information, see the section on
+> [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 
 
 ## `big.time`
@@ -1616,9 +1626,13 @@ What are the first four squared numbers?
 Python is just that easy!
 ```
 
-would be represented in a Python string as:
+would be represented in a Python string as (broken up into multiple strings for clarity):
 ```Python
-"What are the first four squared numbers?\n\n    for i in range(1, 5):\n\n\n        print(i**2)\n\nPython is just that easy!"
+"What are the first four squared numbers?\n\n"
++
+"    for i in range(1, 5):\n\n\n"
++
+"        print(i**2)\n\nPython is just that easy!"
 ```
 
 `split_text_with_code` considers the two lines with initial whitespace as "code" lines,
