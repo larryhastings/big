@@ -92,7 +92,7 @@ notice on the source code.
 
 [`Heap.queue`](#heapqueue)
 
-[`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](##liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+[`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
 [`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
 
