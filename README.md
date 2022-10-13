@@ -1157,18 +1157,19 @@ section below for a higher-level view on some of these functions.
 > strings for `multisplit` et al; `newlines` is specifically
 > used by the `lines` iterator constructor.
 >
-> big also defines `utf8_newlines`, which is `newlines`
+> **big** also defines `utf8_newlines`, which is `newlines`
 > with all strings encoded to UTF-8 (as bytes),
 > and `ascii_newlines`, with all strings converted into
 > bytes and all characters with code points greater than
 > 128 discarded.
 >
 > Note that `newlines` contains `'\r\n'`, the DOS sequence
-> of characters representing a newline.  This lets big functions
-> recognize this sequence as a single newline marker, rather
-> than as two separate newline characters.  If you don't
-> want this behavior, you can use `newlines_without_dos`;
-> big also provides `utf8_newlines_without_dos` and
+> of characters representing a newline.  This lets **big**
+> text-processing functions recognize this sequence as a
+> *single* newline marker, rather than as two *separate*
+> newline characters.  If you don't want this behavior,
+> you can use `newlines_without_dos` instead;
+> **big** also provides `utf8_newlines_without_dos` and
 > `ascii_newlines_without_dos`.
 
 
@@ -1285,18 +1286,19 @@ section below for a higher-level view on some of these functions.
 > (a non-breaking space).  Useful as a list of separator
 > strings for `multisplit` et al.
 >
-> big also defines `utf8_whitespace`, which is `whitespace`
+> **big** also defines `utf8_whitespace`, which is `whitespace`
 > with all strings encoded to UTF-8 (as bytes),
 > and `ascii_whitespace`, with all strings converted into
 > bytes and all characters with code points greater than
 > 128 discarded.
 >
 > Note that `whitespace` contains `'\r\n'`, the DOS sequence
-> of characters representing a newline.  This lets big functions
-> recognize this sequence as a single "newline" marker, rather
-> than as two separate whitespace characters.  If you don't
-> want this behavior, you can use `whitespace_without_dos`;
-> big also provides `utf8_whitespace_without_dos` and
+> of characters representing a newline.  This lets **big**
+> text-processing functions recognize this sequence as a
+> *single* whitespace marker, rather than as two *separate*
+> whitespace characters.  If you don't want this behavior,
+> you can use `whitespace_without_dos` instead;
+> **big** also provides `utf8_whitespace_without_dos` and
 > `ascii_whitespace_without_dos`.
 
 #### `wrap_words(words, margin=79, *, two_spaces=True)`
