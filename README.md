@@ -1278,6 +1278,27 @@ section below for a higher-level view on some of these functions.
 > examples when these words are rejoined into lines
 > by `wrap_words`.)
 
+#### `whitespace`
+
+> A list of all whitespace characters recognized by Python.
+> Includes many Unicode whitespace strings, like `'\xa0'`
+> (a non-breaking space).  Useful as a list of separator
+> strings for `multisplit` et al.
+>
+> big also defines `utf8_whitespace`, which is `whitespace`
+> with all strings encoded to UTF-8 (as bytes),
+> and `ascii_whitespace`, with all strings converted into
+> bytes and all characters with code points greater than
+> 128 discarded.
+>
+> Note that `whitespace` contains `'\r\n'`, the DOS sequence
+> of characters representing a newline.  This lets big functions
+> recognize this sequence as a single "newline" marker, rather
+> than as two separate whitespace characters.  If you don't
+> want this behavior, you can use `whitespace_without_dos`;
+> big also provides `utf8_whitespace_without_dos` and
+> `ascii_whitespace_without_dos`.
+
 #### `wrap_words(words, margin=79, *, two_spaces=True)`
 
 > Combines 'words' into lines and returns the result as a string.
@@ -1367,27 +1388,6 @@ to make it easy to use best practices.
 > ends with microseconds if the type of `t` can represent
 > fractional seconds: a float, a `datetime` object, or the
 > value `None`.
-
-#### `whitespace`
-
-> A list of all whitespace characters recognized by Python.
-> Includes many Unicode whitespace strings, like `'\xa0'`
-> (a non-breaking space).  Useful as a list of separator
-> strings for `multisplit` et al.
->
-> big also defines `utf8_whitespace`, which is `whitespace`
-> with all strings encoded to UTF-8 (as bytes),
-> and `ascii_whitespace`, with all strings converted into
-> bytes and all characters with code points greater than
-> 128 discarded.
->
-> Note that `whitespace` contains `'\r\n'`, the DOS sequence
-> of characters representing a newline.  This lets big functions
-> recognize this sequence as a single "newline" marker, rather
-> than as two separate whitespace characters.  If you don't
-> want this behavior, you can use `whitespace_without_dos`;
-> big also provides `utf8_whitespace_without_dos` and
-> `ascii_whitespace_without_dos`.
 
 # Subsystem notes
 
