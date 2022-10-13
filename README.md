@@ -1149,7 +1149,7 @@ section below for a higher-level view on some of these functions.
 > For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 
-#### 'newlines'
+#### `newlines`
 
 > A list of all newline characters recognized by Python.
 > Includes many Unicode newline characters, like `'\u2029'`
@@ -1368,7 +1368,7 @@ to make it easy to use best practices.
 > fractional seconds: a float, a `datetime` object, or the
 > value `None`.
 
-#### 'whitespace'
+#### `whitespace`
 
 > A list of all whitespace characters recognized by Python.
 > Includes many Unicode whitespace strings, like `'\xa0'`
