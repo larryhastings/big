@@ -86,9 +86,9 @@ notice on the source code.
 
 [`Heap.popleft()`](#heappopleft)
 
-[`Heap.append_and_popleft(o)`](#heapappendandpoplefto)
+[`Heap.append_and_popleft(o)`](#heapappend_and_poplefto)
 
-[`Heap.popleft_and_append(o)`](#heappopleftandappend0)
+[`Heap.popleft_and_append(o)`](#heappopleft_and_append0)
 
 [`Heap.queue`](#heapqueue)
 
@@ -100,11 +100,11 @@ notice on the source code.
 
 [`lines_rstrip(li)`](#lines_rstripli)
 
-[`lines_strip(li)`](#lines_striple)
+[`lines_strip(li)`](#lines_stripli)
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
-[`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponsenormal-overflow_before0-overflow_after0)
+[`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
 
 [`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reverseFalse-separateTrue)
 
@@ -125,8 +125,6 @@ notice on the source code.
 [`re_partition(text, pattern, count=1, *, flags=0)`](#re_partitiontext-pattern-count1--flags0)
 
 [`re_rpartition(text, pattern, count=1, *, flags=0)`](#re_rpartitiontext-pattern-count1--flags0)
-
-[`rstripped_lines(s, *, sep=None)`](#rstripped_liness--sepNone)
 
 [`safe_mkdir(path)`](#safe_mkdirpath)
 
@@ -155,8 +153,6 @@ notice on the source code.
 [`Scheduler.Regulator.wake()`](#schedulerregulatorwake)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-
-[`stripped_lines(s, *, sep=None)`](#stripped_liness--sepNone)
 
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
@@ -875,7 +871,7 @@ section below for a higher-level view on some of these functions.
 >
 > `separators`, if not `None`, must be an iterable of strings of the
 > same type as `s`.  `lines` will split `s` using those strings as
-> separator strings (using `big.multisplit`).
+> separator strings (using [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)).
 >
 > When iterated over, yields 2-tuples:
 >     (info, line)
@@ -900,7 +896,7 @@ section below for a higher-level view on some of these functions.
 
 #### `LineInfo(line, line_number, column_number, **kwargs)`
 
-> The info object yielded by a `lines` iterator.
+> The info object yielded by a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator.
 > You can add your own fields by passing them in
 > via `**kwargs`; you can also add new attributes
 > or modify existing attributes as needed from
@@ -912,7 +908,7 @@ section below for a higher-level view on some of these functions.
 #### `lines_convert_tabs_to_spaces(li)`
 
 > A lines modifier function.  Converts tabs to spaces for the lines
-> of a "lines iterator", using the `tab_width` passed in to `lines`.
+> of a "lines iterator", using the `tab_width` passed in to [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
 >
 > For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
@@ -1083,8 +1079,8 @@ section below for a higher-level view on some of these functions.
 >            characters between two separators.
 >
 > `strip indicates whether multisplit should strip separators from
-> the beginning and/or end of `s`, by using `multistrip`.  It supports
-> six values:
+> the beginning and/or end of `s`, by using [`multistrip`](#multistrips-separators-leftTrue-rightTrue).
+> It supports six values:
 >        NOT_SEPARATE (the default)
 >            Use the opposite value specified for "separate"
 >            If separate=True, behaves as if strip=False.
@@ -1157,8 +1153,8 @@ section below for a higher-level view on some of these functions.
 > A list of all newline characters recognized by Python.
 > Includes many Unicode newline characters, like `'\u2029'`
 > (a paragraph separator).  Useful as a list of separator
-> strings for `multisplit` et al; `newlines` is specifically
-> used by the `lines` iterator constructor.
+> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` et al; `newlines` is specifically
+> used by the [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator constructor.
 >
 > **big** also defines `utf8_newlines`, which is `newlines`
 > with all strings encoded to UTF-8 (as bytes),
@@ -1291,7 +1287,7 @@ section below for a higher-level view on some of these functions.
 > A list of all whitespace characters recognized by Python.
 > Includes many Unicode whitespace strings, like `'\xa0'`
 > (a non-breaking space).  Useful as a list of separator
-> strings for `multisplit` et al.
+> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` et al.
 >
 > **big** also defines `utf8_whitespace`, which is `whitespace`
 > with all strings encoded to UTF-8 (as bytes),
@@ -1413,9 +1409,12 @@ something slightly different?  What if `str.strip` *doesn't*
 do what you want?  If you want to split your string in a
 slightly different way, you can't use `str.strip` anymore.
 So what *can* you use?  There's `re.strip`, but it's hard to
-use.  Now there's a new answer: you can use `multistrip`.
+use.  Now there's a new answer: you can use
+[`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 
-The goal of `multistrip` is to be the be-all end-all text
+The goal of
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+is to be the be-all end-all text
 splitting function.  You pass in the string you want to split,
 and an iterable containing the separator strings you want to
 split on.  It returns an iterator yielding the split strings.
@@ -1424,12 +1423,14 @@ It's designed to replace every mode of operation for
 can even be used to replace `str.partition` and `str.rpartition`
 too.
 
-The cornerstone of `multistrip` is the `separators` argument.
+The cornerstone of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+is the `separators` argument.
 This is an iterable of strings, of the same type (`str` or `bytes`)
-as the string you want to split (`s`).  `multistrip` will split
+as the string you want to split (`s`).  `multisplit` will split
 the string at *each* non-overlapping instance of any string
 specified in `separators`.  The keyword-only parameters to
-`multistrip` let you tune this behavior:
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+let you tune this behavior:
 
 * `keep` lets you include the separator strings in the output,
   in a number of different ways.
@@ -1445,25 +1446,32 @@ specified in `separators`.  The keyword-only parameters to
   and splitting backwards (like using `str.rstrip` instead of
   `str.strip`).
 
-`multistrip` also inspired `multisplit` and `multipartition`,
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+ and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 which also take this same `separators` arguments.  There are
 other functions that take a `separators` argument, and the
 parameter name always has the word `separators` in it.
 (For example, `comment_separators` for `lines_filter_comment_lines`.)
 
-The downside of `multistrip` is that, since it *is* so
+The downside of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 five keyword-only parameters, after all.  However, these
 are designed to be memorable, and they all default to `False`
 (except `strip`).  Also, the best way to combat the
-complexity of `multistrip` is to use it as a building block
+complexity of
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+is to use it as a building block
 for your own presumably easier-to-use text splitting functions.
-For example, `multistrip` is used to implement `multipartition`,
-`normalize_whitespace`,  and `lines`.
+For example,
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+is used to implement [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+`normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
 
 ## `lines` and lines modifier functions
 
-`lines` creates an iterator that yields individual lines
+[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) creates an iterator that yields individual lines
 split from a string.  It's designed to make it easy to write
 well-behaved simple text parsers.
 
@@ -1472,11 +1480,11 @@ object which provides the line number and starting column number
 for each line.  This makes it easy for your parser to provide
 line and column information for error messages.
 
-The output of `lines` can be modified by "lines modifier"
+The output of [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) can be modified by "lines modifier"
 functions.  These are functions that iterate over a lines
 iterator and re-yield the values, possibly modifying or
 discarding them along the way.  For example, passing
-a `lines` iterator into `lines_filter_empty_lines` results
+a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator into `lines_filter_empty_lines` results
 in an iterator that skips over the empty lines.
 All the lines modifier functions that ship with big
 start with the string `lines_`.
@@ -1532,8 +1540,8 @@ Of course, you can write your own lines modifier functions!
 Simply accept a lines iterator as an argument, iterate over
 it, and yield each line info and line, modifying them
 (or not yielding them!) as you see fit.  You can potentially
-even write your own lines iterator, a replacement for `lines`,
-if you need functionality `lines` doesn't provide.
+even write your own lines iterator, a replacement for [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
+if you need functionality [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) doesn't provide.
 
 ## Word wrapping and formatting
 
@@ -2065,18 +2073,23 @@ You can see more complex examples of using inheritance with
 
 A **big** upgrade!
 
-* Completely retooled and upgraded `multisplit`, and added `multistrip`
-  and `multipartition`, collectively called
+* Completely retooled and upgraded [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE),
+  and added
+  [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  collectively called
   [**The `multi-` family of functions.**](#The-multi--family-of-functions)
-  (Thanks to Eric Smith for suggesting `multipartition`!  Well, sort of.)
-  * `multisplit` now supports five (!) keyword-only
+  (Thanks to Eric Smith for suggesting [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)  Well, sort of.)
+  * `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` now supports five (!) keyword-only
     parameters, allowing the caller to tune its behavior to an amazing degree.
-  * Also, the original implementation of `multisplit` got its semantics
+  * Also, the original implementation of `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` got its semantics
     a bit wrong; it was inconsistent and maybe a little buggy.
-  * `multistrip` is like `str.strip` but accepts an iterable of
+  * [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+    is like `str.strip` but accepts an iterable of
     separator strings.  It can strip from the left, right, both, or
     neither (in which case it does nothing).
-  * `multipartition` is like `str.partition`, but accepts an iterable
+  * [`multipartition`](#multipartitions-separators-count1--reverseFalse-separateTrue)
+    is like `str.partition`, but accepts an iterable
     of separator strings.  It can also partition more than once,
     and supports `reverse=True` which causes it to partition from the right
     (like `str.rpartition`).
@@ -2089,12 +2102,12 @@ A **big** upgrade!
   interface and a major upgrade in functionality.  `Heap` is an
   object-oriented interface to Python's `heapq` module, used by
   `Scheduler`.
-* Added `lines` and all the `lines_` modifiers.  These are great
+* Added [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) and all the `lines_` modifiers.  These are great
   for writing little text parsers.  For more information, please
   see the section on
   [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 * Removed`stripped_lines` and `rstripped_lines` from the `text` module,
-  as they're superceded by the far superior `lines` family.
+  as they're superceded by the far superior [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) family.
 * Enhanced `normalize_whitespace`.  Added the `separators` and
   `replacement` parameters, and added support for `bytes` objects.
 * Added the `count` parameter to `re_partition` and `re_rpartition`.
