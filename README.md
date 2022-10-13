@@ -42,6 +42,12 @@ notice on the source code.
 
 # Index
 
+['ascii_newlines'](#newlines)
+
+['ascii_newlines_without_dos'](#newlines)
+
+['ascii_whitespace'](#whitespace)
+
 [`BoundInnerClass`](#boundinnerclasscls)
 
 [`CycleError`](#cycleerror)
@@ -84,7 +90,7 @@ notice on the source code.
 
 [`Heap.queue`](#heapqueue)
 
-[`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsNone--line_number1-column_number1-tab_width8---kwargs)
+[`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](##liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
 [`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
 
@@ -103,6 +109,10 @@ notice on the source code.
 [`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=NOT_SEPARATE)`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 
 [`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
+
+['newlines'](#newlines)
+
+['newlines_without_dos'](#newlines)
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementNone)
 
@@ -178,6 +188,12 @@ notice on the source code.
 
 [`UnboundInnerClass`](#unboundinnerclasscls)
 
+['utf8_newlines'](#newlines)
+
+['utf8_newlines_without_dos'](#newlines)
+
+['utf8_whitespace'](#whitespace)
+
 [`View.close()`](#viewclose)
 
 [`View.copy()`](#viewcopy)
@@ -189,6 +205,8 @@ notice on the source code.
 [`View.ready()`](#viewready)
 
 [`View.reset()`](#viewreset)
+
+['whitespace'](#whitespace)
 
 [`wrap_words(words, margin=79, *, two_spaces=True)`](#wrap_wordswords-margin79--two_spacestrue)
 
@@ -454,7 +472,6 @@ Functions for working with files, directories, and I/O.
 > Returns a copy of `s` where every character not allowed in a UNIX
 > filesystem filename has been replaced with a character (or characters)
 > that are permitted.
-
 
 ## `big.graph`
 
@@ -875,6 +892,17 @@ section below for a higher-level view on some of these functions.
 >
 > For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
+#### `LineInfo(line, line_number, column_number, **kwargs)`
+
+> The info object yielded by a `lines` iterator.
+> You can add your own fields by passing them in
+> via `**kwargs`; you can also add new attributes
+> or modify existing attributes as needed from
+> inside a "lines modifier" function.
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+
 #### `lines_convert_tabs_to_spaces(li)`
 
 > A lines modifier function.  Converts tabs to spaces for the lines
@@ -1114,6 +1142,30 @@ section below for a higher-level view on some of these functions.
 >
 > For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
+
+#### 'newlines'
+
+> A list of all newline characters recognized by Python.
+> Includes many Unicode newline characters, like `'\u2029'`
+> (a paragraph separator).  Useful as a list of separator
+> strings for `multisplit` et al; `newlines` is specifically
+> used by the `lines` iterator constructor.
+>
+> big also defines `utf8_newlines`, which is `newlines`
+> with all strings encoded to UTF-8 (as bytes),
+> and `ascii_newlines`, with all strings converted into
+> bytes and all characters with code points greater than
+> 128 discarded.
+>
+> Note that `newlines` contains `'\r\n'`, the DOS sequence
+> of characters representing a newline.  This lets big functions
+> recognize this sequence as a single newline marker, rather
+> than as two separate newline characters.  If you don't
+> want this behavior, you can use `newlines_without_dos`;
+> big also provides `utf8_newlines_without_dos` and
+> `ascii_newlines_without_dos`.
+
+
 #### `normalize_whitespace(s, separators=None, replacement=None)`
 
 > Returns `s`, but with every run of consecutive
@@ -1310,6 +1362,26 @@ to make it easy to use best practices.
 > fractional seconds: a float, a `datetime` object, or the
 > value `None`.
 
+#### 'whitespace'
+
+> A list of all whitespace characters recognized by Python.
+> Includes many Unicode whitespace strings, like `'\xa0'`
+> (a non-breaking space).  Useful as a list of separator
+> strings for `multisplit` et al.
+>
+> big also defines `utf8_whitespace`, which is `whitespace`
+> with all strings encoded to UTF-8 (as bytes),
+> and `ascii_whitespace`, with all strings converted into
+> bytes and all characters with code points greater than
+> 128 discarded.
+>
+> Note that `whitespace` contains `'\r\n'`, the DOS sequence
+> of characters representing a newline.  This lets big functions
+> recognize this sequence as a single "newline" marker, rather
+> than as two separate whitespace characters.  If you don't
+> want this behavior, you can use `whitespace_without_dos`;
+> big also provides `utf8_whitespace_without_dos` and
+> `ascii_whitespace_without_dos`.
 
 # Subsystem notes
 
@@ -1437,6 +1509,13 @@ then you would filter out empty lines first, and *then*
 "r-strip" the lines.  So lines in the input that contained
 only whitespace would still get yielded as empty lines,
 which in this case is probably not what you wanted.
+
+Of course, you can write your own lines modifier functions!
+Simply accept a lines iterator as an argument, iterate over
+it, and yield each line info and line, modifying them
+(or not yielding them!) as you see fit.  You can potentially
+even write your own lines iterator, a replacement for `lines`,
+if you need functionality `lines` doesn't provide.
 
 ## Word wrapping and formatting
 
@@ -1950,6 +2029,15 @@ You can see more complex examples of using inheritance with
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6.1**
+
+* I realized that `whitespace` should contain the DOS end-of-line
+  sequence (`'\r\n'`), as it should be considered a single separator
+  when splitting etc.  I added that, along with `whitespace_no_dos`,
+  and naturally `utf8_whitespace_no_dos` and `ascii_whitespace_no_dos`
+  too.
+* Minor doc fixes.
 
 **0.6**
 

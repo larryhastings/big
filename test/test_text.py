@@ -47,14 +47,17 @@ def to_bytes(o): # pragma: no cover
 
 known_separators = [
     (big.whitespace, "big.whitespace"),
+    (big.whitespace_without_dos, "big.whitespace_without_dos"),
     (big.newlines,   "big.newlines"),
     (big.newlines_without_dos,   "big.newlines_without_dos"),
 
     (big.ascii_whitespace, "big.ascii_whitespace"),
+    (big.ascii_whitespace_without_dos, "big.ascii_whitespace_without_dos"),
     (big.ascii_newlines,   "big.ascii_newlines"),
     (big.ascii_newlines_without_dos,   "big.ascii_newlines_without_dos"),
 
     (big.utf8_whitespace, "big.utf8_whitespace"),
+    (big.utf8_whitespace_without_dos, "big.utf8_whitespace_without_dos"),
     (big.utf8_newlines,   "big.utf8_newlines"),
     (big.utf8_newlines_without_dos,   "big.utf8_newlines_without_dos"),
 ]
@@ -166,6 +169,7 @@ class BigTextTests(unittest.TestCase):
             big.re_rpartition('a:b', ':', -1)
         with self.assertRaises(ValueError):
             big.re_rpartition(b'a:b', b':', -1)
+
     def test_multistrip(self):
         def test_multistrip(left, s, right, separators):
             for _ in range(2):

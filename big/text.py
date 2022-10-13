@@ -213,25 +213,36 @@ whitespace = [
     '\u202f', #  8239 0x202f - narrow no-break space
     '\u205f', #  8287 0x205f - medium mathematical space
     '\u3000', # 12288 0x3000 - ideographic space
+
+    '\r\n'  , # the classic DOS newline sequence
     ]
+
+# this omits the DOS convention '\r\n'
+_export_name('whitespace_without_dos')
+whitespace_without_dos = [s for s in whitespace if s != b'\r\n']
 
 _export_name('newlines')
 newlines = [
-    '\n'    , #    10 0x000a - newline
-    '\x0b'  , #    11 0x000b - vertical tab
-    '\x0c'  , #    12 0x000c - form feed
-    '\r'    , #    13 0x000d - carriage return
-    '\x1c'  , #    28 0x001c - file separator
-    '\x1d'  , #    29 0x001d - group separator
-    '\x1e'  , #    30 0x001e - record separator
-    '\x85'  , #   133 0x0085 - next line
-    '\u2028', #  8232 0x2028 - line separator
-    '\u2029', #  8233 0x2029 - paragraph separator
+    '\n'    , #   10 0x000a - newline
+    '\x0b'  , #   11 0x000b - vertical tab
+    '\x0c'  , #   12 0x000c - form feed
+    '\r'    , #   13 0x000d - carriage return
+    '\x1c'  , #   28 0x001c - file separator
+    '\x1d'  , #   29 0x001d - group separator
+    '\x1e'  , #   30 0x001e - record separator
+    '\x85'  , #  133 0x0085 - next line
+    '\u2028', # 8232 0x2028 - line separator
+    '\u2029', # 8233 0x2029 - paragraph separator
 
-    '\r\n'  , #  the classic DOS newline sequence
+    '\r\n'  , # the classic DOS newline sequence
+
     # '\n\r' sorry, Acorn and RISC OS, you have to add this yourselves.
     # I'm worried this would cause bugs with a malformed DOS newline.
     ]
+
+# this omits the DOS convention '\r\n'
+_export_name('newlines_without_dos')
+newlines_without_dos = [s for s in newlines if s != b'\r\n']
 
 def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
     a = []
@@ -251,23 +262,22 @@ def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
 # use these with multisplit if your bytes strings are encoded as ascii.
 _export_name('ascii_whitespace')
 ascii_whitespace = _cheap_encode_iterable_of_strings(whitespace, "ascii")
+_export_name('ascii_whitespace_without_dos')
+ascii_whitespace_without_dos = [s for s in ascii_whitespace if s != b'\r\n']
 _export_name('ascii_newlines')
 ascii_newlines   = _cheap_encode_iterable_of_strings(newlines,   "ascii")
+_export_name('ascii_newlines_without_dos')
+ascii_newlines_without_dos = [s for s in ascii_newlines if s != b'\r\n']
 
 # use these with multisplit if your bytes strings are encoded as utf-8.
 _export_name('utf8_whitespace')
 utf8_whitespace = _cheap_encode_iterable_of_strings(whitespace, "utf-8")
+_export_name('utf8_whitespace_without_dos')
+utf8_whitespace_without_dos = [s for s in utf8_whitespace if s != b'\r\n']
 _export_name('utf8_newlines')
 utf8_newlines   = _cheap_encode_iterable_of_strings(newlines,   "utf-8")
-
-
-# these omit the DOS convention '\r\n'
-_export_name('newlines_without_dos')
-newlines_without_dos =       [s for s in       newlines if s !=  '\r\n']
-_export_name('ascii_newlines_without_dos')
-ascii_newlines_without_dos = [s for s in ascii_newlines if s != b'\r\n']
 _export_name('utf8_newlines_without_dos')
-utf8_newlines_without_dos =  [s for s in  utf8_newlines if s != b'\r\n']
+utf8_newlines_without_dos =  [s for s in utf8_newlines if s != b'\r\n']
 
 
 def _re_quote(s):
@@ -738,10 +748,10 @@ def normalize_whitespace(s, separators=None, replacement=None):
     By default turns all runs of consecutive whitespace
     characters into a single space character.
 
-    s may be str or bytes.
-    separators should be an iterable of either str or bytes,
-    matching s.
-    replacement should be str or bytes, matching s.
+    "s" may be str or bytes.
+    "separators" should be an iterable of either str or bytes,
+    matching "s".
+    "replacement" should be str or bytes, also matching "s".
 
     Leading or trailing runs of separator characters will
     be replaced with the replacement string, e.g.:
@@ -792,6 +802,13 @@ def normalize_whitespace(s, separators=None, replacement=None):
 
 @_export
 class LineInfo:
+    """
+    The info object yielded by a lines iterator.
+    You can add your own fields by passing them in
+    via **kwargs; you can also add new attributes
+    or modify existing attributes as needed from
+    inside a "lines modifier" function.
+    """
     def __init__(self, line, line_number, column_number, **kwargs):
         if not isinstance(line, (str, bytes)):
             raise TypeError("line must be str or bytes")
@@ -969,7 +986,7 @@ def lines_strip_indent(li):
     """
     A lines modifier function.  Automatically measures and strips indents.
 
-    Sets two new fields on the LineInfo object:
+    Sets two new fields on the associated LineInfo object for every line:
       * indent - an integer indicating how many indents it's observed
       * leading - the leading whitespace string that was removed
 
