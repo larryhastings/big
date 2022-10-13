@@ -42,11 +42,13 @@ notice on the source code.
 
 # Index
 
-['ascii_newlines'](#newlines)
+[`ascii_newlines`](#newlines)
 
-['ascii_newlines_without_dos'](#newlines)
+[`ascii_newlines_without_dos`](#newlines)
 
-['ascii_whitespace'](#whitespace)
+[`ascii_whitespace`](#whitespace)
+
+[`ascii_whitespace_without_dos`](#whitespace)
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
@@ -110,9 +112,9 @@ notice on the source code.
 
 [`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
 
-['newlines'](#newlines)
+[`newlines`](#newlines)
 
-['newlines_without_dos'](#newlines)
+[`newlines_without_dos`](#newlines)
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementNone)
 
@@ -188,11 +190,13 @@ notice on the source code.
 
 [`UnboundInnerClass`](#unboundinnerclasscls)
 
-['utf8_newlines'](#newlines)
+[`utf8_newlines`](#newlines)
 
-['utf8_newlines_without_dos'](#newlines)
+[`utf8_newlines_without_dos`](#newlines)
 
-['utf8_whitespace'](#whitespace)
+[`utf8_whitespace`](#whitespace)
+
+[`utf8_whitespace_without_dos`](#whitespace)
 
 [`View.close()`](#viewclose)
 
@@ -206,7 +210,9 @@ notice on the source code.
 
 [`View.reset()`](#viewreset)
 
-['whitespace'](#whitespace)
+[`whitespace`](#whitespace)
+
+[`whitespace_without_dos`](#whitespace)
 
 [`wrap_words(words, margin=79, *, two_spaces=True)`](#wrap_wordswords-margin79--two_spacestrue)
 
