@@ -102,7 +102,7 @@ notice on the source code.
 
 [`lines_strip(li)`](#lines_stripli)
 
-[`lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`](#lines_strip_commentsli-comment_separators--quotes--backslash--rstriptrue-triple_quotestrue)
+[`lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
@@ -160,7 +160,7 @@ notice on the source code.
 
 [`Scheduler.Regulator.wake()`](#schedulerregulatorwake)
 
-[`split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`](#split_quoted_stringss-quotes---triple_quotestrue-backslash-)
+[`split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`](#split_quoted_stringss-quotes---triple_quotestrue-backslash)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
@@ -969,14 +969,18 @@ section below for a higher-level view on some of these functions.
 > first non-whitespace characters appear in the iterable of
 > `comment_separators` strings passed in.
 >
->  What's the difference between `lines_strip_comments` and
->  `lines_filter_comment_lines`?
+> What's the difference between
+> [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+> and
+> [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)?
 >
->  * `lines_filter_comment_lines` only recognizes lines that
+>  * [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)
+>    only recognizes lines that
 >    *start* with a comment separator (ignoring leading
 >    whitespace).  Also, it filters out those lines
 >    completely, rather than modifying the line.
->  * `lines_strip_comments` handles comment characters
+>  * [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+>    handles comment characters
 >    anywhere in the line, although it can ignore
 >    comments inside quoted strings.  It truncates the
 >    line but still always yields the line.
@@ -1029,14 +1033,18 @@ section below for a higher-level view on some of these functions.
 >  * `comment` - the comment stripped from the line, if any.
 >     if no comment was found, `comment` will be an empty string.
 >
->  What's the difference between `lines_strip_comments` and
->  `lines_filter_comment_lines`?
+> What's the difference between
+> [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+> and
+> [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)?
 >
->  * `lines_filter_comment_lines` only recognizes lines that
+>  * [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)
+>    only recognizes lines that
 >    *start* with a comment separator (ignoring leading
 >    whitespace).  Also, it filters out those lines
 >    completely, rather than modifying the line.
->  * `lines_strip_comments` handles comment characters
+>  * [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+>    handles comment characters
 >    anywhere in the line, although it can ignore
 >    comments inside quoted strings.  It truncates the
 >    line but still always yields the line.
@@ -1386,7 +1394,8 @@ section below for a higher-level view on some of these functions.
 #### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
 
 > Splits the string `s` into individual words,
-> suitable for feeding into `wrap_words`.
+> suitable for feeding into
+> [`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).
 >
 > Paragraphs indented by less than `code_indent` will be
 > broken up into individual words.
@@ -1395,8 +1404,8 @@ section below for a higher-level view on some of these functions.
 > `code_indent` spaces will preserve their whitespace:
 > internal whitespace is preserved, and the newline is
 > preserved.  (This will preserve the formatting of code
-> examples when these words are rejoined into lines
-> by `wrap_words`.)
+> examples when these words are rejoined into lines by
+> [`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).)
 >
 > For more information, see the section on
 > [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
@@ -1667,7 +1676,10 @@ if you need functionality [`lines`](#liness-separatorsnone--line_number1-column_
 
 **big** contains three functions used to reflow and format text
 in a pleasing manner.  In the order you should use them, they are
-`split_text_with_code`, `word_wrap`, and optionally `merge_columns`.
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue),
+`word_wrap`,
+and optionally
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0).
 This trio of functions gives you the following word-wrap superpowers:
 
 * Paragraphs of text representing embedded "code" don't get word-wrapped.
@@ -1676,8 +1688,8 @@ This trio of functions gives you the following word-wrap superpowers:
 
 #### Split text array
 
-`split_text_with_code` splits a string of text into a
-*split text array*,
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+splits a string of text into a *split text array*,
 and `word_wrap` consumes a *split text array* to produce its
 word-wrapped output.  A split text array is an array of strings.
 You'll see four kinds of strings in a split text array:
@@ -1687,12 +1699,16 @@ You'll see four kinds of strings in a split text array:
 * Line breaks, represented by a single newline: `'\n'`.
 * Paragraph breaks, represented by two newlines: `'\n\n'`.
 
-When `split_text_with_code` splits a string, it views each
+When
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+splits a string, it views each
 line as either a "text" line or a "code" line.  Any non-blank
 line that starts with `code_indent` or more spaces (or the
 equivalent using tabs) is a "code" line, and any other
 non-blank line is a "text" line.  But it has some state
-here; when `split_text_with_code` sees a "text" line,
+here; when
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+sees a "text" line,
 it switches into "text" mode, and when it sees a "code"
 line it switches into "code" mode.
 
@@ -1710,7 +1726,9 @@ In "code" mode:
 * all whitespace is preserved, except for trailing whitespace on a line, and
 * all newline characters are preserved.
 
-Also, whenever `split_text_with_code` switches between
+Also, whenever
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+switches between
 "text" and "code" mode, it emits a paragraph break.
 
 This might be clearer with an example or two.  The following text:
@@ -1730,13 +1748,15 @@ would be represented in a Python string as:
 
 Note the three newlines between the second and third lines.
 
-`split_text_with_code` would turn this into the following split text array:
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+would turn this into the following split text array:
 ```Python
 [ 'hello', 'there!', 'this', 'is', 'text.', '\n\n',
   'this', 'is', 'a', 'second', 'paragraph!']
 ```
 
-`split_text_with_code` merged the first two lines together into
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+merged the first two lines together into
 a single paragraph, and collapsed the three newlines separating
 the two paragraphs into a "paragraph break" marker
 (two newlines in one string).
@@ -1763,7 +1783,8 @@ would be represented in a Python string as (broken up into multiple strings for 
 "        print(i**2)\n\nPython is just that easy!"
 ```
 
-`split_text_with_code` considers the two lines with initial whitespace as "code" lines,
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+considers the two lines with initial whitespace as "code" lines,
 and so the text is split into the following split text array:
 ```Python
 ['What', 'are', 'the', 'first', 'four', 'squared', 'numbers?', '\n\n',
@@ -1792,11 +1813,13 @@ text = "".join(a)
 
 Of course, this algorithm is too simple to do word wrapping.
 Nor does it handle adding two spaces after sentence-ending
-punctuation.  In practice you should just use `wrap_words`.
+punctuation.  In practice you should just use
+[`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).
 
 #### Merging columns
 
-`merge_columns` merges multiple strings into columns on the same line.
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+merges multiple strings into columns on the same line.
 
 For example, it could merge these three Python strings:
 ```Python
@@ -1816,10 +1839,15 @@ column of text.     It's the second        third column.
                     exciting!
 ```
 
-(Note that `merge_columns` doesn't do its own word-wrapping;
-instead, it's designed to consume the output of `wrap_words`.)
+(Note that
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+doesn't do its own word-wrapping;
+instead, it's designed to consume the output of
+[`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).)
 
-Each column is passed in to `merge_columns` as a "column tuple":
+Each column is passed in to
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+as a "column tuple":
 
 ```Python
 (s, min_width, max_width)
@@ -1830,10 +1858,13 @@ Each column is passed in to `merge_columns` as a "column tuple":
 `max_width` is the minimum width of the column.
 
 As you saw above, `s` can contain newline characters,
-and `merge_columns` obeys those when formatting each
-column.
+and
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+obeys those when formatting each column.
 
-For each column, `merge_columns` measures the longest
+For each column,
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+measures the longest
 line of each column.  The width of the column is determined
 as follows:
 
@@ -1849,11 +1880,15 @@ as follows:
 #### Overflow
 
 What is "overflow"?  It's when the text in a column is wider than that
-column's `max_width`.  `merge_columns` discusses both "overflow lines",
+column's `max_width`.
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+discusses both "overflow lines",
 lines that are longer than `max_width`, and "overflow columns", which
 are columns that contain any overflow lines.
 
-What does `merge_columns` do when it encounters overflow?  It provides
+What does
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+do when it encounters overflow?  It provides
 three "strategies" to deal with this condition, and you can control
 which it uses through the `overflow_strategy` parameter.  The three are:
 
@@ -1881,9 +1916,11 @@ the overflowed lines in a column where the subsequent columns
 
 #### Overview
 
-**big**'s `TopologicalSorter` is a drop-in replacement for
+**big**'s [`TopologicalSorter`](#topologicalsortergraphnone)
+is a drop-in replacement for
 [`graphlib.TopologicalSorter`](https://docs.python.org/3/library/graphlib.html#graphlib.TopologicalSorter)
-in the Python standard library (new in 3.9).  However, the version in **big** has been greatly upgraded:
+in the Python standard library (new in 3.9).
+However, the version in **big** has been greatly upgraded:
 
 - `prepare` is now optional, though it still performs a cycle check.
 - You can add nodes and edges to a graph at any time, even while
@@ -2008,7 +2045,8 @@ You just need to decorate the inner class with `@big.BoundInnerClass`.
 
 #### Using bound inner classes
 
-Let's modify the above example to use our `BoundInnerClass` decorator:
+Let's modify the above example to use our [`BoundInnerClass`](#boundinnerclasscls)
+decorator:
 
 ```Python
 from big import BoundInnerClass
@@ -2029,7 +2067,7 @@ i = o.Inner()
 
 Notice that `Inner.__init__` now accepts an `outer` parameter,
 even though you didn't pass in any arguments to `o.Inner`.
-Thanks, `BoundInnerClass`!  You've saved the day.
+Thanks, [`BoundInnerClass`](#boundinnerclasscls)!  You've saved the day.
 
 #### Inheritance
 
@@ -2043,20 +2081,26 @@ class scope, or when referencing the inner class from the outer class
 (as opposed to an instance of the outer class), you must actually
 subclass or reference `classname.cls`.*  This is because inside the
 outer class, the "class" you see is actually an instance of a
-`BoundInnerClass` object.
+[`BoundInnerClass`](#boundinnerclasscls) object.
 
 3. *All classes that inherit from a bound inner class must always call the
 superclass's `__init__`. You don't need to pass in the outer parameter;
 it'll be automatically passed in to the superclass's `__init__` as before.*
 
 4. *An inner class that inherits from a bound inner class, and which also wants
-to be bound to the outer object, should be decorated with `BoundInnerClass`.*
+to be bound to the outer object, should be decorated with
+[`BoundInnerClass`](#boundinnerclasscls).*
 
 5. *An inner class that inherits from a bound inner class, but doesn't want
-to be bound to the outer object, should be decorated with UnboundInnerClass.*
+to be bound to the outer object, should be decorated with
+[`UnboundInnerClass`](#unboundinnerclasscls).*
 
-Restating the last two rules: every class that descends from any `BoundInnerClass`
-should be decorated with either `BoundInnerClass` or `UnboundInnerClass`.
+Restating the last two rules: every class that descends from any
+[`BoundInnerClass`](#boundinnerclasscls)
+should be decorated with either
+[`BoundInnerClass`](#boundinnerclasscls)
+or
+[`UnboundInnerClass`](#unboundinnerclasscls).
 
 Here's a simple example using inheritance with bound inner classes:
 
@@ -2084,21 +2128,27 @@ We followed the rules:
 * `Inner` inherits from object; since object isn't a bound inner class,
   there are no special rules about inheritance `Inner` needs to obey.
 * `ChildOfInner` inherits from `Inner.cls`, not `Inner`.
-* Since `ChildOfInner` inherits from a `BoundInnerClass`, it must be
-  decorated with either `BoundInnerClass` or `UnboundInnerClass`.
+* Since `ChildOfInner` inherits from a
+  [`BoundInnerClass`](#boundinnerclasscls),
+  it must be
+  decorated with either [`BoundInnerClass`](#boundinnerclasscls)
+  or [`UnboundInnerClass`](#unboundinnerclasscls).
   It doesn't want the outer object passed in, so it's decorated
-  with `UnboundInnerClass`.
+  with [`UnboundInnerClass`](#unboundinnerclasscls).
 * `ChildOfInner.__init__` calls `super().__init__`.
 
-Note that, because `ChildOfInner` is decorated with `UnboundInnerClass`,
+Note that, because `ChildOfInner` is decorated with
+[`UnboundInnerClass`](#unboundinnerclasscls),
 it doesn't take an `outer` parameter.  Nor does it pass in an `outer`
 argument when it calls `super().__init__`.  But when the constructor for
 `Inner` is called, the correct `outer` parameter is passed in--like magic!
-Thanks again, `BoundInnerClass`!
+Thanks again, [`BoundInnerClass`](#boundinnerclasscls)!
 
 If you wanted `ChildOfInner` to also get the outer argument passed in to
-its `__init__`, just decorate it with `BoundInnerClass` instead of
-`UnboundInnerClass`, like so:
+its `__init__`, just decorate it with [`BoundInnerClass`](#boundinnerclasscls)
+instead of
+[`UnboundInnerClass`](#unboundinnerclasscls),
+like so:
 
 ```Python
 from big import BoundInnerClass
@@ -2124,7 +2174,9 @@ Again, `ChildOfInner.__init__` doesn't need to explicitly
 pass in `outer` when calling `super.__init__`.
 
 You can see more complex examples of using inheritance with
-`BoundInnerClass` (and `UnboundInnerClass`) in the test suite.
+[`BoundInnerClass`](#boundinnerclasscls)
+(and [`UnboundInnerClass`](#unboundinnerclasscls))
+in the **big** test suite.
 
 #### Miscellaneous notes
 
@@ -2143,8 +2195,12 @@ You can see more complex examples of using inheritance with
   a small speedup and ensures that `isinstance` relationships are
   consistent.
 
-* You must not rename inner classes decorated with either `BoundInnerClass`
-  or `UnboundInnerClass`!  The implementation of `BoundInnerClass` looks up
+* You must not rename inner classes decorated with either
+  [`BoundInnerClass`](#boundinnerclasscls)
+  or [`UnboundInnerClass`](#unboundinnerclasscls)!
+  The implementation of
+  [`BoundInnerClass`](#boundinnerclasscls)
+  looks up
   the bound inner class in the outer object by name in several places.
   Adding aliases to bound inner classes is harmless, but the original
   attribute name must always work.
@@ -2182,35 +2238,46 @@ You can see more complex examples of using inheritance with
 
 **0.6.5**
 
-* Added the new `itertools` module, which so far only contains
-  `PushbackIterator`.
-* Added `lines_strip_comments` and `split_quoted_strings` to the
-  `text` module.
+* Added the new [`itertools`](#bigitertools) module, which so far only contains
+  [`PushbackIterator`](#pushbackiteratoriterablenone).
+* Added
+  [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+  and
+  [`split_quoted_strings`](#split_quoted_stringss-quotes---triple_quotestrue-backslash)
+  to the
+  [`text`](#bigtext)
+  module.
 
 **0.6.1**
 
-* I realized that `whitespace` should contain the DOS end-of-line
+* I realized that [`whitespace`](#whitespace) should contain the DOS end-of-line
   sequence (`'\r\n'`), as it should be considered a single separator
-  when splitting etc.  I added that, along with `whitespace_no_dos`,
-  and naturally `utf8_whitespace_no_dos` and `ascii_whitespace_no_dos`
-  too.
+  when splitting etc.  I added that, along with [`whitespace_no_dos`](#whitespace),
+  and naturally [`utf8_whitespace_no_dos`](#whitespace) and
+  [`ascii_whitespace_no_dos`](#whitespace) too.
 * Minor doc fixes.
 
 **0.6**
 
 A **big** upgrade!
 
-* Completely retooled and upgraded [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE),
+* Completely retooled and upgraded
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE),
   and added
   [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
-  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  and
+  [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
   collectively called
   [**The `multi-` family of functions.**](#The-multi--family-of-functions)
-  (Thanks to Eric Smith for suggesting [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)  Well, sort of.)
-  * `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` now supports five (!) keyword-only
-    parameters, allowing the caller to tune its behavior to an amazing degree.
-  * Also, the original implementation of `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` got its semantics
-    a bit wrong; it was inconsistent and maybe a little buggy.
+  (Thanks to Eric Smith for suggesting
+  [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  Well, sort of.)
+  * `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)`
+    now supports five (!) keyword-only parameters, allowing the caller
+    to tune its behavior to an amazing degree.
+  * Also, the original implementation of
+    `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)`
+    got its semantics a bit wrong; it was inconsistent and maybe a little buggy.
   * [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
     is like `str.strip` but accepts an iterable of
     separator strings.  It can strip from the left, right, both, or
@@ -2221,38 +2288,57 @@ A **big** upgrade!
     and supports `reverse=True` which causes it to partition from the right
     (like `str.rpartition`).
   * Also added useful predefined lists of separators for use with all
-    the `multi` functions: `whitespace` and `newlines`, with
-    `ascii_` and `utf8_` versions of each, and `without_dos` variants of
-    all three newlines variants.
-* Added the `Scheduler` and `Heap` classes.  `Scheduler` is a
-  replacement for Python's `sched.scheduler` class, with a modernized
-  interface and a major upgrade in functionality.  `Heap` is an
-  object-oriented interface to Python's `heapq` module, used by
-  `Scheduler`.
-* Added [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) and all the `lines_` modifiers.  These are great
-  for writing little text parsers.  For more information, please
-  see the section on
+    the `multi` functions: [`whitespace`](#whitespace) and [`newlines`](#newlines),
+    with `ascii_` and `utf8_` versions of each, and `without_dos` variants of
+    all three [`newlines`](#newlines) variants.
+* Added the
+  [`Scheduler`](#schedulerregulatornone)
+  and
+  [`Heap`](#heapinone)
+  classes.  [`Scheduler`](#schedulerregulatornone)
+  is a replacement for Python's `sched.scheduler` class, with a modernized
+  interface and a major upgrade in functionality.  [`Heap`](#heapinone)
+  is an object-oriented interface to Python's `heapq` module, used by
+  [`Scheduler`](#schedulerregulatornone).
+  These are in their own modules.
+* Added
+  [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+  and all the `lines_` modifiers.  These are great for writing little text parsers.
+  For more information, please see the section on
   [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 * Removed`stripped_lines` and `rstripped_lines` from the `text` module,
-  as they're superceded by the far superior [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) family.
-* Enhanced `normalize_whitespace`.  Added the `separators` and
-  `replacement` parameters, and added support for `bytes` objects.
-* Added the `count` parameter to `re_partition` and `re_rpartition`.
+  as they're superceded by the far superior
+  [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+  family.
+* Enhanced
+  [`normalize_whitespace`](#normalize_whitespaces-separatorsNone-replacementNone).
+  Added the `separators` and `replacement` parameters,
+  and added support for `bytes` objects.
+* Added the `count` parameter to
+  [`re_partition`](#re_partitiontext-pattern-count1--flags0)
+  and
+  [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0).
 
 **0.5.2**
 
-* Added `stripped_lines` and `rstripped_lines` to the `text` module.
-* Added support for `len` to the `graph.TopologicalSorter` object.
+* Added `stripped_lines` and `rstripped_lines` to the [`text`](#bigtext) module.
+* Added support for `len` to the [`TopologicalSorter`](#topologicalsortergraphnone) object.
 
 **0.5.1**
 
-* Added `gently_title` and `normalize_whitespace` to the `text` module.
-* Changed `translate_filename_to_exfat` to handle translating `:` in a special way.
-  If the colon is followed by a space, then the colon is turned into " -".
+* Added
+  [`gently_title`](#gently_titles)
+  and
+  [`normalize_whitespace`](#normalize_whitespaces-separatorsNone-replacementNone)
+  to the [`text`](#bigtext) module.
+* Changed [`translate_filename_to_exfat`](#translate_filename_to_exfats)
+  to handle translating `':'` in a special way.
+  If the colon is followed by a space, then the colon is turned into `' -'`.
   This yields a more natural translation when colons are used in text, e.g.
-  "xXx: The Return Of Xander Cage" -> "xXx - The Return Of Xander Cage".
-  If the colon is not followed by a space, turns the colon into "-".
-  This is good for tiresome modern gobbledygook like "Re:code" -> "Re-code".
+  `'xXx: The Return Of Xander Cage'` is translated to `'xXx - The Return Of Xander Cage'`.
+  If the colon is not followed by a space, turns the colon into `'-'`.
+  This is good for tiresome modern gobbledygook like `'Re:code'`, which
+  will now be translated to `'Re-code'`.
 
 **0.5**
 
