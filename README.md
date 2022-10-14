@@ -102,6 +102,8 @@ notice on the source code.
 
 [`lines_strip(li)`](#lines_stripli)
 
+[`lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`](#lines_strip_commentsli-comment_separators--quotes--backslash--rstriptrue-triple_quotestrue)
+
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
 [`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
@@ -119,6 +121,12 @@ notice on the source code.
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementNone)
 
 [`parse_timestamp_3339Z(s)`](#parse_timestamp_3339zs)
+
+[`PushbackIterator(iterable=None)`](#pushbackiteratoriterablenone)
+
+[`PushbackIterator.next(default=None)`](#pushbackiteratornextdefaultnone)
+
+[`PushbackIterator.push(o)`](#pushbackiteratorpusho)
 
 [`pushd(directory)`](#pushddirectory)
 
@@ -151,6 +159,8 @@ notice on the source code.
 [`Scheduler.Regulator.sleep(t)`](#schedulerregulatorsleept)
 
 [`Scheduler.Regulator.wake()`](#schedulerregulatorwake)
+
+[`split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`](#split_quoted_stringss-quotes---triple_quotestrue-backslash-)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
@@ -669,6 +679,46 @@ Well, just one heap object really.
 > of the heap, in sorted order.
 
 
+## `big.itertools`
+
+Functions and classes for working with iteration.
+Only one entry so far.
+
+#### `PushbackIterator(iterable=None)`
+
+> Wraps any iterator, allowing you to push items back on the iterator.
+> This allows you to "peek" at the next item (or items); you can get the
+> next item, examine it, and then push it back.  If any objects have
+> been pushed onto the iterator, they are yielded first, before attempting
+> to yield from the wrapped iterator.
+>
+> Pass in any `iterable` to the constructor.  Passing in an `iterable`
+> of `None` means the `PushbackIterator` is created in an exhausted state.
+>
+> When the wrapped `iterable` is exhausted (or if you passed in `None`
+> to the constructor) you can still call push to add new items, at which
+> point the `PushBackIterator` can be iterated over again.
+>
+> In addition to the following methods, `PushbackIterator` supports
+> the iterator protocol and testing for truth.  A `PushbackIterator`
+> is true if iterating over it will yield at least one value.
+
+#### `PushbackIterator.next(default=None)`
+
+> Equivalent to `next(PushbackIterator)`,
+> but won't raise `StopIteration`.
+> If the iterator is exhausted, returns
+> the `default` argument.
+
+#### `PushbackIterator.push(o)`
+
+> Pushes a value into the iterator's internal stack.
+> When a `PushbackIterator` is iterated over, and there are
+> any pushed values, the top value on the stack will be popped
+> and yielded.  `PushbackIterator` only yields from the
+> iterator it wraps when this internal stack is empty.
+
+
 ## `big.scheduler`
 
 A replacement for Python's `sched.scheduler` object,
@@ -919,6 +969,18 @@ section below for a higher-level view on some of these functions.
 > first non-whitespace characters appear in the iterable of
 > `comment_separators` strings passed in.
 >
+>  What's the difference between `lines_strip_comments` and
+>  `lines_filter_comment_lines`?
+>
+>  * `lines_filter_comment_lines` only recognizes lines that
+>    *start* with a comment separator (ignoring leading
+>    whitespace).  Also, it filters out those lines
+>    completely, rather than modifying the line.
+>  * `lines_strip_comments` handles comment characters
+>    anywhere in the line, although it can ignore
+>    comments inside quoted strings.  It truncates the
+>    line but still always yields the line.
+>
 > For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_rstrip(li)`
@@ -939,6 +1001,48 @@ section below for a higher-level view on some of these functions.
 > * `leading` - the leading whitespace string that was removed
 >
 > For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`
+
+> A lines modifier function.  Strips comments from the lines
+> of a "lines iterator".  Comments are substrings that indicate
+> the rest of the line should be ignored; `lines_strip_comments`
+> truncates the line at the beginning of the leftmost comment
+> separator.
+>
+> If `rstrip` is true (the default), `lines_strip_comments` calls
+> the `rstrip()` method on `line` after it truncates the line.
+>
+> If `quotes` is true, it must be an iterable of quote characters.
+> (Each quote character *must* be a single character.)
+> `lines_strip_comments` will parse the line and ignore comment
+> characters inside quoted strings.  If `quotes` is false,
+> quote characters are ignored and `line_strip_comments` will truncate
+> anywhere in the line.
+>
+> `backslash` and `triple_quotes` are passed in to
+> `split_quoted_string`, which is used internally to detect the quoted
+> strings in the line.
+>
+> Sets a new field on the associated `LineInfo` object for every line:
+>
+>  * `comment` - the comment stripped from the line, if any.
+>     if no comment was found, `comment` will be an empty string.
+>
+>  What's the difference between `lines_strip_comments` and
+>  `lines_filter_comment_lines`?
+>
+>  * `lines_filter_comment_lines` only recognizes lines that
+>    *start* with a comment separator (ignoring leading
+>    whitespace).  Also, it filters out those lines
+>    completely, rather than modifying the line.
+>  * `lines_strip_comments` handles comment characters
+>    anywhere in the line, although it can ignore
+>    comments inside quoted strings.  It truncates the
+>    line but still always yields the line.
+>
+> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
 
 #### `lines_strip_indent(li)`
 
@@ -1262,6 +1366,22 @@ section below for a higher-level view on some of these functions.
 >
 > If `pattern` is a string, `flags` is passed in
 > as the `flags` argument to `re.compile`.
+
+#### `split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`
+
+> Splits s into quoted and unquoted segments.  Returns an iterator yielding 2-tuples:
+>     (is_quoted, segment)
+> where `segment` is a substring of `s`, and `is_quoted` is true if the segment is
+> quoted.  Joining all the segments together recreates `s`.
+>
+> `quotes` is an iterable of quote separators.  Note that `split_quoted_strings`
+> only supports quote *characters,* as in, each quote separator must be exactly
+> one character long.
+>
+> If `triple_quotes` is true, supports "triple-quoted" strings like Python.
+>
+> If `backslash` is a character, this character will quoting characters inside
+> a quoted string, like the backslash character inside strings in Python.
 
 #### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
 
@@ -2059,6 +2179,13 @@ You can see more complex examples of using inheritance with
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6.5**
+
+* Added the new `itertools` module, which so far only contains
+  `PushbackIterator`.
+* Added `lines_strip_comments` and `split_quoted_strings` to the
+  `text` module.
 
 **0.6.1**
 

@@ -1143,6 +1143,43 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.multipartition("abc", "b", -1)
 
+    def test_split_quoted_strings(self):
+        def test(s, expected, **kwargs):
+            got = list(big.split_quoted_strings(s, **kwargs))
+            self.assertEqual(got, expected)
+
+        test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
+            [
+                (False, 'hey there '),
+                (True, '"this is quoted"'),
+                (False, ' an empty quote: '),
+                (True, "''"),
+                (False, ' this is not quoted '),
+                (True, "'this is more quoted'"),
+                (False, ' '),
+                (True, '"here\'s quoting a quote mark: \\" wow!"'),
+                (False, ' this is working!'),
+            ])
+
+        test('''here is triple quoted: """i am triple quoted.""" wow!  again: """triple quoted here. "quotes in quotes" empty: "" done.""" phew!''',
+            [
+                (False, 'here is triple quoted: '),
+                (True, '"""i am triple quoted."""'),
+                (False, ' wow!  again: '),
+                (True, '"""triple quoted here. "quotes in quotes" empty: "" done."""'),
+                (False, ' phew!'),
+            ])
+
+        test('''test turning off quoted strings.  """howdy doodles""" it kinda works anyway!''',
+            [
+                (False, 'test turning off quoted strings.  '),
+                (True, '""'),
+                (True, '"howdy doodles"'),
+                (True, '""'),
+                (False, ' it kinda works anyway!'),
+            ],
+            triple_quotes=False)
+
 
     def test_lines(self):
         def test(i, expected):
@@ -1230,6 +1267,48 @@ class BigTextTests(unittest.TestCase):
                 (LI("  \tthird line", 3, 1), "        third line"),
                 (LI("", 4, 1), ""),
             ])
+
+        test(big.lines_strip_comments(big.lines("""
+for x in range(5): # this is a comment
+    print("# this is quoted", x)
+    print("") # this "comment" is useless
+    print(no_comments_or_quotes_on_this_line)
+"""[1:]), ("#", "//")),
+            [
+                (LI(line='for x in range(5): # this is a comment', line_number=1, column_number=1, comment='# this is a comment'),
+                    'for x in range(5):'),
+                (LI(line='    print("# this is quoted", x)', line_number=2, column_number=1, comment=''),
+                    '    print("# this is quoted", x)'),
+                (LI(line='    print("") # this "comment" is useless', line_number=3, column_number=1, comment='# this "comment" is useless'),
+                    '    print("")'),
+                (LI(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1, comment=''),
+                    '    print(no_comments_or_quotes_on_this_line)'),
+                (LI(line='', line_number=5, column_number=1, comment=''),
+                    '')
+            ])
+
+        test(big.lines_strip_comments(big.lines("""
+for x in range(5): # this is a comment
+    print("# this is quoted", x)
+    print("") # this "comment" is useless
+    print(no_comments_or_quotes_on_this_line)
+"""[1:]), ("#", "//"), quotes=None),
+            [
+                (LI(line='for x in range(5): # this is a comment', line_number=1, column_number=1, comment='# this is a comment'),
+                  'for x in range(5):'),
+                (LI(line='    print("# this is quoted", x)', line_number=2, column_number=1, comment='# this is quoted", x)'),
+                    '    print("'),
+                (LI(line='    print("") # this "comment" is useless', line_number=3, column_number=1, comment='# this "comment" is useless'),
+                    '    print("")'),
+                (LI(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1, comment=''),
+                    '    print(no_comments_or_quotes_on_this_line)'),
+                (LI(line='', line_number=5, column_number=1, comment=''),
+                    ''),
+            ])
+
+        with self.assertRaises(ValueError):
+            test(big.lines_strip_comments(big.lines("a\nb\n"), None), [])
+
 
 
         test(big.lines_filter_empty_lines(big.lines_filter_comment_lines(big.lines_strip(big.lines(

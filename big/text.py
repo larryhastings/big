@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import enum
 import itertools
 from itertools import zip_longest
+from .itertools import PushbackIterator
 import operator
 import re
 import struct
@@ -684,7 +685,7 @@ def gently_title(s):
     Rule a) handles internally quoted strings:
             He Said 'No I Did Not'
         and contractions that start with an apostrophe
-            'Twas The Night Before christmas
+            'Twas The Night Before Christmas
     Rule b) handles certain Irish, French, and Italian
         names.
             Peter O'Toole
@@ -801,6 +802,135 @@ def normalize_whitespace(s, separators=None, replacement=None):
 
 
 @_export
+def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\'):
+    """
+    Splits s into quoted and unquoted segments.  Returns an iterator yielding
+    2-tuples:
+        (is_quoted, segment)
+    where segment is a substring of s, and is_quoted is true if the segment is
+    quoted.  Joining all the segments together recreates s.
+
+    quotes is an iterable of quote separators.  Note that split_quoted_strings
+    only supports quote *characters*, as in, each quote separator must be exactly
+    one character long.
+
+    If triple_quotes is true, supports "triple-quoted" strings like Python.
+
+    If backslash is a character, this character will quoting characters inside
+    a quoted string, like the backslash character inside strings in Python.
+    """
+    i = PushbackIterator(s)
+    in_quote = None
+    in_triple_quote = False
+    in_backslash = False
+    text = []
+    for c in i:
+        if not in_quote:
+            # encountered character while not in quoted string.
+            if c not in quotes:
+                # general case. append unquoted character to our unquoted string.
+                text.append(c)
+                continue
+            if not triple_quotes:
+                # triple quotes are off, encountered quote.
+                # flush unquoted string, start quoted string.
+                if text:
+                    yield False, "".join(text)
+                    text.clear()
+                text.append(c)
+                in_quote = c
+                continue
+            # scan for triple quotes.
+            c2 = next(i)
+            if c2 != c:
+                # only a single quote mark. flush unquoted string, start quoted string.
+                i.push(c2)
+                if text:
+                    yield False, "".join(text)
+                    text.clear()
+                text.append(c)
+                in_quote = c
+                continue
+            c3 = i.next(None)
+            if c3 != c:
+                # two quotes in a row, but not three.
+                # flush unquoted string, emit empty quoted string.
+                if text:
+                    yield False, "".join(text)
+                    text.clear()
+                yield True, c*2
+                if c3 is not None:
+                    i.push(c3)
+                continue
+            # triple quoted string.
+            # flush unquoted string, start triple quoted string.
+            if text:
+                yield False, "".join(text)
+                text.clear()
+            text.append(c*3)
+            in_quote = c
+            in_triple_quote = c
+            continue
+
+        # handle quoted string
+        if in_backslash:
+            # previous character was a backslash.
+            # append this character no matter what it is.
+            text.append(c)
+            in_backslash = False
+            continue
+        if c == backslash:
+            # encountered backslash character.
+            # set flag so we append the next character,
+            # no matter what it is.
+            in_backslash = True
+            text.append(c)
+            continue
+        if c != in_quote:
+            # character doesn't match our quote marker.
+            # append to our quoted string.
+            text.append(c)
+            continue
+        if not in_triple_quote:
+            # we found our quote mark, and we're only
+            # in single quotes (not triple quotes).
+            # finish and emit the quoted string,
+            # and return to unquoted mode.
+            text.append(c)
+            yield True, "".join(text)
+            text.clear()
+            in_quote = False
+            continue
+        # we're in a triple-quoted string,
+        # and found one of our quote marks.
+        # scan to see if we got three in a row.
+        c2 = i.next(None)
+        c3 = i.next(None)
+        if c == c2 == c3:
+            # we found triple quotes.
+            # finish and emit the triple-quoted string,
+            # and return to unquoted mode.
+            text.append(c*3)
+            yield True, "".join(text)
+            text.clear()
+            in_triple_quote = in_quote = False
+            continue
+        # didn't find triple quotes.  append the single
+        # quote mark to our quoted string and push the
+        # other two characters back onto the iterator.
+        text.append(c)
+        if c2 is not None:
+            if c3 is not None:
+                i.push(c3)
+            i.push(c2)
+
+    # flush the remainder of the string we were building,
+    # in whatever condition it's in.
+    if text:
+        yield in_quote, "".join(text)
+
+
+@_export
 class LineInfo:
     """
     The info object yielded by a lines iterator.
@@ -890,12 +1020,14 @@ class lines:
             i = multisplit(s, separators, keep=False, separate=True, strip=False)
         else:
             i = iter(s)
+            as_bytes = None
 
         self.s = s
         self.separators = separators
         self.line_number = line_number
         self.column_number = column_number
         self.tab_width = tab_width
+        self.as_bytes = as_bytes
 
         self.i = i
 
@@ -906,6 +1038,8 @@ class lines:
 
     def __next__(self):
         line = next(self.i)
+        if self.as_bytes is None:
+            self.as_bytes = isinstance(line, bytes)
         return_value = (LineInfo(line, self.line_number, self.column_number), line)
         self.line_number += 1
         return return_value
@@ -956,6 +1090,17 @@ def lines_filter_comment_lines(li, comment_separators):
     non-whitespace characters appear in the iterable of
     comment_separators strings passed in.
 
+    What's the difference between lines_strip_comments and
+    lines_filter_comment_lines?
+      * lines_filter_comment_lines only recognizes lines that
+        *start* with a comment separator (ignoring leading
+        whitespace).  Also, it filters out those lines
+        completely, rather than modifying the line.
+      * lines_strip_comments handles comment characters
+        anywhere in the line, although it can ignore
+        comments inside quoted strings.  It truncates the
+        line but still always yields the line.
+
     Composable with all the lines_ functions from the big.text module.
     """
     if not comment_separators:
@@ -967,6 +1112,83 @@ def lines_filter_comment_lines(li, comment_separators):
         s = line.lstrip()
         if comment_re.match(s):
             continue
+        yield (info, line)
+
+@_export
+def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True):
+    """
+    A lines modifier function.  Strips comments from the lines
+    of a "lines iterator".  Comments are substrings that indicate
+    the rest of the line should be ignored; lines_strip_comments
+    truncates the line at the beginning of the leftmost comment
+    separator.
+
+    If rstrip is true (the default), lines_strip_comments calls
+    the rstrip() method on line after it truncates the line.
+
+    If quotes is true, it must be an iterable of quote characters.
+    (Each quote character MUST be a single character.)
+    lines_strip_comments will parse the line and ignore comment
+    characters inside quoted strings.  If quotes is false,
+    quote characters are ignored and line_strip_comments will
+    truncate anywhere in the line.
+
+    backslash and triple_quotes are passed in to
+    split_quoted_string, which is used internally to detect
+    the quoted strings in the line.
+
+    Sets a new field on the associated LineInfo object for every line:
+      * comment - the comment stripped from the line, if any.
+        if no comment was found, "comment" will be an empty string.
+
+    What's the difference between lines_strip_comments and
+    lines_filter_comment_lines?
+      * lines_filter_comment_lines only recognizes lines that
+        *start* with a comment separator (ignoring leading
+        whitespace).  Also, it filters out those lines
+        completely, rather than modifying the line.
+      * lines_strip_comments handles comment characters
+        anywhere in the line, although it can ignore
+        comments inside quoted strings.  It truncates the
+        line but still always yields the line.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    if not comment_separators:
+        raise ValueError("illegal comment_separators")
+    as_bytes = isinstance(comment_separators[0], bytes)
+
+    comment_pattern = _separators_to_re(comment_separators, as_bytes=as_bytes, separate=True, keep=True)
+    re_comment = re.compile(comment_pattern)
+    split = re_comment.split
+    for info, line in li:
+        if quotes:
+            i = split_quoted_strings(line, quotes, backslash=backslash, triple_quotes=triple_quotes)
+        else:
+            i = ((False, line),)
+        segments = []
+        append = segments.append
+        comment = []
+        for is_quoted, segment in i:
+            if comment:
+                comment.append(segment)
+                continue
+            if is_quoted:
+                append(segment)
+                continue
+            fields = split(segment, maxsplit=1)
+            leading = fields[0]
+            if len(fields) == 1:
+                append(leading)
+                continue
+            # found a comment marker in an unquoted segment!
+            if rstrip:
+                leading = leading.rstrip()
+            append(leading)
+            comment = fields[1:]
+
+        info.comment = "".join(comment)
+        line = "".join(segments)
         yield (info, line)
 
 @_export
