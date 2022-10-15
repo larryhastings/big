@@ -3,10 +3,20 @@
 ##### Copyright 2022 by Larry Hastings
 
 **big** is a Python package, a grab-bag of useful technology
-I always want to have handy.  Finally!  Instead of copying-and-pasting
-all my little helper functions between projects, I have them all in
-one easily-importable place.  And, since it's a public package, you can
-use 'em too!
+I always want to have handy.
+
+Finally!  For years, I've copied-and-pasted all my little
+helper functions between projects--we've all done it.
+But now I've finally taken the time to consolidate all those
+useful little functions into one big package, so they're always
+at hand, ready to use.
+And, since it's a public package, you can use 'em too!
+
+Not only that, but I've taken my time and re-thought and
+retooled a lot of these functions.  All the difficult-to-use,
+overspecialized, cheap hacks have been upgraded with elegant
+new APIs and clever functionality.
+**big** is a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has few dependencies.
 
@@ -1545,19 +1555,20 @@ to make it easy to use best practices.
 > fractional seconds: a float, a `datetime` object, or the
 > value `None`.
 
-# Subsystem notes
+# Topic deep-dives
 
 ## The `multi-` family of functions
 
 This family of functions was inspired by Python's `str.strip`,
 `str.rstrip`, and `str.splitlines` functions.  These functions
 are well-designed, and often do what you want.  But they're
-all surprisingly opinionated.  And... what if you want to do
-something slightly different?  What if `str.strip` *doesn't*
-do what you want?  If you want to split your string in a
-slightly different way, you can't use `str.strip` anymore.
-So what *can* you use?  There's `re.strip`, but it's hard to
-use.  Now there's a new answer: you can use
+all surprisingly opinionated.  And... what if your use case
+doesn't fit exactly into their narrow viewpoints?  `str.strip`
+supports two distinct modes of operation; if you want
+to split your string in a third, slightly different way, you
+probably just can't use `str.strip`.
+So what *can* you use?  There's `re.strip`, but it can be
+hard to use.  Now there's a new answer:
 [`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 
 The goal of
@@ -1576,12 +1587,15 @@ is the `separators` argument.
 This is an iterable of strings, of the same type (`str` or `bytes`)
 as the string you want to split (`s`).  `multisplit` will split
 the string at *each* non-overlapping instance of any string
-specified in `separators`.  The keyword-only parameters to
+specified in `separators`.
+
+But
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
-let you tune this behavior:
+also let you fine-tune how it splits, through five keyword-only
+parameters:
 
 * `keep` lets you include the separator strings in the output,
-  in a number of different ways.
+  in a number of different formats.
 * `separate` lets you specify whether adjacent separator strings
   should be grouped together (like `str.strip` operating on
   whitespace) or regarded as separate (like `str.strip` when
@@ -1598,42 +1612,49 @@ let you tune this behavior:
 also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 which also take this same `separators` arguments.  There are
-other functions that take a `separators` argument, and the
+other **big** functions that take a `separators` argument, and the
 parameter name always has the word `separators` in it.
 (For example, `comment_separators` for `lines_filter_comment_lines`.)
 
 The downside of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
-five keyword-only parameters, after all.  However, these
-are designed to be memorable, and they all default to `False`
-(except `strip`).  Also, the best way to combat the
-complexity of
+*five keyword-only parameters* after all.  However, these
+are designed to be reasonably memorable, and they all default
+to `False` (except `strip`).  But the best way to combat the
+complexity of calling
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 is to use it as a building block
-for your own presumably easier-to-use text splitting functions.
+for your own, presumably easier-to-use, text splitting functions.
 For example,
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 is used to implement [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
-`normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
+`normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
+and several others.
 
 ### Why do you sometimes get empty strings when you split?
+
+Sometimes when you split using
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE),
+you'll get empty strings in the return value.  This might be unexpected,
+violating the [Principle Of Least Astonishment.](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
+But there are excellent reasons for this behavior, and it stems from observing
+how `str.split` behaves.
 
 `str.split` really has two
 major modes of operation: when you don't pass in a separator (or pass in `None` for the
 separator), and when you pass in an explicit separator string.  In this latter mode,
-it regards every instance of a separator string as an individual separator,
-splitting the string.  This behavior can be a little surprising when you have multiple
-adjacent separators in the string you're splitting.  Consider this illuminating
-example:
+the documentation says it regards every instance of a separator string as an individual
+separator splitting the string.  What does that mean?  Watch what happens when you have
+two adjacent separators in the string you're splitting:
 
     >>> '1,2,,3'.split(',')
     ['1', '2', '', '3']
 
 What's that empty string doing between `'2'` and `'3'`?  Here's how to think about it:
 when you pass in an explicit separator, `str.split` splits at *every* occurance of that
-separator in the string.  It *always* splits the string into two places whenever there's
-a separator.  When there are two adjacent separators, conceptually, they have a
+separator in the string.  It *always* splits the string into two places, whenever there's
+a separator.  And when there are two adjacent separators, conceptually, they have a
 zero-length string in between them:
 
     >>> '1,2,,3'[4:4]
@@ -1645,7 +1666,8 @@ and the output looked like this:
 
     ['1', '2', '3']
 
-it'd be identical to splitting the string without two separators in a row:
+it'd be indistinguishable from splitting the same string but *without*
+two separators in a row:
 
     >>> '1,2,3'.split(',')
     ['1', '2', '3']
@@ -1659,13 +1681,13 @@ that empty string there, it works correctly:
     >>> ','.join(['1', '2', '', '3'])
     '1,2,,3'
 
-Now it gets a little weirder.  Take a look at what happens when the string
+Now take a look at what happens when the string
 you're splitting starts or ends with a separator:
 
     >>> ',1,2,3,'.split(',')
     ['', '1', '2', '3', '']
 
-Perhaps it looks weird.  But, just like with two adjacent separators,
+This might seem weird.  But, just like with two adjacent separators,
 this behavior is important for consistency.  Conceptually there's
 a zero-length string between the beginning of the string and the first
 comma.  And `str.join` needs those empty strings in order to correctly
@@ -1679,16 +1701,26 @@ Naturally,
 duplicates this behavior.  When you want
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 to emulate the behavior of `str.split` when using an explicit separator
-string, just pass in `keep=False`, `separate=True`, and `strip=False`:
+string, just pass in `keep=False`, `separate=True`, and `strip=False`.  That is, if 'a' and 'b' are strings,
+
+     big.multisplit(a, (b,), keep=False, separate=True, strip=False)
+
+produces the same output as
+
+     a.split(b)
+
+Here's sample code using
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+to split the strings we've been playing with:
 
     >>> list(big.multisplit('1,2,,3', (',',), keep=False, separate=True, strip=False))
     ['1', '2', '', '3']
     >>> list(big.multisplit(',1,2,3,', (',',), keep=False, separate=True, strip=False))
     ['', '1', '2', '3', '']
 
-This behavior also has ramifications for the other `keep` modes.  The behavior
-of `keep=True` is perhaps easy to predict; we just append the commas to the previous
-string segment:
+This "emit an empty string" behavior has ramifications for the other `keep` modes, too.
+The behavior of `keep=True` is perhaps easy to predict; we just append the separators
+to the previous string segment:
 
     >>> list(big.multisplit('1,2,,3', (',',), keep=True, separate=True, strip=False))
     ['1,', '2,', ',', '3']
@@ -1711,8 +1743,8 @@ own segments, rather than appending each one to the previous segment:
     >>> list(big.multisplit(',1,2,3,', (',',), keep=big.ALTERNATING, separate=True, strip=False))
     ['', ',', '1', ',', '2', ',', '3', ',', '']
 
-And as with `keep=True`, you can recreate the original string by passing these
-arrays in to `''.join`:
+And, as with `keep=True`, you can also recreate the original string by passing
+these arrays in to `''.join`:
 
     >>> ''.join(['1', ',', '2', ',', '', ',', '3'])
     '1,2,,3'
@@ -1720,28 +1752,29 @@ arrays in to `''.join`:
     ',1,2,3,''
 
 Finally, consider `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
-initially I thought it was wrong.  But I thought about it some more and
-convinced myself this is correct:
+initially I thought it was wrong.  But I gave it a lot of thought and convinced
+myself that, yes, this is correct:
 
     >>> list(big.multisplit('1,2,,3', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('1', ','), ('2', ','), ('', ','), ('3', '')]
     >>> list(big.multisplit(',1,2,3,', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]
 
-It's really strange that the second result ends with a tuple containing
-two empty strings:
+That tuple at the end, just containing two empty strings:
 
     ('', '')
 
-The principle here is that
+is so strange.  How can that be right?
+
+It's the same as `str.split`.
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 *must* split the string into two pieces *every* time it finds the separator
 in the original string.  So it *must* emit the empty non-separator string.
 And since that zero-length string isn't (cannot!) be followed by a separator,
-the final separator string is *also* empty.
+when using `keep=AS_PAIRS` the final separator string is *also* empty.
 
-These arrays can also be joined together to recreate the original string,
-although you have to unpack the tuples too:
+You can recreate the original string from this result too,
+although you have to unpack the tuples:
 
     >>> ''.join(s  for t in [('1', ','), ('2', ','), ('', ','), ('3', '')]  for s in t)
     '1,2,,3'
