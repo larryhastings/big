@@ -1302,10 +1302,14 @@ Only one entry so far.
 > By default turns all runs of consecutive whitespace
 > characters into a single space character.
 >
-> 's' may be 'str' or 'bytes'.
-> 'separators' should be an iterable of either 'str' or 'bytes',
-> matching 's'.
-> 'replacement' should be 'str' or 'bytes', also matching 's'.
+> `s` may be `str` or `bytes`.
+> `separators` should be an iterable of either `str` or `bytes`
+> objects, matching `s`.
+> `replacement` should be either a `str` or `bytes` object,
+> also matching `s`, or `None` (the default).
+> If `replacement` is `None`, `normalize_whitespace` will use
+> a replacement string consisting of a single space character,
+> either `str` or `bytes` as appropriate.)
 >
 > Leading or trailing runs of separator characters will
 > be replaced with the replacement string, e.g.:
@@ -1635,8 +1639,9 @@ zero-length string in between them:
     >>> '1,2,,3'[4:4]
     ''
 
-That empty string represents the fact that there were two adjacent separators.
-If `str.split` didn't add that empty string, and the output looked like this:
+The empty string in the output of `str.split` represents the fact that there
+were two adjacent separators.  If `str.split` didn't add that empty string,
+and the output looked like this:
 
     ['1', '2', '3']
 
@@ -1647,12 +1652,12 @@ it'd be identical to splitting the string without two separators in a row:
 
 This difference is crucial when you want to reconstruct the original string from
 the split list.  `str.join` should always be the inverse of `str.split`, and with
-that empty string there, it works correctly.  Consider these two examples:
+that empty string there, it works correctly:
 
     >>> ','.join(['1', '2', '3'])
-    "1,2,3"
+    '1,2,3'
     >>> ','.join(['1', '2', '', '3'])
-    "1,2,,3"
+    '1,2,,3'
 
 Now it gets a little weirder.  Take a look at what happens when the string
 you're splitting starts or ends with a separator:
@@ -1676,51 +1681,51 @@ duplicates this behavior.  When you want
 to emulate the behavior of `str.split` when using an explicit separator
 string, just pass in `keep=False`, `separate=True`, and `strip=False`:
 
-    >>> list(big.multisplit("1,2,,3", (",",), keep=False, separate=True, strip=False))
+    >>> list(big.multisplit('1,2,,3', (',',), keep=False, separate=True, strip=False))
     ['1', '2', '', '3']
-    >>> list(big.multisplit(",1,2,3,", (",",), keep=False, separate=True, strip=False))
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=False, separate=True, strip=False))
     ['', '1', '2', '3', '']
 
 This behavior also has ramifications for the other `keep` modes.  The behavior
 of `keep=True` is perhaps easy to predict; we just append the commas to the previous
 string segment:
 
-    >>> list(big.multisplit("1,2,,3", (",",), keep=True, separate=True, strip=False))
+    >>> list(big.multisplit('1,2,,3', (',',), keep=True, separate=True, strip=False))
     ['1,', '2,', ',', '3']
-    >>> list(big.multisplit(",1,2,3,", (",",), keep=True, separate=True, strip=False))
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=True, separate=True, strip=False))
     [',', '1,', '2,', '3,', '']
 
 The principle here is that, when you use `keep=True`, you should be able to reconstitute
 the original string with `''.join`:
 
     >>> ''.join(['1,', '2,', ',', '3'])
-    "1,2,,3"
+    '1,2,,3'
     >>> ''.join([',', '1,', '2,', '3,', ''])
-    ",1,2,3,"
+    ',1,2,3,''
 
 `keep=big.ALTERNATING` is much the same, except we insert the separators as their
 own segments, rather than appending each one to the previous segment:
 
-    >>> list(big.multisplit("1,2,,3", (",",), keep=big.ALTERNATING, separate=True, strip=False))
+    >>> list(big.multisplit('1,2,,3', (',',), keep=big.ALTERNATING, separate=True, strip=False))
     ['1', ',', '2', ',', '', ',', '3']
-    >>> list(big.multisplit(",1,2,3,", (",",), keep=big.ALTERNATING, separate=True, strip=False))
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=big.ALTERNATING, separate=True, strip=False))
     ['', ',', '1', ',', '2', ',', '3', ',', '']
 
 And as with `keep=True`, you can recreate the original string by passing these
 arrays in to `''.join`:
 
     >>> ''.join(['1', ',', '2', ',', '', ',', '3'])
-    "1,2,,3"
+    '1,2,,3'
     >>> ''.join(['', ',', '1', ',', '2', ',', '3', ',', ''])
-    ",1,2,3,"
+    ',1,2,3,''
 
 Finally, consider `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
 initially I thought it was wrong.  But I thought about it some more and
 convinced myself this is correct:
 
-    >>> list(big.multisplit("1,2,,3", (",",), keep=big.AS_PAIRS, separate=True, strip=False))
+    >>> list(big.multisplit('1,2,,3', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('1', ','), ('2', ','), ('', ','), ('3', '')]
-    >>> list(big.multisplit(",1,2,3,", (",",), keep=big.AS_PAIRS, separate=True, strip=False))
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]
 
 It's really strange that the second result ends with a tuple containing

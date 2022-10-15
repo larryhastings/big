@@ -759,10 +759,14 @@ def normalize_whitespace(s, separators=None, replacement=None):
     By default turns all runs of consecutive whitespace
     characters into a single space character.
 
-    "s" may be str or bytes.
-    "separators" should be an iterable of either str or bytes,
-    matching "s".
-    "replacement" should be str or bytes, also matching "s".
+    s may be str or bytes.
+    separators should be an iterable of either str or bytes objects,
+    matching s.
+    replacement should be either a str or bytes object,
+    also matching s, or None (the default).
+    If replacement is None, normalize_whitespace will use
+    a replacement string consisting of a single space character,
+    either str or bytes as appropriate.
 
     Leading or trailing runs of separator characters will
     be replaced with the replacement string, e.g.:
