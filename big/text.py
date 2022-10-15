@@ -45,7 +45,7 @@ def _export(o):
 
 
 @_export
-def re_partition(s, pattern, count=1, *, flags=0):
+def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     """
     Like str.partition, but pattern is matched as a regular expression.
 
@@ -77,7 +77,12 @@ def re_partition(s, pattern, count=1, *, flags=0):
 
     If pattern is a string or bytes, flags is passed in
     as the flags argument to re.compile.
+
+    If reverse is true, partitions starting at the right,
+    like re_rpartition.
     """
+    if reverse:
+        return re_rpartition(s, pattern, count, flags=flags)
     if not isinstance(pattern, re.Pattern):
         pattern = re.compile(pattern, flags=flags)
     if not (isinstance(s, (str, bytes)) and
@@ -220,7 +225,7 @@ whitespace = [
 
 # this omits the DOS convention '\r\n'
 _export_name('whitespace_without_dos')
-whitespace_without_dos = [s for s in whitespace if s != b'\r\n']
+whitespace_without_dos = [s for s in whitespace if s != '\r\n']
 
 _export_name('newlines')
 newlines = [
@@ -243,7 +248,7 @@ newlines = [
 
 # this omits the DOS convention '\r\n'
 _export_name('newlines_without_dos')
-newlines_without_dos = [s for s in newlines if s != b'\r\n']
+newlines_without_dos = [s for s in newlines if s != '\r\n']
 
 def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
     a = []
@@ -422,6 +427,8 @@ def multisplit(s, separators=None, *,
             Discard the separators.
         true (apart from ALTERNATING or AS_PAIRS)
             Append the separators to the end of the split strings.
+            You can recreate the original string by passing the
+            list returned in to ''.join.
         ALTERNATING
             Yield alternating strings in the output: strings consisting
             of separators, alternating with strings consisting of
@@ -430,11 +437,14 @@ def multisplit(s, separators=None, *,
             may be empty; if "separate" is false, separator strings will
             contain one or more separators, and non-separator strings
             will never be empty.
+            You can recreate the original string by passing the
+            list returned in to ''.join.
         AS_PAIRS
             Yield 2-tuples containing a non-separator string and its
-            subsequent separator string.  Either string may be empty,
-            but both strings will never be empty at the same time,
-            unless s was empty.
+            subsequent separator string.  Either string may be empty;
+            the separator string in the last 2-tuple will always be
+            empty, and if `s` ends with a separator string, *both*
+            strings in the final 2-tuple will be empty.
 
     "separate" indicates whether multisplit should consider adjacent
     separator strings in s as one separator or as multiple separators
@@ -465,15 +475,15 @@ def multisplit(s, separators=None, *,
         true
             Strip separators from the beginning and end of s
             (a la str.strip).
-        STR_STRIP (currently unimplemented, equivalent to true)
-            Behave like str.strip.  Strip from the beginning
-            and end of s, unless maxsplit is nonzero and the
-            entire string is not split.  If splitting stops due
-            to maxsplit before the entire string is split, and
-            reverse is false, don't strip the end of the string.
-            If splitting stops due to maxsplit before the entire
-            string is split, and reverse is true, don't strip
-            the beginning of the string.
+        STR_SPLIT (currently unimplemented, equivalent to true)
+            Strip the way str.split does when splitting on whitespace.
+            Strip from the beginning and end of s, unless maxsplit
+            is nonzero and the entire string is not split.  If
+            splitting stops due to maxsplit before the entire string
+            is split, and reverse is false, don't strip the end of
+            the string. If splitting stops due to maxsplit before
+            the entire string is split, and reverse is true, don't
+            strip the beginning of the string.
 
     "maxsplit" should be either an integer or None.  If maxsplit is an
     integer greater than -1, multisplit will split s no more than
@@ -578,7 +588,8 @@ def multisplit(s, separators=None, *,
             yield o
         return
 
-    # from here on out, we only deal with keep=True
+    # from here on out, we're 'keep'-ing the separator strings.
+    # (we're returning the separator strings in one form or another.)
 
     if keep == ALTERNATING:
         for o in l:
@@ -594,8 +605,7 @@ def multisplit(s, separators=None, *,
             previous = o
             continue
         if keep == AS_PAIRS:
-            if previous or o:
-                yield (previous, o)
+            yield (previous, o)
         else:
             yield previous + o
         previous = None

@@ -70,6 +70,62 @@ def printable_separators(separators):
 
 class BigTextTests(unittest.TestCase):
 
+    def test_whitespace_and_newlines(self):
+        # ensure that big.whitespace and big.newlines
+        # correctly matches the list of characters that
+        # Python considers whitespace / newlines.
+
+        # Python whitespace only considers individual
+        # whitespace charcters, and doesn't include the
+        # DOS end-of-line sequence '\r\n'.  so what we're
+        # going to produce in the below list is technically
+        # the "without DOS" versions.
+        python_whitespace_without_dos = []
+        python_newlines_without_dos = []
+
+        # technically we don't need to check the surrogate pair characters.
+        # but it's faster to leave them in.
+        unicode_code_points = 2**16 + 2**20
+
+        for i in range(unicode_code_points):
+            c = chr(i)
+            s = f"a{c}b"
+            if len(s.split()) == 2:
+                python_whitespace_without_dos.append(c)
+                if len(s.splitlines()) == 2:
+                    python_newlines_without_dos.append(c)
+
+        self.assertEqual(set(big.whitespace_without_dos), set(python_whitespace_without_dos))
+        self.assertEqual(set(big.newlines_without_dos), set(python_newlines_without_dos))
+
+        python_whitespace = list(python_whitespace_without_dos)
+        python_whitespace.append("\r\n")
+        python_newlines = list(python_newlines_without_dos)
+        python_newlines.append("\r\n")
+        self.assertEqual(set(big.whitespace), set(python_whitespace))
+        self.assertEqual(set(big.newlines), set(python_newlines))
+
+        # now test the utf-8 and ascii variants!
+
+        python_ascii_whitespace = big.text._cheap_encode_iterable_of_strings(python_whitespace, 'ascii')
+        self.assertEqual(set(big.ascii_whitespace), set(python_ascii_whitespace))
+        python_ascii_whitespace_without_dos = big.text._cheap_encode_iterable_of_strings(python_whitespace_without_dos, 'ascii')
+        self.assertEqual(set(big.ascii_whitespace_without_dos), set(python_ascii_whitespace_without_dos))
+        python_ascii_newlines = big.text._cheap_encode_iterable_of_strings(python_newlines, 'ascii')
+        self.assertEqual(set(big.ascii_newlines), set(python_ascii_newlines))
+        python_ascii_newlines_without_dos = big.text._cheap_encode_iterable_of_strings(python_newlines_without_dos, 'ascii')
+        self.assertEqual(set(big.ascii_newlines_without_dos), set(python_ascii_newlines_without_dos))
+
+        python_utf8_whitespace = big.text._cheap_encode_iterable_of_strings(python_whitespace, 'utf8')
+        self.assertEqual(set(big.utf8_whitespace), set(python_utf8_whitespace))
+        python_utf8_whitespace_without_dos = big.text._cheap_encode_iterable_of_strings(python_whitespace_without_dos, 'utf8')
+        self.assertEqual(set(big.utf8_whitespace_without_dos), set(python_utf8_whitespace_without_dos))
+        python_utf8_newlines = big.text._cheap_encode_iterable_of_strings(python_newlines, 'utf8')
+        self.assertEqual(set(big.utf8_newlines), set(python_utf8_newlines))
+        python_utf8_newlines_without_dos = big.text._cheap_encode_iterable_of_strings(python_newlines_without_dos, 'utf8')
+        self.assertEqual(set(big.utf8_newlines_without_dos), set(python_utf8_newlines_without_dos))
+
+
     def test_re_partition(self):
         def group0(re_partition_result):
             result = []
@@ -86,6 +142,8 @@ class BigTextTests(unittest.TestCase):
             self.assertEqual(group0(big.re_partition(s, pattern)),
                 c(("abc", "123", "def456ghi")) )
             self.assertEqual(group0(big.re_rpartition(s, pattern)),
+                c(("abc123def", "456", "ghi")) )
+            self.assertEqual(group0(big.re_partition(s, pattern, reverse=True)),
                 c(("abc123def", "456", "ghi")) )
 
             s = c("abc12345def67890ghi")
@@ -138,6 +196,8 @@ class BigTextTests(unittest.TestCase):
 
             def test_re_rpartition(s, pattern, count, expected):
                 self.assertEqual(group0(big.re_rpartition(s, pattern, count)),
+                    expected )
+                self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)),
                     expected )
 
             test_re_rpartition("a:b:c:d", ":", 0, ("a:b:c:d",))
@@ -248,8 +308,9 @@ class BigTextTests(unittest.TestCase):
             # test greedy separators
             self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'), c(['a', 'abc', 'abcde'])), c(['-', '-', '-', '-', '-', '-']))
 
-            # regression test: don't ever end with a tuple containing two empty strings
-            self.assertEqual(multisplit(c('\na\nb\nc\n'), c(('\n',)), keep=big.AS_PAIRS, strip=False), c([ ('', '\n'), ('a', '\n'), ('b', '\n'), ('c', '\n') ]))
+            # regression test: *YES*, if the string you're splitting ends with a separator,
+            # and keep=big.AS_PAIRS, the result ends with a tuple containing two empty strings.
+            self.assertEqual(multisplit(c('\na\nb\nc\n'), c(('\n',)), keep=big.AS_PAIRS, strip=False), c([ ('', '\n'), ('a', '\n'), ('b', '\n'), ('c', '\n'), ('', '') ]))
 
         with self.assertRaises(TypeError):
             multisplit('s', 3.1415)
@@ -657,8 +718,7 @@ class BigTextTests(unittest.TestCase):
                                                     if waiting is None:
                                                         waiting = s
                                                         return
-                                                    if waiting or s:
-                                                        new_expected.append((waiting, s))
+                                                    new_expected.append((waiting, s))
                                                     waiting = None
                                                 for s in expected:
                                                     append(s)

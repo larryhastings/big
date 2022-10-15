@@ -118,7 +118,7 @@ notice on the source code.
 
 [`newlines_without_dos`](#newlines)
 
-[`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementNone)
+[`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
 
 [`parse_timestamp_3339Z(s)`](#parse_timestamp_3339zs)
 
@@ -130,7 +130,7 @@ notice on the source code.
 
 [`pushd(directory)`](#pushddirectory)
 
-[`re_partition(text, pattern, count=1, *, flags=0)`](#re_partitiontext-pattern-count1--flags0)
+[`re_partition(text, pattern, count=1, *, flags=0, reverse=False)`](#re_partitiontext-pattern-count1--flags0-reversefalse)
 
 [`re_rpartition(text, pattern, count=1, *, flags=0)`](#re_rpartitiontext-pattern-count1--flags0)
 
@@ -184,6 +184,18 @@ notice on the source code.
 
 [`TopologicalSorter.view()`](#topologicalsorterview)
 
+[`TopologicalSorter.View.close()`](#topologicalsorterviewclose)
+
+[`TopologicalSorter.View.copy()`](#topologicalsorterviewcopy)
+
+[`TopologicalSorter.View.done(*nodes)`](#topologicalsorterviewdonenodes)
+
+[`TopologicalSorter.View.print(print=print)`](#topologicalsorterviewprintprintprint)
+
+[`TopologicalSorter.View.ready()`](#topologicalsorterviewready)
+
+[`TopologicalSorter.View.reset()`](#topologicalsorterviewreset)
+
 [`touch(path)`](#touchpath)
 
 [`translate_filename_to_exfat(s)`](#translate_filename_to_exfats)
@@ -203,18 +215,6 @@ notice on the source code.
 [`utf8_whitespace`](#whitespace)
 
 [`utf8_whitespace_without_dos`](#whitespace)
-
-[`View.close()`](#viewclose)
-
-[`View.copy()`](#viewcopy)
-
-[`View.done(*nodes)`](#viewdonenodes)
-
-[`View.print(print=print)`](#viewprintprintprint)
-
-[`View.ready()`](#viewready)
-
-[`View.reset()`](#viewreset)
 
 [`whitespace`](#whitespace)
 
@@ -552,7 +552,7 @@ Resets `get_ready` and `done` to their initial state.
 
 Methods on a `View` object:
 
-#### `View.__bool__()`
+#### `TopologicalSorter.View.__bool__()`
 
 > Returns `True` if more work can be done in the
 > view--if there are nodes waiting to be yielded by
@@ -561,21 +561,21 @@ Methods on a `View` object:
 > Aliased to `TopologicalSorter.is_active` for compatibility
 > with graphlib.
 
-#### `View.close()`
+#### `TopologicalSorter.View.close()`
 
 > Closes the view.  A closed view can no longer be used.
 
-#### `View.copy()`
+#### `TopologicalSorter.View.copy()`
 
 > Returns a shallow copy of the view, duplicating its current state.
 
-#### `View.done(*nodes)`
+#### `TopologicalSorter.View.done(*nodes)`
 
 > Marks nodes returned by `ready` as "done",
 > possibly allowing additional nodes to be available
 > from `ready`.
 
-#### `View.print(print=print)`
+#### `TopologicalSorter.View.print(print=print)`
 
 > Prints the internal state of the view, and its graph.
 > Used for debugging.
@@ -583,16 +583,16 @@ Methods on a `View` object:
 > `print` is the function used for printing;
 > it should behave identically to the builtin `print` function.
 
-#### `View.ready()`
+#### `TopologicalSorter.View.ready()`
 
 > Returns a tuple of "ready" nodes--nodes with no
 > predecessors, or nodes whose predecessors have all
 > been marked "done".
 >
-> Aliased to TopologicalSorter.get_ready for
-> compatibility with graphlib.
+> Aliased to `TopologicalSorter.get_ready` for
+> compatibility with `graphlib`.
 
-#### `View.reset()`
+#### `TopologicalSorter.View.reset()`
 
 > Resets the view to its initial state,
 > forgetting all "ready" and "done" state.
@@ -866,33 +866,34 @@ Only one entry so far.
 
 > Uppercase the first character of every word in `s`.
 > Leave the other letters alone.
-
+>
 > (For the purposes of this algorithm, words are
 > any blob of non-whitespace characters.)
-
+>
 > Capitalize the letter after an apostrophe if
-
-    a) the apostrophe is after whitespace
-       (or is the first letter of the string), or
-
-    b) if the apostrophe is after a letter O or D,
-       and that O or D is after whitespace (or is
-       the first letter of the string).  The O or D
-       here will also be capitalized.
+>
+>     a) the apostrophe is after whitespace
+>        (or is the first letter of the string), or
+>
+>     b) if the apostrophe is after a letter O or D,
+>        and that O or D is after whitespace (or is
+>       the first letter of the string).  The O or D
+>        here will also be capitalized.
+>
 > Rule a) handles internally quoted strings:
-
-    He Said 'No I Did Not'
-
+>
+>     He Said 'No I Did Not'
+>
 > and contractions that start with an apostrophe
-
-    'Twas The Night Before Christmas
-
+>
+>     'Twas The Night Before Christmas
+>
 > Rule b) handles certain Irish, French, and Italian
 > names.
-
-    Peter O'Toole
-    Lord D'Arcy
-
+>
+>     Peter O'Toole
+>     Lord D'Arcy
+>
 > Capitalize the letter after a quote mark if
 > the quote mark is after whitespace (or is the
 > first letter of a string).
@@ -903,13 +904,13 @@ Only one entry so far.
 >
 > Each of these Unicode code points is considered
 > an apostrophe:
-
-    '‘’‚‛
-
+>
+>     '‘’‚‛
+>
 > Each of these Unicode code points is considered
 > a quote mark:
-
-    "“”„‟«»‹›
+>
+>     "“”„‟«»‹›
 
 #### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
 
@@ -1170,7 +1171,9 @@ Only one entry so far.
 >            Discard the separators.
 >       true (apart from ALTERNATING or AS_PAIRS)
 >            Append the separators to the end of the split strings.
->        ALTERNATING
+>            You can recreate the original string by passing the
+>            list returned in to ''.join.
+>       ALTERNATING
 >            Yield alternating strings in the output: strings consisting
 >            of separators, alternating with strings consisting of
 >            non-separators.  If "separate" is true, separator strings
@@ -1178,10 +1181,14 @@ Only one entry so far.
 >            may be empty; if "separate" is false, separator strings will
 >            contain one or more separators, and non-separator strings
 >            will never be empty, unless `s` was empty.
->        AS_PAIRS
+>            You can recreate the original string by passing the
+>            list returned in to ''.join.
+>       AS_PAIRS
 >            Yield 2-tuples containing a non-separator string and its
->            subsequent separator string.  Either string may be empty,
->            but both strings will never be empty at the same time.
+>            subsequent separator string.  Either string may be empty;
+>            the separator string in the last 2-tuple will always be
+>            empty, and if `s` ends with a separator string, *both*
+>            strings in the final 2-tuple will be empty.
 >
 > `separate` indicates whether multisplit should consider adjacent
 > separator strings in `s` as one separator or as multiple separators
@@ -1212,15 +1219,15 @@ Only one entry so far.
 >        true
 >            Strip separators from the beginning and end of s
 >            (a la str.strip).
->        STR_STRIP (currently unimplemented, equivalent to true)
->            Behave like str.strip.  Strip from the beginning
->            and end of s, unless maxsplit is nonzero and the
->            entire string is not split.  If splitting stops due
->            to maxsplit before the entire string is split, and
->            reverse is false, don't strip the end of the string.
->            If splitting stops due to maxsplit before the entire
->            string is split, and reverse is true, don't strip
->            the beginning of the string.
+>        STR_SPLIT (currently unimplemented, equivalent to true)
+>            Strip the way `str.split` does when splitting on whitespace.
+>            Strip from the beginning and end of `s`, unless `maxsplit`
+>            is nonzero and the entire string is not split.  If
+>            splitting stops due to `maxsplit` before the entire string
+>            is split, and `reverse` is false, don't strip the end of
+>            the string. If splitting stops due to `maxsplit` before
+>            the entire string is split, and `reverse` is true, don't
+>            strip the beginning of the string.
 >
 > `maxsplit` should be either an integer or `None`.  If `maxsplit` is an
 > integer greater than -1, multisplit will split `text` no more than
@@ -1305,7 +1312,7 @@ Only one entry so far.
 >
 >     normalize_whitespace("   a    b   c") == " a b c"
 
-#### `re_partition(text, pattern, count=1, *, flags=0)`
+#### `re_partition(text, pattern, count=1, *, flags=0, reverse=False)`
 
 > Like `str.partition`, but `pattern` is matched as a regular expression.
 >
@@ -1341,6 +1348,10 @@ Only one entry so far.
 >
 > If `pattern` is a string or bytes object, `flags` is passed in
 > as the `flags` argument to `re.compile`.
+>
+> If `reverse` is true, partitions starting at the right,
+> like [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0).
+
 
 #### `re_rpartition(text, pattern, count=1, *, flags=0)`
 
@@ -1601,6 +1612,137 @@ For example,
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
 is used to implement [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 `normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
+
+### Why do you sometimes get empty strings when you split?
+
+`str.split` really has two
+major modes of operation: when you don't pass in a separator (or pass in `None` for the
+separator), and when you pass in an explicit separator string.  In this latter mode,
+it regards every instance of a separator string as an individual separator,
+splitting the string.  This behavior can be a little surprising when you have multiple
+adjacent separators in the string you're splitting.  Consider this illuminating
+example:
+
+    >>> '1,2,,3'.split(',')
+    ['1', '2', '', '3']
+
+What's that empty string doing between `'2'` and `'3'`?  Here's how to think about it:
+when you pass in an explicit separator, `str.split` splits at *every* occurance of that
+separator in the string.  It *always* splits the string into two places whenever there's
+a separator.  When there are two adjacent separators, conceptually, they have a
+zero-length string in between them:
+
+    >>> '1,2,,3'[4:4]
+    ''
+
+That empty string represents the fact that there were two adjacent separators.
+If `str.split` didn't add that empty string, and the output looked like this:
+
+    ['1', '2', '3']
+
+it'd be identical to splitting the string without two separators in a row:
+
+    >>> '1,2,3'.split(',')
+    ['1', '2', '3']
+
+This difference is crucial when you want to reconstruct the original string from
+the split list.  `str.join` should always be the inverse of `str.split`, and with
+that empty string there, it works correctly.  Consider these two examples:
+
+    >>> ','.join(['1', '2', '3'])
+    "1,2,3"
+    >>> ','.join(['1', '2', '', '3'])
+    "1,2,,3"
+
+Now it gets a little weirder.  Take a look at what happens when the string
+you're splitting starts or ends with a separator:
+
+    >>> ',1,2,3,'.split(',')
+    ['', '1', '2', '3', '']
+
+Perhaps it looks weird.  But, just like with two adjacent separators,
+this behavior is important for consistency.  Conceptually there's
+a zero-length string between the beginning of the string and the first
+comma.  And `str.join` needs those empty strings in order to correctly
+recreate the original string.
+
+    >>> ','.join(['', '1', '2', '3', ''])
+    ',1,2,3,'
+
+Naturally,
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+duplicates this behavior.  When you want
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+to emulate the behavior of `str.split` when using an explicit separator
+string, just pass in `keep=False`, `separate=True`, and `strip=False`:
+
+    >>> list(big.multisplit("1,2,,3", (",",), keep=False, separate=True, strip=False))
+    ['1', '2', '', '3']
+    >>> list(big.multisplit(",1,2,3,", (",",), keep=False, separate=True, strip=False))
+    ['', '1', '2', '3', '']
+
+This behavior also has ramifications for the other `keep` modes.  The behavior
+of `keep=True` is perhaps easy to predict; we just append the commas to the previous
+string segment:
+
+    >>> list(big.multisplit("1,2,,3", (",",), keep=True, separate=True, strip=False))
+    ['1,', '2,', ',', '3']
+    >>> list(big.multisplit(",1,2,3,", (",",), keep=True, separate=True, strip=False))
+    [',', '1,', '2,', '3,', '']
+
+The principle here is that, when you use `keep=True`, you should be able to reconstitute
+the original string with `''.join`:
+
+    >>> ''.join(['1,', '2,', ',', '3'])
+    "1,2,,3"
+    >>> ''.join([',', '1,', '2,', '3,', ''])
+    ",1,2,3,"
+
+`keep=big.ALTERNATING` is much the same, except we insert the separators as their
+own segments, rather than appending each one to the previous segment:
+
+    >>> list(big.multisplit("1,2,,3", (",",), keep=big.ALTERNATING, separate=True, strip=False))
+    ['1', ',', '2', ',', '', ',', '3']
+    >>> list(big.multisplit(",1,2,3,", (",",), keep=big.ALTERNATING, separate=True, strip=False))
+    ['', ',', '1', ',', '2', ',', '3', ',', '']
+
+And as with `keep=True`, you can recreate the original string by passing these
+arrays in to `''.join`:
+
+    >>> ''.join(['1', ',', '2', ',', '', ',', '3'])
+    "1,2,,3"
+    >>> ''.join(['', ',', '1', ',', '2', ',', '3', ',', ''])
+    ",1,2,3,"
+
+Finally, consider `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
+initially I thought it was wrong.  But I thought about it some more and
+convinced myself this is correct:
+
+    >>> list(big.multisplit("1,2,,3", (",",), keep=big.AS_PAIRS, separate=True, strip=False))
+    [('1', ','), ('2', ','), ('', ','), ('3', '')]
+    >>> list(big.multisplit(",1,2,3,", (",",), keep=big.AS_PAIRS, separate=True, strip=False))
+    [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]
+
+It's really strange that the second result ends with a tuple containing
+two empty strings:
+
+    ('', '')
+
+The principle here is that
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+*must* split the string into two pieces *every* time it finds the separator
+in the original string.  So it *must* emit the empty non-separator string.
+And since that zero-length string isn't (cannot!) be followed by a separator,
+the final separator string is *also* empty.
+
+These arrays can also be joined together to recreate the original string,
+although you have to unpack the tuples too:
+
+    >>> ''.join(s  for t in [('1', ','), ('2', ','), ('', ','), ('3', '')]  for s in t)
+    '1,2,,3'
+    >>> ''.join(s  for t in [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]  for s in t)
+    ',1,2,3,'
+
 
 ## `lines` and lines modifier functions
 
@@ -2239,6 +2381,24 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6.6**
+
+* Fixed a bug in
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE).
+  I thought when using `keep=AS_PAIRS` that it shouldn't ever emit a 2-tuple
+  containing just empty strings--but on further reflection I've realized that
+  that's correct.  This behavior is now tested and documented, along with
+  the reasoning behind it.
+* Added the `reverse` flag to
+  [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse).
+* `whitespace_without_dos` and `newlines_without_dos` still had the DOS
+  end-of-line sequence in them!  Oops!
+    * Added a unit test to check that.  The unit test also ensures that
+      `whitespace`, `newlines`, and all the variants (`utf8_`, `ascii_`,
+      and `_with_dos`) exactly match the set of characters Python considers
+      whitespace and newline characters.
+* Lots more documentation and formatting fixes.
 
 **0.6.5**
 
