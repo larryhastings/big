@@ -2165,15 +2165,15 @@ To state it more precisely: if view `v` is a view on graph `g`,
 and you call `g.add('Z', 'Y')`,
 and neither of these statements is true in view `v`:
 
-- 'Y' has been marked as `done`.
-- 'Z' has not yet been yielded by `get_ready`.
+- `'Y'` has been marked as `done`.
+- `'Z'` has not yet been yielded by `get_ready`.
 
 then `v` is no longer "coherent".
 
-(If 'Y' has been marked as `done`, then it's okay to make 'Z' dependent on
-'Y' regardless of what state 'Y' is in.  Likewise, if 'Z' hasn't been yielded
-by `get_ready` yet, then it's okay to make 'Z' dependent on 'Y' regardless
-of what state 'Y' is in.)
+(If `'Y'` has been marked as `done`, then it's okay to make `'Z'` dependent on
+`'Y'` regardless of what state `'Z'` is in.  Likewise, if `'Z'` hasn't been yielded
+by `get_ready` yet, then it's okay to make `'Z'` dependent on `'Y'` regardless
+of what state `'Y'` is in.)
 
 Note that you can restore a view to coherence.  In this case,
 removing either `Y` or `Z` from `g` would resolve the incoherence
