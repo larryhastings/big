@@ -62,21 +62,21 @@ notice on the source code.
 
 [`big.boundinnerclass`](#`bigboundinnerclass`)
 
-[`big.builtin`](#`bigbuiltin`)
+[`big.builtin`](#bigbuiltin)
 
-[`big.file`](#`bigfile`)
+[`big.file`](#bigfile)
 
-[`big.graph`](#`biggraph`)
+[`big.graph`](#biggraph)
 
-[`big.heap`](#`bigheap`)
+[`big.heap`](#bigheap)
 
-[`big.itertools`](#`bigitertools`)
+[`big.itertools`](#bigitertools)
 
-[`big.scheduler`](#`bigscheduler`)
+[`big.scheduler`](#bigscheduler)
 
-[`big.text`](#`bigtext`)
+[`big.text`](#bigtext)
 
-[`big.time`](#`bigtime`)
+[`big.time`](#bigtime)
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
