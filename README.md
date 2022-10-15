@@ -250,7 +250,7 @@ notice on the source code.
 
 Class decorators that implement bound inner classes.  See the
 [**Bound inner classes**](#bound-inner-classes)
-section for more information.
+deep-dive for more information.
 
 
 #### `BoundInnerClass(cls)`
@@ -503,7 +503,7 @@ with an enhanced API.  This version of `TopologicalSorter` allows modifying the
 graph at any time, and supports multiple simultaneous *views,* allowing
 iteration over the graph more than once.
 
-See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) section for more information.
+See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) deep-dive for more information.
 
 #### `CycleError`
 
@@ -866,7 +866,7 @@ Only one entry so far.
 > Functions for working with text strings.  There are
 > several families of functions inside the `text` module;
 > for a higher-level view of those families, read the
-> following sections:
+> following deep-dives:
 >
 > * [**The `multi-` family of functions**](#The-multi--family-of-functions)
 > * [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
@@ -957,7 +957,7 @@ Only one entry so far.
 > arguments passed in via `kwargs` are stored internally and can
 > be accessed by user-defined lines modifier functions.
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `LineInfo(line, line_number, column_number, **kwargs)`
 
@@ -967,7 +967,7 @@ Only one entry so far.
 > or modify existing attributes as needed from
 > inside a "lines modifier" function.
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 
 #### `lines_convert_tabs_to_spaces(li)`
@@ -975,7 +975,7 @@ Only one entry so far.
 > A lines modifier function.  Converts tabs to spaces for the lines
 > of a "lines iterator", using the `tab_width` passed in to [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_filter_comment_lines(li, comment_separators)`
 
@@ -1000,14 +1000,14 @@ Only one entry so far.
 >    comments inside quoted strings.  It truncates the
 >    line but still always yields the line.
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_rstrip(li)`
 
 > A lines modifier function.  Strips trailing whitespace from the
 > lines of a "lines iterator".
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_strip(li)`
 
@@ -1019,7 +1019,7 @@ Only one entry so far.
 >
 > * `leading` - the leading whitespace string that was removed
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`
 
@@ -1064,7 +1064,7 @@ Only one entry so far.
 >    comments inside quoted strings.  It truncates the
 >    line but still always yields the line.
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 
 #### `lines_strip_indent(li)`
@@ -1084,7 +1084,7 @@ Only one entry so far.
 > You can only dedent out to a previous indent.
 > Raises `IndentationError` if there's an illegal dedent.
 >
-> For more information, see the section on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
 
@@ -1122,7 +1122,7 @@ Only one entry so far.
 > specify the number of extra lines before or after
 > the overflowed lines in a column.
 >
-> For more information, see the section on
+> For more information, see the deep-dive on
 > [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 
 #### `multipartition(s, separators, count=1, *, reverse=False, separate=True)`
@@ -1158,7 +1158,7 @@ Only one entry so far.
 > It partitions starting on the right, scanning backwards through slooking
 > for separators.
 >
-> For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 #### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=NOT_SEPARATE)`
 
@@ -1251,7 +1251,7 @@ Only one entry so far.
 >            Start splitting at the end of the string.
 > `reverse` has no effect when `maxsplit` is 0, -1, or `None`.
 >
-> For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 #### `multistrip(s, separators, left=True, right=True)`
 
@@ -1278,7 +1278,7 @@ Only one entry so far.
 > separators stripped.  (If `left` and `right` are both
 > false, returns `s` unchanged.)
 >
-> For more information, see the section on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 
 #### `newlines`
@@ -1436,7 +1436,7 @@ Only one entry so far.
 > examples when these words are rejoined into lines by
 > [`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).)
 >
-> For more information, see the section on
+> For more information, see the deep-dive on
 > [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 
 
@@ -1488,7 +1488,7 @@ Only one entry so far.
 > whitespace will be preserved.  You can use this to preserve
 > whitespace where necessary, like in code examples.
 >
-> For more information, see the section on
+> For more information, see the deep-dive on
 > [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 
 
@@ -2506,7 +2506,7 @@ A **big** upgrade!
 * Added
   [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
   and all the `lines_` modifiers.  These are great for writing little text parsers.
-  For more information, please see the section on
+  For more information, please see the deep-dive on
   [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 * Removed`stripped_lines` and `rstripped_lines` from the `text` module,
   as they're superceded by the far superior
