@@ -2188,8 +2188,12 @@ others.  Views are completely independent from each other.
 
 #### Overview
 
-One minor complaint about Python is that inner classes don't have access to the outer object
-at construction time.  Consider this Python code:
+One minor complaint I have about Python is about inner classes.
+An "inner class" is a class defined inside another class.  And,
+well, inner classes seem kind of half-baked.   Unlike methods,
+inner classes don't get bound to the object.
+
+Consider this Python code:
 
 ```Python
 class Outer(object):
@@ -2205,10 +2209,18 @@ i = o.Inner()
 ```
 
 When `o.method` is called, Python automatically passes in the `o` object as the first parameter
-(generally called `self`). But that doesn't happen when `o.Inner` is called.  (It does pass in
-a `self`, but in this case it's the newly-created `Inner` object.)  There's just no built-in way
-for the `o.Inner` object being constructed to automatically get a reference to the `o` `Outer`
-object.  If you need one, you must explicitly pass one in, like so:
+(generally called `self`).  In object-oriented lingo, `o` is *bound* to `method`, and indeed
+Python calls this object a *bound method*:
+
+
+    >>> o.method
+    <bound method Outer.method of <__main__.Outer object at 0x########>>
+
+But that doesn't happen when `o.Inner` is called.  (It *does* pass in
+a `self`, but in this case it's the newly-created `Inner` object.)
+There's just no built-in way for the `o.Inner` object being constructed
+to *automatically* get a reference to `o`.  If you need one, you must
+explicitly pass one in, like so:
 
 ```Python
 class Outer(object):
@@ -2223,8 +2235,10 @@ o.method()
 i = o.Inner(o)
 ```
 
-This seems redundant.  You don't have to pass in `o` explicitly to method calls;
-why should you have to pass it in explicitly to inner classes?  Well--now you don't have to!
+This seems redundant.  You don't have to pass in `o` explicitly to method calls,
+why should you have to pass it in explicitly to inner classes?
+
+Well--now you don't have to!
 You just need to decorate the inner class with `@big.BoundInnerClass`.
 
 #### Using bound inner classes
@@ -2251,7 +2265,13 @@ i = o.Inner()
 
 Notice that `Inner.__init__` now accepts an `outer` parameter,
 even though you didn't pass in any arguments to `o.Inner`.
+And when it's called, `o` is magically passed in to `outer`!
 Thanks, [`BoundInnerClass`](#boundinnerclasscls)!  You've saved the day.
+
+Decorating an inner class like this always adds a second positional
+parameter, after `self`.  And, like `self`, in theory you don't have
+to use the name `outer`.  (Although for consistency's sakes, it's probably
+a good idea.)
 
 #### Inheritance
 
