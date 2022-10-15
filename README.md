@@ -60,6 +60,24 @@ notice on the source code.
 
 [`ascii_whitespace_without_dos`](#whitespace)
 
+[`big.boundinnerclass`](#`bigboundinnerclass`)
+
+[`big.builtin`](#`bigbuiltin`)
+
+[`big.file`](#`bigfile`)
+
+[`big.graph`](#`biggraph`)
+
+[`big.heap`](#`bigheap`)
+
+[`big.itertools`](#`bigitertools`)
+
+[`big.scheduler`](#`bigscheduler`)
+
+[`big.text`](#`bigtext`)
+
+[`big.time`](#`bigtime`)
+
 [`BoundInnerClass`](#boundinnerclasscls)
 
 [`CycleError`](#cycleerror)
@@ -734,8 +752,15 @@ Only one entry so far.
 > A replacement for Python's `sched.scheduler` object,
 > adding full threading support and a modern Python interface.
 >
-> Python's `sched.scheduler` object is unfixable; its interface
-> means it cannot correctly handle some scenarios:
+> Python's `sched.scheduler` object was a clever idea for the
+> time.  It abstracted away the concept of time from its interface,
+> allowing it to be adapted to new schemes of measuring time--including
+> mock time used for testing.  Very nice!
+>
+> But unfortunately, `sched.scheduler` was designed in 1991--long
+> before multithreading was common, years before threading support
+> was added to Python.  Sadly its API isn't flexible enough to
+> correctly handle some scenarios:
 >
 > * If one thread has called `sched.scheduler.run`,
 >   and the next scheduled event will occur at time **T**,
