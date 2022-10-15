@@ -12,8 +12,8 @@ class PushbackIterator:
     Pass in any iterable to the constructor.  Passing in an iterable of None
     means the PushbackIterator is created in an exhausted state.
 
-    When the iterator is exhausted (or if you passed in None to the
-    constructor) you can still call push to add new items, at which
+    When the wrapped iterable is exhausted (or if you passed in None to
+    the constructor) you can still call push to add new items, at which
     point the PushBackIterator can be iterated over again.
     """
     def __init__(self, iterable=None):
@@ -30,8 +30,8 @@ class PushbackIterator:
         Pushes a value into the iterator's internal stack.
         When a PushbackIterator is iterated over, and there are
         any pushed values, the top value on the stack will be popped
-        and yielded.  The wrapped iterator is only yielded from when
-        the internal stack is empty.
+        and yielded.  PushbackIterator only yields from the
+        iterator it wraps when this internal stack is empty.
         """
         self.stack.append(o)
 
@@ -45,7 +45,7 @@ class PushbackIterator:
     def next(self, default=None):
         """
         Equivalent to next(PushbackIterator),
-        but doesn't raise StopIteration.
+        but won't raise StopIteration.
         If the iterator is exhausted, returns
         the "default" argument.
         """

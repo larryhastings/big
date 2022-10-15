@@ -721,142 +721,146 @@ Only one entry so far.
 
 ## `big.scheduler`
 
-A replacement for Python's `sched.scheduler` object,
-adding full threading support and a modern Python interface.
-
-Python's `sched.scheduler` object is unfixable; its interface
-means it cannot correctly handle some scenarios:
-
-* If one thread has called `sched.scheduler.run`,
-  and the next scheduled event will occur at time **T**,
-  and a second thread schedules a new event which
-  occurs at a time < **T**, `sched.scheduler.run` won't
-  return any events to the first thread until time **T**.
-* If one thread has called `sched.scheduler.run`,
-  and the next scheduled event will occur at time **T**,
-  and a second thread cancels all events,
-  `sched.scheduler.run` won't exit until time **T**.
-
-Also, `sched.scheduler` is thirty years behind the times in
-Python API design--its design predates many common modern
-Python conventions.  Its events are callbacks, which it
-calls directly.  `Scheduler` fixes this: its events are
-objects, and you iterate over the `Scheduler` object to receive
-events as they become due.
-
-`Scheduler` also benefits from thirty years of improvements
-to `sched.scheduler`.  In particular, big reimplements the
-bulk of the `sched.scheduler` test suite, to ensure that
-`Scheduler` never repeats the historical problems discovered
-over the lifetime of `sched.scheduler`.
+> A replacement for Python's `sched.scheduler` object,
+> adding full threading support and a modern Python interface.
+>
+> Python's `sched.scheduler` object is unfixable; its interface
+> means it cannot correctly handle some scenarios:
+>
+> * If one thread has called `sched.scheduler.run`,
+>   and the next scheduled event will occur at time **T**,
+>   and a second thread schedules a new event which
+>   occurs at a time < **T**, `sched.scheduler.run` won't
+>   return any events to the first thread until time **T**.
+> * If one thread has called `sched.scheduler.run`,
+>   and the next scheduled event will occur at time **T**,
+>   and a second thread cancels all events,
+>   `sched.scheduler.run` won't exit until time **T**.
+>
+> Also, `sched.scheduler` is thirty years behind the times in
+> Python API design--its design predates many common modern
+> Python conventions.  Its events are callbacks, which it
+> calls directly.  `Scheduler` fixes this: its events are
+> objects, and you iterate over the `Scheduler` object to receive
+> events as they become due.
+>
+> `Scheduler` also benefits from thirty years of improvements
+> to `sched.scheduler`.  In particular, big reimplements the
+> bulk of the `sched.scheduler` test suite, to ensure that
+> `Scheduler` never repeats the historical problems discovered
+> over the lifetime of `sched.scheduler`.
 
 #### `Scheduler(regulator=None)`
 
-Implements a thread-safe scheduler.  The only argument is the
-"regulator" object to use; the regulator abstracts away all
-time-related details for the scheduler.  By default `Scheduler`
-creates a new `Scheduler.Regulator` object and uses that.
-
-In addition to the below methods, `Scheduler` objects support
-being evaluated in a boolean context (they are true if they
-contain any events), and they support being iterated over.
-Iterating over a `Scheduler` object blocks until the next
-event comes due, at which point the `Scheduler` yields that
-event.  An empty `Scheduler` that is iterated over raises
-`StopIteration`.  You can reuse `Scheduler` objects, iterating
-over them until empty, then adding more objects and iterating
-over them again.
+> Implements a thread-safe scheduler.  The only argument is the
+> "regulator" object to use; the regulator abstracts away all
+> time-related details for the scheduler.  By default `Scheduler`
+> creates a new `Scheduler.Regulator` object and uses that.
+>
+> In addition to the below methods, `Scheduler` objects support
+> being evaluated in a boolean context (they are true if they
+> contain any events), and they support being iterated over.
+> Iterating over a `Scheduler` object blocks until the next
+> event comes due, at which point the `Scheduler` yields that
+> event.  An empty `Scheduler` that is iterated over raises
+> `StopIteration`.  You can reuse `Scheduler` objects, iterating
+> over them until empty, then adding more objects and iterating
+> over them again.
 
 #### `Scheduler.schedule(o, time, *, absolute=False, priority=DEFAULT_PRIORITY)`
 
-Schedules an object `o` to be yielded as an event by this `schedule` object
-at some time in the future.
-
-By default the `time` value is a relative time value,
-and is added to the current time; using a `time` value of 0
-should schedule this event to be yielded immediately.
-
-If `absolute` is true, `time` is regarded as an absolute time value.
-
-If multiple events are scheduled for the same time, they will
-be yielded by order of `priority`.  Lowever values of
-`priority` represent higher priorities.  The default value
-is `Scheduler.DEFAULT_PRIORITY`, which is 100.  If two events
-are scheduled for the same time, and have the same priority,
-`Scheduler` will yield the events in the order they were added.
-
-Returns an `Event` object, which can be used to cancel the event.
+> Schedules an object `o` to be yielded as an event by this `schedule` object
+> at some time in the future.
+>
+> By default the `time` value is a relative time value,
+> and is added to the current time; using a `time` value of 0
+> should schedule this event to be yielded immediately.
+>
+> If `absolute` is true, `time` is regarded as an absolute time value.
+>
+> If multiple events are scheduled for the same time, they will
+> be yielded by order of `priority`.  Lowever values of
+> `priority` represent higher priorities.  The default value
+> is `Scheduler.DEFAULT_PRIORITY`, which is 100.  If two events
+> are scheduled for the same time, and have the same priority,
+> `Scheduler` will yield the events in the order they were added.
+>
+> Returns an `Event` object, which can be used to cancel the event.
 
 #### `Scheduler.cancel(event)`
 
-Cancels a scheduled event.  `event` must be an object
-returned by this `Scheduler` object.  If `event` is not
-currently scheduled in this `Scheduler` object,
-raises `ValueError`.
+> Cancels a scheduled event.  `event` must be an object
+> returned by this `Scheduler` object.  If `event` is not
+> currently scheduled in this `Scheduler` object,
+> raises `ValueError`.
 
 #### `Scheduler.queue`
 
-A property, not a method.  Returns a list of the
-current `Event` objects in the scheduler, in order
-that they will be yielded.
+> A property, not a method.  Returns a list of the
+> current `Event` objects in the scheduler, in order
+> that they will be yielded.
 
 #### `Scheduler.non_blocking()`
 
-Returns an iterator for the events in the
-`Scheduler` that only yields the events that
-are currently due.  Never blocks; if the next
-event is not due yet, raises `StopIteration`.
+> Returns an iterator for the events in the
+> `Scheduler` that only yields the events that
+> are currently due.  Never blocks; if the next
+> event is not due yet, raises `StopIteration`.
 
 #### `Scheduler.Event(time, priority, sequence, event, scheduler)`
 
-An object representing a scheduled event in a `Scheduler`.
-You shouldn't need to create them manually; `Event` objects
-are created automatically when you add events to a `Scheduler`.
-
-Supports one method:
+> An object representing a scheduled event in a `Scheduler`.
+> You shouldn't need to create them manually; `Event` objects
+> are created automatically when you add events to a `Scheduler`.
+>
+> Supports one method:
 
 #### `Scheduler.Event.cancel()`
 
-Cancels this event.  If this event has already been canceled,
-raises `ValueError`.
+> Cancels this event.  If this event has already been canceled,
+> raises `ValueError`.
 
 #### `Scheduler.Regulator(scheduler)`
 
-Creates a regulator object for use with a `Scheduler`.
-Measures time using the `time.monotonic` clock, and
-sleeps using a `threading.Event` object.
-Time values are expressed in seconds, either integer
-or floating point.
-
-You can write your own regulator class and use it with
-`Scheduler`; it must implement the three following methods.
+> Creates a regulator object for use with a `Scheduler`.
+> Measures time using the `time.monotonic` clock, and
+> sleeps using a `threading.Event` object.
+> Time values are expressed in seconds, either integer
+> or floating point.
+>
+> You can write your own regulator class and use it with
+> `Scheduler`; it must implement the three following methods.
 
 #### `Scheduler.Regulator.now()`
 
-Returns a "time value", an object representing the
-current time. The object returned must support
-simple arithmetic operations (`+` and `-`) and
-rich comparison with other time values.
+> Returns a "time value", an object representing the
+> current time. The object returned must support
+> simple arithmetic operations (`+` and `-`) and
+> rich comparison with other time values.
 
 #### `Scheduler.Regulator.sleep(t)`
 
-Sleeps for a period of time expressed as a
-relative "time value".  Note that `sleep` must
-be interruptable with the `wake` method.
+> Sleeps for a period of time expressed as a
+> relative "time value".  Note that `sleep` must
+> be interruptable with the `wake` method.
 
 #### `Scheduler.Regulator.wake()`
 
-Wakes up *all* threads that are current sleeping
-using `Scheduler.Regulator.sleep(t)`.  All calls
-to `sleep` on this `Regulator` object must return
-immediately.
+> Wakes up *all* threads that are current sleeping
+> using `Scheduler.Regulator.sleep(t)`.  All calls
+> to `sleep` on this `Regulator` object must return
+> immediately.
 
 ## `big.text`
 
-Functions for working with text strings.  See the
-[**Word wrapping and formatting**](#word-wrapping-and-formatting)
-section below for a higher-level view on some of these functions.
-
+> Functions for working with text strings.  There are
+> several families of functions inside the `text` module;
+> for a higher-level view of those families, read the
+> following sections:
+>
+> * [**The `multi-` family of functions**](#The-multi--family-of-functions)
+> * [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
+> * [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
 #### `gently_title(s)`
 
