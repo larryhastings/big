@@ -1200,7 +1200,7 @@ def lines_filter_comment_lines(li, comment_separators):
 
 
 @_export
-def lines_filter_contains(li, s, *, invert=False):
+def lines_containing(li, s, *, invert=False):
     """
     A lines modifier function.  Only yields lines
     that contain s.  (Filters out lines that
@@ -1221,7 +1221,7 @@ def lines_filter_contains(li, s, *, invert=False):
             yield t
 
 @_export
-def lines_filter_grep(li, pattern, *, invert=False, flags=0):
+def lines_grep(li, pattern, *, invert=False, flags=0):
     """
     A lines modifier function.  Only yields lines
     that match the regular expression pattern.

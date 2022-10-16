@@ -126,9 +126,9 @@ notice on the source code.
 
 [`lines_filter_comment_lines(li, comment_separators)`](#lines_filter_comment_linesli-comment_separators)
 
-[`lines_filter_contains(li, s, *, invert=False)`](#lines_filter_containsli-s--invertfalse)
+[`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
 
-[`lines_filter_grep(li, pattern, *, invert=False, flags=0)`](#lines_filter_grepli-pattern--invertfalse-flags0)
+[`lines_grep(li, pattern, *, invert=False, flags=0)`](#lines_grepli-pattern--invertfalse-flags0)
 
 [`lines_rstrip(li)`](#lines_rstripli)
 
@@ -1047,7 +1047,7 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
-#### `lines_filter_contains(li, s, *, invert=False)`
+#### `lines_containing(li, s, *, invert=False)`
 
 > A lines modifier function.  Only yields lines
 > that contain `s`.  (Filters out lines that
@@ -1058,7 +1058,7 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
-#### `lines_filter_grep(li, pattern, *, invert=False, flags=0)`
+#### `lines_grep(li, pattern, *, invert=False, flags=0)`
 
 > A lines modifier function.  Only yields lines
 > that match the regular expression `pattern`.
@@ -2521,12 +2521,20 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.8**
+
+* Renamed two of the three freshly-added lines modifier functions:
+  `lines_filter_contains` is now 
+  [`lines_containing`](#lines_containingli-s--invertfalse),
+  and `lines_filter_grep` is now
+  [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0).
+
 **0.6.7**
 
 * Added three new lines modifier functions
   to the [`text`](#bigtext) module:
-  [`lines_filter_contains`](#lines_filter_containsli-s--invertfalse),
-  [`lines_filter_grep`](#lines_filter_grepli-pattern--invertfalse-flags0),
+  `lines_filter_contains`,
+  `lines_filter_grep`,
   and
   [`lines_sort`](#lines_sortli--reversefalse).
 * [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)

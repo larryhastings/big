@@ -1306,7 +1306,7 @@ class BigTextTests(unittest.TestCase):
             ]
             )
 
-        test(big.lines_filter_contains(big.lines("""
+        test(big.lines_containing(big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -1322,7 +1322,7 @@ whoops, I meant, negatory.
             ]
             )
 
-        test(big.lines_filter_contains(big.lines("""
+        test(big.lines_containing(big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -1340,7 +1340,7 @@ whoops, I meant, negatory.
             ]
             )
 
-        test(big.lines_filter_grep(big.lines("""
+        test(big.lines_grep(big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -1357,7 +1357,7 @@ whoops, I meant, negatory.
             ]
             )
 
-        test(big.lines_filter_grep(big.lines("""
+        test(big.lines_grep(big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
