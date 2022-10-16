@@ -1217,6 +1217,9 @@ class BigTextTests(unittest.TestCase):
             got = list(big.split_quoted_strings(s, **kwargs))
             self.assertEqual(got, expected)
 
+            got = list(big.split_quoted_strings(s.encode('ascii'), **kwargs))
+            self.assertEqual(got, [(b, s.encode('ascii')) for b, s in expected])
+
         test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
             [
                 (False, 'hey there '),
@@ -1257,6 +1260,10 @@ class BigTextTests(unittest.TestCase):
 
         LI = big.LineInfo
 
+        def L(line, line_number, column_number=1, **kwargs):
+            info = big.LineInfo(line, line_number, column_number, **kwargs)
+            return (info, line)
+
         test(big.lines("a\nb\nc\nd\ne\n"),
             [
             (LI('a', 1, 1), 'a'),
@@ -1291,6 +1298,125 @@ class BigTextTests(unittest.TestCase):
             (LI('    / not a comment', 5, 1), '    / not a comment'),
             (LI('',                    9, 1), ''),
             ])
+
+        test(big.lines_filter_comment_lines(big.lines(b"a\n# ignored\n c"), b'#'),
+            [
+            L(b'a', 1),
+            L(b' c', 3),
+            ]
+            )
+
+        test(big.lines_filter_contains(big.lines("""
+hello yolks
+what do you have to say, champ?
+i like eggs.
+they don't have to be fancy.
+simple scrambled eggs are just fine.
+neggatory!
+whoops, I meant, negatory.
+"""[1:]), "egg"),
+            [
+                (LI('i like eggs.', 3, 1), 'i like eggs.'),
+                (LI('simple scrambled eggs are just fine.', 5, 1), 'simple scrambled eggs are just fine.'),
+                (LI('neggatory!', 6, 1), 'neggatory!'),
+            ]
+            )
+
+        test(big.lines_filter_contains(big.lines("""
+hello yolks
+what do you have to say, champ?
+i like eggs.
+they don't have to be fancy.
+simple scrambled eggs are just fine.
+neggatory!
+whoops, I meant, negatory.
+"""[1:]), "egg", invert=True),
+            [
+                (LI('hello yolks', 1, 1), 'hello yolks'),
+                (LI('what do you have to say, champ?', 2, 1), 'what do you have to say, champ?'),
+                (LI("they don't have to be fancy.", 4, 1), "they don't have to be fancy."),
+                (LI('whoops, I meant, negatory.', 7, 1), 'whoops, I meant, negatory.'),
+                (LI('', 8, 1), ''),
+            ]
+            )
+
+        test(big.lines_filter_grep(big.lines("""
+hello yolks
+what do you have to say, champ?
+i like eggs.
+they don't have to be fancy.
+simple scrambled eggs are just fine.
+neggatory!
+whoops, I meant, negatory.
+"""[1:]), "eg+"),
+            [
+                (LI('i like eggs.', 3, 1), 'i like eggs.'),
+                (LI('simple scrambled eggs are just fine.', 5, 1), 'simple scrambled eggs are just fine.'),
+                (LI('neggatory!', 6, 1), 'neggatory!'),
+                (LI('whoops, I meant, negatory.', 7, 1), 'whoops, I meant, negatory.'),
+            ]
+            )
+
+        test(big.lines_filter_grep(big.lines("""
+hello yolks
+what do you have to say, champ?
+i like eggs.
+they don't have to be fancy.
+simple scrambled eggs are just fine.
+neggatory!
+whoops, I meant, negatory.
+"""[1:]), "eg+", invert=True),
+            [
+                (LI('hello yolks', 1, 1), 'hello yolks'),
+                (LI('what do you have to say, champ?', 2, 1), 'what do you have to say, champ?'),
+                (LI("they don't have to be fancy.", 4, 1), "they don't have to be fancy."),
+                (LI('', 8, 1), ''),
+            ]
+            )
+
+        test(big.lines_sort(big.lines("""
+cormorant
+firefox
+alligator
+diplodocus
+elephant
+giraffe
+barracuda
+hummingbird
+"""[1:-1])),
+            [
+                L('alligator', 3),
+                L('barracuda', 7),
+                L('cormorant', 1),
+                L('diplodocus', 4),
+                L('elephant', 5),
+                L('firefox', 2),
+                L('giraffe', 6),
+                L('hummingbird', 8),
+            ]
+            )
+
+        test(big.lines_sort(big.lines("""
+cormorant
+firefox
+alligator
+diplodocus
+elephant
+giraffe
+barracuda
+hummingbird
+"""[1:-1]), reverse=True),
+            [
+                L('hummingbird', 8),
+                L('giraffe', 6),
+                L('firefox', 2),
+                L('elephant', 5),
+                L('diplodocus', 4),
+                L('cormorant', 1),
+                L('barracuda', 7),
+                L('alligator', 3),
+            ]
+            )
 
         test(big.lines_rstrip(big.lines(
 "    a = b  \n"
@@ -1378,6 +1504,13 @@ for x in range(5): # this is a comment
         with self.assertRaises(ValueError):
             test(big.lines_strip_comments(big.lines("a\nb\n"), None), [])
 
+        test(big.lines_strip_comments(big.lines(b"a\nb# ignored\n c"), b'#'),
+            [
+            L(b'a', 1, comment=b''),
+            (LI(b'b# ignored', 2, 1, comment=b'# ignored'), b'b'),
+            L(b' c', 3, comment=b''),
+            ]
+            )
 
 
         test(big.lines_filter_empty_lines(big.lines_filter_comment_lines(big.lines_strip(big.lines(

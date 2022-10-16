@@ -126,7 +126,13 @@ notice on the source code.
 
 [`lines_filter_comment_lines(li, comment_separators)`](#lines_filter_comment_linesli-comment_separators)
 
+[`lines_filter_contains(li, s, *, invert=False)`](#lines_filter_containsli-s--invertfalse)
+
+[`lines_filter_grep(li, pattern, *, invert=False, flags=0)`](#lines_filter_grepli-pattern--invertfalse-flags0)
+
 [`lines_rstrip(li)`](#lines_rstripli)
+
+[`lines_sort(li, *, reverse=False)`](#lines_sortli--reversefalse)
 
 [`lines_strip(li)`](#lines_stripli)
 
@@ -1041,12 +1047,48 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
+#### `lines_filter_contains(li, s, *, invert=False)`
+
+> A lines modifier function.  Only yields lines
+> that contain `s`.  (Filters out lines that
+> don't contain `s`.)
+>
+> If `invert` is true, returns the opposite--
+> filters out lines that contain `s`.
+>
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_filter_grep(li, pattern, *, invert=False, flags=0)`
+
+> A lines modifier function.  Only yields lines
+> that match the regular expression `pattern`.
+> (Filters out lines that don't match `pattern`.)
+>
+> `pattern` can be `str`, `bytes`, or an `re.Pattern` object.
+> If `pattern` is not an `re.Pattern` object, it's compiled
+> with `re.compile(pattern, flags=flags)`.
+>
+> If `invert` is true, returns the opposite--
+> filters out lines that match `pattern`.
+>
+> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
 #### `lines_rstrip(li)`
 
 > A lines modifier function.  Strips trailing whitespace from the
 > lines of a "lines iterator".
 >
 > For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+
+#### `lines_sort(li, *, reverse=False)`
+
+> A lines modifier function.  Sorts all
+> input lines before yielding them.
+>
+> Lines are sorted lexicographically,
+> from lowest to highest.
+> If `reverse` is true, lines are sorted
+> from highest to lowest.
 
 #### `lines_strip(li)`
 
@@ -2481,6 +2523,12 @@ in the **big** test suite.
 
 **0.6.7**
 
+* Added three new lines modifier functions
+  to the [`text`](#bigtext) module:
+  [`lines_filter_contains`](#lines_filter_containsli-s--invertfalse),
+  [`lines_filter_grep`](#lines_filter_grepli-pattern--invertfalse-flags0),
+  and
+  [`lines_sort`](#lines_sortli--reversefalse).
 * [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
   now accepts `str` or `bytes`.  Also added the `apostrophes` and
   `double_quotes` arguments.

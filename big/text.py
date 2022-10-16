@@ -190,7 +190,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
 
 # a list of all unicode whitespace characters
 _export_name('whitespace')
-whitespace = [
+whitespace = (
     '\t'    , #     9 0x0009 - tab
     '\n'    , #    10 0x000a - newline
     '\x0b'  , #    11 0x000b - vertical tab
@@ -222,14 +222,14 @@ whitespace = [
     '\u3000', # 12288 0x3000 - ideographic space
 
     '\r\n'  , # the classic DOS newline sequence
-    ]
+    )
 
 # this omits the DOS convention '\r\n'
 _export_name('whitespace_without_dos')
-whitespace_without_dos = [s for s in whitespace if s != '\r\n']
+whitespace_without_dos = tuple(s for s in whitespace if s != '\r\n')
 
 _export_name('newlines')
-newlines = [
+newlines = (
     '\n'    , #   10 0x000a - newline
     '\x0b'  , #   11 0x000b - vertical tab
     '\x0c'  , #   12 0x000c - form feed
@@ -245,11 +245,11 @@ newlines = [
 
     # '\n\r' sorry, Acorn and RISC OS, you have to add this yourselves.
     # I'm worried this would cause bugs with a malformed DOS newline.
-    ]
+    )
 
 # this omits the DOS convention '\r\n'
 _export_name('newlines_without_dos')
-newlines_without_dos = [s for s in newlines if s != '\r\n']
+newlines_without_dos = tuple(s for s in newlines if s != '\r\n')
 
 def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
     a = []
@@ -274,7 +274,7 @@ ascii_whitespace_without_dos = [s for s in ascii_whitespace if s != b'\r\n']
 _export_name('ascii_newlines')
 ascii_newlines   = _cheap_encode_iterable_of_strings(newlines,   "ascii")
 _export_name('ascii_newlines_without_dos')
-ascii_newlines_without_dos = [s for s in ascii_newlines if s != b'\r\n']
+ascii_newlines_without_dos = tuple(s for s in ascii_newlines if s != b'\r\n')
 
 # use these with multisplit if your bytes strings are encoded as utf-8.
 _export_name('utf8_whitespace')
@@ -284,7 +284,7 @@ utf8_whitespace_without_dos = [s for s in utf8_whitespace if s != b'\r\n']
 _export_name('utf8_newlines')
 utf8_newlines   = _cheap_encode_iterable_of_strings(newlines,   "utf-8")
 _export_name('utf8_newlines_without_dos')
-utf8_newlines_without_dos =  [s for s in utf8_newlines if s != b'\r\n']
+utf8_newlines_without_dos =  tuple(s for s in utf8_newlines if s != b'\r\n')
 
 
 def _re_quote(s):
@@ -304,7 +304,7 @@ def _re_quote(s):
 
 
 @functools.lru_cache(re._MAXCACHE)
-def _separators_to_re(separators, as_bytes, separate=False, keep=False):
+def __separators_to_re(separators, as_bytes, separate=False, keep=False):
     if as_bytes:
         pipe = b'|'
         separate_start = b'(?:'
@@ -332,6 +332,14 @@ def _separators_to_re(separators, as_bytes, separate=False, keep=False):
         pattern = keep_start + pattern + keep_end
     # print(f"  P3 {pattern!r}")
     return pattern
+
+def _separators_to_re(separators, as_bytes, separate=False, keep=False):
+    try:
+        hash(separators)
+    except TypeError:
+        separators = tuple(separators)
+    return __separators_to_re(separators, as_bytes, separate=separate, keep=keep)
+
 
 @_export
 def multistrip(s, separators, left=True, right=True):
@@ -366,8 +374,9 @@ def multistrip(s, separators, left=True, right=True):
         tail = b'$'
         if isinstance(separators, bytes):
             # not iterable of bytes, literally a bytes string.
-            # split it ourselves.
-            separators = [separators[i:i+1] for i in range(len(separators))]
+            # split it ourselves.  otherwise, _separators_to_re will
+            # iterate over it, and... oops! it gets bytes!
+            separators = tuple(separators[i:i+1] for i in range(len(separators)))
     else:
         head = '^'
         tail = '$'
@@ -504,11 +513,12 @@ def multisplit(s, separators=None, *,
     as_bytes = isinstance(s, bytes)
     if separators is None:
         separators = ascii_whitespace if as_bytes else whitespace
+
     if as_bytes:
         if isinstance(separators, bytes):
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.
-            separators = [separators[i:i+1] for i in range(len(separators))]
+            separators = tuple(separators[i:i+1] for i in range(len(separators)))
         separators_type = bytes
         empty = b''
     else:
@@ -853,7 +863,7 @@ def normalize_whitespace(s, separators=None, replacement=None):
 
 
 @_export
-def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\'):
+def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
     """
     Splits s into quoted and unquoted segments.  Returns an iterator yielding
     2-tuples:
@@ -870,7 +880,24 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
     If backslash is a character, this character will quoting characters inside
     a quoted string, like the backslash character inside strings in Python.
     """
-    i = PushbackIterator(s)
+    as_bytes = isinstance(s, bytes)
+    if as_bytes:
+        empty = b''
+        if quotes is None:
+            quotes=(b'"', b"'")
+        if backslash is None:
+            backslash = b'\\'
+        i = (s[i:i+1] for i in range(len(s)))
+    else:
+        empty = ''
+        if quotes is None:
+            quotes=('"', "'")
+        if backslash is None:
+            backslash = '\\'
+        i = s
+    empty_join = empty.join
+
+    i = PushbackIterator(i)
     in_quote = None
     in_triple_quote = False
     in_backslash = False
@@ -886,7 +913,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
                 # triple quotes are off, encountered quote.
                 # flush unquoted string, start quoted string.
                 if text:
-                    yield False, "".join(text)
+                    yield False, empty_join(text)
                     text.clear()
                 text.append(c)
                 in_quote = c
@@ -897,7 +924,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
                 # only a single quote mark. flush unquoted string, start quoted string.
                 i.push(c2)
                 if text:
-                    yield False, "".join(text)
+                    yield False, empty_join(text)
                     text.clear()
                 text.append(c)
                 in_quote = c
@@ -907,7 +934,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
                 # two quotes in a row, but not three.
                 # flush unquoted string, emit empty quoted string.
                 if text:
-                    yield False, "".join(text)
+                    yield False, empty_join(text)
                     text.clear()
                 yield True, c*2
                 if c3 is not None:
@@ -916,7 +943,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
             # triple quoted string.
             # flush unquoted string, start triple quoted string.
             if text:
-                yield False, "".join(text)
+                yield False, empty_join(text)
                 text.clear()
             text.append(c*3)
             in_quote = c
@@ -948,7 +975,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
             # finish and emit the quoted string,
             # and return to unquoted mode.
             text.append(c)
-            yield True, "".join(text)
+            yield True, empty_join(text)
             text.clear()
             in_quote = False
             continue
@@ -962,7 +989,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
             # finish and emit the triple-quoted string,
             # and return to unquoted mode.
             text.append(c*3)
-            yield True, "".join(text)
+            yield True, empty_join(text)
             text.clear()
             in_triple_quote = in_quote = False
             continue
@@ -978,7 +1005,7 @@ def split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash=
     # flush the remainder of the string we were building,
     # in whatever condition it's in.
     if text:
-        yield in_quote, "".join(text)
+        yield in_quote, empty_join(text)
 
 
 @_export
@@ -1156,7 +1183,13 @@ def lines_filter_comment_lines(li, comment_separators):
     """
     if not comment_separators:
         raise ValueError("illegal comment_separators")
-    as_bytes = isinstance(comment_separators[0], bytes)
+
+    if isinstance(comment_separators, bytes):
+        comment_separators = tuple(comment_separators[i:i+1] for i in range(len(comment_separators)))
+        as_bytes = True
+    else:
+        as_bytes = isinstance(comment_separators[0], bytes)
+
     comment_pattern = _separators_to_re(tuple(comment_separators), as_bytes, separate=False, keep=False)
     comment_re = re.compile(comment_pattern)
     for info, line in li:
@@ -1164,6 +1197,73 @@ def lines_filter_comment_lines(li, comment_separators):
         if comment_re.match(s):
             continue
         yield (info, line)
+
+
+@_export
+def lines_filter_contains(li, s, *, invert=False):
+    """
+    A lines modifier function.  Only yields lines
+    that contain s.  (Filters out lines that
+    don't contain s.)
+
+    If invert is true, returns the opposite--
+    filters out lines that contain s.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    if invert:
+        for t in li:
+            if not s in t[1]:
+                yield t
+        return
+    for t in li:
+        if s in t[1]:
+            yield t
+
+@_export
+def lines_filter_grep(li, pattern, *, invert=False, flags=0):
+    """
+    A lines modifier function.  Only yields lines
+    that match the regular expression pattern.
+    (Filters out lines that don't match pattern.)
+
+    pattern can be str, bytes, or an re.Pattern object.
+    If pattern is not an re.Pattern object, it's compiled
+    with re.compile(pattern, flags=flags).
+
+    If invert is true, returns the opposite--
+    filters out lines that match pattern.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    if not isinstance(pattern, re.Pattern):
+        pattern = re.compile(pattern, flags=flags)
+    search = pattern.search
+    if invert:
+        for t in li:
+            if not search(t[1]):
+                yield t
+        return
+    for t in li:
+        if search(t[1]):
+            yield t
+
+@_export
+def lines_sort(li, *, reverse=False):
+    """
+    A lines modifier function.  Sorts all
+    input lines before yielding them.
+
+    Lines are sorted lexicographically,
+    from lowest to highest.
+    If reverse is true, lines are sorted
+    from highest to lowest.
+
+    Composable with all the lines_ functions from the big.text module.
+    """
+    lines = list(li)
+    lines.sort(key=lambda t:t[1], reverse=reverse)
+    yield from iter(lines)
 
 @_export
 def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True):
@@ -1207,7 +1307,18 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
     """
     if not comment_separators:
         raise ValueError("illegal comment_separators")
-    as_bytes = isinstance(comment_separators[0], bytes)
+
+    if isinstance(comment_separators, bytes):
+        comment_separators = tuple(comment_separators[i:i+1] for i in range(len(comment_separators)))
+        as_bytes = True
+    else:
+        as_bytes = isinstance(comment_separators[0], bytes)
+
+    if as_bytes:
+        empty = b''
+    else:
+        empty = ''
+    empty_join = empty.join
 
     comment_pattern = _separators_to_re(comment_separators, as_bytes=as_bytes, separate=True, keep=True)
     re_comment = re.compile(comment_pattern)
@@ -1238,8 +1349,8 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
             append(leading)
             comment = fields[1:]
 
-        info.comment = "".join(comment)
-        line = "".join(segments)
+        info.comment = empty_join(comment)
+        line = empty_join(segments)
         yield (info, line)
 
 @_export
