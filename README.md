@@ -90,7 +90,7 @@ notice on the source code.
 
 [`file_size(path)`](#file_sizepath)
 
-[`gently_title(s)`](#gently_titles)
+[`gently_title(s, *, apostrophes=None, double_quotes=None)`](#gently_titles-apostrophesnone-double_quotesnone)
 
 [`get_float(o, default=_sentinel)`](#get_floato-default_sentinel)
 
@@ -896,11 +896,18 @@ Only one entry so far.
 > * [**The `multi-` family of functions**](#The-multi--family-of-functions)
 > * [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 > * [**Word wrapping and formatting**](#word-wrapping-and-formatting)
+>
+> All the functions in `big.text` will work with either
+> `str` or `bytes` objects, except the three
+> [**Word wrapping and formatting**](#word-wrapping-and-formatting)
+> functions.  When working with `bytes`,
+> by default the functions will only work with ASCII
+> characters.
 
-#### `gently_title(s)`
+#### `gently_title(s, *, apostrophes=None, double_quotes=None)`
 
 > Uppercase the first character of every word in `s`.
-> Leave the other letters alone.
+> Leave the other letters alone.  s should be `str` or `bytes`.
 >
 > (For the purposes of this algorithm, words are
 > any blob of non-whitespace characters.)
@@ -937,14 +944,21 @@ Only one entry so far.
 > quote marks is considered one quote mark for
 > the purposes of capitalization.
 >
-> Each of these Unicode code points is considered
-> an apostrophe:
->
+> If specified, `apostrophes` should be a `str`
+> or `bytes` object containing characters that
+> should be considered apostrophes.  If `apostrophes`
+> is false, and `s` is `bytes`, `apostrophes` is set to `"'"`.
+> If `apostrophes` is false and s is `str`, `apostrophes`
+> is set to a string containing these Unicode apostrophe code points:
 >     '‘’‚‛
 >
-> Each of these Unicode code points is considered
-> a quote mark:
->
+> If specified, `double_quotes` should be a `str`
+> or `bytes` object containing characters that
+> should be considered double-quote characters.
+> If `double_quotes` is false, and `s` is `bytes`,
+> `double_quotes` is set to "'".
+> If `double_quotes` is false and `s` is `str`, double_quotes
+> is set to a string containing these Unicode double quote code points:
 >     "“”„‟«»‹›
 
 #### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
@@ -2465,6 +2479,12 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.7**
+
+* [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
+  now accepts `str` or `bytes`.  Also added the `apostrophes` and
+  `double_quotes` arguments.
+
 **0.6.6**
 
 * Fixed a bug in
@@ -2574,7 +2594,7 @@ A **big** upgrade!
 **0.5.1**
 
 * Added
-  [`gently_title`](#gently_titles)
+  [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
   and
   [`normalize_whitespace`](#normalize_whitespaces-separatorsNone-replacementNone)
   to the [`text`](#bigtext) module.

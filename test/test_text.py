@@ -1156,9 +1156,16 @@ class BigTextTests(unittest.TestCase):
         )
 
     def test_gently_title(self):
-        def test(s, expected):
-            result = big.gently_title(s)
+        def test(s, expected, test_ascii=True, apostrophes=None, double_quotes=None):
+            result = big.gently_title(s, apostrophes=apostrophes, double_quotes=double_quotes)
             self.assertEqual(result, expected)
+            if test_ascii:
+                if apostrophes:
+                    apostrophes = apostrophes.encode('ascii')
+                if double_quotes:
+                    double_quotes = double_quotes.encode('ascii')
+                result = big.gently_title(s.encode('ascii'), apostrophes=apostrophes, double_quotes=double_quotes)
+                self.assertEqual(result, expected.encode('ascii'))
 
         test("", "")
         test("abcde fgh", "Abcde Fgh")
@@ -1170,7 +1177,9 @@ class BigTextTests(unittest.TestCase):
         test("everybody's thinking they couldn't've had a v-8", "Everybody's Thinking They Couldn't've Had A V-8")
         test("don't come home if you don't get 1st", "Don't Come Home If You Don't Get 1st")
         test("""i said "no, i didn't", you idiot""", """I Said "No, I Didn't", You Idiot""")
-        test('multiple «"“quote marks”"»', 'Multiple «"“Quote Marks”"»')
+        test('multiple «"“quote marks”"»', 'Multiple «"“Quote Marks”"»', test_ascii=False)
+
+        test("""i said ZdonXt touch that, oXconnell!Z, you 2nd rate idiot!""", """I Said ZDonXt Touch That, OXConnell!Z, You 2nd Rate Idiot!""", apostrophes='X', double_quotes='Z')
 
     def test_normalize_whitespace(self):
         def test(s, expected, *, separators=None, replacement=" "):

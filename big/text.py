@@ -25,6 +25,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import enum
+import functools
 import itertools
 from itertools import zip_longest
 from .itertools import PushbackIterator
@@ -301,6 +302,8 @@ def _re_quote(s):
             s = f"(?:{s})"
     return s
 
+
+@functools.lru_cache(re._MAXCACHE)
 def _separators_to_re(separators, as_bytes, separate=False, keep=False):
     if as_bytes:
         pipe = b'|'
@@ -669,18 +672,18 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     return tuple(result)
 
 
-_invalid_state = 0
-_in_word = 1
-_after_whitespace = 2
-_after_whitespace_then_apostrophe_or_quote_mark = 3
-_after_whitespace_then_D_or_O = 4
-_after_whitespace_then_D_or_O_then_apostrophe = 5
+_invalid_state = "_invalid_state"
+_in_word = "_in_word"
+_after_whitespace = "_after_whitespace"
+_after_whitespace_then_apostrophe_or_double_quote = "_after_whitespace_then_apostrophe_or_double_quote"
+_after_whitespace_then_D_or_O = "_after_whitespace_then_D_or_O"
+_after_whitespace_then_D_or_O_then_apostrophe = "_after_whitespace_then_D_or_O_then_apostrophe"
 
 @_export
-def gently_title(s):
+def gently_title(s, *, apostrophes=None, double_quotes=None):
     """
     Uppercase the first character of every word in s.
-    Leave the other letters alone.
+    Leave the other letters alone.  s should be str or bytes.
 
     (For the purposes of this algorithm, words are
     any blob of non-whitespace characters.)
@@ -709,34 +712,68 @@ def gently_title(s):
     quote marks is considered one quote mark for
     the purposes of capitalization.
 
-    Each of these Unicode code points is considered
-    an apostrophe:
+    If specified, apostrophes should be a str
+    or bytes object containing characters that
+    should be considered apostrophes.  If apostrophes
+    is false, and s is bytes, apostrophes is set to "'".
+    If apostrophes is false and s is str, apostrophes
+    is set to a string containing these Unicode
+    apostrophe code points:
         '‘’‚‛
 
-    Each of these Unicode code points is considered
-    a quote mark:
+    If specified, double_quotes should be a str
+    or bytes object containing characters that
+    should be considered double-quote characters.
+    If double_quotes is false, and s is bytes,
+    double_quotes is set to "'".
+    If double_quotes is false, and s is str, double_quotes
+    is set to a string containing these Unicode double quote
+    code points:
         "“”„‟«»‹›
     """
+    as_bytes = isinstance(s, bytes)
+    if as_bytes:
+        empty = b""
+        if not apostrophes:
+            apostrophes = b"'"
+        if not double_quotes:
+            double_quotes = b'"'
+        d_and_o = b'DO'
+        characters_in_s = (s[i:i+1] for i in range(len(s)))
+    else:
+        empty = ""
+        if not apostrophes:
+            apostrophes = "'‘’‚‛"
+        if not double_quotes:
+            double_quotes = '"“”„‟«»‹›'
+        d_and_o = 'DO'
+        characters_in_s = iter(s)
+
+    # ooh, fancy!
+    _is_apostrophe = apostrophes.__contains__
+    _is_double_quote = double_quotes.__contains__
+    _is_d_or_o = d_and_o.__contains__
+
     result = []
     state = _after_whitespace
-    for c in s:
+    for c in characters_in_s:
         is_space = c.isspace()
-        is_apostrophe = c in "'‘’‚‛"
-        is_quote_mark = c in '"“”„‟«»‹›'
+        is_apostrophe = _is_apostrophe(c)
+        is_double_quote = _is_double_quote(c)
         if state == _in_word:
             if is_space:
                 state = _after_whitespace
         elif state == _after_whitespace:
             if not is_space:
                 c = c.upper()
-                if (is_apostrophe or is_quote_mark):
-                    state = _after_whitespace_then_apostrophe_or_quote_mark
-                elif c in "DO":
+                if (is_apostrophe or is_double_quote):
+                    state = _after_whitespace_then_apostrophe_or_double_quote
+                elif _is_d_or_o(c):
                     state = _after_whitespace_then_D_or_O
                 else:
                     state = _in_word
-        elif state == _after_whitespace_then_apostrophe_or_quote_mark:
-            if not (is_apostrophe or is_quote_mark):
+        elif state == _after_whitespace_then_apostrophe_or_double_quote:
+            if not (is_apostrophe or is_double_quote):
                 c = c.upper()
                 state = _in_word
         elif state == _after_whitespace_then_D_or_O:
@@ -748,7 +785,7 @@ def gently_title(s):
             c = c.upper()
             state = _in_word
         result.append(c)
-    return "".join(result)
+    return empty.join(result)
 
 
 @_export
