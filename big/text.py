@@ -188,7 +188,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     return tuple(result)
 
 
-# a list of all unicode whitespace characters
+# a list of all unicode whitespace characters known to Python
 _export_name('whitespace')
 whitespace = (
     '\t'    , #     9 0x0009 - tab
@@ -243,8 +243,9 @@ newlines = (
 
     '\r\n'  , # the classic DOS newline sequence
 
-    # '\n\r' sorry, Acorn and RISC OS, you have to add this yourselves.
-    # I'm worried this would cause bugs with a malformed DOS newline.
+    # what about '\n\r'?
+    # sorry, Acorn and RISC OS users, you'll have to add this yourselves.
+    # I'm worried it would cause bugs with a malformed DOS newline.
     )
 
 # this omits the DOS convention '\r\n'
@@ -270,7 +271,7 @@ def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
 _export_name('ascii_whitespace')
 ascii_whitespace = _cheap_encode_iterable_of_strings(whitespace, "ascii")
 _export_name('ascii_whitespace_without_dos')
-ascii_whitespace_without_dos = [s for s in ascii_whitespace if s != b'\r\n']
+ascii_whitespace_without_dos = tuple(s for s in ascii_whitespace if s != b'\r\n')
 _export_name('ascii_newlines')
 ascii_newlines   = _cheap_encode_iterable_of_strings(newlines,   "ascii")
 _export_name('ascii_newlines_without_dos')
@@ -280,11 +281,55 @@ ascii_newlines_without_dos = tuple(s for s in ascii_newlines if s != b'\r\n')
 _export_name('utf8_whitespace')
 utf8_whitespace = _cheap_encode_iterable_of_strings(whitespace, "utf-8")
 _export_name('utf8_whitespace_without_dos')
-utf8_whitespace_without_dos = [s for s in utf8_whitespace if s != b'\r\n']
+utf8_whitespace_without_dos = tuple(s for s in utf8_whitespace if s != b'\r\n')
 _export_name('utf8_newlines')
 utf8_newlines   = _cheap_encode_iterable_of_strings(newlines,   "utf-8")
 _export_name('utf8_newlines_without_dos')
 utf8_newlines_without_dos =  tuple(s for s in utf8_newlines if s != b'\r\n')
+
+def _multisplit_reversed(o):
+    if isinstance(o, str):
+        if len(o) <= 1:
+            return o
+        return "".join(reversed(o))
+    if isinstance(o, bytes):
+        if len(o) <= 1:
+            return o
+        return b"".join(o[i:i+1] for i in range(len(o)-1, -1, -1))
+    t = type(o)
+    assert t in (list, tuple, set), f"{o=} {t=}"
+    return t(_multisplit_reversed(p) for p in o)
+
+
+# _reversed_builtin_separators precalculates the reversed versions
+# of the builtin separators.  we use the reversed versions when
+# reverse=True.  this is a minor speed optimization, but also it
+# helps a lot with the lrucache for _separators_to_re.
+#
+# we test that these cached versions are correct in tests/test_text.py.
+#
+_reversed_utf8_whitespace_without_dos = _multisplit_reversed(utf8_whitespace_without_dos)
+_reversed_utf8_newlines_without_dos =   _multisplit_reversed(utf8_newlines_without_dos)
+
+_reversed_builtin_separators = {
+    whitespace: whitespace_without_dos + ('\n\r',),
+    whitespace_without_dos: whitespace_without_dos,
+
+    newlines: newlines_without_dos + ("\n\r",),
+    newlines_without_dos: newlines_without_dos,
+
+    ascii_whitespace: ascii_whitespace_without_dos + (b"\n\r",),
+    ascii_whitespace_without_dos: ascii_whitespace_without_dos,
+
+    ascii_newlines: ascii_newlines_without_dos + (b"\n\r",),
+    ascii_newlines_without_dos: ascii_newlines_without_dos,
+
+    utf8_whitespace: _reversed_utf8_whitespace_without_dos + (b"\n\r",),
+    utf8_whitespace_without_dos: _reversed_utf8_whitespace_without_dos,
+
+    utf8_newlines: _reversed_utf8_newlines_without_dos + (b"\n\r",),
+    utf8_newlines_without_dos: _reversed_utf8_newlines_without_dos,
+    }
 
 
 def _re_quote(s):
@@ -338,7 +383,8 @@ def _separators_to_re(separators, as_bytes, separate=False, keep=False):
         hash(separators)
     except TypeError:
         separators = tuple(separators)
-    return __separators_to_re(separators, as_bytes, separate=separate, keep=keep)
+    return __separators_to_re(separators, bool(as_bytes), separate=bool(separate), keep=bool(keep))
+
 
 
 @_export
@@ -388,11 +434,13 @@ def multistrip(s, separators, left=True, right=True):
         left_match = re.match(head + pattern, s)
         if left_match:
             start = left_match.end(0)
+            s = s[start:]
     if right:
         right_match = re.search(pattern + tail, s)
         if right_match:
             end = right_match.start(0)
-    return s[start:end]
+            s = s[:end]
+    return s
 
 
 # for keep
@@ -402,14 +450,12 @@ ALTERNATING="ALTERNATING"
 _export_name(ALTERNATING)
 
 # for strip
-NOT_SEPARATE = "NOT_SEPARATE"
-_export_name(NOT_SEPARATE)
 LEFT = "LEFT"
 _export_name(LEFT)
 RIGHT = "RIGHT"
 _export_name(RIGHT)
-STR_SPLIT = "STR_SPLIT"  # not implemented yet
-_export_name(STR_SPLIT)
+PROGRESSIVE = "PROGRESSIVE"
+_export_name(PROGRESSIVE)
 
 @_export
 def multisplit(s, separators=None, *,
@@ -417,18 +463,18 @@ def multisplit(s, separators=None, *,
     maxsplit=-1,
     reverse=False,
     separate=False,
-    strip=NOT_SEPARATE,
+    strip=False,
     ):
     """
-    Like str.split, supporting multiple separator strings and tunable behavior.
+    Splits strings like str.split, but with multiple separators and options.
 
     s can be str or bytes.
 
     separators should be an iterable of str or bytes, matching s.
 
     Returns an iterator yielding the strings split from s.  If keep
-    is not false, and strip is false, joining these strings together
-    will recreate s.
+    is true (or ALTERNATING), and strip is false, joining these strings
+    together will recreate s.
 
     multisplit is greedy; if two (or more) separator strings match at a
     particular index in "s", it splits using the largest one.
@@ -437,7 +483,7 @@ def multisplit(s, separators=None, *,
     strings.  It supports four values:
         false (the default)
             Discard the separators.
-        true (apart from ALTERNATING or AS_PAIRS)
+        true (apart from ALTERNATING and AS_PAIRS)
             Append the separators to the end of the split strings.
             You can recreate the original string by passing the
             list returned in to ''.join.
@@ -472,47 +518,58 @@ def multisplit(s, separators=None, *,
     "strip" indicates whether multisplit should strip separators from
     the beginning and/or end of s, a la multistrip.  It supports
     six values:
-        NOT_SEPARATE (the default)
-            Use the opposite value specified for "separate"
-            If separate=True, behaves as if strip=False.
-            If separate=False, behaves as if strip=True.
-        false
+        false (the default)
             Don't strip separators from the beginning or end of s.
+        true (apart from LEFT, RIGHT, and PROGRESSIVE)
+            Strip separators from the beginning and end of s
+            (a la str.strip).
         LEFT
             Strip separators only from the beginning of s
             (a la str.lstrip).
         RIGHT
             Strip separators only from the end of s
             (a la str.rstrip).
-        true
-            Strip separators from the beginning and end of s
-            (a la str.strip).
-        STR_SPLIT (currently unimplemented, equivalent to true)
-            Strip the way str.split does when splitting on whitespace.
+        PROGRESSIVE
             Strip from the beginning and end of s, unless maxsplit
             is nonzero and the entire string is not split.  If
             splitting stops due to maxsplit before the entire string
             is split, and reverse is false, don't strip the end of
             the string. If splitting stops due to maxsplit before
             the entire string is split, and reverse is true, don't
-            strip the beginning of the string.
+            strip the beginning of the string.  (This is how str.strip
+            and str.rstrip behave when sep=None.)
 
     "maxsplit" should be either an integer or None.  If maxsplit is an
     integer greater than -1, multisplit will split s no more than
     maxsplit times.
 
-    "reverse" affects whether the "maxsplit" splits start at the
-    beginning or the end of the string.  It supports two values:
+    "reverse" controls whether multisplit splits starting from the
+    beginning or from the end of the string.  It supports two values:
         false (the default)
-            Start splitting at the beginning of the string.
+            Start splitting from the beginning of the string
+            and scanning right.
         true
-            Start splitting at the end of the string.
-    "reverse" has no effect when maxsplit is 0, -1, or None.
+            Start splitting from the end of the string and
+            scanning left.
+    Splitting from the end of the string and scanning left has two
+    effects.  First, if maxsplit is a number greater than 0,
+    the splits will start at the end of the string rather than
+    the beginning.  Second, if there are overlapping instances of
+    separators in the string, multisplit will prefer the rightmost
+    separator rather than the left.  For example:
+        multisplit(" x x ", (" x ",), keep=big.ALTERNATING)
+    will split on the leftmost instance of " x ", yielding
+        "", " x ", "x "
+    whereas
+        multisplit(" x x ", (" x ",), keep=big.ALTERNATING, reverse=True)
+    will split on the rightmost instance of " x ", yielding
+        " x", " x ", ""
     """
-
     as_bytes = isinstance(s, bytes)
     if separators is None:
         separators = ascii_whitespace if as_bytes else whitespace
+    elif not separators:
+        raise ValueError("illegal separators")
 
     if as_bytes:
         if isinstance(separators, bytes):
@@ -528,11 +585,24 @@ def multisplit(s, separators=None, *,
         if not isinstance(o, separators_type):
             raise ValueError("separators must be an iterable of objects the same type as s")
 
-    if strip == NOT_SEPARATE:
-        strip = not separate
+    separators_to_re_keep = keep
 
     if strip:
-        s = multistrip(s, separators, left=(strip != RIGHT), right=(strip != LEFT))
+        if strip == PROGRESSIVE:
+            if maxsplit == -1:
+                strip = left = right = True
+            else:
+                left = not reverse
+                right = reverse
+                separators_to_re_keep = True
+        else:
+            left = strip != RIGHT
+            right = strip != LEFT
+        s = multistrip(s, separators, left=left, right=right)
+        if not s:
+            # oops! all separators!
+            # this will make us exit early, just a few lines down from here.
+            maxsplit = 0
 
     if maxsplit == None:
         maxsplit = -1
@@ -548,53 +618,68 @@ def multisplit(s, separators=None, *,
     # convert maxsplit for use with re.split.
     #
     # re.split interprets maxsplit slightly differently:
-    # maxsplit==0 means "allow all splits".
-    # maxsplit==1 means "only allow one split".
+    #   its maxsplit==0 means "allow all splits".
+    #   its maxsplit==1 means "only allow one split".
     #
     # (re.split doesn't have a way to express
     #  "don't split" with its maxsplit parameter,
     #  which is why we handled it already.)
-    if maxsplit == -1:
-        maxsplit = 0
-
-    # we may change the values of keep and maxsplit
-    # we pass in to subfunctions, depending.
-    # these are the original values.
-    original_keep = keep
-    original_maxsplit = maxsplit
-
-    if reverse and (maxsplit > 0):
-        # we have to handle reverse maxsplit by hand.
-        # we completely split, then rejoin strings
-        # together to simulate the maxsplit value.
-        # this means that inside the function we have
-        # to keep separators; if the user didn't specify
-        # keep, we'll throw the un-joined ones away.
-        maxsplit = 0
-        keep = True
-    else:
-        # we're not maxsplitting, so reverse is unused.
-        reverse = False
-
-    pattern = _separators_to_re(separators, as_bytes, keep=keep, separate=separate)
-
-    l = re.split(pattern, s, maxsplit)
-    assert l
+    re_split_maxsplit = maxsplit if maxsplit != -1 else 0
 
     if reverse:
-        maxsplit = original_maxsplit
-        keep = original_keep
-        # alternating nonsep, sep strings
-        desired_length = 1 + (2*maxsplit)
+        # if reverse is true, when separators overlap,
+        # we need to prefer the rightmost one rather than
+        # the leftmost one.  how do we do *that*?
+        # Eric Smith had the brainstorm: reverse the string
+        # and the separators, split, and reverse the output
+        # and the strings in the output.
+        s = _multisplit_reversed(s)
+        s2 = _reversed_builtin_separators.get(separators, None)
+        if s2 != None:
+            separators = s2
+        else:
+            separators = _multisplit_reversed(separators)
+
+    pattern = _separators_to_re(separators, as_bytes, keep=separators_to_re_keep, separate=separate)
+    # print("PATTERN", pattern, f"{separators_to_re_keep=} {separate=}")
+
+    l = re.split(pattern, s, re_split_maxsplit)
+    assert l
+    # print("S", repr(s), "L", l, f"{re_split_maxsplit=}")
+
+    if strip == PROGRESSIVE:
+        # l alternates nonsep and sep strings.
+        # it's always an odd length, starting and ending with nonsep.
         length = len(l)
-        join_count = length - desired_length + 1
-        if join_count > 1:
-            s = empty.join(l[:join_count])
-            del l[:join_count]
-            l.insert(0, s)
+        assert length & 1
+
+        desired_length = 1 + (2*maxsplit)
+
+        # dang! this is complicated!
+        # maxsplit has to extend *past* the last nonsep
+        # for us to strip on the far side.
+        #  ' a b c   '.split(None, maxsplit=2) => ['a', 'b', 'c   ']
+        #  ' a b c   '.split(None, maxsplit=3) => ['a', 'b', 'c']
+        for i in range(length - 1, 0, -2):
+            nonsep = l[i]
+            if nonsep:
+                last_non_empty_nonsep = i
+                break
+        else:
+            last_non_empty_nonsep = 0
+
+        if desired_length > (last_non_empty_nonsep + 2):
+            # strip!
+            l = l[:last_non_empty_nonsep + 1]
+            desired_length = length = last_non_empty_nonsep
+
         if not keep:
             for i in range(len(l) - 2, 0, -2):
                 del l[i]
+
+    if reverse:
+        l = _multisplit_reversed(l)
+        l.reverse()
 
     if not keep:
         for o in l:

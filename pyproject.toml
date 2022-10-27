@@ -2,15 +2,26 @@
 requires = ["flit"]
 build-backend = "flit.buildapi"
 
-[tool.flit.metadata]
-module = "big"
-author = "Larry Hastings"
-author-email = "larry@hastings.org"
-home-page = "https://github.com/larryhastings/big/"
+[project]
+name = "big"
+authors = [
+    {name="Larry Hastings", email="larry@hastings.org"},
+    ]
+readme = "README.md"
 requires-python = ">=3.6"
-description-file = "README.md"
+
 classifiers = [
     "Intended Audience :: Developers",
     "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
     "Programming Language :: Python :: 3 :: Only",
     ]
+dependencies = [
+    "python-dateutil",
+    ]
+dynamic = [
+    "description",
+    "version",
+    ]
+
+[project.urls]
+Source = "https://github.com/larryhastings/big/"

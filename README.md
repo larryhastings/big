@@ -144,7 +144,7 @@ notice on the source code.
 
 [`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reverseFalse-separateTrue)
 
-[`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=NOT_SEPARATE)`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 
 [`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
 
@@ -981,7 +981,7 @@ Only one entry so far.
 >
 > `separators`, if not `None`, must be an iterable of strings of the
 > same type as `s`.  `lines` will split `s` using those strings as
-> separator strings (using [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)).
+> separator strings (using [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)).
 >
 > When iterated over, yields 2-tuples:
 >     (info, line)
@@ -1241,9 +1241,9 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
-#### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=NOT_SEPARATE)`
+#### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`
 
-> Like `str.split`, but separators is an iterable of separator strings.
+> Splits strings like `str.split`, but with multiple separators and options.
 >
 > `s` can be `str` or `bytes`.
 >
@@ -1253,18 +1253,18 @@ Only one entry so far.
 > individual character.
 >
 > Returns an iterator yielding the strings split from `s`.  If `keep`
-> is not false, and `strip` is false, joining these strings together
-> will recreate `s`.
+> is true (or `ALTERNATING`), and `strip` is false, joining these strings
+> together will recreate `s`.
 >
 > `keep` indicates whether or not multisplit should preserve the separator
 > strings in the strings it yields.  It supports four values:
 >       false (the default)
 >            Discard the separators.
->       true (apart from ALTERNATING or AS_PAIRS)
+>       true (apart from `ALTERNATING` and `AS_PAIRS`)
 >            Append the separators to the end of the split strings.
 >            You can recreate the original string by passing the
->            list returned in to ''.join.
->       ALTERNATING
+>            list returned in to `''.join`.
+>       `ALTERNATING`
 >            Yield alternating strings in the output: strings consisting
 >            of separators, alternating with strings consisting of
 >            non-separators.  If "separate" is true, separator strings
@@ -1273,8 +1273,8 @@ Only one entry so far.
 >            contain one or more separators, and non-separator strings
 >            will never be empty, unless `s` was empty.
 >            You can recreate the original string by passing the
->            list returned in to ''.join.
->       AS_PAIRS
+>            list returned in to `''.join`.
+>       `AS_PAIRS`
 >            Yield 2-tuples containing a non-separator string and its
 >            subsequent separator string.  Either string may be empty;
 >            the separator string in the last 2-tuple will always be
@@ -1285,8 +1285,8 @@ Only one entry so far.
 > separator strings in `s` as one separator or as multiple separators
 > each separated by a zero-length string.  It supports two values:
 >        false (the default)
->            Multiple adjacent separators should be considered one
->            separator.
+>            Multiple adjacent separators should behave as if they
+>            are one big separator.
 >        true
 >            Don't group separators together.  Each separator should
 >            split the string individually, even if there are no
@@ -1295,30 +1295,26 @@ Only one entry so far.
 > `strip indicates whether multisplit should strip separators from
 > the beginning and/or end of `s`, by using [`multistrip`](#multistrips-separators-leftTrue-rightTrue).
 > It supports six values:
->        NOT_SEPARATE (the default)
->            Use the opposite value specified for "separate"
->            If separate=True, behaves as if strip=False.
->            If separate=False, behaves as if strip=True.
->        false
->            Don't strip separators from the beginning or end of s.
->        LEFT
->            Strip separators only from the beginning of s
->            (a la str.lstrip).
->        RIGHT
->            Strip separators only from the end of s
->            (a la str.rstrip).
->        true
->            Strip separators from the beginning and end of s
->            (a la str.strip).
->        STR_SPLIT (currently unimplemented, equivalent to true)
->            Strip the way `str.split` does when splitting on whitespace.
+>        false (the default)
+>            Don't strip separators from the beginning or end of `s`.
+>        true (apart from `LEFT`, `RIGHT`, and `PROGRESSIVE`)
+>            Strip separators from the beginning and end of `s`
+>            (similarly to `str.strip`).
+>        `LEFT`
+>            Strip separators only from the beginning of `s`
+>            (similarly to `str.lstrip`).
+>        `RIGHT`
+>            Strip separators only from the end of `s`
+>            (similarly to `str.rstrip`).
+>        `PROGRESSIVE`
 >            Strip from the beginning and end of `s`, unless `maxsplit`
 >            is nonzero and the entire string is not split.  If
 >            splitting stops due to `maxsplit` before the entire string
 >            is split, and `reverse` is false, don't strip the end of
 >            the string. If splitting stops due to `maxsplit` before
 >            the entire string is split, and `reverse` is true, don't
->            strip the beginning of the string.
+>            strip the beginning of the string.  (This is how `str.strip`
+>            and `str.rstrip` behave when `sep=None`.)
 >
 > `maxsplit` should be either an integer or `None`.  If `maxsplit` is an
 > integer greater than -1, multisplit will split `text` no more than
@@ -1327,10 +1323,24 @@ Only one entry so far.
 > `reverse` affects whether the `maxsplit` splits start at the
 > beginning or the end of the string.  It supports two values:
 >        false (the default)
->            Start splitting at the beginning of the string.
+>            Start splitting from the beginning of the string
+>            and scanning right.
 >        true
->            Start splitting at the end of the string.
-> `reverse` has no effect when `maxsplit` is 0, -1, or `None`.
+>            Start splitting from the end of the string and
+>            scanning left.
+>    Splitting from the end of the string and scanning left has two
+>    effects.  First, if `maxsplit` is a number greater than 0,
+>    the splits will start at the end of the string rather than
+>    the beginning.  Second, if there are overlapping instances of
+>    separators in the string, `multisplit` will prefer the rightmost
+>    separator rather than the left.  For example:
+>        multisplit(" x x ", (" x ",), keep=big.ALTERNATING)
+>    will split on the leftmost instance of `" x "`, yielding
+>        "", " x ", "x "
+>    whereas
+>        multisplit(" x x ", (" x ",), keep=big.ALTERNATING, reverse=True)
+>    will split on the rightmost instance of `" x "`, yielding
+>        " x", " x ", ""
 >
 > For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
@@ -1367,7 +1377,7 @@ Only one entry so far.
 > A list of all newline characters recognized by Python.
 > Includes many Unicode newline characters, like `'\u2029'`
 > (a paragraph separator).  Useful as a list of separator
-> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` et al; `newlines` is specifically
+> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)` et al; `newlines` is specifically
 > used by the [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator constructor.
 >
 > **big** also defines `utf8_newlines`, which is `newlines`
@@ -1526,7 +1536,7 @@ Only one entry so far.
 > A list of all whitespace characters recognized by Python.
 > Includes many Unicode whitespace strings, like `'\xa0'`
 > (a non-breaking space).  Useful as a list of separator
-> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)` et al.
+> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)` et al.
 >
 > **big** also defines `utf8_whitespace`, which is `whitespace`
 > with all strings encoded to UTF-8 (as bytes),
@@ -1650,10 +1660,10 @@ to split your string in a third, slightly different way, you
 probably just can't use `str.strip`.
 So what *can* you use?  There's `re.strip`, but it can be
 hard to use.  Now there's a new answer:
-[`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 
 The goal of
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is to be the be-all end-all text
 splitting function.  You pass in the string you want to split,
 and an iterable containing the separator strings you want to
@@ -1663,7 +1673,7 @@ It's designed to replace every mode of operation for
 can even be used to replace `str.partition` and `str.rpartition`
 too.
 
-The cornerstone of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+The cornerstone of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is the `separators` argument.
 This is an iterable of strings, of the same type (`str` or `bytes`)
 as the string you want to split (`s`).  `multisplit` will split
@@ -1671,7 +1681,7 @@ the string at *each* non-overlapping instance of any string
 specified in `separators`.
 
 But
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 also let you fine-tune how it splits, through five keyword-only
 parameters:
 
@@ -1682,14 +1692,16 @@ parameters:
   whitespace) or regarded as separate (like `str.strip` when
   you pass in an explicit `sep` separator).
 * `strip` lets you strip separator strings from the beginning,
-  end, or both ends of the string you're splitting.
+  end, or both ends of the string you're splitting.  It also
+  supports a special *progressive* mode that duplicates the
+  behavior of `str.strip` when you use `None` as the separator.
 * `maxsplit` lets you specify the maximum number of times to
   split the string (like the `maxsplit` argument to `str.strip`).
 * `reverse` lets you apply `maxsplit` to the end of the string
   and splitting backwards (like using `str.rstrip` instead of
   `str.strip`).
 
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 which also take this same `separators` arguments.  There are
@@ -1697,26 +1709,89 @@ other **big** functions that take a `separators` argument, and the
 parameter name always has the word `separators` in it.
 (For example, `comment_separators` for `lines_filter_comment_lines`.)
 
-The downside of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+The downside of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 *five keyword-only parameters* after all.  However, these
 are designed to be reasonably memorable, and they all default
-to `False` (except `strip`).  But the best way to combat the
-complexity of calling
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
-is to use it as a building block
-for your own, presumably easier-to-use, text splitting functions.
-For example,
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+to `False`.  But the best way to combat the complexity of calling
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+is to use it as a building block for your own, presumably easier-to-use,
+text splitting functions.  For example,
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is used to implement [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 `normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
 and several others.
 
+Finally, here are some concrete examples of how you could use
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+to replace some common Python string splitting methods.  These exactly duplicate the
+behavior of the originals:
+```Python
+def str_split(s, sep, maxsplit=-1):
+    separate = sep != None
+    if separate:
+        strip = False
+    else:
+        sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
+        strip = big.PROGRESSIVE
+    result = list(big.multisplit(s, sep,
+        maxsplit=maxsplit, separate=separate, strip=strip))
+    if not separate:
+        empty = b'' if isinstance(s, bytes) else ''
+        if result and result[-1] == empty:
+            result.pop()
+    return result
+
+def str_rsplit(s, sep, maxsplit=-1):
+    separate = sep != None
+    if separate:
+        strip = False
+    else:
+        sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
+        strip = big.PROGRESSIVE
+    result = list(big.multisplit(s, sep,
+        maxsplit=maxsplit, reverse=True, separate=separate, strip=strip))
+    if not separate:
+        empty = b'' if isinstance(s, bytes) else ''
+        if result and result[-1] == empty:
+            result.pop()
+    return result
+
+def str_splitlines(s, keepends=False):
+    newlines = big.ascii_newlines if isinstance(s, bytes) else big.newlines
+    l = list(big.multisplit(s, newlines,
+        keep=keepends, separate=True, strip=False))
+    if l and not l[-1]:
+        l.pop()
+    return l
+
+def str_partition(s, sep):
+    if not sep:
+        raise ValueError("empty separator")
+    l = tuple(big.multisplit(s, (sep,),
+        keep=big.ALTERNATING, maxsplit=1, separate=True))
+    if len(l) == 1:
+        empty = b'' if isinstance(s, bytes) else ''
+        l += (empty, empty)
+    return l
+
+def str_rpartition(s, sep):
+    if not sep:
+        raise ValueError("empty separator")
+    l = tuple(big.multisplit(s, (sep,),
+        keep=big.ALTERNATING, maxsplit=1, reverse=True, separate=True))
+    if len(l) == 1:
+        empty = b'' if isinstance(s, bytes) else ''
+        l = (empty, empty) + l
+    return l
+```
+
+
 ### Why do you sometimes get empty strings when you split?
 
 Sometimes when you split using
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE),
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse),
 you'll get empty strings in the return value.  This might be unexpected,
 violating the [Principle Of Least Astonishment.](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
 But there are excellent reasons for this behavior, and it stems from observing
@@ -1778,9 +1853,9 @@ recreate the original string.
     ',1,2,3,'
 
 Naturally,
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 duplicates this behavior.  When you want
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 to emulate the behavior of `str.split` when using an explicit separator
 string, just pass in `keep=False`, `separate=True`, and `strip=False`.  That is, if 'a' and 'b' are strings,
 
@@ -1791,7 +1866,7 @@ produces the same output as
      a.split(b)
 
 Here's sample code using
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 to split the strings we've been playing with:
 
     >>> list(big.multisplit('1,2,,3', (',',), keep=False, separate=True, strip=False))
@@ -1848,7 +1923,7 @@ That tuple at the end, just containing two empty strings:
 is so strange.  How can that be right?
 
 It's the same as `str.split`.
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 *must* split the string into two pieces *every* time it finds the separator
 in the original string.  So it *must* emit the empty non-separator string.
 And since that zero-length string isn't (cannot!) be followed by a separator,
@@ -2521,6 +2596,37 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.10**
+
+* All code changes had to do with
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse):
+    * Fixed a subtle bug.  When splitting with a separator that can overlap
+      itself, like `' x '`, `multisplit` will prefer the *leftmost* instance.
+      But when `reverse=True`, it must prefer the *rightmost* instance.
+      Thanks to Eric V. Smith for suggesting the clever "reverse everything,
+      call `re.split`, and un-reverse everything" approach that meant I could
+      fix this bug while still implementing on top of `re.split`!
+    * Implemented `PROGRESSIVE` mode for the `strip` keyword.  This behaves
+      like `str.strip`: when splitting, strip on the left, then start splitting.
+      If we don't exhaust `maxsplit`, strip on the right; if we *do* exhaust
+      `maxsplit`, *don't* strip on the right.  (Similarly for `str.rstrip`
+      when `reverse=True`.)
+    * Changed the default for `strip` to `False`.  It used to be
+      `NOT_SEPARATE`.  But this was too surprising--I'd forget that it
+      was the default, and turning on `keep` wouldn't return everything I
+      thought I should get, and I'd head off to debug `multisplit`, when in
+      fact it was behaving as specified.  The Principle Of Least Surprise
+      tells me that `strip` defaulting to `False` is less surprising.
+      Also, maintaining the invariant that all the keyword-only parameters
+      to `multisplit` default to `False` is a helpful mnemonic device in
+      several ways.
+    * Removed `NOT_SEPARATE` (and the not-yet-implemented `STR_STRIP`)
+      modes for `strip`.  They're easy to implement yourself, and this
+      removes some surface area from the already-too-big
+      `multisplit` API.
+* Modernized `pyproject.toml` metadata to make `flit` happier.  This was
+  necessary to ensure that `pip install big` also installs its dependencies.
+
 **0.6.8**
 
 * Renamed two of the three freshly-added lines modifier functions:
@@ -2544,7 +2650,7 @@ in the **big** test suite.
 **0.6.6**
 
 * Fixed a bug in
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE).
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse).
   I thought when using `keep=AS_PAIRS` that it shouldn't ever emit a 2-tuple
   containing just empty strings--but on further reflection I've realized that
   that's correct.  This behavior is now tested and documented, along with
@@ -2585,7 +2691,7 @@ in the **big** test suite.
 A **big** upgrade!
 
 * Completely retooled and upgraded
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE),
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse),
   and added
   [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
   and
@@ -2595,11 +2701,11 @@ A **big** upgrade!
   (Thanks to Eric Smith for suggesting
   [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)
   Well, sort of.)
-  * `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)`
+  * `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)`
     now supports five (!) keyword-only parameters, allowing the caller
     to tune its behavior to an amazing degree.
   * Also, the original implementation of
-    `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripNOT_SEPARATE)`
+    `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)`
     got its semantics a bit wrong; it was inconsistent and maybe a little buggy.
   * [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
     is like `str.strip` but accepts an iterable of
