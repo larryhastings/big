@@ -901,11 +901,19 @@ class BigTextTests(unittest.TestCase):
                 if _ == 1:
                     # encode!
                     s = s.encode('ascii')
-                    separator = separator.encode('ascii')
+                    if separator == big.whitespace:
+                        separator = big.ascii_whitespace
+                    elif isinstance(separator, str):
+                        separator = separator.encode('ascii')
+                    else:
+                        separator = big.text._cheap_encode_iterable_of_strings(separator)
                     expected = big.text._cheap_encode_iterable_of_strings(expected)
 
                 # print()
-                separators = (separator,)
+                if isinstance(separator, (str, bytes)):
+                    separators = (separator,)
+                else:
+                    separators = separator
                 # print(f"multipartition({s=}, {separators=}, {count=}, *, {reverse=}):")
                 # print(f"    {expected=}")
                 got = big.multipartition(s, separators, count, reverse=reverse)
@@ -935,6 +943,14 @@ class BigTextTests(unittest.TestCase):
         test_multipartition("a:b:c:d", "x", 1, ("", "", "a:b:c:d"), reverse=True)
         test_multipartition("a:b:c:d", "x", 2, ("", "", "", "", "a:b:c:d"), reverse=True)
         test_multipartition("a:b:c:d", "x", 3, ("", "", "", "", "", "", "a:b:c:d"), reverse=True)
+
+        # test overlapping separator behavior
+        test_multipartition("a x x b", " x ", 1, ("a", " x ", "x b"))
+        test_multipartition("a x x b", " x ", 1, ("a x", " x ", "b"), reverse=True)
+
+        # test actually using multiple separators, and just for fun--overlapping!
+        test_multipartition("a x x b y y c", (" x ", " y "), 2, ("a", " x ", "x b", " y ", "y c"))
+        test_multipartition("a x x b y y c", (" x ", " y "), 2, ("a x", " x ", "b y", " y ", "c"), reverse=True)
 
     def test_reimplemented_str_split(self):
         def str_split(s, sep, maxsplit=-1):
