@@ -27,7 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import itertools
 import unittest
 
-from big import TopologicalSorter
+from big.all import TopologicalSorter
 
 
 def _parse(nodes_and_dependencies):

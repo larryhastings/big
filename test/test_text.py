@@ -25,8 +25,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import copy
-import big
-import big.text
+import big.all as big
 import math
 import re
 import unittest
@@ -901,9 +900,9 @@ class BigTextTests(unittest.TestCase):
                 if _ == 1:
                     # encode!
                     s = s.encode('ascii')
-                    if separator == big.whitespace:
-                        separator = big.ascii_whitespace
-                    elif isinstance(separator, str):
+                    # if separator == big.whitespace:
+                    #     separator = big.ascii_whitespace
+                    if isinstance(separator, str):
                         separator = separator.encode('ascii')
                     else:
                         separator = big.text._cheap_encode_iterable_of_strings(separator)
@@ -1730,7 +1729,7 @@ for x in range(5): # this is a comment
             self.assertEqual(got, expected)
 
 
-        from big import LineInfo
+        LineInfo = big.text.LineInfo
 
         lines = """
 left margin
@@ -1899,7 +1898,6 @@ outdent
         info = big.LineInfo('', 1, 1, quark=35)
         self.assertTrue(hasattr(info, 'quark'))
         self.assertEqual(getattr(info, 'quark'), 35)
-
 
 
 import bigtestlib

@@ -25,12 +25,10 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import copy
-import big
-import big.text
+import big.all as big
 import math
 import re
 import unittest
-
 
 
 class BigItertoolsTests(unittest.TestCase):

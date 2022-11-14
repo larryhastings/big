@@ -25,23 +25,37 @@ new APIs and clever functionality.
 ## Using big
 
 To use **big**, just install the **big** package (and its dependencies)
-from PyPI using your favorite Python package manager.  Then simply
+from PyPI using your favorite Python package manager.
+
+Once **big** is installed, you can simply import it.  However, the
+top-level **big** package doesn't contain anything but a version number.
+Internally **big** is broken up into submodules, aggregated together
+loosely by problem domain, and you can selectively import just the
+functions you want.  For example, if you only want to use the text functions,
+just import the **text** submodule:
 
 ```Python
-import big
+import big.text
 ```
 
-in your programs.
-
-Internally **big** is broken up into submodules, aggregated together
-loosely by problem domain.  But all functions are also imported into the top-level
-module; every function or class published in **big** is available directly in the
-`big` module.
-
-**big** is designed to be safe for use with `import *`:
+If you'd prefer to import everything all at once, simply import the
+**big.all** module.  This one module imports all the other modules,
+and imports all their symbols too.  So, one convenient way to work
+with **big** is this:
 
 ```Python
-from big import *
+import big.all as big
+```
+
+That will make every symbol defined in **big** accessible from the `big`
+object. For example, if you want to use
+[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+you can call it with just `big.multisplit`.
+
+You can also use **big.all** with `import *`:
+
+```Python
+from big.all import *
 ```
 
 but that's up to you.
@@ -269,6 +283,12 @@ notice on the source code.
 
 # API Reference
 
+## `big.all`
+
+This submodule doesn't define any of its own symbols.  Instead, it
+imports every other submodule in **big**, and uses `import *` to
+import every symbol from every other submodule, too.  Every
+symbol in **big** is available in `big.all`.
 
 ## `big.boundinnerclass`
 
@@ -2595,6 +2615,17 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6.11**
+
+* Changed the import strategy.  The top-level **big** module used
+  to import all its child modules, and `import *` all the symbols
+  from all those modules.  But a friend (hi Mark Shannon!) talked
+  me out of this.  It's convenient, but if a user doesn't care about
+  a particular module, why make them import it.  So now the top-level
+  **big** module contains nothing but a version number, and you
+  can either import just the submodules you need, or you can import
+  **big.all** to get all the symbols (like **big** itself used to do).
 
 **0.6.10**
 
