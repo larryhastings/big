@@ -2618,6 +2618,12 @@ in the **big** test suite.
 
 **0.6.12**
 
+* Bugfix: When calling
+  [`TopologicalSorter.print()`](#topologicalsorterprintprintprint),
+  it sorts the list of nodes, for consistency's sakes.
+  But if the node objects don't support `<` or `>` comparison,
+  that throws an exception.  `TopologicalSorter.print()` now catches
+  that exception and simply 
 * Added a secret (otherwise undocumented!) function: `multirpartition`,
   which is like
   [`multipartition`](#multipartitions-separators-count1--reverseFalse-separateTrue)
