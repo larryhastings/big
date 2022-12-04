@@ -766,6 +766,10 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
             result.extend(extension)
     return tuple(result)
 
+@_export
+def multirpartition(s, separators, count=1, *, reverse=True, separate=True):
+    return multipartition(s, separators, count=count, reverse=reverse, separate=separate)
+
 
 _invalid_state = "_invalid_state"
 _in_word = "_in_word"

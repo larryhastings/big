@@ -48,6 +48,18 @@ __all__ = ["TopologicalSorter", "CycleError"]
 
 nodes_dict_default = lambda: [0, {}]
 
+def _hopefully_sorted_collection(c):
+    try:
+        return sorted(c)
+    except TypeError:
+        return iter(c)
+
+def _hopefully_sorted_callable(c):
+    try:
+        return sorted(c())
+    except TypeError:
+        return iter(c())
+
 class TopologicalSorter:
     """
     An object representing a directed graph of nodes.
@@ -159,7 +171,7 @@ class TopologicalSorter:
             if self.graph is None:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
-                raise RuntimeError("TopologicalSorter view is incoherent to the graph")
+                raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {self._conflicts}")
             return len(self._done) < len(self.graph.nodes)
 
         def ready(self):
@@ -170,7 +182,7 @@ class TopologicalSorter:
             if self.graph is None:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
-                raise RuntimeError("TopologicalSorter view is incoherent to the graph")
+                raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {self._conflicts}")
             if self.graph.dirty:
                 self.graph.check_for_cycles()
             self._yielded.update(self._ready)
@@ -187,7 +199,7 @@ class TopologicalSorter:
             if self.graph is None:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
-                raise RuntimeError("TopologicalSorter view is incoherent to the graph")
+                raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {self._conflicts}")
             for node in nodes:
                 if node not in self.graph.nodes:
                     raise ValueError(f"node {node!r} was not added using add()")
@@ -337,10 +349,10 @@ class TopologicalSorter:
             it should behave identically to the builtin print function.
             """
             print(self)
-            print("      _ready:", sorted(self._ready))
-            print("    _yielded:", sorted(self._yielded))
-            print("       _done:", sorted(self._done))
-            print("  _conflicts:", dict(self._conflicts))
+            print("      _ready:", _hopefully_sorted_collection(self._ready))
+            print("    _yielded:", _hopefully_sorted_collection(self._yielded))
+            print("       _done:", _hopefully_sorted_collection(self._done))
+            print("  _conflicts:", _hopefully_sorted_collection(dict(self._conflicts)))
             self.graph.print(print=print)
             print()
 
@@ -652,7 +664,7 @@ class TopologicalSorter:
         """
         print(self)
         print(f"  {len(self.nodes)} nodes:".rjust(13))
-        for node, p_s in sorted(self.nodes.items()):
+        for node, p_s in _hopefully_sorted_callable(self.nodes.items):
             print("         ", node, p_s)
 
     # graphlib 1.0 compatibility

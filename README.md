@@ -2616,6 +2616,15 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.12**
+
+* Added a secret (otherwise undocumented!) function: `multirpartition`,
+  which is like
+  [`multipartition`](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  but with `reverse=True`.
+* Added the list of conflicted nodes to the "node is incoherent"
+  exception text.
+
 **0.6.11**
 
 * Changed the import strategy.  The top-level **big** module used
