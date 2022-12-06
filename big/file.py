@@ -341,7 +341,7 @@ def translate_filename_to_exfat(s):
         raise ValueError("filename can't be empty")
     s = s.translate(_exfat_translation_table)
     s = s.replace(": ", " - ")
-    s = s.replace(":", "-")
+    s = s.replace(":", ".")
     return s
 
 

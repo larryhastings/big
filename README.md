@@ -2616,6 +2616,14 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.13**
+
+* Changed [`translate_filename_to_exfat(s)`](#translate_filename_to_exfats)
+  behavior: when modifying a string with a colon (`':'`) *not* followed by
+  a space, it used to convert it to a dash (`'-'`).  Now it converts the
+  colon to a period (`'.'`), which looks a little more natural.  A colon
+  followed by a space is still converted to a dash followed by a space.
+
 **0.6.12**
 
 * Bugfix: When calling
