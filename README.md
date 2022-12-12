@@ -1281,25 +1281,25 @@ Only one entry so far.
 >
 >       false (the default)
 >            Discard the separators.
->       true (apart from `ALTERNATING` and `AS_PAIRS`)
+>       true (apart from ALTERNATING and AS_PAIRS)
 >            Append the separators to the end of the split strings.
 >            You can recreate the original string by passing the
->            list returned in to `''.join`.
->       `ALTERNATING`
+>            list returned in to "".join .
+>       ALTERNATING
 >            Yield alternating strings in the output: strings consisting
 >            of separators, alternating with strings consisting of
 >            non-separators.  If "separate" is true, separator strings
 >            will contain exactly one separator, and non-separator strings
 >            may be empty; if "separate" is false, separator strings will
 >            contain one or more separators, and non-separator strings
->            will never be empty, unless `s` was empty.
+>            will never be empty, unless "s" was empty.
 >            You can recreate the original string by passing the
->            list returned in to `''.join`.
->       `AS_PAIRS`
+>            list returned in to "".join .
+>       AS_PAIRS
 >            Yield 2-tuples containing a non-separator string and its
 >            subsequent separator string.  Either string may be empty;
 >            the separator string in the last 2-tuple will always be
->            empty, and if `s` ends with a separator string, *both*
+>            empty, and if "s" ends with a separator string, *both*
 >            strings in the final 2-tuple will be empty.
 >
 > `separate` indicates whether multisplit should consider adjacent
@@ -1318,25 +1318,25 @@ Only one entry so far.
 > the beginning and/or end of `s`.  It supports six values:
 >
 >        false (the default)
->            Don't strip separators from the beginning or end of `s`.
->        true (apart from `LEFT`, `RIGHT`, and `PROGRESSIVE`)
->            Strip separators from the beginning and end of `s`
+>            Don't strip separators from the beginning or end of "s".
+>        true (apart from LEFT, RIGHT, and PROGRESSIVE)
+>            Strip separators from the beginning and end of "s"
 >            (similarly to `str.strip`).
->        `LEFT`
->            Strip separators only from the beginning of `s`
+>        LEFT
+>            Strip separators only from the beginning of "s"
 >            (similarly to `str.lstrip`).
->        `RIGHT`
->            Strip separators only from the end of `s`
+>        RIGHT
+>            Strip separators only from the end of "s"
 >            (similarly to `str.rstrip`).
->        `PROGRESSIVE`
->            Strip from the beginning and end of `s`, unless `maxsplit`
+>        PROGRESSIVE
+>            Strip from the beginning and end of "s", unless "maxsplit"
 >            is nonzero and the entire string is not split.  If
->            splitting stops due to `maxsplit` before the entire string
->            is split, and `reverse` is false, don't strip the end of
->            the string. If splitting stops due to `maxsplit` before
->            the entire string is split, and `reverse` is true, don't
->            strip the beginning of the string.  (This is how `str.strip`
->            and `str.rstrip` behave when `sep=None`.)
+>            splitting stops due to "maxsplit" before the entire string
+>            is split, and "reverse" is false, don't strip the end of
+>            the string. If splitting stops due to "maxsplit" before
+>            the entire string is split, and "reverse" is true, don't
+>            strip the beginning of the string.  (This is how str.strip
+>            and str.rstrip behave when you pass in sep=None .)
 >
 > `maxsplit` should be either an integer or `None`.  If `maxsplit` is an
 > integer greater than -1, multisplit will split `text` no more than
