@@ -1795,12 +1795,55 @@ and the special values `ALTERNATING` and `AS_PAIRS`.
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=False))
     ['apple', 'banana', 'cookie']
+
+When `keep` is true, `multisplit` keeps the separators, appending them to
+the end of the separated string:
+
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=True))
     ['appleX', 'bananaY', 'cookie']
+
+When `keep` is `ALTERNATING`, `multisplit` keeps the separators as separate
+strings.  The first string yielded is always a non-separator string, and
+from then on it always alternates between a separator string and a non-separator
+string.  Put another way, if you store the output of `multisplit` in a list,
+entries with an even-numbered index (0, 2, 4, ...) are always non-separator strings,
+and entries with an odd-numbered index (1, 3, 5, ...) are always separator strings.
+
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.ALTERNATING))
     ['apple', 'X', 'banana', 'Y', 'cookie']
+
+Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
+strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
+2-tuple contains a non-separator string followed by a separator string.
+
+If the original string doesn't end with a separator, or if `strip` is set to a
+value that means the string is stripped to the right, the last 2-tuple will
+contain an empty separator string:
+
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+    >>> list(big.multisplit('appleXbananaYcookieXXX', ('X', 'Y'), keep=big.AS_PAIRS, strip=True))
+    [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+
+If the original string starts with a separator, the first 2-tuple will contain
+an empty non-separator string:
+
+    >>> list(big.multisplit('YappleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
+    [('', 'Y'), ('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+
+Sometimes `AS_PAIRS` will exhibit what seems to be bizarre behavior:
+
+    >>> list(big.multisplit('appleXbananaYcookieX', ('X', 'Y'), keep=big.AS_PAIRS))
+    [('apple', 'X'), ('banana', 'Y'), ('cookie', 'X'), ('', '')]
+
+Although this looks very strange, this *is* sensible and correct.
+
+For an explanation as to why `multisplit` will sometimes emit empty
+strings when using a true value with `keep`, read the
+[Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split])
+section below.
+
+
 
 #### `separate`
 
