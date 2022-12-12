@@ -1278,6 +1278,7 @@ Only one entry so far.
 >
 > `keep` indicates whether or not multisplit should preserve the separator
 > strings in the strings it yields.  It supports four values:
+>
 >       false (the default)
 >            Discard the separators.
 >       true (apart from `ALTERNATING` and `AS_PAIRS`)
@@ -1304,6 +1305,7 @@ Only one entry so far.
 > `separate` indicates whether multisplit should consider adjacent
 > separator strings in `s` as one separator or as multiple separators
 > each separated by a zero-length string.  It supports two values:
+>
 >        false (the default)
 >            Multiple adjacent separators should behave as if they
 >            are one big separator.
@@ -1312,9 +1314,9 @@ Only one entry so far.
 >            split the string individually, even if there are no
 >            characters between two separators.
 >
-> `strip indicates whether multisplit should strip separators from
-> the beginning and/or end of `s`, by using [`multistrip`](#multistrips-separators-leftTrue-rightTrue).
-> It supports six values:
+> `strip` indicates whether multisplit should strip separators from
+> the beginning and/or end of `s`.  It supports six values:
+>
 >        false (the default)
 >            Don't strip separators from the beginning or end of `s`.
 >        true (apart from `LEFT`, `RIGHT`, and `PROGRESSIVE`)
@@ -1340,26 +1342,35 @@ Only one entry so far.
 > integer greater than -1, multisplit will split `text` no more than
 > `maxsplit` times.
 >
-> `reverse` affects whether the `maxsplit` splits start at the
-> beginning or the end of the string.  It supports two values:
+> `reverse` changes where `multisplit` starts splitting the string, and
+> what direction it moves through the string when parsing.
+>
 >        false (the default)
 >            Start splitting from the beginning of the string
->            and scanning right.
+>            and parse moving right (towards the end).
 >        true
 >            Start splitting from the end of the string and
->            scanning left.
->    Splitting from the end of the string and scanning left has two
->    effects.  First, if `maxsplit` is a number greater than 0,
->    the splits will start at the end of the string rather than
->    the beginning.  Second, if there are overlapping instances of
->    separators in the string, `multisplit` will prefer the rightmost
->    separator rather than the left.  For example:
+>            parse moving left (towards the beginning).
+>
+>    Splitting starting from the end of the string and parsing to
+>    the left has two effects.  First, if `maxsplit` is a number
+>    greater than 0, the splits will start at the end of the string
+>    rather than the beginning.  Second, if there are overlapping
+>    instances of separators in the string, `multisplit` will prefer
+>    the rightmost separator rather than the left.  For example:
+>
 >        multisplit(" x x ", (" x ",), keep=big.ALTERNATING)
+>
 >    will split on the leftmost instance of `" x "`, yielding
+>
 >        "", " x ", "x "
+>
 >    whereas
+>
 >        multisplit(" x x ", (" x ",), keep=big.ALTERNATING, reverse=True)
+>
 >    will split on the rightmost instance of `" x "`, yielding
+>
 >        " x", " x ", ""
 >
 > For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
@@ -1721,6 +1732,12 @@ parameters:
   and splitting backwards (like using `str.rstrip` instead of
   `str.strip`).
 
+To make it slightly easier to remember, all these keyword-only
+parameters default to a false value.  (Well, technically,
+`maxsplit` defaults to its special value `-1`, but this is its
+special "don't do anything" magic value.  All the other keyword-only
+parameters default to `False`.)
+
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
@@ -1742,6 +1759,156 @@ text splitting functions.  For example,
 is used to implement [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 `normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
 and several others.
+
+### Demonstrations of each `multisplit` keyword-only parameter
+
+To give you a sense of how you can use
+[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+here's a breakdown of each of the five keyword-only parameters, with examples.
+
+#### `maxsplit`
+
+`maxsplit` specifies the maximum number of times the string should be split.
+The default value of `-1` means "split as many times as you can".  In our
+example here, the string can be split a maximum of three times.  Therefore,
+specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
+`2` or greater:
+
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y')))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0))
+    ['appleXbananaYcookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=1))
+    ['apple', 'bananaYcookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=2))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3))
+    ['apple', 'banana', 'cookie']
+
+#### `keep`
+
+`keep` indicates whether or not multisplit should preserve the separator
+strings in the strings it yields.  It supports four values: false, true,
+and the special values `ALTERNATING` and `AS_PAIRS`.
+
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y')))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=False))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=True))
+    ['appleX', 'bananaY', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.ALTERNATING))
+    ['apple', 'X', 'banana', 'Y', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
+    [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+
+#### `separate`
+
+`separate` indicates whether multisplit should consider adjacent
+separator strings in `s` as one separator or as multiple separators
+each separated by a zero-length string.  It can be either false or
+true.
+
+    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y')))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=False))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True))
+    ['apple', '', 'banana', '', '', 'cookie']
+
+When you use `separate` and `keep` at the same time, and your string
+has multiple adjacent separators, the second and subsequent adjacent
+separators will be in a string by themselves:
+
+    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=True))
+    ['appleX', 'Y', 'bananaY', 'X', 'Y', 'cookie']
+
+    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=big.AS_PAIRS))
+    [('apple', 'X'), ('', 'Y'), ('banana', 'Y'), ('', 'X'), ('', 'Y'), ('cookie', '')]
+
+
+#### `strip`
+
+`strip` indicates whether multisplit should strip separators from
+the beginning and/or end of `s`.  It supports six values:
+false, true, `big.LEFT`, `big.RIGHT`, and `big.PROGRESSIVE`.
+
+By default, `strip` is false, which means it doesn't strip any
+leading or trailing separators:
+
+    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y')))
+    ['', 'apple', 'banana', 'cookie', '']
+
+Setting `strip` to true strips both leading and trailing separators:
+
+    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=True))
+    ['apple', 'banana', 'cookie']
+
+`big.LEFT` and `big.RIGHT` tell `multistrip` to only strip on that
+side of the string
+
+    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=big.LEFT))
+    ['apple', 'banana', 'cookie', '']
+    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=big.RIGHT))
+    ['', 'apple', 'banana', 'cookie']
+
+`big.PROGRESSIVE` duplicates a specific behavior of `str.split` when using
+`maxsplit`.  It always strips on the left, but it only strips on the right
+if the string is completely split.  If `maxsplit` is reached before the entire
+string is split, and `strip` is `big.PROGRESSIVE`, `multisplit` *won't* strip
+the right side of the string.
+
+    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), strip=big.PROGRESSIVE))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=0, strip=big.PROGRESSIVE))
+    ['appleXbananaYcookieY']
+    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=1, strip=big.PROGRESSIVE))
+    ['apple', 'bananaYcookieY']
+    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=2, strip=big.PROGRESSIVE))
+    ['apple', 'banana', 'cookieY']
+    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=3, strip=big.PROGRESSIVE))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=4, strip=big.PROGRESSIVE))
+    ['apple', 'banana', 'cookie']
+
+#### `reverse`
+
+`reverse` specifies where `multisplit` starts parsing the string--from
+the beginning, or the end--and in what direction it moves when parsing
+the string--towards the end, or towards the beginning.  It only supports
+two values: when it's false, `multisplit` starts at the beginning of the
+string, and parses moving to the right (towards the end).  But when `reverse`
+is true, `multisplit` starts at the *end* of the
+string, and parses moving to the *left* (towards the *beginning).*
+
+This has two noticable effects on `multisplit`'s output.  First, this
+changes what splits are kept when `maxsplit` is less than the total number
+of splits in the string.  When `reverse` is true, the string is split
+starting on the right and moving towards the left:
+
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), reverse=True))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0, reverse=True))
+    ['appleXbananaYcookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=1, reverse=True))
+    ['appleXbanana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=2, reverse=True))
+    ['apple', 'banana', 'cookie']
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3, reverse=True))
+    ['apple', 'banana', 'cookie']
+
+The second effect is far more subtle.  It pertains to strings where there
+are multiple *overlapping* separators.  When `reverse` is false, and there
+are two overlapping separators, the string is split by the leftmost overlapping
+separator.  When `reverse` is true and there are two overlapping separators,
+the string is split by the *rightmost* overlapping separator.
+
+    >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY')))
+    ['apple', 'Ybanana', 'Ycookie']
+    >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'), reverse=True))
+    ['appleX', 'bananaX', 'cookie']
+
+### Reimplementing library functions using `multisplit`
 
 Finally, here are some concrete examples of how you could use
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -1806,7 +1973,6 @@ def str_rpartition(s, sep):
         l = (empty, empty) + l
     return l
 ```
-
 
 ### Why do you sometimes get empty strings when you split?
 
@@ -2616,6 +2782,13 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.14**
+
+* Improved the text of the `RuntimeError` raised by `TopologicalSorter.View`
+  when the view is incoherent.  Now it tells you exactly what nodes are
+  conflicting.
+* Expanded the deep dive on `multisplit`.
+
 **0.6.13**
 
 * Changed [`translate_filename_to_exfat(s)`](#translate_filename_to_exfats)
@@ -2623,6 +2796,9 @@ in the **big** test suite.
   a space, it used to convert it to a dash (`'-'`).  Now it converts the
   colon to a period (`'.'`), which looks a little more natural.  A colon
   followed by a space is still converted to a dash followed by a space.
+
+*p.s.* There's a revision with a comment claiming it represents 0.6.13.  But
+I forgot to actually tag it and release it, and I forgot to actually.  Oops!
 
 **0.6.12**
 

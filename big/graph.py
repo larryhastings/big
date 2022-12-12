@@ -162,6 +162,13 @@ class TopologicalSorter:
             del self._conflicts
             del self._reverse_conflicts
 
+        def _raise_conflicts(self):
+            conflict_descriptions = []
+            for node, successor in self._conflicts.items():
+                conflict_descriptions.append(f"successor node {successor} is 'yielded' or 'done', but it depends on predecessor node {node} which is not 'done'")
+            s = ".  ".join(conflict_descriptions)
+            raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {s}")
+
         def __bool__(self):
             """
             Returns `True` if more work can be done in the
@@ -171,7 +178,7 @@ class TopologicalSorter:
             if self.graph is None:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
-                raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {self._conflicts}")
+                self._raise_conflicts()
             return len(self._done) < len(self.graph.nodes)
 
         def ready(self):
@@ -182,7 +189,7 @@ class TopologicalSorter:
             if self.graph is None:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
-                raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {self._conflicts}")
+                self._raise_conflicts()
             if self.graph.dirty:
                 self.graph.check_for_cycles()
             self._yielded.update(self._ready)
@@ -199,7 +206,7 @@ class TopologicalSorter:
             if self.graph is None:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
-                raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {self._conflicts}")
+                self._raise_conflicts()
             for node in nodes:
                 if node not in self.graph.nodes:
                     raise ValueError(f"node {node!r} was not added using add()")
@@ -248,17 +255,22 @@ class TopologicalSorter:
             successor is guaranteed to be a new successor to node.
             """
 
-            # CAPITAL LETTER is the predecessor node
-            # single digit is the successor node
-            # lowercase letter is the result
+            # Determine whether or not the graph is now incoherent.
             #
-            # so, A-1, 1 depends on A
+            # Legend:
+            #   a CAPITAL LETTER represents "node", the predecessor node
+            #   a single digit number represents "successor", the successor node
             #
-            # ---------
-            # A  1  not yet yielded by ready (not ready, or waiting to be yielded by ready)
-            # B  2  yielded by ready but not yet marked done
-            # C  3  done
-            # ---------
+            #   nodes "A" and "1" have not been yielded by ready yet.
+            #      they're either not ready, or they're in "_ready" waiting to be yielded.
+            #   nodes "B" and "2" have been yielded by ready but haven't
+            #      yet been marked done.
+            #   nodes "C" and "3" have been marked done.
+            #
+            #   a result of lowercase "o" means "this is fine"
+            #   a result of lowercase "x" means "the graph is now incoherent"
+            #
+            # resolution table:
             #
             #   1__2__3
             # A|o* x  x
@@ -269,12 +281,12 @@ class TopologicalSorter:
             # x = not ok, view is incoherent.
             # * = if 1 was previously waiting in "ready", it's removed.
 
-            conflicted = not (
-                (node in self._done)
-                or ((successor not in self._done)
-                    and (successor not in self._yielded)) )
+            conflict_1 = not (node in self._done)      # "node" is not C, so it's A or B
+            conflict_2a = (successor in self._yielded) # "successor" is 2
+            conflict_2b = (successor in self._done)    # "successor" is 3
+            confict_2 = conflict_2a or conflict_2b     # "successor" is 2 or 3
+            conflicted = conflict_1 and confict_2      # "node" is not C and "successor" is 2 or 3
             if conflicted:
-                # print("CONFLICT", node, successor, self._done)
                 self._conflicts[node].add(successor)
                 self._reverse_conflicts[successor].add(node)
 
