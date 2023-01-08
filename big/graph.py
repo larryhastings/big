@@ -48,16 +48,17 @@ __all__ = ["TopologicalSorter", "CycleError"]
 
 nodes_dict_default = lambda: [0, {}]
 
+# only used for printing
 def _hopefully_sorted_collection(c):
     try:
         return sorted(c)
-    except TypeError:
+    except TypeError: # pragma: no cover
         return iter(c)
 
 def _hopefully_sorted_callable(c):
     try:
         return sorted(c())
-    except TypeError:
+    except TypeError: # pragma: no cover
         return iter(c())
 
 class TopologicalSorter:

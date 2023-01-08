@@ -96,6 +96,10 @@ notice on the source code.
 
 [`CycleError`](#cycleerror)
 
+[`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
+
+[`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
+
 [`fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`](#fgreppath-text--encodingnone-enumeratefalse-case_insensitivefalse)
 
 [`file_mtime(path)`](#file_mtimepath)
@@ -168,7 +172,7 @@ notice on the source code.
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
 
-[`parse_timestamp_3339Z(s)`](#parse_timestamp_3339zs)
+[`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
 
 [`PushbackIterator(iterable=None)`](#pushbackiteratoriterablenone)
 
@@ -940,7 +944,8 @@ Only one entry so far.
 >
 > Capitalize the letter after an apostrophe if
 >
->     a) the apostrophe is after whitespace
+>     a) the apostrophe is after whitespace or a
+>        left parenthesis character (`'('`)
 >        (or is the first letter of the string), or
 >
 >     b) if the apostrophe is after a letter O or D,
@@ -1620,11 +1625,46 @@ Functions for working with time.  Currently deals specifically
 with timestamps.  The time functions in **big** are designed
 to make it easy to use best practices.
 
+#### `date_ensure_timezone(d, timezone)`
 
-#### `parse_timestamp_3339Z(s)`
+> Ensures that a `datetime.date` object has
+> a timezone set.
+>
+> If `d` has a timezone set, returns `d`.
+> Otherwise, returns a new `datetime.date`
+> object equivalent to `d` with its `tzinfo` set
+> to `timezone`.
+
+#### `date_set_timezone(d, timezone)`
+
+> Returns a new `datetime.date` object identical
+> to `d` but with its `tzinfo` set to `timezone`.
+
+#### `datetime_ensure_timezone(d, timezone)`
+
+> Ensures that a `datetime.datetime` object has
+> a timezone set.
+>
+> If `d` has a timezone set, returns `d`.
+> Otherwise, creates a new `datetime.datetime`
+> object equivalent to `d` with its `tzinfo` set
+> to `timezone`.
+
+#### `datetime_set_timezone(d, timezone)`
+
+> Returns a new `datetime.datetime` object identical
+> to `d` but with its `tzinfo` set to `timezone`.
+
+#### `parse_timestamp_3339Z(s, *, timezone=None)`
 
 > Parses a timestamp string returned by `timestamp_3339Z`.
 > Returns a `datetime.datetime` object.
+>
+> `timezone` is an optional default timezone, and should
+> be a `datetime.tzinfo` object (or `None`).  If provided,
+> and the time represented in the string doesn't specify
+> a timezone, the `tzinfo` attribute of the returned object
+> will be explicitly set to `timezone`.
 
 #### `timestamp_3339Z(t=None, want_microseconds=None)`
 
@@ -2824,6 +2864,22 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6.15**
+
+* Added the new functions
+  [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone) and
+  [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone).
+  These allow you to ensure or explicitly set a timezone on a `datetime.datetime`
+  object.
+* Added the `timezone` argument to 
+  [`parse_timestamp_3339Z()`](#parse_timestamp_3339zs--timezonenone).
+* [`gently_title()`](#gently_titles-apostrophesnone-double_quotesnone)
+  now capitalizes the first letter after a left parenthesis.
+* Changed the secret `multirpartition` function slightly.  Its `reverse`
+  parameter now means to un-reverse its reversing behavior.  Stated
+  another way, `multipartition(reverse=X)` and `multirpartition(reverse=not X)`
+  now do the same thing.
 
 **0.6.14**
 

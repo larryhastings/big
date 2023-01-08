@@ -25,7 +25,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import calendar
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import dateutil.parser
 import time
 
@@ -165,13 +165,52 @@ def timestamp_3339Z(t=None, want_microseconds=None):
     return t.strftime(f)
 
 
-_parse_timestamp_3339Z_format = "%Y-%m-%dT%H:%M:%S*%z"
+@export
+def datetime_set_timezone(d, timezone):
+    """
+    Returns a new datetime.datetime object identical
+    to d but with its tzinfo set to timezone.
+    """
+    return datetime(
+        year = d.year,
+        month = d.month,
+        day = d.day,
+        hour = d.hour,
+        minute = d.minute,
+        second = d.second,
+        microsecond = d.microsecond,
+        tzinfo = timezone,
+        fold = d.fold,
+        )
 
 @export
-def parse_timestamp_3339Z(s):
+def datetime_ensure_timezone(d, timezone):
+    """
+    Ensures that a datetime.datetime object has
+    a timezone set.
+
+    If d has a timezone set, returns d.
+    Otherwise, returns a new datetime.datetime
+    object equivalent to d with its tzinfo set
+    to timezone.
+    """
+    if d.tzinfo:
+        return d
+    return datetime_set_timezone(d, timezone)
+
+@export
+def parse_timestamp_3339Z(s, *, timezone=None):
     """
     Parses a timestamp string returned by timestamp_3339Z.
     Returns a datetime.datetime object.
-    """
-    return dateutil.parser.parse(s)
 
+    timezone is an optional default timezone, and should
+    be a datetime.tzinfo object (or None).  If provided,
+    and the time represented in the string doesn't specify
+    a timezone, the 'tzinfo' attribute of the returned object
+    will be explicitly set to timezone.
+    """
+    d = dateutil.parser.parse(s)
+    assert d
+    d = datetime_ensure_timezone(d, timezone)
+    return d

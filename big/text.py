@@ -767,8 +767,8 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     return tuple(result)
 
 @_export
-def multirpartition(s, separators, count=1, *, reverse=True, separate=True):
-    return multipartition(s, separators, count=count, reverse=reverse, separate=separate)
+def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
+    return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
 
 _invalid_state = "_invalid_state"
@@ -788,7 +788,8 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     any blob of non-whitespace characters.)
 
     Capitalize the letter after an apostrophe if
-        a) the apostrophe is after whitespace
+        a) the apostrophe is after whitespace or a
+           left parenthesis character ('(')
            (or is the first letter of the string), or
         b) if the apostrophe is after a letter O or D,
            and that O or D is after whitespace (or is
@@ -838,6 +839,7 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         if not double_quotes:
             double_quotes = b'"'
         d_and_o = b'DO'
+        lparen = b'('
         characters_in_s = (s[i:i+1] for i in range(len(s)))
     else:
         empty = ""
@@ -846,6 +848,7 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         if not double_quotes:
             double_quotes = '"“”„‟«»‹›'
         d_and_o = 'DO'
+        lparen = '('
         characters_in_s = iter(s)
 
     # ooh, fancy!
@@ -856,7 +859,9 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     result = []
     state = _after_whitespace
     for c in characters_in_s:
-        is_space = c.isspace()
+        original_c = c
+        original_state = state
+        is_space = c.isspace() or (c == lparen)
         is_apostrophe = _is_apostrophe(c)
         is_double_quote = _is_double_quote(c)
         if state == _in_word:
@@ -883,6 +888,7 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         elif state == _after_whitespace_then_D_or_O_then_apostrophe:
             c = c.upper()
             state = _in_word
+        # print(f"  {original_c!r} {repr(is_space):5} {original_state!r:49} -> {c!r} {state!r}")
         result.append(c)
     return empty.join(result)
 

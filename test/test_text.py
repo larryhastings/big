@@ -913,11 +913,14 @@ class BigTextTests(unittest.TestCase):
                     separators = (separator,)
                 else:
                     separators = separator
-                # print(f"multipartition({s=}, {separators=}, {count=}, *, {reverse=}):")
-                # print(f"    {expected=}")
+
                 got = big.multipartition(s, separators, count, reverse=reverse)
                 # print(f"    {got!r}")
                 self.assertEqual(expected, got)
+
+                got2 = big.multirpartition(s, separators, count, reverse=not reverse)
+                # print(f"    {got2!r}")
+                self.assertEqual(expected, got2)
 
         test_multipartition("a:b:c:d", ":", 0, ("a:b:c:d",))
         test_multipartition("a:b:c:d", ":", 1, ("a", ":", "b:c:d"))
@@ -1373,6 +1376,7 @@ class BigTextTests(unittest.TestCase):
         test("don't come home if you don't get 1st", "Don't Come Home If You Don't Get 1st")
         test("""i said "no, i didn't", you idiot""", """I Said "No, I Didn't", You Idiot""")
         test('multiple «"“quote marks”"»', 'Multiple «"“Quote Marks”"»', test_ascii=False)
+        test('my head is my only house (when it rains)', 'My Head Is My Only House (When It Rains)')
 
         test("""i said ZdonXt touch that, oXconnell!Z, you 2nd rate idiot!""", """I Said ZDonXt Touch That, OXConnell!Z, You 2nd Rate Idiot!""", apostrophes='X', double_quotes='Z')
 
