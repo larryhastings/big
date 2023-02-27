@@ -359,7 +359,7 @@ try:
         """.strip().split():
         delattr(test.test_graphlib.TestTopologicalSort, fn_name)
     have_test_graphlib = True
-except ImportError:
+except ImportError: # pragma: no cover
     have_test_graphlib = False
 
 import bigtestlib

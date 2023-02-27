@@ -86,14 +86,10 @@ class Scheduler:
 
             if self.sequence < other.sequence:
                 return True
-            if self.sequence > other.sequence:
-                return False
 
-            if self.event <= other.event:
-                return True
             return False
 
-        def __repr__(self):
+        def __repr__(self): # pragma: no cover
             return f"<Event time={self.time} priority={self.priority} sequence={self.sequence} event={self.event} scheduler={self.scheduler}>"
 
         def cancel(self):

@@ -31,7 +31,7 @@ import re
 
 try:
     from re import Pattern as re_Pattern
-except ImportError:
+except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
 
 

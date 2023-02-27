@@ -29,7 +29,7 @@ from datetime import date, datetime, timezone
 try:
     import dateutil.parser
     have_dateutils = True
-except ImportError:
+except ImportError: # pragma: no cover
     have_dateutils = False
 import time
 

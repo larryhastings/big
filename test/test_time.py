@@ -117,7 +117,7 @@ class BigTests(unittest.TestCase):
             self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000Z"), aware)
             self.assertEqual(aware, big.datetime_ensure_timezone(naive, utc))
             self.assertEqual(aware, big.datetime_ensure_timezone(aware, utc))
-    except ImportError:
+    except ImportError: # pragma: no cover
         pass
 
 
