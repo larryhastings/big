@@ -2987,6 +2987,7 @@ in the **big** test suite.
 **next version** (still under development)
 
 * Updated all copyright date notices to 2023.
+* Lots of doc fixes.
 
 **0.6.16**
 
