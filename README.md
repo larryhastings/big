@@ -1009,7 +1009,8 @@ Only one entry so far.
 >
 > `separators`, if not `None`, must be an iterable of strings of the
 > same type as `s`.  `lines` will split `s` using those strings as
-> separator strings (using [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)).
+> separator strings (using
+> [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)).
 >
 > When iterated over, yields 2-tuples:
 >     (info, line)
@@ -1030,25 +1031,31 @@ Only one entry so far.
 > arguments passed in via `kwargs` are stored internally and can
 > be accessed by user-defined lines modifier functions.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `LineInfo(line, line_number, column_number, **kwargs)`
 
-> The info object yielded by a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator.
+> The second object yielded by a
+> [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+> iterator, containing metadata about the line.
 > You can add your own fields by passing them in
 > via `**kwargs`; you can also add new attributes
 > or modify existing attributes as needed from
 > inside a "lines modifier" function.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 
 #### `lines_convert_tabs_to_spaces(li)`
 
 > A lines modifier function.  Converts tabs to spaces for the lines
-> of a "lines iterator", using the `tab_width` passed in to [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
+> of a "lines iterator", using the `tab_width` passed in to
+> [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_filter_comment_lines(li, comment_separators)`
 
@@ -1073,7 +1080,8 @@ Only one entry so far.
 >    comments inside quoted strings.  It truncates the
 >    line but still always yields the line.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_containing(li, s, *, invert=False)`
 
@@ -1084,7 +1092,8 @@ Only one entry so far.
 > If `invert` is true, returns the opposite--
 > filters out lines that contain `s`.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_grep(li, pattern, *, invert=False, flags=0)`
 
@@ -1099,7 +1108,8 @@ Only one entry so far.
 > If `invert` is true, returns the opposite--
 > filters out lines that match `pattern`.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 >
 > (In older versions of Python, `re.Pattern` was a private type called
 > `re._pattern_type`.)
@@ -1109,7 +1119,8 @@ Only one entry so far.
 > A lines modifier function.  Strips trailing whitespace from the
 > lines of a "lines iterator".
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_sort(li, *, reverse=False)`
 
@@ -1120,18 +1131,23 @@ Only one entry so far.
 > from lowest to highest.
 > If `reverse` is true, lines are sorted
 > from highest to lowest.
+>
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_strip(li)`
 
 > A lines modifier function.  Strips leading and trailing whitespace
 > from the lines of a "lines iterator".
 >
-> If `lines_strip` removes leading whitespace from a line, it adds
-> a field to the associated `LineInfo` object:
+> If `lines_strip` removes leading whitespace from a line,
+> it updates `LineInfo.column_number` with the new starting
+> column number, and also adds a field to the `LinesInfo` object:
 >
 > * `leading` - the leading whitespace string that was removed
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`
 
@@ -1176,7 +1192,8 @@ Only one entry so far.
 >    comments inside quoted strings.  It truncates the
 >    line but still always yields the line.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 
 #### `lines_strip_indent(li)`
@@ -1188,6 +1205,8 @@ Only one entry so far.
 > * `indent` - an integer indicating how many indents it's observed
 > * `leading` - the leading whitespace string that was removed
 >
+> Also updates LineInfo.column_number as needed.
+>
 > Uses an intentionally simple algorithm.
 > Only understands tab and space characters as indent characters.
 > Internally detabs to spaces first for consistency, using the
@@ -1196,7 +1215,8 @@ Only one entry so far.
 > You can only dedent out to a previous indent.
 > Raises `IndentationError` if there's an illegal dedent.
 >
-> For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+> For more information, see the deep-dive on
+> [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
 #### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
 
@@ -1270,7 +1290,8 @@ Only one entry so far.
 > It partitions starting on the right, scanning backwards through slooking
 > for separators.
 >
-> For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> For more information, see the deep-dive on
+> [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 #### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`
 
@@ -1384,7 +1405,8 @@ Only one entry so far.
 >
 >        " x", " x ", ""
 >
-> For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> For more information, see the deep-dive on
+> [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 #### `multistrip(s, separators, left=True, right=True)`
 
@@ -1411,7 +1433,8 @@ Only one entry so far.
 > separators stripped.  (If `left` and `right` are both
 > false, returns `s` unchanged.)
 >
-> For more information, see the deep-dive on [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> For more information, see the deep-dive on
+> [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
 
 #### `newlines`
@@ -1826,6 +1849,7 @@ example here, the string can be split a maximum of three times.  Therefore,
 specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 `2` or greater:
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y')))
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0))
@@ -1836,6 +1860,7 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3))
     ['apple', 'banana', 'cookie']
+```
 
 #### `keep`
 
@@ -1843,16 +1868,20 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 strings in the strings it yields.  It supports four values: false, true,
 and the special values `ALTERNATING` and `AS_PAIRS`.
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y')))
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=False))
     ['apple', 'banana', 'cookie']
+```
 
 When `keep` is true, `multisplit` keeps the separators, appending them to
 the end of the separated string:
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=True))
     ['appleX', 'bananaY', 'cookie']
+```
 
 When `keep` is `ALTERNATING`, `multisplit` keeps the separators as separate
 strings.  The first string yielded is always a non-separator string, and
@@ -1861,8 +1890,10 @@ string.  Put another way, if you store the output of `multisplit` in a list,
 entries with an even-numbered index (0, 2, 4, ...) are always non-separator strings,
 and entries with an odd-numbered index (1, 3, 5, ...) are always separator strings.
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.ALTERNATING))
     ['apple', 'X', 'banana', 'Y', 'cookie']
+```
 
 Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
 strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
@@ -1872,21 +1903,27 @@ If the original string doesn't end with a separator, or if `strip` is set to a
 value that means the string is stripped to the right, the last 2-tuple will
 contain an empty separator string:
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
     >>> list(big.multisplit('appleXbananaYcookieXXX', ('X', 'Y'), keep=big.AS_PAIRS, strip=True))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+```
 
 If the original string starts with a separator, the first 2-tuple will contain
 an empty non-separator string:
 
+```Python
     >>> list(big.multisplit('YappleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
     [('', 'Y'), ('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+```
 
 Sometimes `AS_PAIRS` will exhibit what seems to be bizarre behavior:
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookieX', ('X', 'Y'), keep=big.AS_PAIRS))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', 'X'), ('', '')]
+```
 
 Although this looks very strange, this *is* sensible and correct.
 
@@ -1896,7 +1933,6 @@ strings when using a true value with `keep`, read the
 section below.
 
 
-
 #### `separate`
 
 `separate` indicates whether multisplit should consider adjacent
@@ -1904,22 +1940,26 @@ separator strings in `s` as one separator or as multiple separators
 each separated by a zero-length string.  It can be either false or
 true.
 
+```Python
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y')))
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=False))
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True))
     ['apple', '', 'banana', '', '', 'cookie']
+```
 
 When you use `separate` and `keep` at the same time, and your string
 has multiple adjacent separators, the second and subsequent adjacent
 separators will be in a string by themselves:
 
+```Python
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=True))
     ['appleX', 'Y', 'bananaY', 'X', 'Y', 'cookie']
 
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=big.AS_PAIRS))
     [('apple', 'X'), ('', 'Y'), ('banana', 'Y'), ('', 'X'), ('', 'Y'), ('cookie', '')]
+```
 
 
 #### `strip`
@@ -1931,21 +1971,27 @@ false, true, `big.LEFT`, `big.RIGHT`, and `big.PROGRESSIVE`.
 By default, `strip` is false, which means it doesn't strip any
 leading or trailing separators:
 
+```Python
     >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y')))
     ['', 'apple', 'banana', 'cookie', '']
+```
 
 Setting `strip` to true strips both leading and trailing separators:
 
+```Python
     >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=True))
     ['apple', 'banana', 'cookie']
+```
 
 `big.LEFT` and `big.RIGHT` tell `multistrip` to only strip on that
-side of the string
+side of the string:
 
+```Python
     >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=big.LEFT))
     ['apple', 'banana', 'cookie', '']
     >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=big.RIGHT))
     ['', 'apple', 'banana', 'cookie']
+```
 
 `big.PROGRESSIVE` duplicates a specific behavior of `str.split` when using
 `maxsplit`.  It always strips on the left, but it only strips on the right
@@ -1953,6 +1999,7 @@ if the string is completely split.  If `maxsplit` is reached before the entire
 string is split, and `strip` is `big.PROGRESSIVE`, `multisplit` *won't* strip
 the right side of the string.
 
+```Python
     >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), strip=big.PROGRESSIVE))
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=0, strip=big.PROGRESSIVE))
@@ -1965,6 +2012,7 @@ the right side of the string.
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=4, strip=big.PROGRESSIVE))
     ['apple', 'banana', 'cookie']
+```
 
 #### `reverse`
 
@@ -1981,6 +2029,7 @@ changes what splits are kept when `maxsplit` is less than the total number
 of splits in the string.  When `reverse` is true, the string is split
 starting on the right and moving towards the left:
 
+```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), reverse=True))
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0, reverse=True))
@@ -1991,6 +2040,7 @@ starting on the right and moving towards the left:
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3, reverse=True))
     ['apple', 'banana', 'cookie']
+```
 
 The second effect is far more subtle.  It pertains to strings where there
 are multiple *overlapping* separators.  When `reverse` is false, and there
@@ -1998,10 +2048,12 @@ are two overlapping separators, the string is split by the leftmost overlapping
 separator.  When `reverse` is true and there are two overlapping separators,
 the string is split by the *rightmost* overlapping separator.
 
+```Python
     >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY')))
     ['apple', 'Ybanana', 'Ycookie']
     >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'), reverse=True))
     ['appleX', 'bananaX', 'cookie']
+```
 
 ### Reimplementing library functions using `multisplit`
 
@@ -2085,8 +2137,10 @@ the documentation says it regards every instance of a separator string as an ind
 separator splitting the string.  What does that mean?  Watch what happens when you have
 two adjacent separators in the string you're splitting:
 
+```Python
     >>> '1,2,,3'.split(',')
     ['1', '2', '', '3']
+```
 
 What's that empty string doing between `'2'` and `'3'`?  Here's how to think about it:
 when you pass in an explicit separator, `str.split` splits at *every* occurance of that
@@ -2094,35 +2148,45 @@ separator in the string.  It *always* splits the string into two places, wheneve
 a separator.  And when there are two adjacent separators, conceptually, they have a
 zero-length string in between them:
 
+```Python
     >>> '1,2,,3'[4:4]
     ''
+```
 
 The empty string in the output of `str.split` represents the fact that there
 were two adjacent separators.  If `str.split` didn't add that empty string,
 and the output looked like this:
 
+```Python
     ['1', '2', '3']
+```
 
 it'd be indistinguishable from splitting the same string but *without*
 two separators in a row:
 
+```Python
     >>> '1,2,3'.split(',')
     ['1', '2', '3']
+```
 
 This difference is crucial when you want to reconstruct the original string from
 the split list.  `str.join` should always be the inverse of `str.split`, and with
 that empty string there, it works correctly:
 
+```Python
     >>> ','.join(['1', '2', '3'])
     '1,2,3'
     >>> ','.join(['1', '2', '', '3'])
     '1,2,,3'
+```
 
 Now take a look at what happens when the string
 you're splitting starts or ends with a separator:
 
+```Python
     >>> ',1,2,3,'.split(',')
     ['', '1', '2', '3', '']
+```
 
 This might seem weird.  But, just like with two adjacent separators,
 this behavior is important for consistency.  Conceptually there's
@@ -2130,8 +2194,10 @@ a zero-length string between the beginning of the string and the first
 comma.  And `str.join` needs those empty strings in order to correctly
 recreate the original string.
 
+```Python
     >>> ','.join(['', '1', '2', '3', ''])
     ',1,2,3,'
+```
 
 Naturally,
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -2140,66 +2206,84 @@ duplicates this behavior.  When you want
 to emulate the behavior of `str.split` when using an explicit separator
 string, just pass in `keep=False`, `separate=True`, and `strip=False`.  That is, if 'a' and 'b' are strings,
 
+```Python
      big.multisplit(a, (b,), keep=False, separate=True, strip=False)
+```
 
 produces the same output as
 
+```Python
      a.split(b)
+```
 
 Here's sample code using
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 to split the strings we've been playing with:
 
+```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=False, separate=True, strip=False))
     ['1', '2', '', '3']
     >>> list(big.multisplit(',1,2,3,', (',',), keep=False, separate=True, strip=False))
     ['', '1', '2', '3', '']
+```
 
 This "emit an empty string" behavior has ramifications for the other `keep` modes, too.
 The behavior of `keep=True` is perhaps easy to predict; we just append the separators
 to the previous string segment:
 
+```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=True, separate=True, strip=False))
     ['1,', '2,', ',', '3']
     >>> list(big.multisplit(',1,2,3,', (',',), keep=True, separate=True, strip=False))
     [',', '1,', '2,', '3,', '']
+```
 
 The principle here is that, when you use `keep=True`, you should be able to reconstitute
 the original string with `''.join`:
 
+```Python
     >>> ''.join(['1,', '2,', ',', '3'])
     '1,2,,3'
     >>> ''.join([',', '1,', '2,', '3,', ''])
     ',1,2,3,''
+```
 
 `keep=big.ALTERNATING` is much the same, except we insert the separators as their
 own segments, rather than appending each one to the previous segment:
 
+```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=big.ALTERNATING, separate=True, strip=False))
     ['1', ',', '2', ',', '', ',', '3']
     >>> list(big.multisplit(',1,2,3,', (',',), keep=big.ALTERNATING, separate=True, strip=False))
     ['', ',', '1', ',', '2', ',', '3', ',', '']
+```
 
 And, as with `keep=True`, you can also recreate the original string by passing
 these arrays in to `''.join`:
 
+```Python
     >>> ''.join(['1', ',', '2', ',', '', ',', '3'])
     '1,2,,3'
     >>> ''.join(['', ',', '1', ',', '2', ',', '3', ',', ''])
     ',1,2,3,''
+```
 
 Finally, consider `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
 initially I thought it was wrong.  But I gave it a lot of thought and convinced
 myself that, yes, this is correct:
 
+```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('1', ','), ('2', ','), ('', ','), ('3', '')]
     >>> list(big.multisplit(',1,2,3,', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]
+```
 
 That tuple at the end, just containing two empty strings:
 
+```Python
     ('', '')
+```
 
 is so strange.  How can that be right?
 
@@ -2213,10 +2297,12 @@ when using `keep=AS_PAIRS` the final separator string is *also* empty.
 You can recreate the original string from this result too,
 although you have to unpack the tuples:
 
+```Python
     >>> ''.join(s  for t in [('1', ','), ('2', ','), ('', ','), ('3', '')]  for s in t)
     '1,2,,3'
     >>> ''.join(s  for t in [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]  for s in t)
     ',1,2,3,'
+```
 
 
 ## `lines` and lines modifier functions
@@ -2245,26 +2331,30 @@ of the function, immediately after `lines_`, tells you what
 the function will do.  Some examples:
 
 * `filter` means this lines modifier may remove some
-  lines from the output.  `lines_filter_empty_lines`
+  lines from the output.  For example, `lines_filter_empty_lines`
   will only yield a line if it isn't empty.
 * `strip` means this lines modifier may remove one or
-  more substrings from the line.  A lines modifier that
-  removes the initial part of a line will add a
-  `leading` field to the accompanying `LineInfo` object
-  containing the substring removed from the beginning
-  of the line, and will also update the `column_number`
-  of the line to reflect the change to the line.
+  more substrings from the line.  For example, `lines_filter_indent`
+  will strip the leading whitespace from a line before yielding
+  it.  (Whenever a lines modifier removes leading text from a line,
+  it will add a `leading` field to the accompanying `LineInfo` object
+  containing the removed substring, and will also update the
+  `column_number` of the line to reflect the new starting column.)
 * `convert` means this lines modifier may change one
-  or more substrings in the line.
+  or more substrings in the line.  For example,
+  `lines_convert_tabs_to_spaces` changes tab characters
+  to space characters in any lines it processes.
 
 All lines modifier functions are composable with each
 other; you can "stack" them together simply by passing
 the output of one into the input of another.  For example,
 
+```Python
      with open("textfile.txt", "rt") as f:
          for info, lines in big.lines_filter_empty_lines(
      	     big.lines_rstrip(lines(f.read()))):
      	     ...
+```
 
 will iterate over the lines of `textfile.txt`, skipping
 over all empty lines and lines that consist only of
@@ -2276,12 +2366,14 @@ each line is first "r-stripped", and then discarded
 if it is empty.  If you stacked the line modifiers in
 the opposite order:
 
+```Python
      with open("textfile.txt", "rt") as f:
          for info, lines in big.lines_rstrip(
      	     big.lines_filter_empty_lines(lines(f.read()))):
      	     ...
+```
 
-then you would filter out empty lines first, and *then*
+then it'd filter out empty lines first, and *then*
 "r-strip" the lines.  So lines in the input that contained
 only whitespace would still get yielded as empty lines,
 which in this case is probably not what you wanted.
@@ -2290,8 +2382,16 @@ Of course, you can write your own lines modifier functions!
 Simply accept a lines iterator as an argument, iterate over
 it, and yield each line info and line, modifying them
 (or not yielding them!) as you see fit.  You can potentially
-even write your own lines iterator, a replacement for [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
-if you need functionality [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) doesn't provide.
+even write your own lines iterator, a replacement for
+[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
+if you need functionality
+[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) doesn't provide.
+
+Note that if you write your own lines modifier function,
+and it removes text from the beginning the line, you'll have to
+update the `LineInfo` object manually--it doesn't happen
+automatically.
+
 
 ## Word wrapping and formatting
 

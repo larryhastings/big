@@ -1117,7 +1117,8 @@ def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
 @_export
 class LineInfo:
     """
-    The info object yielded by a lines iterator.
+    The second object yielded by a lines iterator,
+    containing metadata about the line.
     You can add your own fields by passing them in
     via **kwargs; you can also add new attributes
     or modify existing attributes as needed from
@@ -1482,6 +1483,7 @@ def lines_strip_indent(li):
     Sets two new fields on the associated LineInfo object for every line:
       * indent - an integer indicating how many indents it's observed
       * leading - the leading whitespace string that was removed
+    Also updates LineInfo.column_number as needed.
 
     Uses an intentionally simple algorithm.
     Only understands tab and space characters as indent characters.
