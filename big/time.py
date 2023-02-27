@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022 Larry Hastings
+Copyright 2022-2023 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -54,7 +54,7 @@ def timestamp_human(t=None, want_microseconds=None):
     time, use timestamp_3339Z().
 
     Example timestamp:
-        '2022/05/24 23:42:49.099437'
+        '2021/05/24 23:42:49.099437'
 
     t can be one of several types:
         If t is None, timestamp_human uses the current local time.
@@ -115,7 +115,7 @@ def timestamp_3339Z(t=None, want_microseconds=None):
     timestamps; for human-readable timestamps, use timestamp_human().
 
     Example timestamp:
-        '2022-05-25T06:46:35.425327Z'
+        '2021-05-25T06:46:35.425327Z'
 
     t may be one of several types:
       If t is None, timestamp_3339Z uses the current time in UTC.

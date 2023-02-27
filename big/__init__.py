@@ -8,7 +8,7 @@ Think big!
 
 _license = """
 big
-Copyright 2022 Larry Hastings
+Copyright 2022-2023 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a

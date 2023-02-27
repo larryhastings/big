@@ -1,6 +1,6 @@
 ![# big](/resources/images/big.header.png)
 
-##### Copyright 2022 by Larry Hastings
+##### Copyright 2022-2023 by Larry Hastings
 
 **big** is a Python package, a grab-bag of useful technology
 I always want to have handy.
@@ -1684,7 +1684,7 @@ to make it easy to use best practices.
 > time zone.  This format is intended for computer-parsable
 > timestamps; for human-readable timestamps, use `timestamp_human()`.
 >
-> Example timestamp: `'2022-05-25T06:46:35.425327Z'`
+> Example timestamp: `'2021-05-25T06:46:35.425327Z'`
 >
 > `t` may be one of several types:
 >
@@ -1712,7 +1712,7 @@ to make it easy to use best practices.
 > is intended for human readability; for computer-parsable
 > time, use `timestamp_3339Z()`.
 >
-> Example timestamp: `"2022/05/24 23:42:49.099437"`
+> Example timestamp: `"2021/05/24 23:42:49.099437"`
 >
 > `t` can be one of several types:
 >
@@ -2876,6 +2876,10 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**next version** (still under development)
+
+* Updated all copyright date notices to 2023.
 
 **0.6.16**
 
