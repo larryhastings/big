@@ -122,7 +122,8 @@ class BoundInnerClass(_Worker):
         Wrapper.__module__ = self.cls.__module__
         Wrapper.__qualname__ = self.cls.__qualname__
         Wrapper.__doc__ = self.cls.__doc__
-        Wrapper.__annotations__ = self.cls.__annotations__
+        if hasattr(self.cls, '__annotations__'):
+            Wrapper.__annotations__ = self.cls.__annotations__
         return Wrapper
 
 class UnboundInnerClass(_Worker):
@@ -140,5 +141,6 @@ class UnboundInnerClass(_Worker):
         Wrapper.__module__ = self.cls.__module__
         Wrapper.__qualname__ = self.cls.__qualname__
         Wrapper.__doc__ = self.cls.__doc__
-        Wrapper.__annotations__ = self.cls.__annotations__
+        if hasattr(self.cls, '__annotations__'):
+            Wrapper.__annotations__ = self.cls.__annotations__
         return Wrapper

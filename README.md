@@ -470,10 +470,13 @@ Functions for working with files, directories, and I/O.
 > For simplicity of implementation, the entire file is read in to memory
 > at one time.
 >
-> (Tip: to perform a case-insensitive pattern match, pass in the
+> Tip: to perform a case-insensitive pattern match, pass in the
 > `re.IGNORECASE` flag into flags for this function (if pattern is a string
 > or bytes) or when creating your regular expression object (if pattern is
-> an `re.Pattern` object).
+> an `re.Pattern` object.
+>
+> (In older versions of Python, `re.Pattern` was a private type called
+> `re._pattern_type`.)
 
 #### `pushd(directory)`
 
@@ -1097,6 +1100,9 @@ Only one entry so far.
 > filters out lines that match `pattern`.
 >
 > For more information, see the deep-dive on [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+>
+> (In older versions of Python, `re.Pattern` was a private type called
+> `re._pattern_type`.)
 
 #### `lines_rstrip(li)`
 
@@ -1492,6 +1498,9 @@ Only one entry so far.
 >
 > If `reverse` is true, partitions starting at the right,
 > like [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0).
+>
+> (In older versions of Python, `re.Pattern` was a private type called
+> `re._pattern_type`.)
 
 
 #### `re_rpartition(text, pattern, count=1, *, flags=0)`
@@ -1530,6 +1539,9 @@ Only one entry so far.
 >
 > If `pattern` is a string, `flags` is passed in
 > as the `flags` argument to `re.compile`.
+>
+> (In older versions of Python, `re.Pattern` was a private type called
+> `re._pattern_type`.)
 
 #### `split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`
 
@@ -2864,6 +2876,16 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**0.6.16**
+
+* Fixed Python 3.6 support! Some equals-signs-in-f-strings and some
+  other anachronisms had crept in.  0.6.16 has been tested on all
+  versions from 3.6 to 3.11 (as well as having 100% *coverage*).
+* Made the `dateutils` package an optional dependency.  Only one function
+  needs it, [`parse_timestamp_3339Z()`](#parse_timestamp_3339zs--timezonenone).
+* Minor cleanup in [`PushbackIterator()`](#pushbackiteratoriterablenone).
+  It also uses slots now, which should make it a bit faster.
 
 **0.6.15**
 

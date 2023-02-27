@@ -27,7 +27,6 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 __all__ = ["Scheduler"]
 
 
-from dataclasses import dataclass
 import threading
 from .heap import Heap
 import time
@@ -66,13 +65,36 @@ class Scheduler:
 
     DEFAULT_PRIORITY = 100
 
-    @dataclass(order=True)
     class Event:
-        time: object
-        priority: object
-        sequence: int
-        event: object
-        scheduler: object
+        def __init__(self, time, priority, sequence, event, scheduler):
+            self.time = time
+            self.priority = priority
+            self.sequence = sequence
+            self.event = event
+            self.scheduler = scheduler
+
+        def __lt__(self, other):
+            if self.time < other.time:
+                return True
+            if self.time > other.time:
+                return False
+
+            if self.priority < other.priority:
+                return True
+            if self.priority > other.priority:
+                return False
+
+            if self.sequence < other.sequence:
+                return True
+            if self.sequence > other.sequence:
+                return False
+
+            if self.event <= other.event:
+                return True
+            return False
+
+        def __repr__(self):
+            return f"<Event time={self.time} priority={self.priority} sequence={self.sequence} event={self.event} scheduler={self.scheduler}>"
 
         def cancel(self):
             self.scheduler.cancel(self)

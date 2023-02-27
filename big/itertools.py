@@ -16,6 +16,9 @@ class PushbackIterator:
     the constructor) you can still call push to add new items, at which
     point the PushBackIterator can be iterated over again.
     """
+
+    __slots__ = ('i', 'stack')
+
     def __init__(self, iterable=None):
         if (iterable != None) and (not hasattr(iterable, '__next__')):
             iterable = iter(iterable)
@@ -39,7 +42,10 @@ class PushbackIterator:
         if self.stack:
             return self.stack.pop()
         if self.i:
-            return next(self.i)
+            try:
+                return next(self.i)
+            except:
+                self.i = None
         raise StopIteration
 
     def next(self, default=None):
@@ -51,25 +57,24 @@ class PushbackIterator:
         """
         if self.stack:
             return self.stack.pop()
-        if not self.i:
-            return default
-        try:
-            return next(self.i)
-        except StopIteration:
-            self.i = None
-            return default
+        if self.i:
+            try:
+                return next(self.i)
+            except StopIteration:
+                self.i = None
+        return default
 
     def __bool__(self):
         if self.stack:
             return True
-        if not self.i:
-            return False
-        try:
-            o = next(self.i)
-            self.push(o)
-            return True
-        except StopIteration:
-            return False
+        if self.i:
+            try:
+                o = next(self.i)
+                self.push(o)
+                return True
+            except StopIteration:
+                self.i = None
+        return False
 
     def __repr__(self):
         return f"<{self.__class__.__name__} i={self.i} stack={self.stack}>"

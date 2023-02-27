@@ -29,6 +29,11 @@ import os
 import pathlib
 import re
 
+try:
+    from re import Pattern as re_Pattern
+except ImportError:
+    re_Pattern = re._pattern_type
+
 
 __all__ = []
 
@@ -136,12 +141,15 @@ def grep(path, pattern, *, encoding=None, enumerate=False, flags=0):
     For simplicity of implementation, the entire file is read in to memory
     at one time.
 
-    (Tip: to perform a case-insensitive pattern match, pass in the
+    Tip: to perform a case-insensitive pattern match, pass in the
     re.IGNORECASE flag into flags for this function (if pattern is a string
     or bytes) or when creating your regular expression object (if pattern is
-    an re.Pattern object).
+    an re.Pattern object.
+
+    (In older versions of Python, re.Pattern was a private type called
+    re._pattern_type.)
     """
-    if not isinstance(pattern, re.Pattern):
+    if not isinstance(pattern, re_Pattern):
         pattern = re.compile(pattern, flags)
     if isinstance(pattern.pattern, bytes):
         if encoding is not None:

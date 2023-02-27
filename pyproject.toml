@@ -15,9 +15,6 @@ classifiers = [
     "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
     "Programming Language :: Python :: 3 :: Only",
     ]
-dependencies = [
-    "python-dateutil",
-    ]
 dynamic = [
     "description",
     "version",
@@ -25,3 +22,8 @@ dynamic = [
 
 [project.urls]
 Source = "https://github.com/larryhastings/big/"
+
+[project.optional-dependencies]
+time = [
+    "python-dateutil",
+    ]

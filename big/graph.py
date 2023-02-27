@@ -122,7 +122,7 @@ class TopologicalSorter:
             self._done = set()
 
         def __repr__(self):
-            return f"<View {hex(id(self))} on graph={hex(id(self.graph))} {self._ready=} yielded={len(self._yielded)} done={len(self._done)} conflicts={bool(self._conflicts)}>"
+            return f"<View {hex(id(self))} on graph={hex(id(self.graph))} ready={self._ready} yielded={len(self._yielded)} done={len(self._done)} conflicts={bool(self._conflicts)}>"
 
         def copy(self):
             """

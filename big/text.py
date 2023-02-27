@@ -34,6 +34,11 @@ import re
 import struct
 import sys
 
+try:
+    from re import Pattern as re_Pattern
+except ImportError:
+    re_Pattern = re._pattern_type
+
 
 __all__ = []
 
@@ -81,10 +86,13 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
 
     If reverse is true, partitions starting at the right,
     like re_rpartition.
+
+    (In older versions of Python, re.Pattern was a private type called
+    re._pattern_type.)
     """
     if reverse:
         return re_rpartition(s, pattern, count, flags=flags)
-    if not isinstance(pattern, re.Pattern):
+    if not isinstance(pattern, re_Pattern):
         pattern = re.compile(pattern, flags=flags)
     if not (isinstance(s, (str, bytes)) and
         (type(s) == type(pattern.pattern))):
@@ -157,8 +165,11 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
 
     If pattern is a string, flags is passed in
     as the flags argument to re.compile.
+
+    (In older versions of Python, re.Pattern was a private type called
+    re._pattern_type.)
     """
-    if not isinstance(pattern, re.Pattern):
+    if not isinstance(pattern, re_Pattern):
         pattern = re.compile(pattern, flags=flags)
     if not (isinstance(s, (str, bytes)) and
         (type(s) == type(pattern.pattern))):
@@ -297,7 +308,7 @@ def _multisplit_reversed(o):
             return o
         return b"".join(o[i:i+1] for i in range(len(o)-1, -1, -1))
     t = type(o)
-    assert t in (list, tuple, set), f"{o=} {t=}"
+    assert t in (list, tuple, set), f"o={o} t={t}"
     return t(_multisplit_reversed(p) for p in o)
 
 
@@ -1330,8 +1341,11 @@ def lines_grep(li, pattern, *, invert=False, flags=0):
     filters out lines that match pattern.
 
     Composable with all the lines_ functions from the big.text module.
+
+    (In older versions of Python, re.Pattern was a private type called
+    re._pattern_type.)
     """
-    if not isinstance(pattern, re.Pattern):
+    if not isinstance(pattern, re_Pattern):
         pattern = re.compile(pattern, flags=flags)
     search = pattern.search
     if invert:

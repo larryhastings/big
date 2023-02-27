@@ -85,7 +85,7 @@ class TopologicalSortTests(unittest.TestCase):
                     yielded.extend(ready)
                     graph.done(*ready)
                 got = "".join(sorted(yielded))
-                self.assertEqual(got, result, msg=f"expected {result=} is not equal to {got!r}")
+                self.assertEqual(got, result, msg=f"expected result={result} is not equal to got={got!r}")
                 tests_run += 1
 
 
@@ -176,11 +176,11 @@ class TopologicalSortTests(unittest.TestCase):
                     except RuntimeError:
                         coherent = False
 
-                    # print(f"{predecessor_state=} {successor_state=} {should_be_coherent=} {coherent=}")
+                    # print(f"predecessor_state={predecessor_state} successor_state={successor_state} should_be_coherent={should_be_coherent} coherent={coherent}")
                     # g._default_view.print()
                     # print()
 
-                    self.assertEqual(should_be_coherent, coherent, msg=f"test 1 {predecessor_state=} {successor_state=} {should_be_coherent=} {coherent=}")
+                    self.assertEqual(should_be_coherent, coherent, msg=f"test 1 predecessor_state={predecessor_state} successor_state={successor_state} should_be_coherent={should_be_coherent} coherent={coherent}")
                     tests_run += 1
 
                     if coherent:
@@ -209,7 +209,7 @@ class TopologicalSortTests(unittest.TestCase):
         g.reset()
         for i, r in enumerate(g_groups, 1):
             r2 = g.ready()
-            self.assertEqual(r, r2, msg=f"failed at step {i}: {r=} != {r2=}")
+            self.assertEqual(r, r2, msg=f"failed at step {i}: r={r!r} != r2={r2}")
             g.done(*r2)
             tests_run += 1
 
@@ -231,11 +231,11 @@ class TopologicalSortTests(unittest.TestCase):
                 if i == step:
                     g.add("2", "1")
                 r = g.ready()
-                self.assertLessEqual(set(g_groups[i]), set(r), f"{set(g_groups[i])=} isn't <= {set(r)=}")
+                self.assertLessEqual(set(g_groups[i]), set(r), f"set(g_groups[i])={set(g_groups[i])} isn't <= set(r){set(r)}")
                 if i == step:
-                    self.assertIn('1', r, msg=f"1 not in {r=}")
+                    self.assertIn('1', r, msg=f"1 not in r={r}")
                 elif i == (step + 1):
-                    self.assertIn('2', r, msg=f"2 not in {r=}")
+                    self.assertIn('2', r, msg=f"2 not in r={r}")
                 g.done(*r)
                 i += 1
             tests_run += 1
@@ -349,21 +349,26 @@ graphlib = big.graph
 import sys
 sys.modules['graphlib'] = graphlib
 
-import test
-from test import test_graphlib
-# the API has changed and they are now invalid.
-for fn_name in """
-    test_calls_before_prepare
-    test_prepare_multiple_times
-    """.strip().split():
-    delattr(test.test_graphlib.TestTopologicalSort, fn_name)
+try:
+    import test
+    from test import test_graphlib
+    # the API has changed and they are now invalid.
+    for fn_name in """
+        test_calls_before_prepare
+        test_prepare_multiple_times
+        """.strip().split():
+        delattr(test.test_graphlib.TestTopologicalSort, fn_name)
+    have_test_graphlib = True
+except ImportError:
+    have_test_graphlib = False
 
 import bigtestlib
 
 def run_tests(exit=False):
     bigtestlib.run(name="big.graph", module=__name__, permutations=lambda: tests_run)
-    print("Testing big.graph using test.test_graphlib...")
-    bigtestlib.run(name=None, module="test.test_graphlib")
+    if have_test_graphlib:
+        print("Testing big.graph using test.test_graphlib...")
+        bigtestlib.run(name=None, module="test.test_graphlib")
 
 
 if __name__ == "__main__": # pragma: no cover

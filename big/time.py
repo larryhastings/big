@@ -26,7 +26,11 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import calendar
 from datetime import date, datetime, timezone
-import dateutil.parser
+try:
+    import dateutil.parser
+    have_dateutils = True
+except ImportError:
+    have_dateutils = False
 import time
 
 # I'm on my way, I'm making it
@@ -198,19 +202,20 @@ def datetime_ensure_timezone(d, timezone):
         return d
     return datetime_set_timezone(d, timezone)
 
-@export
-def parse_timestamp_3339Z(s, *, timezone=None):
-    """
-    Parses a timestamp string returned by timestamp_3339Z.
-    Returns a datetime.datetime object.
+if have_dateutils:
+    @export
+    def parse_timestamp_3339Z(s, *, timezone=None):
+        """
+        Parses a timestamp string returned by timestamp_3339Z.
+        Returns a datetime.datetime object.
 
-    timezone is an optional default timezone, and should
-    be a datetime.tzinfo object (or None).  If provided,
-    and the time represented in the string doesn't specify
-    a timezone, the 'tzinfo' attribute of the returned object
-    will be explicitly set to timezone.
-    """
-    d = dateutil.parser.parse(s)
-    assert d
-    d = datetime_ensure_timezone(d, timezone)
-    return d
+        timezone is an optional default timezone, and should
+        be a datetime.tzinfo object (or None).  If provided,
+        and the time represented in the string doesn't specify
+        a timezone, the 'tzinfo' attribute of the returned object
+        will be explicitly set to timezone.
+        """
+        d = dateutil.parser.parse(s)
+        assert d
+        d = datetime_ensure_timezone(d, timezone)
+        return d

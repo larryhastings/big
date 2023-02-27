@@ -99,22 +99,26 @@ class BigTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             big.timestamp_3339Z('abcde')
 
-    def test_parse_timestamp_3339Z(self):
-        utc = datetime.timezone.utc
-        datetimes = []
-        for seconds in range(2):
-            datetimes.append(datetime.datetime(1970, 1, 1, 0, 0, seconds, tzinfo=utc))
-        self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00Z"), datetimes[0])
-        self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000Z"), datetimes[0])
-        self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:01.000000Z"), datetimes[1])
-        self.assertEqual(big.parse_timestamp_3339Z("2022-05-29T05:40:24Z"), datetime.datetime(2022, 5, 29, 5, 40, 24, tzinfo=datetime.timezone.utc))
+    try:
+        from big.time import parse_timestamp_3339Z
+        def test_parse_timestamp_3339Z(self):
+            utc = datetime.timezone.utc
+            datetimes = []
+            for seconds in range(2):
+                datetimes.append(datetime.datetime(1970, 1, 1, 0, 0, seconds, tzinfo=utc))
+            self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00Z"), datetimes[0])
+            self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000Z"), datetimes[0])
+            self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:01.000000Z"), datetimes[1])
+            self.assertEqual(big.parse_timestamp_3339Z("2022-05-29T05:40:24Z"), datetime.datetime(2022, 5, 29, 5, 40, 24, tzinfo=datetime.timezone.utc))
 
-        naive = datetime.datetime(1970, 1, 1, 0, 0, 0)
-        self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000"), naive)
-        aware = big.datetime_set_timezone(naive, utc)
-        self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000Z"), aware)
-        self.assertEqual(aware, big.datetime_ensure_timezone(naive, utc))
-        self.assertEqual(aware, big.datetime_ensure_timezone(aware, utc))
+            naive = datetime.datetime(1970, 1, 1, 0, 0, 0)
+            self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000"), naive)
+            aware = big.datetime_set_timezone(naive, utc)
+            self.assertEqual(big.parse_timestamp_3339Z("1970-01-01T00:00:00.000000Z"), aware)
+            self.assertEqual(aware, big.datetime_ensure_timezone(naive, utc))
+            self.assertEqual(aware, big.datetime_ensure_timezone(aware, utc))
+    except ImportError:
+        pass
 
 
 import bigtestlib

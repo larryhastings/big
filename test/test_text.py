@@ -380,7 +380,7 @@ class BigTextTests(unittest.TestCase):
                         separators = big.text._cheap_encode_iterable_of_strings(separators)
                     expected = list(big.text._cheap_encode_iterable_of_strings(expected))
                 # print()
-                # print(f"{s=} {expected=}\n{separators=}")
+                # print(f"s={s} expected={expected}\nseparators={separators}")
                 result = list(big.multisplit(s, separators, **kwargs))
                 self.assertEqual(result, expected)
 
@@ -474,7 +474,7 @@ class BigTextTests(unittest.TestCase):
             trailing = []
             while True:
                 if want_prints: # pragma: no cover
-                    print(f"splitting segments: {segments[-1]=} {separators_set=} not in? {segments[-1] not in separators_set}")
+                    print(f"splitting segments: segments[-1]={segments[-1]} separators_set={separators_set} not in? {segments[-1] not in separators_set}")
                 if segments[-1] not in separators_set:
                     break
                 trailing.append(segments.pop())
@@ -502,16 +502,16 @@ class BigTextTests(unittest.TestCase):
                     assert split
                     split.append(segment)
                     continue
-                assert (not split) or (split[-1] in separators_set), f"{split=} {split[-1]=} {separators_set=}"
+                assert (not split) or (split[-1] in separators_set), f"split={split} split[-1]={split[-1]} separators_set={separators_set}"
                 flush()
                 split.append(segment)
             flush()
 
             if want_prints: # pragma: no cover
-                print(f"{leading=}")
-                print(f"{splits=}")
-                print(f"{trailing=}")
-            assert splits[-1][-1] not in separators_set, f"{splits[-1][-1]=} is in {separators_set=}!"
+                print(f"leading={leading}")
+                print(f"splits={splits}")
+                print(f"trailing={trailing}")
+            assert splits[-1][-1] not in separators_set, f"splits[-1][-1]={splits[-1][-1]} is in separators_set={separators_set}!"
 
             # leading and trailing must both have at least
             # one sep string.
@@ -525,7 +525,7 @@ class BigTextTests(unittest.TestCase):
 
             for as_bytes in (False, True):
                 if want_prints: # pragma: no cover
-                    print(f"[loop 0] {as_bytes=}")
+                    print(f"[loop 0] as_bytes={as_bytes}")
                 if as_bytes:
                     leading, splits, trailing = copy.deepcopy(originals)
                     leading = big.text._cheap_encode_iterable_of_strings(leading)
@@ -550,8 +550,8 @@ class BigTextTests(unittest.TestCase):
                         leading, splits, trailing = copy.deepcopy(originals)
 
                         if want_prints: # pragma: no cover
-                            print(f"[loop 1,2] {use_leading=} {use_trailing=}")
-                            print(f"         {leading=} {split=} {trailing=}")
+                            print(f"[loop 1,2] use_leading={use_leading} use_trailing={use_trailing}")
+                            print(f"         leading={leading} split={split} trailing={trailing}")
 
                         input_strings = []
                         if use_leading:
@@ -570,18 +570,18 @@ class BigTextTests(unittest.TestCase):
                             #    nonsep, sep
 
                             if want_prints: # pragma: no cover
-                                print(f"[loop 3] {separate=}")
-                                print(f"    {leading=} {splits=} {trailing=}")
+                                print(f"[loop 3] separate={separate}")
+                                print(f"    leading={leading} splits={splits} trailing={trailing}")
 
                             if not separate:
                                 # blob the separators together
                                 l2 = [empty]
                                 if want_prints: # pragma: no cover
-                                    print(f"    blob together {empty=} {leading=}")
+                                    print(f"    blob together empty={empty} leading={leading}")
                                 l2.append(empty.join(leading))
                                 leading = l2
                                 if want_prints: # pragma: no cover
-                                    print(f"    blobbed {leading=}")
+                                    print(f"    blobbed leading={leading}")
 
                                 for split in splits:
                                     if len(split) > 1:
@@ -602,7 +602,7 @@ class BigTextTests(unittest.TestCase):
                                     separate_leading.append(s)
                                 leading = separate_leading
                                 if want_prints: # pragma: no cover
-                                    print(f"    {leading=}")
+                                    print(f"    leading={leading}")
 
                                 separate_splits = []
                                 for split in splits:
@@ -616,7 +616,7 @@ class BigTextTests(unittest.TestCase):
                                         separate_splits.append([empty, s])
                                 splits = separate_splits
                                 if want_prints: # pragma: no cover
-                                    print(f"    {splits=}")
+                                    print(f"    splits={splits}")
 
                                 separate_trailing = []
                                 for s in trailing:
@@ -625,7 +625,7 @@ class BigTextTests(unittest.TestCase):
                                         separate_trailing.append(empty)
                                 trailing = separate_trailing
                                 if want_prints: # pragma: no cover
-                                    print(f"    {trailing=}")
+                                    print(f"    trailing={trailing}")
 
                             # time to check!  every list or sublist
                             # should now have an even length,
@@ -639,33 +639,33 @@ class BigTextTests(unittest.TestCase):
                             for strip in (False, big.LEFT, big.RIGHT, True):
                                 expected = []
                                 if want_prints: # pragma: no cover
-                                    print(f"[loop 4] {strip=}")
-                                    print(f"         {leading=} {splits=} {trailing=}")
+                                    print(f"[loop 4] strip={strip}")
+                                    print(f"         leading={leading} splits={splits} trailing={trailing}")
 
                                 if use_leading and (strip in (False, big.RIGHT)):
                                     expected.extend(leading)
                                 if want_prints: # pragma: no cover
-                                    print(f"     leading: {expected=}")
+                                    print(f"     leading: expected={expected}")
 
                                 for split in splits:
                                     expected.extend(split)
                                 if want_prints: # pragma: no cover
-                                    print(f"      splits: {expected=}")
+                                    print(f"      splits: expected={expected}")
 
                                 if use_trailing and (strip in (False, big.LEFT)):
                                     expected.extend(trailing)
                                 if want_prints: # pragma: no cover
-                                    print(f"    trailing: {expected=}")
+                                    print(f"    trailing: expected={expected}")
 
                                 # expected now looks like this:
                                 #   * it has an odd number of items
                                 #   * even numbered items are nonsep
                                 #   * odd numbered items are sep
-                                assert len(expected) % 2 == 1, f"{expected=} doesn't have an odd # of elements!"
+                                assert len(expected) % 2 == 1, f"expected={expected} doesn't have an odd # of elements!"
                                 for i in range(0, len(expected), 2):
                                     assert expected[i] not in separators_set
                                 for i in range(1, len(expected), 2):
-                                    assert not big.multistrip(expected[i], separators_set), f"expected[{i}]={expected[i]!r} not in {separators_set=} !"
+                                    assert not big.multistrip(expected[i], separators_set), f"expected[{i}]={expected[i]!r} not in separators_set={separators_set} !"
 
                                 # how many splits can we have?
                                 # Technically the maximum number of splits possible
@@ -679,13 +679,13 @@ class BigTextTests(unittest.TestCase):
                                 expected_original = expected
 
                                 if want_prints: # pragma: no cover
-                                    print(f"    {expected_original=}")
+                                    print(f"    expected_original={expected_original}")
 
                                 for reverse in (False, True):
                                     for maxsplit in range(-1, max_maxsplit):
                                         expected = list(expected_original)
                                         if want_prints: # pragma: no cover
-                                            print(f"[loop 5,6] {reverse=} {maxsplit=} // {expected=}")
+                                            print(f"[loop 5,6] reverse={reverse} maxsplit={maxsplit} // expected={expected}")
                                         if maxsplit == 0:
                                             joined = empty.join(expected)
                                             expected = [joined]
@@ -707,7 +707,7 @@ class BigTextTests(unittest.TestCase):
                                                     joined = non_sep_marker + empty.join(expected[start:end])
                                                     del expected[start:end]
                                                     if want_prints: # pragma: no cover
-                                                        print(f"    {expected=} {joined=} {empty=}")
+                                                        print(f"    expected={expected} joined={joined} empty={empty}")
                                                     expected.append(joined)
                                             else:
                                                 # reverse and maxsplit
@@ -720,16 +720,16 @@ class BigTextTests(unittest.TestCase):
                                                 end = len(expected) - (maxsplit * 2)
                                                 joined = non_sep_marker + empty.join(expected[start:end])
                                                 if want_prints: # pragma: no cover
-                                                    print(f"    reverse: expected[{start}:{end}] = {expected[start:end]}  /// {joined=}")
+                                                    print(f"    reverse: expected[{start}:{end}] = {expected[start:end]}  /// joined={joined}")
                                                 del expected[start:end]
                                                 if want_prints: # pragma: no cover
-                                                    print(f"    {expected=} {joined=}")
+                                                    print(f"    expected={expected} joined={joined}")
                                                 expected.insert(0, joined)
                                         expected_original2 = expected
                                         for keep in (False, True, big.ALTERNATING, big.AS_PAIRS):
                                             expected = list(expected_original2)
                                             if want_prints: # pragma: no cover
-                                                print(f"[loop 7] {keep=} // {expected=}")
+                                                print(f"[loop 7] keep={keep} // expected={expected}")
                                             if not keep:
                                                 expected = [s.replace(non_sep_marker, empty) for i, s in enumerate(expected) if i % 2 == 0]
                                             elif keep == big.AS_PAIRS:
@@ -773,7 +773,7 @@ class BigTextTests(unittest.TestCase):
                                                     new_expected.append(waiting)
                                                 expected = new_expected
                                                 if want_prints: # pragma: no cover
-                                                    print(f"    now {expected=}")
+                                                    print(f"    now expected={expected}")
 
                                             result = list(big.multisplit(input_string, separators,
                                                 keep=keep,
@@ -783,13 +783,13 @@ class BigTextTests(unittest.TestCase):
                                                 strip=strip,
                                                 ))
                                             if want_prints: # pragma: no cover
-                                                print(f"{as_bytes=} {use_leading=} {use_trailing=}")
-                                                print(f"multisplit({input_string!r}, separators={printable_separators(separators)}, {keep=}, {separate=}, {strip=}, {reverse=}, {maxsplit=})")
-                                                print(f"  {result=}")
-                                                print(f"{expected=}")
+                                                print(f"as_bytes={as_bytes} use_leading={use_leading} use_trailing={use_trailing}")
+                                                print(f"multisplit({input_string!r}, separators={printable_separators(separators)}, keep={keep}, separate={separate}, strip={strip}, reverse={reverse}, maxsplit={maxsplit})")
+                                                print(f"  result={result}")
+                                                print(f"expected={expected}")
                                                 print("________")
                                                 print()
-                                            self.assertEqual(result, expected, f"{as_bytes=} {use_leading=} {use_trailing=} multisplit({input_string=}, separators={printable_separators(separators)}, {keep=}, {separate=}, {strip=}, {reverse=}, {maxsplit=})")
+                                            self.assertEqual(result, expected, f"as_bytes={as_bytes} use_leading={use_leading} use_trailing={use_trailing} multisplit(input_string={input_string}, separators={printable_separators(separators)}, keep={keep}, separate={separate}, strip={strip}, reverse={reverse}, maxsplit={maxsplit})")
 
 
         test_string = [
