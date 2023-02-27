@@ -1027,9 +1027,10 @@ Only one entry so far.
 >
 > `tab_width` is not used by `lines` itself, but is stored
 > internally and may be used by other lines modifier functions
-> (e.g. `lines_convert_tabs_to_spaces`). Similarly, all keyword
-> arguments passed in via `kwargs` are stored internally and can
-> be accessed by user-defined lines modifier functions.
+> (e.g. `lines_convert_tabs_to_spaces`, `lines_strip_indent`).
+> Similarly, all keyword arguments passed in via `kwargs` are
+> stored internally and can be accessed by user-defined lines
+> modifier functions.
 >
 > For more information, see the deep-dive on
 > [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
