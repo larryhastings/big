@@ -430,20 +430,37 @@ def multistrip(s, separators, left=True, right=True):
     separators stripped.  (If left and right are both
     false, returns s unchanged.)
     """
-    if not (left or right):
-        return s
-    as_bytes = isinstance(s, bytes)
+    type_of_s = type(s)
+    as_bytes = type_of_s == bytes
+
+    if not (as_bytes or (type_of_s == str)):
+        raise TypeError('s must be str or bytes')
+
+    type_of_separators = type(separators)
     if as_bytes:
         head = b'^'
         tail = b'$'
-        if isinstance(separators, bytes):
+        if type_of_separators == bytes:
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.  otherwise, _separators_to_re will
             # iterate over it, and... oops! it gets bytes!
+            check_separators = False
             separators = tuple(separators[i:i+1] for i in range(len(separators)))
+        else:
+            check_separators = True
     else:
         head = '^'
         tail = '$'
+        check_separators = type_of_separators != str
+
+    if check_separators:
+        for o in separators:
+            if not isinstance(o, type_of_s):
+                raise TypeError("separators must be an iterable of objects the same type as s")
+
+    if not (left or right):
+        return s
+
     pattern = _separators_to_re(separators, as_bytes, separate=False, keep=False)
 
     start = 0
@@ -586,28 +603,38 @@ def multisplit(s, separators=None, *,
     will split on the rightmost instance of " x ", yielding
         " x", " x ", ""
     """
-    as_bytes = isinstance(s, bytes)
+    type_of_s = type(s)
+    as_bytes = type_of_s == bytes
+    if not (as_bytes or (type_of_s == str)):
+        raise TypeError('s must be str or bytes')
+
     if separators is None:
         separators = ascii_whitespace if as_bytes else whitespace
+        check_separators = False
     elif not separators:
-        raise ValueError("illegal separators")
+        raise TypeError("separators must be either None or an iterable of objects the same type as s")
+    else:
+        check_separators = True
 
+    type_of_separators = type(separators)
     if as_bytes:
-        if isinstance(separators, bytes):
+        if type_of_separators == bytes:
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.
             separators = tuple(separators[i:i+1] for i in range(len(separators)))
-        separators_type = bytes
+            check_separators = False
         empty = b''
     else:
-        if not isinstance(s, str):
-            raise TypeError('s must be str or bytes')
-        separators_type = str
         empty = ''
+        if check_separators:
+            check_separators = type_of_separators != str
 
-    for o in separators:
-        if not isinstance(o, separators_type):
-            raise ValueError("separators must be an iterable of objects the same type as s")
+    # check_separators is True if separators isn't str or bytes
+    # or something we split ourselves.
+    if check_separators:
+        for o in separators:
+            if not isinstance(o, type_of_s):
+                raise TypeError("separators must be either None or an iterable of objects the same type as s")
 
     separators_to_re_keep = keep
 

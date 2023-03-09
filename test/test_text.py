@@ -209,8 +209,6 @@ class BigTextTests(unittest.TestCase):
             test_re_rpartition("a:b:c:d", ":", 4, ("", None, "a", ":", "b", ":", "c", ':' ,"d"))
             test_re_rpartition("a:b:c:d", ":", 5, ("", None, "", None, "a", ":", "b", ":", "c", ':' ,"d"))
 
-
-
         s = "abc123def456ghi"
         pattern = b"[0-9]+"
         with self.assertRaises(ValueError):
@@ -293,51 +291,82 @@ class BigTextTests(unittest.TestCase):
         # remains of the right one.
         self.assertEqual(big.multistrip(' x x ', (' x ',)), 'x ')
 
+        # regression: multistrip didn't used to verify
+        # that s was either str or bytes.
+        with self.assertRaises(TypeError):
+            big.multistrip(3.1415)
+        with self.assertRaises(TypeError):
+            big.multistrip(3.1415, 'abc')
+        with self.assertRaises(TypeError):
+            big.multistrip(['a', 'b', 'c'])
+        with self.assertRaises(TypeError):
+            big.multistrip([b'a', b'b', b'c'])
+        with self.assertRaises(TypeError):
+            big.multistrip(['a', 'b', 'c'], 'a')
+        with self.assertRaises(TypeError):
+            big.multistrip([b'a', b'b', b'c'], b'a')
+
+        with self.assertRaises(TypeError):
+            big.multistrip('s', ['a', b'b', 'c'])
+        with self.assertRaises(TypeError):
+            big.multistrip('s', ['a', 1234, 'c'])
+        with self.assertRaises(TypeError):
+            big.multistrip(b's', [b'a', 'b', b'c'])
+        with self.assertRaises(TypeError):
+            big.multistrip(b's', [b'a', 1234, b'c'])
+
+        with self.assertRaises(TypeError):
+            big.multistrip('s', b'abc')
+        with self.assertRaises(TypeError):
+            big.multistrip(b's', 'abc')
+
+
     def test_multisplit(self):
         for c in (unchanged, to_bytes):
-            def multisplit(*a, **kw): return list(big.multisplit(*a, **kw))
-            self.assertEqual(multisplit(c('aaaXaaaYaaa'), c('abc'), strip=True ), c(['X', 'Y']))
-            self.assertEqual(multisplit(c('aaaXaaaYaaa'), c('abc'), strip=False), c(['', 'X', 'Y', '']))
-            self.assertEqual(multisplit(c('abcXbcaYcba'), c('abc'), strip=True ), c(['X', 'Y']))
-            self.assertEqual(multisplit(c('abcXbcaYcba'), c('abc'), strip=False), c(['', 'X', 'Y', '']))
+            not_c = to_bytes if (c == unchanged) else unchanged
+            def list_multisplit(*a, **kw): return list(big.multisplit(*a, **kw))
+            self.assertEqual(list_multisplit(c('aaaXaaaYaaa'), c('abc'), strip=True ), c(['X', 'Y']))
+            self.assertEqual(list_multisplit(c('aaaXaaaYaaa'), c('abc'), strip=False), c(['', 'X', 'Y', '']))
+            self.assertEqual(list_multisplit(c('abcXbcaYcba'), c('abc'), strip=True ), c(['X', 'Y']))
+            self.assertEqual(list_multisplit(c('abcXbcaYcba'), c('abc'), strip=False), c(['', 'X', 'Y', '']))
 
-            self.assertEqual(multisplit(c(''), c('abcde'), maxsplit=None), c(['']))
-            self.assertEqual(multisplit(c('abcde'), c('fghij')), c(['abcde']))
-            self.assertEqual(multisplit(c('abcde'), c('fghijc')), c(['ab', 'de']))
-            self.assertEqual(multisplit(c('1a2b3c4d5e6'), c('abcde')), c(['1', '2', '3', '4', '5', '6']))
+            self.assertEqual(list_multisplit(c(''), c('abcde'), maxsplit=None), c(['']))
+            self.assertEqual(list_multisplit(c('abcde'), c('fghij')), c(['abcde']))
+            self.assertEqual(list_multisplit(c('abcde'), c('fghijc')), c(['ab', 'de']))
+            self.assertEqual(list_multisplit(c('1a2b3c4d5e6'), c('abcde')), c(['1', '2', '3', '4', '5', '6']))
 
-            self.assertEqual(multisplit(c('ab:cd,ef'),   c(':,'), strip=True ), c(["ab", "cd", "ef"]))
-            self.assertEqual(multisplit(c('ab:cd,ef'),   c(':,'), strip=False), c(["ab", "cd", "ef"]))
-            self.assertEqual(multisplit(c('ab:cd,ef:'),  c(':,'), strip=True ), c(["ab", "cd", "ef"]))
-            self.assertEqual(multisplit(c('ab:cd,ef:'),  c(':,'), strip=False), c(["ab", "cd", "ef", ""]))
-            self.assertEqual(multisplit(c(',ab:cd,ef:'), c(':,'), strip=True ), c(["ab", "cd", "ef"]))
-            self.assertEqual(multisplit(c(',ab:cd,ef:'), c(':,'), strip=False), c(["", "ab", "cd", "ef", ""]))
-            self.assertEqual(multisplit(c(':ab:cd,ef'),  c(':,'), strip=True ), c(["ab", "cd", "ef"]))
-            self.assertEqual(multisplit(c(':ab:cd,ef'),  c(':,'), strip=False), c(["", "ab", "cd", "ef"]))
-            self.assertEqual(multisplit(c('WWabXXcdYYabZZ'),   c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(multisplit(c('WWabXXcdYYabZZ'),   c(('ab', 'cd')), strip=False), c(['WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(multisplit(c('WWabXXcdYYabZZab'), c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(multisplit(c('WWabXXcdYYabZZab'), c(('ab', 'cd')), strip=False), c(['WW', 'XX', 'YY', 'ZZ', '']))
-            self.assertEqual(multisplit(c('abWWabXXcdYYabZZ'), c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(multisplit(c('abWWabXXcdYYabZZ'), c(('ab', 'cd')), strip=False), c(['','WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(multisplit(c('WWabXXcdYYabZZcd'), c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
-            self.assertEqual(multisplit(c('WWabXXcdYYabZZcd'), c(('ab', 'cd')), strip=False), c(['WW', 'XX', 'YY', 'ZZ', '']))
-            self.assertEqual(multisplit(c('XXabcdYY'), c(('a', 'abcd'))), c(['XX', 'YY']))
-            self.assertEqual(multisplit(c('XXabcdabcdYY'), c(('ab', 'cd'))), c(['XX', 'YY']))
-            self.assertEqual(multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd')), strip=True ), c(['XX', 'YY']))
-            self.assertEqual(multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd')), strip=False), c(['', 'XX', 'YY', '']))
-            self.assertEqual(multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd')), separate=True, strip=False), c(['', '', 'XX', '', '', '', 'YY', '', '']))
+            self.assertEqual(list_multisplit(c('ab:cd,ef'),   c(':,'), strip=True ), c(["ab", "cd", "ef"]))
+            self.assertEqual(list_multisplit(c('ab:cd,ef'),   c(':,'), strip=False), c(["ab", "cd", "ef"]))
+            self.assertEqual(list_multisplit(c('ab:cd,ef:'),  c(':,'), strip=True ), c(["ab", "cd", "ef"]))
+            self.assertEqual(list_multisplit(c('ab:cd,ef:'),  c(':,'), strip=False), c(["ab", "cd", "ef", ""]))
+            self.assertEqual(list_multisplit(c(',ab:cd,ef:'), c(':,'), strip=True ), c(["ab", "cd", "ef"]))
+            self.assertEqual(list_multisplit(c(',ab:cd,ef:'), c(':,'), strip=False), c(["", "ab", "cd", "ef", ""]))
+            self.assertEqual(list_multisplit(c(':ab:cd,ef'),  c(':,'), strip=True ), c(["ab", "cd", "ef"]))
+            self.assertEqual(list_multisplit(c(':ab:cd,ef'),  c(':,'), strip=False), c(["", "ab", "cd", "ef"]))
+            self.assertEqual(list_multisplit(c('WWabXXcdYYabZZ'),   c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(list_multisplit(c('WWabXXcdYYabZZ'),   c(('ab', 'cd')), strip=False), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(list_multisplit(c('WWabXXcdYYabZZab'), c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(list_multisplit(c('WWabXXcdYYabZZab'), c(('ab', 'cd')), strip=False), c(['WW', 'XX', 'YY', 'ZZ', '']))
+            self.assertEqual(list_multisplit(c('abWWabXXcdYYabZZ'), c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(list_multisplit(c('abWWabXXcdYYabZZ'), c(('ab', 'cd')), strip=False), c(['','WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(list_multisplit(c('WWabXXcdYYabZZcd'), c(('ab', 'cd')), strip=True ), c(['WW', 'XX', 'YY', 'ZZ']))
+            self.assertEqual(list_multisplit(c('WWabXXcdYYabZZcd'), c(('ab', 'cd')), strip=False), c(['WW', 'XX', 'YY', 'ZZ', '']))
+            self.assertEqual(list_multisplit(c('XXabcdYY'), c(('a', 'abcd'))), c(['XX', 'YY']))
+            self.assertEqual(list_multisplit(c('XXabcdabcdYY'), c(('ab', 'cd'))), c(['XX', 'YY']))
+            self.assertEqual(list_multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd')), strip=True ), c(['XX', 'YY']))
+            self.assertEqual(list_multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd')), strip=False), c(['', 'XX', 'YY', '']))
+            self.assertEqual(list_multisplit(c('abcdXXabcdabcdYYabcd'), c(('ab', 'cd')), separate=True, strip=False), c(['', '', 'XX', '', '', '', 'YY', '', '']))
 
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=0), c(['xaxbxcxdxex']))
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=1), c(['x', 'xbxcxdxex']))
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=2), c(['x', 'x', 'xcxdxex']))
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=3), c(['x', 'x', 'x', 'xdxex']))
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=4), c(['x', 'x', 'x', 'x', 'xex']))
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=5), c(['x', 'x', 'x', 'x', 'x', 'x']))
-            self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=6), c(['x', 'x', 'x', 'x', 'x', 'x']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=0), c(['xaxbxcxdxex']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=1), c(['x', 'xbxcxdxex']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=2), c(['x', 'x', 'xcxdxex']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=3), c(['x', 'x', 'x', 'xdxex']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=4), c(['x', 'x', 'x', 'x', 'xex']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=5), c(['x', 'x', 'x', 'x', 'x', 'x']))
+            self.assertEqual(list_multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=6), c(['x', 'x', 'x', 'x', 'x', 'x']))
 
             # test: greedy separators
-            self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'),
+            self.assertEqual(list_multisplit(c('-abcde-abc-a-abc-abcde-'),
                 c([
                     'a', 'ab', 'abc', 'abcd', 'abcde',
                     'b', 'bc', 'bcd', 'bcde',
@@ -347,7 +376,7 @@ class BigTextTests(unittest.TestCase):
                 ])),
                 c(['-', '-', '-', '-', '-', '-']))
             # greedy works the same when reverse=True, even if it maybe feels a little strange
-            self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'),
+            self.assertEqual(list_multisplit(c('-abcde-abc-a-abc-abcde-'),
                 c([
                     'a', 'ab', 'abc', 'abcd', 'abcde',
                     'b', 'bc', 'bcd', 'bcde',
@@ -359,55 +388,70 @@ class BigTextTests(unittest.TestCase):
 
             # regression test: *YES*, if the string you're splitting ends with a separator,
             # and keep=big.AS_PAIRS, the result ends with a tuple containing two empty strings.
-            self.assertEqual(multisplit(c('\na\nb\nc\n'), c(('\n',)), keep=big.AS_PAIRS, strip=False), c([ ('', '\n'), ('a', '\n'), ('b', '\n'), ('c', '\n'), ('', '') ]))
+            self.assertEqual(list_multisplit(c('\na\nb\nc\n'), c(('\n',)), keep=big.AS_PAIRS, strip=False), c([ ('', '\n'), ('a', '\n'), ('b', '\n'), ('c', '\n'), ('', '') ]))
 
             # test: progressive strip
-            self.assertEqual(multisplit(c('   a b c   '), c((' ',)), maxsplit=1, strip=big.PROGRESSIVE), c([ 'a', 'b c   ']))
+            self.assertEqual(list_multisplit(c('   a b c   '), c((' ',)), maxsplit=1, strip=big.PROGRESSIVE), c([ 'a', 'b c   ']))
 
             # regression test: when there are *overlapping* separators,
             # multisplit prefers the leftmost one(s), but passing in
             # reverse=True makes it prefer the *rightmost* ones.
-            self.assertEqual(multisplit(c(' x x '), c((' x ',)), keep=big.ALTERNATING),
+            self.assertEqual(list_multisplit(c(' x x '), c((' x ',)), keep=big.ALTERNATING),
                 c([ '', ' x ', 'x ']))
-            self.assertEqual(multisplit(c(' x x '), c((' x ',)), keep=big.ALTERNATING, reverse=True),
+            self.assertEqual(list_multisplit(c(' x x '), c((' x ',)), keep=big.ALTERNATING, reverse=True),
                 c([ ' x', ' x ', '']))
 
             # ''.split() returns an empty list.
             # multisplit intentionally does *not* reproduce this ill-concieved behavior.
             # multisplit(s, list-of-separators-that-don't-appear-in-s) always returns [s].
             # (or, rather, an iterator that yields only s).
-            self.assertEqual(multisplit(c('')), c(['']))
-            self.assertEqual(multisplit(c(''), reverse=True), c(['']))
+            self.assertEqual(list_multisplit(c('')), c(['']))
+            self.assertEqual(list_multisplit(c(''), reverse=True), c(['']))
             # similarly, '    '.split() also returns an empty list,
             # and multisplit does not.
-            self.assertEqual(multisplit(c('   ')), c(['', '']))
-            self.assertEqual(multisplit(c('   '), reverse=True), c(['', '']))
+            self.assertEqual(list_multisplit(c('   ')), c(['', '']))
+            self.assertEqual(list_multisplit(c('   '), reverse=True), c(['', '']))
 
             with self.assertRaises(TypeError):
-                multisplit(c('s'), 3.1415)
-            with self.assertRaises(ValueError):
-                multisplit(c('s'), [])
-            with self.assertRaises(ValueError):
-                multisplit(c('s'), ())
-            with self.assertRaises(ValueError):
-                multisplit(c('s'), c(''))
+                list_multisplit(c('s'), 3.1415)
+            with self.assertRaises(TypeError):
+                list_multisplit(c('s'), [])
+            with self.assertRaises(TypeError):
+                list_multisplit(c('s'), ())
+            with self.assertRaises(TypeError):
+                list_multisplit(c('s'), c(''))
 
-        with self.assertRaises(ValueError):
-            multisplit('s', b'abc')
-        with self.assertRaises(ValueError):
-            multisplit(b's', 'abc')
+            with self.assertRaises(TypeError):
+                list_multisplit(c('s'), [c('a'), not_c('b'), c('c')])
+            with self.assertRaises(TypeError):
+                list_multisplit(c('s'), [c('a'), 1234, c('c')])
+
+        with self.assertRaises(TypeError):
+            list_multisplit('s', b'abc')
+        with self.assertRaises(TypeError):
+            list_multisplit(b's', 'abc')
+
+        # just making sure!
+        with self.assertRaises(TypeError):
+            list_multisplit('s', ['a', b'b', 'c'])
+        with self.assertRaises(TypeError):
+            list_multisplit(b's', [b'a', 'b', b'c'])
 
         # regression: multisplit didn't used to verify
         # that s was either str or bytes.
         with self.assertRaises(TypeError):
-            multisplit(3.1415, 'abc')
+            list_multisplit(3.1415)
         with self.assertRaises(TypeError):
-            multisplit(['a', 'b', 'c'], 'a')
+            list_multisplit(3.1415, 'abc')
+        with self.assertRaises(TypeError):
+            list_multisplit(['a', 'b', 'c'])
+        with self.assertRaises(TypeError):
+            list_multisplit(['a', 'b', 'c'], 'a')
 
         # regression: if reverse=True and separators was not hashable,
         # multisplit would crash.  fixed in 0.6.17.
-        self.assertEqual(multisplit('axbyczd', ['x', 'y', 'z'], maxsplit=2, reverse=True), ['axb', 'c', 'd'])
-        self.assertEqual(multisplit(b'axbyczd', [b'x', b'y', b'z'], maxsplit=2, reverse=True), [b'axb', b'c', b'd'])
+        self.assertEqual(list_multisplit('axbyczd', ['x', 'y', 'z'], maxsplit=2, reverse=True), ['axb', 'c', 'd'])
+        self.assertEqual(list_multisplit(b'axbyczd', [b'x', b'y', b'z'], maxsplit=2, reverse=True), [b'axb', b'c', b'd'])
 
     def test_advanced_multisplit(self):
         def simple_test_multisplit(s, separators, expected, **kwargs):

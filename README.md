@@ -2994,6 +2994,15 @@ in the **big** test suite.
 
 ## Release history
 
+**0.6.18**
+
+* Retooled
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  and
+  [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+  argument verification code.  Both functions now consistently check all
+  their inputs, and use consistent error messages when raising an exception.
+
 **0.6.17**
 
 * Fixed a minor crashing bug in
