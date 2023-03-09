@@ -298,7 +298,14 @@ utf8_newlines   = _cheap_encode_iterable_of_strings(newlines,   "utf-8")
 _export_name('utf8_newlines_without_dos')
 utf8_newlines_without_dos =  tuple(s for s in utf8_newlines if s != b'\r\n')
 
-def _multisplit_reversed(o):
+# reverse an iterable thing.
+# o must be str, bytes, list, tuple, set, or frozenset.
+# value returned is the same type as o.
+#
+# we don't need to bother checking the type of o.
+# _multisplit_reversed is an internal function
+# and I've manually checked every call site.
+def _multisplit_reversed(o, name='s'):
     if isinstance(o, str):
         if len(o) <= 1:
             return o
@@ -307,8 +314,8 @@ def _multisplit_reversed(o):
         if len(o) <= 1:
             return o
         return b"".join(o[i:i+1] for i in range(len(o)-1, -1, -1))
+    # assert isinstance(o, (list, tuple, set, frozenset))
     t = type(o)
-    assert t in (list, tuple, set), f"o={o} t={t}"
     return t(_multisplit_reversed(p) for p in o)
 
 
@@ -487,8 +494,11 @@ def multisplit(s, separators=None, *,
     is true (or ALTERNATING), and strip is false, joining these strings
     together will recreate s.
 
-    multisplit is greedy; if two (or more) separator strings match at a
-    particular index in "s", it splits using the largest one.
+    multisplit is *greedy*: if two or more separators start at the same
+    location in "s", multisplit splits using the longest matching separator.
+    For example:
+        big.multisplit('wxabcyz', ('a', 'abc'))
+    yields 'wx' then 'yz'.
 
     "keep" indicates whether or not multisplit should keep the separator
     strings.  It supports four values:
@@ -590,8 +600,11 @@ def multisplit(s, separators=None, *,
         separators_type = bytes
         empty = b''
     else:
+        if not isinstance(s, str):
+            raise TypeError('s must be str or bytes')
         separators_type = str
         empty = ''
+
     for o in separators:
         if not isinstance(o, separators_type):
             raise ValueError("separators must be an iterable of objects the same type as s")
@@ -644,12 +657,13 @@ def multisplit(s, separators=None, *,
         # Eric Smith had the brainstorm: reverse the string
         # and the separators, split, and reverse the output
         # and the strings in the output.
-        s = _multisplit_reversed(s)
+        s = _multisplit_reversed(s, 's')
+        separators = tuple(separators)
         s2 = _reversed_builtin_separators.get(separators, None)
         if s2 != None:
             separators = s2
         else:
-            separators = _multisplit_reversed(separators)
+            separators = _multisplit_reversed(separators, 'separators')
 
     pattern = _separators_to_re(separators, as_bytes, keep=separators_to_re_keep, separate=separate)
     # print("PATTERN", pattern, f"{separators_to_re_keep=} {separate=}")
@@ -689,7 +703,7 @@ def multisplit(s, separators=None, *,
                 del l[i]
 
     if reverse:
-        l = _multisplit_reversed(l)
+        l = _multisplit_reversed(l, 'l')
         l.reverse()
 
     if not keep:
@@ -739,6 +753,12 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 
     If none of the separators are found in the string, returns
     a tuple containing `s` unchanged followed by two empty strings.
+
+    multipartition is *greedy*: if two or more separators appear at
+    the leftmost location in `s`, multipartition partitions using
+    the longest matching separator.  For example:
+        big.multipartition('wxabcyz', ('a', 'abc'))
+    returns ('wx', 'abc', 'yz').
 
     Passing in an explicit "count" lets you control how many times
     multipartition partitions the string.  multipartition will always

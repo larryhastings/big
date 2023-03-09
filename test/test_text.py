@@ -337,7 +337,25 @@ class BigTextTests(unittest.TestCase):
             self.assertEqual(multisplit(c('xaxbxcxdxex'), c('abcde'), maxsplit=6), c(['x', 'x', 'x', 'x', 'x', 'x']))
 
             # test: greedy separators
-            self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'), c(['a', 'abc', 'abcde'])), c(['-', '-', '-', '-', '-', '-']))
+            self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'),
+                c([
+                    'a', 'ab', 'abc', 'abcd', 'abcde',
+                    'b', 'bc', 'bcd', 'bcde',
+                    'c', 'cd', 'cde',
+                    'd', 'de',
+                    'e'
+                ])),
+                c(['-', '-', '-', '-', '-', '-']))
+            # greedy works the same when reverse=True, even if it maybe feels a little strange
+            self.assertEqual(multisplit(c('-abcde-abc-a-abc-abcde-'),
+                c([
+                    'a', 'ab', 'abc', 'abcd', 'abcde',
+                    'b', 'bc', 'bcd', 'bcde',
+                    'c', 'cd', 'cde',
+                    'd', 'de',
+                    'e'
+                ]), reverse=True),
+                c(['-', '-', '-', '-', '-', '-']))
 
             # regression test: *YES*, if the string you're splitting ends with a separator,
             # and keep=big.AS_PAIRS, the result ends with a tuple containing two empty strings.
@@ -354,17 +372,42 @@ class BigTextTests(unittest.TestCase):
             self.assertEqual(multisplit(c(' x x '), c((' x ',)), keep=big.ALTERNATING, reverse=True),
                 c([ ' x', ' x ', '']))
 
+            # ''.split() returns an empty list.
+            # multisplit intentionally does *not* reproduce this ill-concieved behavior.
+            # multisplit(s, list-of-separators-that-don't-appear-in-s) always returns [s].
+            # (or, rather, an iterator that yields only s).
+            self.assertEqual(multisplit(c('')), c(['']))
+            self.assertEqual(multisplit(c(''), reverse=True), c(['']))
+            # similarly, '    '.split() also returns an empty list,
+            # and multisplit does not.
+            self.assertEqual(multisplit(c('   ')), c(['', '']))
+            self.assertEqual(multisplit(c('   '), reverse=True), c(['', '']))
 
-        with self.assertRaises(TypeError):
-            multisplit('s', 3.1415)
+            with self.assertRaises(TypeError):
+                multisplit(c('s'), 3.1415)
+            with self.assertRaises(ValueError):
+                multisplit(c('s'), [])
+            with self.assertRaises(ValueError):
+                multisplit(c('s'), ())
+            with self.assertRaises(ValueError):
+                multisplit(c('s'), c(''))
+
         with self.assertRaises(ValueError):
             multisplit('s', b'abc')
         with self.assertRaises(ValueError):
-            multisplit('s', [])
-        with self.assertRaises(ValueError):
-            multisplit('s', ())
-        with self.assertRaises(ValueError):
-            multisplit('s', '')
+            multisplit(b's', 'abc')
+
+        # regression: multisplit didn't used to verify
+        # that s was either str or bytes.
+        with self.assertRaises(TypeError):
+            multisplit(3.1415, 'abc')
+        with self.assertRaises(TypeError):
+            multisplit(['a', 'b', 'c'], 'a')
+
+        # regression: if reverse=True and separators was not hashable,
+        # multisplit would crash.  fixed in 0.6.17.
+        self.assertEqual(multisplit('axbyczd', ['x', 'y', 'z'], maxsplit=2, reverse=True), ['axb', 'c', 'd'])
+        self.assertEqual(multisplit(b'axbyczd', [b'x', b'y', b'z'], maxsplit=2, reverse=True), [b'axb', b'c', b'd'])
 
     def test_advanced_multisplit(self):
         def simple_test_multisplit(s, separators, expected, **kwargs):
@@ -413,14 +456,15 @@ class BigTextTests(unittest.TestCase):
             """
             segments represent split-up text segments.
             each segment is either
-              a) in separators, or
+              a) a string appearing in separators, or
               b) contains no separators at all.
-            you don't need to start or end with empty strings.
+            segments *must* alternate between a) and b).
+            segments doesn't need to start or end with empty strings.
 
-            and, the last positional argument is actually "separators".
+            the last positional argument is actually "separators".
             as in, the separators argument for multisplit.
 
-            tests Every. Possible. Permutation. of inputs to multisplit()
+            tests Every. Possible. Permutation. of inputs to multisplit(),
             based on the segments you pass in.  this includes
                 * as strings and encoded to bytes (ascii)
                 * with and without the left separators
@@ -954,8 +998,12 @@ class BigTextTests(unittest.TestCase):
         test_multipartition("a x x b y y c", (" x ", " y "), 2, ("a", " x ", "x b", " y ", "y c"))
         test_multipartition("a x x b y y c", (" x ", " y "), 2, ("a x", " x ", "b y", " y ", "c"), reverse=True)
 
+        # test greedy
+        test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'))
+        test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'), reverse=True)
+
     def test_reimplemented_str_split(self):
-        def str_split(s, sep, maxsplit=-1):
+        def _multisplit_to_split(s, sep, maxsplit, reverse):
             separate = sep != None
             if separate:
                 strip = False
@@ -963,29 +1011,21 @@ class BigTextTests(unittest.TestCase):
                 sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
                 strip = big.PROGRESSIVE
             result = list(big.multisplit(s, sep,
-                maxsplit=maxsplit, separate=separate, strip=strip))
+                maxsplit=maxsplit, reverse=reverse,
+                separate=separate, strip=strip))
             if not separate:
-                empty = b'' if isinstance(s, bytes) else ''
-                if result and result[-1] == empty:
+                # ''.split() == '   '.split() == []
+                if result and (not result[-1]):
                     result.pop()
             return result
 
-        def str_rsplit(s, sep, maxsplit=-1):
-            separate = sep != None
-            if separate:
-                strip = False
-            else:
-                sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
-                strip = big.PROGRESSIVE
-            result = list(big.multisplit(s, sep,
-                maxsplit=maxsplit, reverse=True, separate=separate, strip=strip))
-            if not separate:
-                empty = b'' if isinstance(s, bytes) else ''
-                if result and result[-1] == empty:
-                    result.pop()
-            return result
+        def str_split(s, sep=None, maxsplit=-1):
+            return _multisplit_to_split(s, sep, maxsplit, False)
 
-        def test(s, sep, maxsplit=-1):
+        def str_rsplit(s, sep=None, maxsplit=-1):
+            return _multisplit_to_split(s, sep, maxsplit, True)
+
+        def test(s, sep=None, maxsplit=-1):
             # automatically test with (str, bytes) x (sep=sep, sep=None)
             for as_bytes in (False, True):
                 if as_bytes:
@@ -996,13 +1036,15 @@ class BigTextTests(unittest.TestCase):
                     sep2 = None if sep_none else sep
                     a = s.split(sep2, maxsplit)
                     b = str_split(s, sep2, maxsplit)
-                    self.assertEqual(a, b, f"reimplemented str_split fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, multisplit gave us {b}")
+                    self.assertEqual(a, b, f"reimplemented str_split fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
 
                     a = s.rsplit(sep2, maxsplit)
                     b = str_rsplit(s, sep2, maxsplit)
-                    self.assertEqual(a, b, f"reimplemented str_rsplit fails: {s!r}.rsplit({sep2!r}, {maxsplit}) == {a}, multisplit gave us {b}")
+                    self.assertEqual(a, b, f"reimplemented str_rsplit fails: {s!r}.rsplit({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
+
 
         for maxsplit in range(-1, 10):
+            test('a b   c       d \t\t\n e', None, maxsplit)
             test('   a b c   ', ' ', maxsplit)
 
         for base_s in (
@@ -1016,9 +1058,22 @@ class BigTextTests(unittest.TestCase):
                     s = (" " * leading) + base_s + (" " * trailing)
                     s_with_commas = s.replace(' ', ',')
                     for maxsplit in range(-1, 8):
+                        test(s, None, maxsplit)
                         test(s, " ", maxsplit)
                         test(s_with_commas, ',', maxsplit)
 
+        self.assertEqual(str_split(''), [])
+        test('')
+
+        # test greedy behavior.
+        # str.split isn't greedy, but multisplit is.
+        # (well, str.split *might* be? there's no way to call it
+        # that demonstrates whether or not it's greedy.)
+        # anyway, ensure multisplit's greedy behavior doesn't
+        # mess up our emulation of str.split.
+        test('a\rb\nc\r\nd')
+
+        test('a b c ', ' ')
 
     def test_reimplemented_str_splitlines(self):
         def str_splitlines(s, keepends=False):
@@ -1026,6 +1081,7 @@ class BigTextTests(unittest.TestCase):
             l = list(big.multisplit(s, newlines,
                 keep=keepends, separate=True, strip=False))
             if l and not l[-1]:
+                # yes, "".splitlines() returns an empty list
                 l.pop()
             return l
 
@@ -1047,25 +1103,24 @@ class BigTextTests(unittest.TestCase):
         test('Two lines\nTwo lines\n\n\n')
 
     def test_reimplemented_str_partition(self):
-        def str_partition(s, sep):
+        def _partition_to_multisplit(s, sep, reverse):
             if not sep:
                 raise ValueError("empty separator")
             l = tuple(big.multisplit(s, (sep,),
-                keep=big.ALTERNATING, maxsplit=1, separate=True))
+                keep=big.ALTERNATING, maxsplit=1, reverse=reverse, separate=True))
             if len(l) == 1:
                 empty = b'' if isinstance(s, bytes) else ''
-                l += (empty, empty)
+                if reverse:
+                    l = (empty, empty) + l
+                else:
+                    l = l + (empty, empty)
             return l
 
+        def str_partition(s, sep):
+            return _partition_to_multisplit(s, sep, False)
+
         def str_rpartition(s, sep):
-            if not sep:
-                raise ValueError("empty separator")
-            l = tuple(big.multisplit(s, (sep,),
-                keep=big.ALTERNATING, maxsplit=1, reverse=True, separate=True))
-            if len(l) == 1:
-                empty = b'' if isinstance(s, bytes) else ''
-                l = (empty, empty) + l
-            return l
+            return _partition_to_multisplit(s, sep, True)
 
         def test(s, sep):
             # automatically test with (str, bytes)

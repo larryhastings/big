@@ -1277,6 +1277,14 @@ Only one entry so far.
 > If none of the separators are found in the string, returns
 > a tuple containing `s` unchanged followed by two empty strings.
 >
+> `multipartition` is *greedy:* if two or more separators appear at
+> the leftmost location in `s`, `multipartition` partitions using
+> the longest matching separator.  For example:
+>
+>     big.multipartition('wxabcyz', ('a', 'abc'))
+>
+> returns `('wx', 'abc', 'yz')`.
+>
 > Passing in an explicit `count` lets you control how many times
 > `multipartition` partitions the string.  `multipartition` will always
 > return a tuple containing `(2*count)+1` elements.
@@ -1308,6 +1316,14 @@ Only one entry so far.
 > Returns an iterator yielding the strings split from `s`.  If `keep`
 > is true (or `ALTERNATING`), and `strip` is false, joining these strings
 > together will recreate `s`.
+>
+> `multisplit` is *greedy:* if two or more separators start at the same
+> location in `s`, `multisplit` splits using the longest matching separator.
+> For example:
+>
+>     big.multisplit('wxabcyz', ('a', 'abc'))
+>
+> yields `'wx'` then `'yz'`.
 >
 > `keep` indicates whether or not multisplit should preserve the separator
 > strings in the strings it yields.  It supports four values:
@@ -2027,9 +2043,10 @@ the right side of the string.
 the beginning, or the end--and in what direction it moves when parsing
 the string--towards the end, or towards the beginning.  It only supports
 two values: when it's false, `multisplit` starts at the beginning of the
-string, and parses moving to the right (towards the end).  But when `reverse`
-is true, `multisplit` starts at the *end* of the
-string, and parses moving to the *left* (towards the *beginning).*
+string, and parses moving to the right (towards the end of the string).
+But when `reverse` is true, `multisplit` starts at the *end* of the
+string, and parses moving to the *left* (towards the *beginning*
+of the string).
 
 This has two noticable effects on `multisplit`'s output.  First, this
 changes what splits are kept when `maxsplit` is less than the total number
@@ -2049,11 +2066,12 @@ starting on the right and moving towards the left:
     ['apple', 'banana', 'cookie']
 ```
 
-The second effect is far more subtle.  It pertains to strings where there
-are multiple *overlapping* separators.  When `reverse` is false, and there
-are two overlapping separators, the string is split by the leftmost overlapping
-separator.  When `reverse` is true and there are two overlapping separators,
-the string is split by the *rightmost* overlapping separator.
+The second effect is far more subtle.  It's only relevant when splitting strings
+containing multiple *overlapping* separators.  When `reverse` is false, and there
+are two (or more) overlapping separators, the string is split by the *leftmost*
+overlapping separator.  When `reverse` is true and there are two (or more)
+overlapping separators, the string is split by the *rightmost* overlapping
+separator.
 
 ```Python
     >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'))) # reverse defaults to False
@@ -2069,7 +2087,7 @@ Finally, here are some concrete examples of how you could use
 to replace some common Python string splitting methods.  These exactly duplicate the
 behavior of the originals:
 ```Python
-def str_split(s, sep, maxsplit=-1):
+def _multisplit_to_split(s, sep, maxsplit, reverse):
     separate = sep != None
     if separate:
         strip = False
@@ -2077,55 +2095,47 @@ def str_split(s, sep, maxsplit=-1):
         sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
         strip = big.PROGRESSIVE
     result = list(big.multisplit(s, sep,
-        maxsplit=maxsplit, separate=separate, strip=strip))
+        maxsplit=maxsplit, reverse=reverse,
+        separate=separate, strip=strip))
     if not separate:
-        empty = b'' if isinstance(s, bytes) else ''
-        if result and result[-1] == empty:
+        # ''.split() == '   '.split() == []
+        if result and (not result[-1]):
             result.pop()
     return result
 
-def str_rsplit(s, sep, maxsplit=-1):
-    separate = sep != None
-    if separate:
-        strip = False
-    else:
-        sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
-        strip = big.PROGRESSIVE
-    result = list(big.multisplit(s, sep,
-        maxsplit=maxsplit, reverse=True, separate=separate, strip=strip))
-    if not separate:
-        empty = b'' if isinstance(s, bytes) else ''
-        if result and result[-1] == empty:
-            result.pop()
-    return result
+def str_split(s, sep=None, maxsplit=-1):
+    return _multisplit_to_split(s, sep, maxsplit, False)
+
+def str_rsplit(s, sep=None, maxsplit=-1):
+    return _multisplit_to_split(s, sep, maxsplit, True)
 
 def str_splitlines(s, keepends=False):
     newlines = big.ascii_newlines if isinstance(s, bytes) else big.newlines
     l = list(big.multisplit(s, newlines,
         keep=keepends, separate=True, strip=False))
     if l and not l[-1]:
+    	# yes, "".splitlines() returns an empty list
         l.pop()
     return l
 
-def str_partition(s, sep):
+def _partition_to_multisplit(s, sep, reverse):
     if not sep:
         raise ValueError("empty separator")
     l = tuple(big.multisplit(s, (sep,),
-        keep=big.ALTERNATING, maxsplit=1, separate=True))
+        keep=big.ALTERNATING, maxsplit=1, reverse=reverse, separate=True))
     if len(l) == 1:
         empty = b'' if isinstance(s, bytes) else ''
-        l += (empty, empty)
+        if reverse:
+            l = (empty, empty) + l
+        else:
+            l = l + (empty, empty)
     return l
 
+def str_partition(s, sep):
+    return _partition_to_multisplit(s, sep, False)
+
 def str_rpartition(s, sep):
-    if not sep:
-        raise ValueError("empty separator")
-    l = tuple(big.multisplit(s, (sep,),
-        keep=big.ALTERNATING, maxsplit=1, reverse=True, separate=True))
-    if len(l) == 1:
-        empty = b'' if isinstance(s, bytes) else ''
-        l = (empty, empty) + l
-    return l
+    return _partition_to_multisplit(s, sep, True)
 ```
 
 ### Why do you sometimes get empty strings when you split?
@@ -2984,8 +2994,16 @@ in the **big** test suite.
 
 ## Release history
 
-**next version** (still under development)
+**0.6.17**
 
+* Fixed a minor crashing bug in
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse):
+  if you passed in a *list* of separators (or `separators`
+  was of any non-hashable type), and `reverse` was true,
+  `multisplit` would crash.  It used `separators` as a key
+  into a dict, which meant `separators` had to be hashable.
+* [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  now verifies that the `s` passed in is either `str` or `bytes`.
 * Updated all copyright date notices to 2023.
 * Lots of doc fixes.
 
