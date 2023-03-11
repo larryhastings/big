@@ -193,11 +193,11 @@ notice on the source code.
 
 [`Regulator()`](#regulator)
 
-[`Regulator.now()`](#schedulerregulatornow)
+[`Regulator.now()`](#regulatornow)
 
-[`Regulator.sleep(t)`](#schedulerregulatorsleept)
+[`Regulator.sleep(t)`](#regulatorsleept)
 
-[`Regulator.wake()`](#schedulerregulatorwake)
+[`Regulator.wake()`](#regulatorwake)
 
 [`safe_mkdir(path)`](#safe_mkdirpath)
 
