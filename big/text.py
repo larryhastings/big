@@ -785,9 +785,7 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     the leftmost location in `s`, multipartition partitions using
     the longest matching separator.  For example:
 
-        big.multipartition('wxabcyz', ('a', 'abc'))
-
-    returns ('wx', 'abc', 'yz').
+        big.multipartition('wxabcyz', ('a', 'abc')) => ('wx', 'abc', 'yz')
 
     Passing in an explicit "count" lets you control how many times
     multipartition partitions the string.  multipartition will always
