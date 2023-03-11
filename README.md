@@ -292,6 +292,7 @@ notice on the source code.
 
 # API Reference
 
+
 ## `big.all`
 
 This submodule doesn't define any of its own symbols.  Instead, it
@@ -299,12 +300,12 @@ imports every other submodule in **big**, and uses `import *` to
 import every symbol from every other submodule, too.  Every
 public symbol in **big** is available in `big.all`.
 
+
 ## `big.boundinnerclass`
 
 Class decorators that implement bound inner classes.  See the
 [**Bound inner classes**](#bound-inner-classes)
 deep-dive for more information.
-
 
 #### `BoundInnerClass(cls)`
 
@@ -351,7 +352,6 @@ The functions in this sub-module are designed to always work.  None of
 them should ever raise an exception--no matter *what* nonsense you pass in.
 (But don't take that as a challenge!)
 
-
 #### `get_float(o, default=_sentinel)`
 
 > Returns `float(o)`, unless that conversion fails,
@@ -391,7 +391,6 @@ them should ever raise an exception--no matter *what* nonsense you pass in.
 
 Functions for working with files, directories, and I/O.
 
-
 #### `fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`
 
 > Find the lines of a file that match some text, like the UNIX `fgrep` utility
@@ -423,7 +422,6 @@ Functions for working with files, directories, and I/O.
 >
 > For simplicity of implementation, the entire file is read in to memory
 > at one time.  If `case_insensitive` is True, a lowercased copy is also used.
-
 
 #### `file_mtime(path)`
 
@@ -550,6 +548,7 @@ Functions for working with files, directories, and I/O.
 > Returns a copy of `s` where every character not allowed in a UNIX
 > filesystem filename has been replaced with a character (or characters)
 > that are permitted.
+
 
 ## `big.graph`
 
@@ -696,7 +695,6 @@ Well, just one heap object really.
 > expensive.
 >
 > Methods on a `Heap` object:
-
 
 #### `Heap.append(o)`
 
@@ -1004,16 +1002,16 @@ Only one entry so far.
 >
 > Capitalize the letter after an apostrophe if
 >
->     a) the apostrophe is after whitespace or a
->        left parenthesis character (`'('`)
->        (or is the first letter of the string), or
+> * the apostrophe is after whitespace or a
+> left parenthesis character (`'('`)
+> (or is the first letter of the string), or
 >
->     b) if the apostrophe is after a letter O or D,
->        and that O or D is after whitespace (or is
->       the first letter of the string).  The O or D
->        here will also be capitalized.
+> * if the apostrophe is after a letter O or D,
+> and that O or D is after whitespace (or is
+> the first letter of the string).  The O or D
+> here will also be capitalized.
 >
-> Rule a) handles internally quoted strings:
+> The first rule handles internally quoted strings:
 >
 >     He Said 'No I Did Not'
 >
@@ -1021,8 +1019,8 @@ Only one entry so far.
 >
 >     'Twas The Night Before Christmas
 >
-> Rule b) handles certain Irish, French, and Italian
-> names.
+> And the second rule handles certain Irish, French,
+> and Italian names.
 >
 >     Peter O'Toole
 >     Lord D'Arcy
@@ -1104,7 +1102,6 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on
 > [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-
 
 #### `lines_convert_tabs_to_spaces(li)`
 
@@ -1252,7 +1249,6 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on
 > [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-
 
 #### `lines_strip_indent(li)`
 
@@ -1509,7 +1505,6 @@ Only one entry so far.
 > For more information, see the deep-dive on
 > [**The `multi-` family of functions.**](#The-multi--family-of-functions)
 
-
 #### `newlines`
 
 > A list of all newline characters recognized by Python.
@@ -1598,7 +1593,6 @@ Only one entry so far.
 > (In older versions of Python, `re.Pattern` was a private type called
 > `re._pattern_type`.)
 
-
 #### `re_rpartition(text, pattern, count=1, *, flags=0)`
 
 > Like `str.rpartition`, but `pattern` is matched as a regular expression.
@@ -1673,7 +1667,6 @@ Only one entry so far.
 >
 > For more information, see the deep-dive on
 > [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
-
 
 #### `whitespace`
 
@@ -1829,6 +1822,7 @@ to make it easy to use best practices.
 > ends with microseconds if the type of `t` can represent
 > fractional seconds: a float, a `datetime` object, or the
 > value `None`.
+
 
 # Topic deep-dives
 
@@ -2065,7 +2059,6 @@ separators will be in a string by themselves:
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=big.AS_PAIRS))
     [('apple', 'X'), ('', 'Y'), ('banana', 'Y'), ('', 'X'), ('', 'Y'), ('cookie', '')]
 ```
-
 
 #### `strip`
 
@@ -2563,7 +2556,6 @@ by default, this is four spaces.  Any non-blank line that
 starting with four spaces is a "code" line, and any non-blank
 line that starts with less than four spaces is a "text" line.
 
-
 In "text" mode:
 
 * words are separated by whitespace,
@@ -2601,7 +2593,6 @@ You'll see four kinds of strings in a *split text array:*
 * Entire lines of "code", preserving their formatting.
 * Line breaks, represented by a single newline: `'\n'`.
 * Paragraph breaks, represented by two newlines: `'\n\n'`.
-
 
 #### Examples
 
@@ -3133,6 +3124,7 @@ in the **big** test suite.
   class from the `__init__` of the outer class, which should allow
   the code to cache the bound inner class instance before a second
   thread could ever get a reference to the outer object.
+
 
 ## Release history
 
