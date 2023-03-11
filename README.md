@@ -100,6 +100,10 @@ notice on the source code.
 
 [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
 
+[`Event(scheduler, event, time, priority, sequence)`](#eventscheduler-event-time-priority-sequence)
+
+[`Event.cancel()`](#eventcancel)
+
 [`fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`](#fgreppath-text--encodingnone-enumeratefalse-case_insensitivefalse)
 
 [`file_mtime(path)`](#file_mtimepath)
@@ -186,11 +190,19 @@ notice on the source code.
 
 [`re_rpartition(text, pattern, count=1, *, flags=0)`](#re_rpartitiontext-pattern-count1--flags0)
 
+[`Regulator()`](#regulator)
+
+[`Regulator.now()`](#schedulerregulatornow)
+
+[`Regulator.sleep(t)`](#schedulerregulatorsleept)
+
+[`Regulator.wake()`](#schedulerregulatorwake)
+
 [`safe_mkdir(path)`](#safe_mkdirpath)
 
 [`safe_unlink(path)`](#safe_unlinkpath)
 
-[`Scheduler(regulator=None)`](#schedulerregulatornone)
+[`Scheduler(regulator=default_regulator)`](#schedulerregulatordefault_regulator)
 
 [`Scheduler.schedule(o, time, *, absolute=False, priority=DEFAULT_PRIORITY)`](#schedulerscheduleo-time--absolutefalse-prioritydefault_priority)
 
@@ -200,17 +212,7 @@ notice on the source code.
 
 [`Scheduler.non_blocking()`](#schedulernon_blocking)
 
-[`Scheduler.Event(time, priority, sequence, event, scheduler)`](#schedulereventtime-priority-sequence-event-scheduler)
-
-[`Scheduler.Event.cancel()`](#schedulereventcancel)
-
-[`Scheduler.Regulator(scheduler)`](#schedulerregulatorscheduler)
-
-[`Scheduler.Regulator.now()`](#schedulerregulatornow)
-
-[`Scheduler.Regulator.sleep(t)`](#schedulerregulatorsleept)
-
-[`Scheduler.Regulator.wake()`](#schedulerregulatorwake)
+[`SingleThreadedRegulator()`](#singlethreadedregulator)
 
 [`split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`](#split_quoted_stringss-quotes---triple_quotestrue-backslash)
 
@@ -219,6 +221,8 @@ notice on the source code.
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
 [`timestamp_human(t=None, want_microseconds=None)`](#timestamp_humantnone-want_microsecondsnone)
+
+[`ThreadSafeRegulator()`](#threadsaferegulator)
 
 [`TopologicalSorter(graph=None)`](#topologicalsortergraphnone)
 
@@ -818,12 +822,93 @@ Only one entry so far.
 > `Scheduler` never repeats the historical problems discovered
 > over the lifetime of `sched.scheduler`.
 
-#### `Scheduler(regulator=None)`
+#### `Event(scheduler, event, time, priority, sequence)`
 
-> Implements a thread-safe scheduler.  The only argument is the
+> An object representing a scheduled event in a `Scheduler`.
+> You shouldn't need to create them manually; `Event` objects
+> are created automatically when you add events to a `Scheduler`.
+>
+> Supports one method:
+
+#### `Event.cancel()`
+
+> Cancels this event.  If this event has already been canceled,
+> raises `ValueError`.
+
+#### `Regulator()`
+
+> An abstract base class for `Scheduler` regulators.
+>
+> A "regulator" handles all the details about time
+> for a `Scheduler`.  `Scheduler` objects don't actually
+> understand time; it's all abstracted away by the
+> `Regulator`.
+>
+> You can implement your own `Regulator` and use it
+> with `Scheduler`.  Your `Regulator` subclass needs to
+> implement a minimum of three methods: `now`,
+> `sleep`, and `wake`.  It must also provide an
+> attribute called 'lock'.  The lock must implement
+> the context manager protocol, and should lock
+> the `Regulator` as needed.  (It doesn't need to be
+> a recursive lock.)
+>
+> Normally a `Regulator` represents time using
+> a floating-point number, representing a fractional
+> number of seconds since some epoch.  But this
+> isn't strictly necessary.  Any Python object that
+> implements `__le__`, `__eq__`, `__add__`,
+> and `__sub__` in a consistent manner will work;
+> time values must also implement rich comparison
+> with numbers (integers and floats).
+
+#### `Scheduler.Regulator.now()`
+
+> Returns the current time in local units.
+> Must be monotonically increasing; for any
+> two calls to now during the course of the
+> program, the later call must *never*
+> have a lower value than the earlier call.
+>
+> A `Scheduler` will only call this method while
+> holding this regulator's lock.
+
+#### `Scheduler.Regulator.sleep(t)`
+
+> Sleeps for some amount of time, in local units.
+> Must support an interval of `0`, which should
+> represent not sleeping.  (Though it's preferable
+> that an interval of `0` yields the rest of the
+> current thread's remaining time slice back to
+> the operating system.)
+>
+> If `wake` is called on this `Regulator` object while a
+> different thread has called this function to sleep,
+> `sleep` must abandon the rest of the sleep interval
+> and return immediately.
+>
+> A `Scheduler` will only call this method while
+> *not* holding this regulator's lock.
+
+#### `Scheduler.Regulator.wake()`
+
+> Aborts all current calls to `sleep` on this
+> `Regulator`, across all threads.
+>
+> A `Scheduler` will only call this method while
+> holding this regulator's lock.
+
+#### `Scheduler(regulator=default_regulator)`
+
+> Implements a scheduler.  The only argument is the
 > "regulator" object to use; the regulator abstracts away all
 > time-related details for the scheduler.  By default `Scheduler`
-> creates a new `Scheduler.Regulator` object and uses that.
+> uses an instance of `SingleThreadedRegulator`,
+> which is not thread-safe.
+>
+> (If you need the scheduler to be thread-safe, pass in an
+> instance of a thread-safe `Regulator` class like
+> `ThreadSafeRegulator`.)
 >
 > In addition to the below methods, `Scheduler` objects support
 > being evaluated in a boolean context (they are true if they
@@ -875,49 +960,21 @@ Only one entry so far.
 > are currently due.  Never blocks; if the next
 > event is not due yet, raises `StopIteration`.
 
-#### `Scheduler.Event(time, priority, sequence, event, scheduler)`
+### `SingleThreadedRegulator()`
 
-> An object representing a scheduled event in a `Scheduler`.
-> You shouldn't need to create them manually; `Event` objects
-> are created automatically when you add events to a `Scheduler`.
+> An implementation of `Regulator` designed for
+> use in single-threaded programs.  It provides
+> no thread safety, but is much higher performance
+> than thread-safe `Regulator` implementations.
 >
-> Supports one method:
+> (This `Regulator` is also not safe for use from
+> inside a signal handler.)
 
-#### `Scheduler.Event.cancel()`
+### `ThreadSafeRegulator()`
 
-> Cancels this event.  If this event has already been canceled,
-> raises `ValueError`.
+> A thread-safe implementation of `Regulator`
+> designed for use in multithreaded programs.
 
-#### `Scheduler.Regulator(scheduler)`
-
-> Creates a regulator object for use with a `Scheduler`.
-> Measures time using the `time.monotonic` clock, and
-> sleeps using a `threading.Event` object.
-> Time values are expressed in seconds, either integer
-> or floating point.
->
-> You can write your own regulator class and use it with
-> `Scheduler`; it must implement the three following methods.
-
-#### `Scheduler.Regulator.now()`
-
-> Returns a "time value", an object representing the
-> current time. The object returned must support
-> simple arithmetic operations (`+` and `-`) and
-> rich comparison with other time values.
-
-#### `Scheduler.Regulator.sleep(t)`
-
-> Sleeps for a period of time expressed as a
-> relative "time value".  Note that `sleep` must
-> be interruptable with the `wake` method.
-
-#### `Scheduler.Regulator.wake()`
-
-> Wakes up *all* threads that are current sleeping
-> using `Scheduler.Regulator.sleep(t)`.  All calls
-> to `sleep` on this `Regulator` object must return
-> immediately.
 
 ## `big.text`
 
@@ -3074,7 +3131,36 @@ in the **big** test suite.
 
 ## Release history
 
-**next version** *(under development)*
+**0.7**
+
+* Breaking changes to the
+  [`Scheduler`](#schedulerregulatordefault_regulator):
+  * It's no longer thread-safe by default, which means it's much faster
+    for non-threaded workloads.
+  * The lock has been moved out of the
+    [`Scheduler`](#schedulerregulatordefault_regulator)
+    object and into the
+    [`Regulator`](#regulator).  Among other things, this
+    means that the
+    [`Scheduler`](#schedulerregulatordefault_regulator)
+    constructor no longer takes a `lock` argument.
+  * [`Regulator`](#regulator) is now an abstract base class.
+    `big.scheduler` also provides two concrete implementations:
+    [`SingleThreadedRegulator`](#singlethreadedregulator)
+    and
+    [`ThreadSafeRegulator`](#threadsaferegulator).
+  * [`Regulator`](#regulator) and
+    [`Event`](#eventscheduler-event-time-priority-sequence)
+    are now defined in the `big.scheduler` namespace.  They were
+    previously defined inside the `Scheduler` class.
+  * The arguments to the
+    [`Event`](#eventscheduler-event-time-priority-sequence)
+    constructor were rearranged.  (You shouldn't care, as you
+    shouldn't be manually constructing
+    [`Event`](#eventscheduler-event-time-priority-sequence)
+    objects anyway.)
+  * The `Scheduler` now guarantees that it will only call `now` and `wake`
+    on a `Regulator` object while holding its lock.
 
 * Minor doc fixes.
 

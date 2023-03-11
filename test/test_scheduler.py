@@ -32,6 +32,12 @@ import time
 
 
 class MockRegulator:
+    """
+    Thread-safe Regulator object.
+    Doesn't use the actual time; instead,
+    you must manually advance the Regulator's
+    time using the advance method.
+    """
     def __init__(self):
         self.t = 0
         self.explicit_wake_counter = 0
@@ -49,8 +55,7 @@ class MockRegulator:
         self.wake()
 
     def now(self):
-        with self.lock:
-            return self.t
+        return self.t
 
     def sleep(self, t):
         tid = hex(threading.get_ident())[2:]
@@ -72,12 +77,10 @@ class MockRegulator:
 
     def wake(self):
         tid = hex(threading.get_ident())[2:]
-        with self.lock:
-            # print(f"  {self} {tid} wake at time {self.t}")
-            self.explicit_wake_counter += 1
+        # print(f"  {self} {tid} wake at time {self.t}")
+        self.explicit_wake_counter += 1
         self.event.set()
         self.event.clear()
-
 
 
 class ScheduleTester(unittest.TestCase):
@@ -97,7 +100,6 @@ class ScheduleTester(unittest.TestCase):
         objects = list(s)
         sorted_objects = sorted(objects)
         self.assertEqual(objects, sorted_objects)
-
 
         with self.assertRaises(ValueError):
             s.schedule(big.scheduler.invalid_event, 5)
@@ -122,7 +124,7 @@ class ScheduleTester(unittest.TestCase):
 
 
     def test_clear_after_blocking(self):
-        s = big.Scheduler()
+        s = big.Scheduler(big.ThreadSafeRegulator())
         e1 = s.schedule(object(), 10)
         e2 = s.schedule(object(), 11)
         e3 = s.schedule(object(), 12)
@@ -223,7 +225,7 @@ class SchedModuleTests(unittest.TestCase):
     def test_enterabs(self):
         s = big.Scheduler()
         times = [0.05, 0.04, 0.03, 0.02, 0.01]
-        start_time = time.monotonic()
+        start_time = s.regulator.now()
         for t in times:
             s.schedule(t, start_time + t, absolute=True)
         results = []
@@ -280,13 +282,14 @@ class SchedModuleTests(unittest.TestCase):
 
     def test_priority(self):
         s = big.Scheduler()
+        now = s.regulator.now()
         for priorities, expected in [
             ([1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),
             ([5, 4, 3, 2, 1], [1, 2, 3, 4, 5]),
             ([2, 5, 3, 1, 4], [1, 2, 3, 4, 5]),
             ([1, 2, 3, 2, 1], [1, 1, 2, 2, 3]),
             ]:
-            t = time.monotonic() + 0.01
+            t = now + 0.01
             for p in priorities:
                 s.schedule(p, t, priority=p, absolute=True)
             events = [o for o in s]
@@ -295,10 +298,10 @@ class SchedModuleTests(unittest.TestCase):
 
     def test_cancel(self):
         s = big.Scheduler()
-        t = time.monotonic()
+        now = s.regulator.now()
         events = []
         for delta in [0.01, 0.02, 0.03, 0.04, 0.05]:
-            events.append(s.schedule(delta, t+delta, absolute=True))
+            events.append(s.schedule(delta, now+delta, absolute=True))
         events[0].cancel()
         events[-1].cancel()
         events = list(s)
@@ -366,7 +369,6 @@ class SchedModuleTests(unittest.TestCase):
 
     def test_queue(self):
         s = big.Scheduler()
-        now = time.monotonic()
         events = []
         for delta in [0.05, 0.01, 0.02, 0.04, 0.03]:
             events.append(s.schedule(delta, delta))

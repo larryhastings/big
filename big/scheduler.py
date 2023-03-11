@@ -24,9 +24,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-__all__ = ["Scheduler"]
+__all__ = ['Regulator', 'SingleThreadedRegulator', 'ThreadSafeRegulator', 'Scheduler']
 
 
+from abc import abstractmethod
 import threading
 from .heap import Heap
 import time
@@ -34,6 +35,177 @@ import time
 
 
 invalid_event = object()
+
+class InertContextManager:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exception_type, exception, traceback):
+        pass
+
+inert_context_manager = InertContextManager()
+
+class Regulator:
+    """
+    An abstract base class for Scheduler regulators.
+
+    A "regulator" handles all the details about time
+    for a Scheduler.  Scheduler objects don't actually
+    understand time; it's all abstracted away by the
+    Regulator.
+
+    You can implement your own Regulator and use it
+    with Scheduler.  Your Regulator subclass needs to
+    implement a minimum of three methods: 'now',
+    'sleep', and 'wake'.  It must also provide an
+    attribute called 'lock'.  The lock must implement
+    the context manager protocol, and should lock
+    the Regulator as needed.
+
+    Normally a Regulator represents time using a
+    floating-point number, representing a fractional
+    number of seconds since some epoch.  But this
+    isn't strictly necessary.  Any Python object
+    that implements '__le__', '__eq__', '__add__',
+    and '__sub__' in a consistent manner will work;
+    time values must also implement rich comparison
+    with numbers (integers and floats).
+    """
+
+    # A context manager that provides thread-safety
+    # as appropriate.  The Schedule will never recursively
+    # enter the lock (it doesn't need to be a threading.RLock).
+    lock = inert_context_manager
+
+    @abstractmethod
+    def now(self): # pragma: no cover
+        """
+        Returns the current time in local units.
+        Must be monotonically increasing; for any
+        two calls to now during the course of the
+        program, the later call must *never*
+        have a lower value than the earlier call.
+
+        A Scheduler will only call this method while
+        holding this regulator's lock.
+        """
+        pass
+
+    @abstractmethod
+    def sleep(self, interval): # pragma: no cover
+        """
+        Sleeps for some amount of time, in local units.
+        Must support an interval of 0, which should
+        represent not sleeping.  (Though it's preferable
+        that an interval of 0 yields the rest of the
+        current thread's remaining time slice back to
+        the operating system.)
+
+        If wake is called on this Regulator object while a
+        different thread has called this function to sleep,
+        sleep must abandon the rest of the sleep interval
+        and return immediately.
+
+        A Scheduler will only call this method while
+        *not* holding this regulator's lock.
+        """
+        pass
+
+    @abstractmethod
+    def wake(self): # pragma: no cover
+        """
+        Aborts all current calls to sleep on this
+        Regulator, across all threads.
+
+        A Scheduler will only call this method while
+        holding this regulator's lock.
+        """
+        pass
+
+
+class SingleThreadedRegulator(Regulator):
+    """
+    An implementation of Regulator designed for
+    use in single-threaded programs.  It provides
+    no thread safety, but is much higher performance
+    than thread-safe Regulator implementations.
+
+    (This Regulator is also not safe for use from
+    inside a signal handler.)
+    """
+
+    def __repr__(self): # pragma: no cover
+        return f"<SingleThreadedRegulator>"
+
+    def now(self):
+        return time.monotonic()
+
+    def wake(self):
+        pass
+
+    def sleep(self, interval):
+        time.sleep(interval)
+
+
+default_regulator = SingleThreadedRegulator()
+
+
+class ThreadSafeRegulator(Regulator):
+    """
+    A thread-safe implementation of Regulator
+    designed for use in multithreaded programs.
+    """
+
+    def __init__(self):
+        self.event = threading.Event()
+        self.lock = threading.Lock()
+
+    def __repr__(self): # pragma: no cover
+        return f"<ThreadSafeRegulator event={self.event} lock={self.lock}>"
+
+    def now(self):
+        return time.monotonic()
+
+    def wake(self):
+        self.event.set()
+        self.event.clear()
+
+    def sleep(self, interval):
+        self.event.wait(interval)
+
+
+DEFAULT_PRIORITY = 100
+
+class Event:
+    def __init__(self, scheduler, event, time, priority, sequence):
+        self.scheduler = scheduler
+        self.event = event
+        self.time = time
+        self.priority = priority
+        self.sequence = sequence
+
+    def __lt__(self, other):
+        if self.time < other.time:
+            return True
+        if self.time > other.time:
+            return False
+
+        if self.priority < other.priority:
+            return True
+        if self.priority > other.priority:
+            return False
+
+        if self.sequence < other.sequence:
+            return True
+
+        return False
+
+    def __repr__(self): # pragma: no cover
+        return f"<Event event={self.event} time={self.time} priority={self.priority} sequence={self.sequence} scheduler={self.scheduler}>"
+
+    def cancel(self):
+        self.scheduler.cancel(self)
+
 
 class Scheduler:
     """
@@ -61,102 +233,20 @@ class Scheduler:
     Scheduler also benefits from thirty years of improvements
     to sched.scheduler, and in particular reimplements the
     entire (relevant portion of the) sched.scheduler test suite.
+
+    The only argument to Scheduler is an instance of Regulator,
+    that provides time and thread-safety to the Scheduler.
+    By default Scheduler uses an instance of
+    SingleThreadedRegulator, which is not thread-safe.
+
+    (If you need the scheduler to be thread-safe, pass in
+    an instance of a thread-safe Regulator class like
+    ThreadSafeRegulator.)
     """
 
-    DEFAULT_PRIORITY = 100
-
-    class Event:
-        def __init__(self, time, priority, sequence, event, scheduler):
-            self.time = time
-            self.priority = priority
-            self.sequence = sequence
-            self.event = event
-            self.scheduler = scheduler
-
-        def __lt__(self, other):
-            if self.time < other.time:
-                return True
-            if self.time > other.time:
-                return False
-
-            if self.priority < other.priority:
-                return True
-            if self.priority > other.priority:
-                return False
-
-            if self.sequence < other.sequence:
-                return True
-
-            return False
-
-        def __repr__(self): # pragma: no cover
-            return f"<Event time={self.time} priority={self.priority} sequence={self.sequence} event={self.event} scheduler={self.scheduler}>"
-
-        def cancel(self):
-            self.scheduler.cancel(self)
-
-    class Regulator:
-        """
-        Regulator encapsulates all the Scheduler's needs
-        for interacting with time.
-        The Scheduler has no knowledge about time itself;
-        it uses a Regulator object for all its time-related
-        needs.
-
-        You can implement your own Regulator and use it
-        with Scheduler; the only methods it needs are
-        now, sleep, and wake.
-        """
-
-        def __init__(self, scheduler):
-            self.event = threading.Event()
-
-        def __repr__(self): # pragma: no cover
-            return f"<Regulator {event}>"
-
-        def now(self):
-            """
-            Returns the current time in local units.
-            Must be monotonically increasing; for any
-            two calls to now during the course of the
-            program, the later call must *never*
-            have a lower value than the earlier call.
-
-            (The same Scheduler object will never call
-            now twice simulaneously on the same Regulator
-            object, as all access to the Regulator object
-            is done under a lock.)
-            """
-            return time.time()
-
-        def wake(self):
-            """
-            Aborts all current calls to sleep,
-            across all threads.
-            """
-            self.event.set()
-            self.event.clear()
-
-        def sleep(self, interval):
-            """
-            Sleeps for some amount of time, in local units.
-            Must support an interval of 0.
-            It's preferable that an interval of 0 yields the rest
-            of the current thread's current time slice.
-
-            If wake is called on this Regulator object while a
-            different thread has called this function to sleep,
-            sleep must abandon the rest of the sleep interval
-            and return immediately.
-            """
-            self.event.wait(interval)
-
-    def __init__(self, regulator=None):
-        if regulator is None:
-            regulator = self.Regulator(self)
+    def __init__(self, regulator=default_regulator):
         self.regulator = regulator
         self.heap = Heap()
-        self.lock = threading.Lock()
         self.counter = 0
 
     def schedule(self, o, time, *, absolute=False, priority=DEFAULT_PRIORITY):
@@ -178,11 +268,11 @@ class Scheduler:
         """
         if o == invalid_event:
             raise ValueError('invalid event')
-        if not absolute:
-            time += self.regulator.now()
-        with self.lock:
+        with self.regulator.lock:
+            if not absolute:
+                time += self.regulator.now()
             self.counter += 1
-            event = self.Event(time, priority, self.counter, o, self)
+            event = Event(self, o, time, priority, self.counter)
             self.heap.append(event)
             self.regulator.wake()
         return event
@@ -194,7 +284,7 @@ class Scheduler:
         event must be a value returned by add().
         If the event is not in the queue, raises ValueError.
         """
-        with self.lock:
+        with self.regulator.lock:
             self.heap.remove(event)
             self.regulator.wake()
 
@@ -202,7 +292,7 @@ class Scheduler:
         """
         Returns True if the queue is not empty.
         """
-        with self.lock:
+        with self.regulator.lock:
             return bool(self.heap)
 
     @property
@@ -212,13 +302,13 @@ class Scheduler:
 
         The entries in the list are big.scheduler.Event objects.
         """
-        with self.lock:
+        with self.regulator.lock:
             return self.heap.queue
 
     def _next(self, blocking=True):
         # why loop here? in case we get awakened by the queue changing.
         #
-        # also, I swear that back in my early Windows days, sleeping on
+        # also, I swear that back in my early Win32 days, sleeping on
         # timers wasn't perfect and would often return slightly early.
         while True:
             # print(f"{self._regulator.now()}  {self.heap=}")
@@ -229,7 +319,7 @@ class Scheduler:
             sleep_interval = 0
             event = invalid_event
 
-            with self.lock:
+            with self.regulator.lock:
                 if not self.heap:
                     # print(" empty queue DONE")
                     raise StopIteration
