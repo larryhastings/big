@@ -769,14 +769,14 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 
     "s" can be str or bytes.
 
-    "separators" should be an iterable of str or bytes, matching "s".
+    "separators" should be an iterable of objects of the same type as "s".
 
     By default, if any of the strings in "separators" are found in "s",
     returns a tuple of three strings: the portion of "s" leading up to
     the earliest separator, the separator, and the portion of "s" after
     that separator.  Example:
 
-    multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
+        multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
 
     If none of the separators are found in the string, returns
     a tuple containing `s` unchanged followed by two empty strings.
@@ -784,7 +784,9 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     multipartition is *greedy*: if two or more separators appear at
     the leftmost location in `s`, multipartition partitions using
     the longest matching separator.  For example:
+
         big.multipartition('wxabcyz', ('a', 'abc'))
+
     returns ('wx', 'abc', 'yz').
 
     Passing in an explicit "count" lets you control how many times
@@ -792,10 +794,11 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     return a tuple containing (2*count)+1 elements.  Passing in a
     count of 0 will always return a tuple containing s.
 
-    If separate is true, multiple adjacent separator strings behave
+    If `separate` is true, multiple adjacent separator strings behave
     like one separator.  Example:
 
-    multipartition('aXYbXYc', ('X', 'Y',), separate=True) => ('a', 'XY', 'bXYc')
+        big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False) => ('a', 'XY', 'b', 'YX', 'c')
+        big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True ) => ('a', 'X', '', 'Y', 'bYXc')
 
     If reverse is true, multipartition behaves like str.rpartition.
     It partitions starting on the right, scanning backwards through

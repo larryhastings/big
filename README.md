@@ -1265,7 +1265,7 @@ Only one entry so far.
 >
 > `s` can be str or bytes.
 >
-> `separators` should be an iterable of str or bytes, matching `s`.
+> `separators` should be an iterable of objects of the same type as `s`.
 >
 > By default, if any of the strings in `separators` are found in `s`,
 > returns a tuple of three strings: the portion of `s` leading up to
@@ -1293,11 +1293,12 @@ Only one entry so far.
 > If `separate` is true, multiple adjacent separator strings behave
 > like one separator.  Example:
 >
->     multipartition('aXYbXYc', ('X', 'Y',), separate=True) => ('a', 'XY', 'bXYc')
+>     big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False) => ('a', 'XY', 'b', 'YX', 'c')
+>     big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True ) => ('a', 'X', '', 'Y', 'bYXc')
 >
 > If `reverse` is true, multipartition behaves like `str.rpartition`.
-> It partitions starting on the right, scanning backwards through slooking
-> for separators.
+> It partitions starting on the right, scanning backwards through s
+> s looking for separators.
 >
 > For more information, see the deep-dive on
 > [**The `multi-` family of functions.**](#The-multi--family-of-functions)
