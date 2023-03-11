@@ -1786,24 +1786,31 @@ So what *can* you use?  There's `re.strip`, but it can be
 hard to use.  Now there's a new answer:
 [`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 
-The goal of
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is to be the be-all end-all text
-splitting function.  You pass in the string you want to split,
-and an iterable containing the separator strings you want to
-split on.  It returns an iterator yielding the split strings.
+[`multisplit`'s](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+goal is to be the be-all end-all string splitting function.
 It's designed to replace every mode of operation for
 `str.split`, `str.rstrip`, and `str.splitlines`, and it
-can even be used to replace `str.partition` and `str.rpartition`
-too.  (**big** does exactly that; see
+can even replace `str.partition` and `str.rpartition`.
+(**big** uses
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+to implement
 [`multipartition`.)](#multipartitions-separators-count1--reverseFalse-separateTrue)
+
+To use
+[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+pass in the string you want to split, the separators you
+want to split on, and tweak its behavior with its five
+keyword arguments.  It returns an iterator that yields
+string segments from the original string in your preferred
+format.
 
 The cornerstone of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is the `separators` argument.
 This is an iterable of strings, of the same type (`str` or `bytes`)
 as the string you want to split (`s`).  `multisplit` will split
 the string at *each* non-overlapping instance of any string
-specified in `separators`.
+specified in `separators`.  Internally, `multisplit` is
+implemented using `re.split` for speed.
 
 But
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -1847,20 +1854,23 @@ is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 *five keyword-only parameters* after all.  However, they're
 designed to be reasonably memorable, and they all default
-to `False`.  But the best way to combat the complexity of calling
+to `False` (except the traditional `maxsplit`).  But the best
+way to combat the complexity of calling
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is to use it as a building block for your own, presumably easier-to-use,
-text splitting functions.  For example,
+is to use it as a building block for your own tailor-made
+text splitting functions.  For example, inside **big**,
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is used to implement [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
-`normalize_whitespace`,  and [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
+is used to implement
+[`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+[`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
+[`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
 and several others.
 
 ### Demonstrations of each `multisplit` keyword-only parameter
 
-To give you a sense of how you can use
+To give you a sense of how the five keyword-only parameters changes the behavior of
 [`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-here's a breakdown of each of the five keyword-only parameters, with examples.
+here's a breakdown of each of these parameters with examples.
 
 #### `maxsplit`
 
@@ -1873,7 +1883,7 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 `2` or greater:
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # maxsplit defaults to -1
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # "maxsplit" defaults to -1
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0))
     ['appleXbananaYcookie']
@@ -1887,12 +1897,12 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 
 #### `keep`
 
-`keep` indicates whether or not multisplit should preserve the separator
+`keep` indicates whether or not `multisplit` should preserve the separator
 strings in the strings it yields.  It supports four values: false, true,
 and the special values `ALTERNATING` and `AS_PAIRS`.
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # keep defaults to False
+    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # "keep" defaults to False
     ['apple', 'banana', 'cookie']
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=False))
     ['apple', 'banana', 'cookie']
@@ -1934,7 +1944,7 @@ contain an empty separator string:
 ```
 
 If the original string starts with a separator, the first 2-tuple will contain
-an empty non-separator string:
+an empty non-separator string, and the separator:
 
 ```Python
     >>> list(big.multisplit('YappleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
@@ -2311,7 +2321,23 @@ in the original string.  So it *must* emit the empty non-separator string.
 And since that zero-length string isn't (cannot!) be followed by a separator,
 when using `keep=AS_PAIRS` the final separator string is *also* empty.
 
-You can recreate the original string from this result too,
+Think of it this way:
+
+```Python
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=False, separate=True, strip=False))
+    ['', '1', '2', '3', '']
+```
+
+When you call `multisplit` with `keep=False` in this example, the empty string at the
+end makes sense, right?  So if you change that parameter to `keep=AS_PAIRS`, it makes
+sense that you still have an empty string at the end.
+
+```Python
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
+    [('', ','), ('1', ','), ('2', ',') ('3', ','), ('', '')]
+```
+
+Naturally, you can recreate the original string from `big.AS_PAIRS` tuples too,
 although you have to unpack the tuples:
 
 ```Python
@@ -2342,25 +2368,34 @@ in an iterator that skips over the empty lines.
 All the lines modifier functions that ship with big
 start with the string `lines_`.
 
-Actually there are additional constraints on the names
-of lines modifier functions.  The second word of the name
-of the function, immediately after `lines_`, tells you what
-the function will do.  Some examples:
+Actually there are additional constraints on lines modifier
+function names.  The second word in the function name,
+immediately after `lines_`, may denote the lines modifier's
+category.  Some examples:
 
-* `filter` means this lines modifier may remove some
+* `lines_filter_` functions may remove
   lines from the output.  For example, `lines_filter_empty_lines`
   will only yield a line if it isn't empty.
-* `strip` means this lines modifier may remove one or
-  more substrings from the line.  For example, `lines_filter_indent`
-  will strip the leading whitespace from a line before yielding
+* `lines_strip_` functions may remove one or
+  more substrings from the line.  For example,
+  [`lines_strip_indent(li)`](#lines_strip_indentli)
+  strips the leading whitespace from a line before yielding
   it.  (Whenever a lines modifier removes leading text from a line,
   it will add a `leading` field to the accompanying `LineInfo` object
   containing the removed substring, and will also update the
   `column_number` of the line to reflect the new starting column.)
-* `convert` means this lines modifier may change one
+* `lines_convert_` functions means this lines modifier may change one
   or more substrings in the line.  For example,
   `lines_convert_tabs_to_spaces` changes tab characters
   to space characters in any lines it processes.
+
+(**big** isn't strict about these category names though.
+For example,
+[`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
+and
+[`lines_grep(li, pattern, *, invert=False, flags=0)`](#lines_grepli-pattern--invertfalse-flags0)
+are obviously "filter" modifiers, but their names
+don't start with `lines_filter_`.)
 
 All lines modifier functions are composable with each
 other; you can "stack" them together simply by passing
@@ -2380,7 +2415,7 @@ whitespace.
 When you stack line modifiers in this way, note that the
 *outer* modifiers happen *later*.  In the above example,
 each line is first "r-stripped", and then discarded
-if it is empty.  If you stacked the line modifiers in
+if it's empty.  If you stacked the line modifiers in
 the opposite order:
 
 ```Python
@@ -2393,7 +2428,7 @@ the opposite order:
 then it'd filter out empty lines first, and *then*
 "r-strip" the lines.  So lines in the input that contained
 only whitespace would still get yielded as empty lines,
-which in this case is probably not what you wanted.
+which is probably not what you want.
 
 Of course, you can write your own lines modifier functions!
 Simply accept a lines iterator as an argument, iterate over
@@ -2993,6 +3028,10 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**next version** *(under development)*
+
+* Minor doc fixes.
 
 **0.6.18**
 

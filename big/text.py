@@ -1235,7 +1235,7 @@ class lines:
         all keyword arguments passed in via kwargs are stored internally
         and can be accessed by user-defined lines modifier functions.
 
-        Composable with all the lines_ functions from the big.text module.
+        Composable with all the lines_ modifier functions in the big.text module.
         """
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
@@ -1282,8 +1282,7 @@ def lines_rstrip(li):
     A lines modifier function.  Strips trailing whitespace from the
     lines of a "lines iterator".
 
-    Composable with all the lines_ functions
-    from the big text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     for info, line in li:
         yield (info, line.rstrip())
@@ -1298,7 +1297,7 @@ def lines_strip(li):
     a field to the associated LineInfo object:
       * leading - the leading whitespace string that was removed
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     for info, line in li:
         lstripped = line.lstrip()
@@ -1333,7 +1332,7 @@ def lines_filter_comment_lines(li, comment_separators):
         comments inside quoted strings.  It truncates the
         line but still always yields the line.
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     if not comment_separators:
         raise ValueError("illegal comment_separators")
@@ -1363,7 +1362,7 @@ def lines_containing(li, s, *, invert=False):
     If invert is true, returns the opposite--
     filters out lines that contain s.
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     if invert:
         for t in li:
@@ -1416,7 +1415,7 @@ def lines_sort(li, *, reverse=False):
     If reverse is true, lines are sorted
     from highest to lowest.
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     lines = list(li)
     lines.sort(key=lambda t:t[1], reverse=reverse)
@@ -1460,7 +1459,7 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
         comments inside quoted strings.  It truncates the
         line but still always yields the line.
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     if not comment_separators:
         raise ValueError("illegal comment_separators")
@@ -1516,7 +1515,7 @@ def lines_convert_tabs_to_spaces(li):
     A lines modifier function.  Converts tabs to spaces for the lines
     of a "lines iterator", using the tab_width passed in to lines.
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     for info, line in li:
         yield (info, line.expandtabs(li.tab_width))
@@ -1605,7 +1604,7 @@ def lines_filter_empty_lines(li):
         (3, "a")
         (5, "b")
 
-    Composable with all the lines_ functions from the big.text module.
+    Composable with all the lines_ modifier functions in the big.text module.
     """
     for t in li:
         if not t[1]:
