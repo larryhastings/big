@@ -1296,7 +1296,7 @@ Only one entry so far.
 >
 > If `reverse` is true, multipartition behaves like `str.rpartition`.
 > It partitions starting on the right, scanning backwards through s
-> s looking for separators.
+> looking for separators.
 >
 > For more information, see the deep-dive on
 > [**The `multi-` family of functions.**](#The-multi--family-of-functions)
