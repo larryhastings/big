@@ -1973,7 +1973,7 @@ Although this looks very strange, this *is* sensible and correct.
 
 For an explanation as to why `multisplit` will sometimes emit empty
 strings when using a true value with `keep`, read the
-[Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split])
+[Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split)
 section below.
 
 
@@ -2530,11 +2530,10 @@ It's literally just an array of strings, where the strings
 represent individual word-wrappable substrings.
 
 [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-splits a string of text and returns a *split text array,*
-and
-[`wrap_words()`](#wrap_wordswords-margin79--two_spacestrue),
-consumes a *split text array* to produce its
-word-wrapped output.
+returns a *split text array,* and
+[`wrap_words()`](#wrap_wordswords-margin79--two_spacestrue)
+consumes a *split text array.*
+
 You'll see four kinds of strings in a *split text array:*
 
 * Individual words, ready to be word-wrapped.
