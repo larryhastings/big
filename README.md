@@ -1928,6 +1928,17 @@ and entries with an odd-numbered index (1, 3, 5, ...) are always separator strin
     ['apple', 'X', 'banana', 'Y', 'cookie']
 ```
 
+Note that `ALTERNATING` always emits an odd number of strings; the first and last
+strings are always non-separator strings.  Like `str.split`, if the string you're
+splitting starts or ends with a separator string, `multisplit` will emit an empty
+string there:
+
+```Python
+    >>> list(big.multisplit('1a1z1', ('1',), keep=big.ALTERNATING))
+    ['', '1', 'a', '1', 'z', '1', '']
+```
+
+
 Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
 strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
 2-tuple contains a non-separator string followed by a separator string.
@@ -2154,7 +2165,7 @@ Sometimes when you split using
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse),
 you'll get empty strings in the return value.  This might be unexpected,
 violating the [Principle Of Least Astonishment.](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
-But there are excellent reasons for this behavior, and it stems from observing
+But there are excellent reasons for this behavior.  It stems from observing
 how `str.split` behaves.
 
 `str.split` really has two
@@ -2169,7 +2180,7 @@ two adjacent separators in the string you're splitting:
     ['1', '2', '', '3']
 ```
 
-What's that empty string doing between `'2'` and `'3'`?  Here's how to think about it:
+What's that empty string doing between `'2'` and `'3'`?  Here's how you should think about it:
 when you pass in an explicit separator, `str.split` splits at *every* occurance of that
 separator in the string.  It *always* splits the string into two places, whenever there's
 a separator.  And when there are two adjacent separators, conceptually, they have a
@@ -2182,13 +2193,13 @@ zero-length string in between them:
 
 The empty string in the output of `str.split` represents the fact that there
 were two adjacent separators.  If `str.split` didn't add that empty string,
-so that the output looked like this:
+the output would look like this:
 
 ```Python
     ['1', '2', '3']
 ```
 
-it'd be indistinguishable from splitting the same string but *without*
+But then it'd be indistinguishable from splitting the same string *without*
 two separators in a row:
 
 ```Python
@@ -2197,8 +2208,8 @@ two separators in a row:
 ```
 
 This difference is crucial when you want to reconstruct the original string from
-the split list.  `str.join` should always be the inverse of `str.split`, and with
-that empty string there, it works correctly:
+the split list.  `str.split` with a separator should always be reversable using
+`str.join`, and with that empty string there it works correctly:
 
 ```Python
     >>> ','.join(['1', '2', '3'])
@@ -2231,13 +2242,14 @@ Naturally,
 duplicates this behavior.  When you want
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 to emulate the behavior of `str.split` when using an explicit separator
-string, just pass in `keep=False`, `separate=True`, and `strip=False`.  That is, if 'a' and 'b' are strings,
+string, just pass in `keep=False`, `separate=True`, and `strip=False`.
+That is, if `a` and `b` are strings,
 
 ```Python
      big.multisplit(a, (b,), keep=False, separate=True, strip=False)
 ```
 
-produces the same output as
+always produces the same output as
 
 ```Python
      a.split(b)
@@ -2254,8 +2266,8 @@ to split the strings we've been playing with:
     ['', '1', '2', '3', '']
 ```
 
-This "emit an empty string" behavior has ramifications for the other `keep` modes, too.
-The behavior of `keep=True` is perhaps easy to predict; we just append the separators
+This "emit an empty string" behavior has ramifications for the other `keep` modes.
+The behavior of `keep=True` is easy to predict; `multisplit` just appends the separators
 to the previous string segment:
 
 ```Python
@@ -2285,6 +2297,11 @@ own segments, rather than appending each one to the previous segment:
     ['', ',', '1', ',', '2', ',', '3', ',', '']
 ```
 
+Remember, `ALTERNATING` output always begins and ends with a non-separator string.
+If the string you're splitting begins or ends with a separator, the output
+from `multisplit` specifying `keep=ALTERNATING` will begin or end with an empty
+string, too.
+
 And, as with `keep=True`, you can also recreate the original string by passing
 these arrays in to `''.join`:
 
@@ -2295,8 +2312,8 @@ these arrays in to `''.join`:
     ',1,2,3,'
 ```
 
-Finally, consider `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
-initially I thought it was wrong.  But I gave it a lot of thought and convinced
+Finally there's `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
+initially I thought it was wrong.  But I gave it a *lot* of thought and convinced
 myself that, yes, it's correct:
 
 ```Python
@@ -2312,7 +2329,7 @@ That tuple at the end, just containing two empty strings:
     ('', '')
 ```
 
-is *so strange.*  How can that be right?
+It's *so strange.*  How can that be right?
 
 It's the same as `str.split`.
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -2321,31 +2338,47 @@ in the original string.  So it *must* emit the empty non-separator string.
 And since that zero-length string isn't (cannot!) be followed by a separator,
 when using `keep=AS_PAIRS` the final separator string is *also* empty.
 
-Think of it this way:
+Think of it this way: with the tuple of empty strings there, you can easily
+convert one `keep` format into any another.  (Provided that you know
+what the separators were--either the source `keep` format was not false,
+or you only used one separator string when calling `multisplit`).
+Without that tuple of empty strings at the end, you'd also have to have an
+`if` statement to add or remove empty stuff from the end.
+
+I'll demonstrate this with a simple example.  Here's the output of
+`multisplit` splitting the string `'1a1z1'` by the separator `'1'`,
+in each of the four `keep` formats:
 
 ```Python
-    >>> list(big.multisplit(',1,2,3,', (',',), keep=False, separate=True, strip=False))
-    ['', '1', '2', '3', '']
+>>> list(big.multisplit('1a1z1', '1', keep=False))
+['', 'a', 'z', '']
+>>> list(big.multisplit('1a1z1', '1', keep=True))
+['1', 'a1', 'z1', '']
+>>> list(big.multisplit('1a1z1', '1', keep=big.ALTERNATING))
+['', '1', 'a', '1', 'z', '1', '']
+>>> list(big.multisplit('1a1z1', '1', keep=big.AS_PAIRS))
+[('', '1'), ('a', '1'), ('z', '1'), ('', '')]
 ```
 
-When you call `multisplit` with `keep=False` in this example, the empty string at the
-end makes sense, right?  So if you change that parameter to `keep=AS_PAIRS`, it makes
-sense that you still have an empty string at the end.
+Because the `AS_PAIRS` output ends with that tuple of empty
+strings, we can mechanically convert it into any of the other
+formats, like so:
 
 ```Python
-    >>> list(big.multisplit(',1,2,3,', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
-    [('', ','), ('1', ','), ('2', ',') ('3', ','), ('', '')]
+>>> result = list(big.multisplit('1a1z1', '1', keep=big.AS_PAIRS))
+>>> result
+[('', '1'), ('a', '1'), ('z', '1'), ('', '')]
+>>> [s[0] for s in result] # convert to keep=False
+['', 'a', 'z', '']
+>>> [s[0]+s[1] for s in result] # convert to keep=True
+['1', 'a1', 'z1', '']
+>>> [s for t in result for s in t][:-1] # convert to keep=big.ALTERNATING
+['', '1', 'a', '1', 'z', '1', '']
 ```
 
-Naturally, you can recreate the original string from `big.AS_PAIRS` tuples too,
-although you have to unpack the tuples:
-
-```Python
-    >>> ''.join(s  for t in [('1', ','), ('2', ','), ('', ','), ('3', '')]  for s in t)
-    '1,2,,3'
-    >>> ''.join(s  for t in [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]  for s in t)
-    ',1,2,3,'
-```
+If the `AS_PAIRS` output *didn't* end with that tuple of empty strings,
+you'd need to add an `if` statement to restore the trailing empty
+strings as needed.
 
 
 ## `lines` and lines modifier functions
@@ -2450,7 +2483,7 @@ automatically.
 **big** contains three functions used to reflow and format text
 in a pleasing manner.  In the order you should use them, they are
 [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue),
-`word_wrap`,
+[`wrap_words(),`](#wrap_wordswords-margin79--two_spacestrue),
 and optionally
 [`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0).
 This trio of functions gives you the following word-wrap superpowers:
@@ -2459,31 +2492,16 @@ This trio of functions gives you the following word-wrap superpowers:
   Instead, their formatting is preserved.
 * Multiple texts can be merged together into multiple columns.
 
-#### Split text array
+### "text" vs "code"
 
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-splits a string of text into a *split text array*,
-and `word_wrap` consumes a *split text array* to produce its
-word-wrapped output.  A split text array is an array of strings.
-You'll see four kinds of strings in a split text array:
+The **big** word wrapping functions also distinguish between
+"text" and "code".  The main distinction is, "text" lines can
+get word-wrapped, but "code" lines shouldn't.  **big** considers
+any line starting with enough whitespace to be a "code" line;
+by default, this is four spaces.  Any non-blank line that
+starting with four spaces is a "code" line, and any non-blank
+line that starts with less than four spaces is a "text" line.
 
-* Individual words, ready to be word-wrapped.
-* Entire lines of "code", preserving their formatting.
-* Line breaks, represented by a single newline: `'\n'`.
-* Paragraph breaks, represented by two newlines: `'\n\n'`.
-
-When
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-splits a string, it views each
-line as either a "text" line or a "code" line.  Any non-blank
-line that starts with `code_indent` or more spaces (or the
-equivalent using tabs) is a "code" line, and any other
-non-blank line is a "text" line.  But it has some state
-here; when
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-sees a "text" line,
-it switches into "text" mode, and when it sees a "code"
-line it switches into "code" mode.
 
 In "text" mode:
 
@@ -2504,6 +2522,29 @@ Also, whenever
 switches between
 "text" and "code" mode, it emits a paragraph break.
 
+#### Split text array
+
+A *split text array* is an intermediary data structure
+used by **big.text** functions to represent text.
+It's literally just an array of strings, where the strings
+represent individual word-wrappable substrings.
+
+[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+splits a string of text and returns a *split text array,*
+and
+[`wrap_words()`](#wrap_wordswords-margin79--two_spacestrue),
+consumes a *split text array* to produce its
+word-wrapped output.
+You'll see four kinds of strings in a *split text array:*
+
+* Individual words, ready to be word-wrapped.
+* Entire lines of "code", preserving their formatting.
+* Line breaks, represented by a single newline: `'\n'`.
+* Paragraph breaks, represented by two newlines: `'\n\n'`.
+
+
+#### Examples
+
 This might be clearer with an example or two.  The following text:
 
 ```
@@ -2521,8 +2562,9 @@ would be represented in a Python string as:
 
 Note the three newlines between the second and third lines.
 
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-would turn this into the following split text array:
+If you then passed this string in to
+[`split_text_with_code`,](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+it'd return this *split text array:*
 ```Python
 [ 'hello', 'there!', 'this', 'is', 'text.', '\n\n',
   'this', 'is', 'a', 'second', 'paragraph!']
@@ -2534,7 +2576,8 @@ a single paragraph, and collapsed the three newlines separating
 the two paragraphs into a "paragraph break" marker
 (two newlines in one string).
 
-And this text:
+
+Now let's add an example of text with some "code".  This text:
 
 ```
 What are the first four squared numbers?
@@ -2558,20 +2601,20 @@ would be represented in a Python string as (broken up into multiple strings for 
 
 [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 considers the two lines with initial whitespace as "code" lines,
-and so the text is split into the following split text array:
+and so the text is split into the following *split text array:*
 ```Python
 ['What', 'are', 'the', 'first', 'four', 'squared', 'numbers?', '\n\n',
   '    for i in range(1, 5):', '\n', '\n', '\n', '        print(i**2)', '\n\n',
   'Python', 'is', 'just', 'that', 'easy!']
 ```
 
-Here we have a text paragraph, followed by a "code paragraph", followed
-by a second text paragraph.  The code paragraph preserves the internal
+Here we have a "text" paragraph, followed by a "code" paragraph, followed
+by a second "text" paragraph.  The "code" paragraph preserves the internal
 newlines, though they are represented as individual "line break" markers
 (strings containing a single newline).  Every paragraph is separated by
 a "paragraph marker".
 
-Here's a simple algorithm for joining a split text array back into a
+Here's a simple algorithm for joining a *split text array* back into a
 single string:
 ```Python
 
@@ -2586,7 +2629,8 @@ text = "".join(a)
 
 Of course, this algorithm is too simple to do word wrapping.
 Nor does it handle adding two spaces after sentence-ending
-punctuation.  In practice you should just use
+punctuation.  In practice, you shouldn't do this by hand;
+you should use
 [`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).
 
 #### Merging columns
@@ -2652,27 +2696,30 @@ as follows:
 
 #### Overflow
 
-What is "overflow"?  It's when the text in a column is wider than that
+What is "overflow"?  It's a condition
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+may encounter when the text in a column is wider than that
 column's `max_width`.
 [`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
-discusses both "overflow lines",
-lines that are longer than `max_width`, and "overflow columns", which
-are columns that contain any overflow lines.
+needs to consider both "overflow lines",
+lines that are longer than `max_width`, and "overflow columns",
+columns that contain one or more overflow lines.
 
 What does
 [`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
-do when it encounters overflow?  It provides
-three "strategies" to deal with this condition, and you can control
-which it uses through the `overflow_strategy` parameter.  The three are:
+do when it encounters overflow?  It depends on what you want.
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+provides three "strategies" to deal with this condition, and you can specify
+which one you want with its `overflow_strategy` parameter.  The three are:
 
-`OverflowStrategy.RAISE`: Raise an `OverflowError` exception.  The default.
+- `OverflowStrategy.RAISE`: Raise an `OverflowError` exception.  The default.
 
-`OverflowStrategy.INTRUDE_ALL`: Intrude into all subsequent columns on
+- `OverflowStrategy.INTRUDE_ALL`: Intrude into all subsequent columns on
 all lines where the overflowed column is wider than its max_width.
-The subsequent columns "make space" for the overflow text by pausing their
-output on the overflow lines.
+The subsequent columns "make space" for the overflow text by not adding
+text on those overflowed lines; this is called "pausing" their output.
 
-`OverflowStrategy.DELAY_ALL`:  Delay all columns after the overflowed
+- `OverflowStrategy.DELAY_ALL`:  Delay all columns after the overflowed
 column, not beginning any until after the last overflowed line
 in the overflowed column.  This is like `INTRUDE_ALL`, except that
 they "make space" by pausing their output until the last overflowed
