@@ -298,9 +298,8 @@ class Scheduler:
     @property
     def queue(self):
         """
-        An ordered list of upcoming events.
-
-        The entries in the list are big.scheduler.Event objects.
+        A list of the currently scheduled Event objects,
+        in the order they will be yielded.
         """
         with self.regulator.lock:
             return self.heap.queue

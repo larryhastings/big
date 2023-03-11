@@ -18,7 +18,8 @@ overspecialized, cheap hacks have been upgraded with elegant
 new APIs and clever functionality.
 **big** is a real pleasure to use!
 
-**big** requires Python 3.6 or newer.  It has few dependencies.
+**big** requires Python 3.6 or newer.  Its only dependency
+is `python-dateutil`, and that's optional.
 
 *Think big!*
 
@@ -296,7 +297,7 @@ notice on the source code.
 This submodule doesn't define any of its own symbols.  Instead, it
 imports every other submodule in **big**, and uses `import *` to
 import every symbol from every other submodule, too.  Every
-symbol in **big** is available in `big.all`.
+public symbol in **big** is available in `big.all`.
 
 ## `big.boundinnerclass`
 
@@ -862,7 +863,7 @@ Only one entry so far.
 > time values must also implement rich comparison
 > with numbers (integers and floats).
 
-#### `Scheduler.Regulator.now()`
+#### `Regulator.now()`
 
 > Returns the current time in local units.
 > Must be monotonically increasing; for any
@@ -873,7 +874,7 @@ Only one entry so far.
 > A `Scheduler` will only call this method while
 > holding this regulator's lock.
 
-#### `Scheduler.Regulator.sleep(t)`
+#### `Regulator.sleep(t)`
 
 > Sleeps for some amount of time, in local units.
 > Must support an interval of `0`, which should
@@ -890,7 +891,7 @@ Only one entry so far.
 > A `Scheduler` will only call this method while
 > *not* holding this regulator's lock.
 
-#### `Scheduler.Regulator.wake()`
+#### `Regulator.wake()`
 
 > Aborts all current calls to `sleep` on this
 > `Regulator`, across all threads.
@@ -949,9 +950,8 @@ Only one entry so far.
 
 #### `Scheduler.queue`
 
-> A property, not a method.  Returns a list of the
-> current `Event` objects in the scheduler, in order
-> that they will be yielded.
+> A list of the currently scheduled `Event` objects,
+> in the order they will be yielded.
 
 #### `Scheduler.non_blocking()`
 
@@ -1773,6 +1773,11 @@ to make it easy to use best practices.
 > and the time represented in the string doesn't specify
 > a timezone, the `tzinfo` attribute of the returned object
 > will be explicitly set to `timezone`.
+>
+> `parse_timestamp_3339Z` depends on the
+> [`python-dateutil`](https://github.com/dateutil/dateutil)
+> package.  If `python-dateutil` is unavailable,
+> `parse_timestamp_3339Z` will also be unavailable.
 
 #### `timestamp_3339Z(t=None, want_microseconds=None)`
 
@@ -3130,6 +3135,10 @@ in the **big** test suite.
   thread could ever get a reference to the outer object.
 
 ## Release history
+
+**next version** (under development)
+
+* Minor doc fixes.
 
 **0.7**
 
