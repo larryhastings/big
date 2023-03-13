@@ -1881,7 +1881,6 @@ the string at *each* non-overlapping instance of any string
 specified in `separators`.  Internally, `multisplit` is
 implemented using `re.split` for speed.
 
-But
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 also let you fine-tune how it splits, through five keyword-only
 parameters:
@@ -1897,16 +1896,15 @@ parameters:
   supports a special *progressive* mode that duplicates the
   behavior of `str.strip` when you use `None` as the separator.
 * `maxsplit` lets you specify the maximum number of times to
-  split the string (like the `maxsplit` argument to `str.strip`).
+  split the string, exactly like the `maxsplit` argument to `str.strip`.
 * `reverse` lets you apply `maxsplit` to the end of the string
-  and splitting backwards (like using `str.rstrip` instead of
-  `str.strip`).
+  and splitting backwards, exactly like `str.rstrip`.
 
 To make it slightly easier to remember, all these keyword-only
 parameters default to a false value.  (Well, technically,
 `maxsplit` defaults to the special value `-1`, for compatibility
-with `str.split` etc.  But this is its special "don't do anything"
-magic value.  All the other keyword-only parameters default
+with `str.split`.  But this is its special "don't do anything"
+magic value.  All the *other* keyword-only parameters default
 to `False`.)
 
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -1922,11 +1920,11 @@ The downside of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-rev
 is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 *five keyword-only parameters* after all.  However, they're
-designed to be reasonably memorable, and they all default
-to `False` (except the traditional `maxsplit`).  But the best
+designed to be reasonably memorable, and their default values
+are designedo to be easy to remember.  But the best
 way to combat the complexity of calling
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is to use it as a building block for your own tailor-made
+is to use it as a building block for your own
 text splitting functions.  For example, inside **big**,
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is used to implement
@@ -1963,6 +1961,9 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3))
     ['apple', 'banana', 'cookie']
 ```
+
+`maxsplit` has interactions with `reverse` and `strip`.  For more
+information, see the documentation regarding those parameters, below.
 
 #### `keep`
 
@@ -2007,14 +2008,19 @@ string there:
     ['', '1', 'a', '1', 'z', '1', '']
 ```
 
-
 Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
 strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
 2-tuple contains a non-separator string followed by a separator string.
 
-If the original string doesn't end with a separator, or if `strip` is set to a
-value that means the string is stripped to the right, the last 2-tuple will
-contain an empty separator string:
+If the original string starts with a separator, the first 2-tuple will contain
+an empty non-separator string and the separator:
+
+```Python
+    >>> list(big.multisplit('YappleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
+    [('', 'Y'), ('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+```
+
+The last 2-tuple will *always* contain an empty separator string:
 
 ```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
@@ -2023,27 +2029,21 @@ contain an empty separator string:
     [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
 ```
 
-If the original string starts with a separator, the first 2-tuple will contain
-an empty non-separator string, and the separator:
-
-```Python
-    >>> list(big.multisplit('YappleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
-    [('', 'Y'), ('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
-```
-
-Sometimes `AS_PAIRS` will exhibit what seems to be bizarre behavior:
+Because of this rule, if the original string ends with a separator,
+and `multisplit` doesn't `strip` the right side, `AS_PAIRS`
+will emit a 2-tuple containing two empty strings:
 
 ```Python
     >>> list(big.multisplit('appleXbananaYcookieX', ('X', 'Y'), keep=big.AS_PAIRS))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', 'X'), ('', '')]
 ```
 
-Although this looks very strange, this *is* sensible and correct.
-
-For an explanation as to why `multisplit` will sometimes emit empty
-strings when using a true value with `keep`, read the
+This looks strange--but it *is* correct.  This behavior is discussed in the
 [Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split)
 section below.
+
+The behavior of `keep` can be affected by the value of `separate`.
+For more information, see the next section, on `separate`.
 
 
 #### `separate`
@@ -2062,9 +2062,10 @@ true.
     ['apple', '', 'banana', '', '', 'cookie']
 ```
 
-When you use `separate` and `keep` at the same time, and your string
-has multiple adjacent separators, the second and subsequent adjacent
-separators will be in a string by themselves:
+If `separate` and `keep` are both true values, and your string
+has multiple adjacent separators, `multisplit` will view `s`
+as having zero-length non-separator strings between the
+adjacent separators:
 
 ```Python
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=True))
@@ -2109,7 +2110,8 @@ side of the string:
 `maxsplit`.  It always strips on the left, but it only strips on the right
 if the string is completely split.  If `maxsplit` is reached before the entire
 string is split, and `strip` is `big.PROGRESSIVE`, `multisplit` *won't* strip
-the right side of the string.
+the right side of the string.  Note in this example how the trailing separator
+`Y` isn't stripped from the input string when `maxsplit` is less than `3`.
 
 ```Python
     >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), strip=big.PROGRESSIVE))
@@ -2138,8 +2140,8 @@ string, and parses moving to the *left* (towards the *beginning*
 of the string).
 
 This has two noticable effects on `multisplit`'s output.  First, this
-changes what splits are kept when `maxsplit` is less than the total number
-of splits in the string.  When `reverse` is true, the string is split
+changes which splits are kept when `maxsplit` is less than the total number
+of splits in the string.  When `reverse` is true, the splits are counted
 starting on the right and moving towards the left:
 
 ```Python
@@ -2158,9 +2160,13 @@ starting on the right and moving towards the left:
 The second effect is far more subtle.  It's only relevant when splitting strings
 containing multiple *overlapping* separators.  When `reverse` is false, and there
 are two (or more) overlapping separators, the string is split by the *leftmost*
-overlapping separator.  When `reverse` is true and there are two (or more)
+overlapping separator.  When `reverse` is true, and there are two (or more)
 overlapping separators, the string is split by the *rightmost* overlapping
 separator.
+
+Consider these two calls to `multisplit`.  The only difference between them is
+the value of `reverse`.  They produce different results, even though neither
+one uses `maxsplit`.
 
 ```Python
     >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'))) # reverse defaults to False
@@ -2203,7 +2209,7 @@ def str_splitlines(s, keepends=False):
     l = list(big.multisplit(s, newlines,
         keep=keepends, separate=True, strip=False))
     if l and not l[-1]:
-    	# yes, "".splitlines() returns an empty list
+    	# yes, ''.splitlines() returns an empty list
         l.pop()
     return l
 
@@ -2233,10 +2239,9 @@ Sometimes when you split using
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse),
 you'll get empty strings in the return value.  This might be unexpected,
 violating the [Principle Of Least Astonishment.](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
-But there are excellent reasons for this behavior.  It stems from observing
-how `str.split` behaves.
+But there are excellent reasons for this behavior.
 
-`str.split` really has two
+Let's start by observing what `str.split` does. `str.split` really has two
 major modes of operation: when you don't pass in a separator (or pass in `None` for the
 separator), and when you pass in an explicit separator string.  In this latter mode,
 the documentation says it regards every instance of a separator string as an individual
@@ -2307,9 +2312,9 @@ recreate the original string.
 
 Naturally,
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-duplicates this behavior.  When you want
+lets you duplicate this behavior.  When you want
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-to emulate the behavior of `str.split` when using an explicit separator
+to behave just like `str.split` does with an explicit separator
 string, just pass in `keep=False`, `separate=True`, and `strip=False`.
 That is, if `a` and `b` are strings,
 
@@ -2323,9 +2328,9 @@ always produces the same output as
      a.split(b)
 ```
 
-Here's sample code using
+For example, here's
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-to split the strings we've been playing with:
+splitting the strings we've been playing with, using these parameters:
 
 ```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=False, separate=True, strip=False))
@@ -2334,7 +2339,7 @@ to split the strings we've been playing with:
     ['', '1', '2', '3', '']
 ```
 
-This "emit an empty string" behavior has ramifications for the other `keep` modes.
+This "emit an empty string" behavior also has ramifications when `keep` isn't false.
 The behavior of `keep=True` is easy to predict; `multisplit` just appends the separators
 to the previous string segment:
 
@@ -2367,8 +2372,8 @@ own segments, rather than appending each one to the previous segment:
 
 Remember, `ALTERNATING` output always begins and ends with a non-separator string.
 If the string you're splitting begins or ends with a separator, the output
-from `multisplit` specifying `keep=ALTERNATING` will begin or end with an empty
-string, too.
+from `multisplit` specifying `keep=ALTERNATING` will correspondingly begin or end
+with an empty string.
 
 And, as with `keep=True`, you can also recreate the original string by passing
 these arrays in to `''.join`:
@@ -2381,8 +2386,8 @@ these arrays in to `''.join`:
 ```
 
 Finally there's `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
-initially I thought it was wrong.  But I gave it a *lot* of thought and convinced
-myself that, yes, it's correct:
+initially I thought it was wrong.  But I've given it a *lot* of thought, and
+I've convinced myself that this is correct:
 
 ```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
@@ -3142,7 +3147,15 @@ in the **big** test suite.
 
 ## Release history
 
-**next version** (under development)
+**0.7.1**
+
+* Tweaked the implementation of `multisplit`.  Internally, it does the
+  string splitting using `re.split`, which returns a `list`.  It used
+  to iterate over the list and yield each element.  But that meant keeping
+  tne entire list around in memory until `multisplit` exited.  Now,
+  `multisplit` reverses the list, pops off the final element, and yields
+  that.  This means `multisplit` drops all references to the split strings
+  as it iterates over the string, which may help in low-memory situations.
 
 * Minor doc fixes.
 

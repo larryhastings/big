@@ -734,23 +734,27 @@ def multisplit(s, separators=None, *,
         l.reverse()
 
     if not keep:
-        for o in l:
-            yield o
+        l.reverse()
+        while l:
+            yield l.pop()
         return
 
     # from here on out, we're 'keep'-ing the separator strings.
     # (we're returning the separator strings in one form or another.)
 
     if keep == ALTERNATING:
-        for o in l:
-            yield o
+        l.reverse()
+        while l:
+            yield l.pop()
         return
 
     if (len(l) % 2) == 1:
         l.append(empty)
 
     previous = None
-    for o in l:
+    l.reverse()
+    while l:
+        o = l.pop()
         if previous is None:
             previous = o
             continue
