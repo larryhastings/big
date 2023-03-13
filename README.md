@@ -2010,7 +2010,9 @@ string there:
 
 Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
 strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
-2-tuple contains a non-separator string followed by a separator string.
+2-tuple contains a non-separator string followed by a separator string.  (In this
+way, `AS_PAIRS` is the *opposite* of `ALTERNATING`, as it always emits an *even*
+number of strings.)
 
 If the original string starts with a separator, the first 2-tuple will contain
 an empty non-separator string and the separator:
@@ -2038,9 +2040,9 @@ will emit a 2-tuple containing two empty strings:
     [('apple', 'X'), ('banana', 'Y'), ('cookie', 'X'), ('', '')]
 ```
 
-This looks strange--but it *is* correct.  This behavior is discussed in the
+This looks strange--but it *is* what you want.  This behavior is discussed
+at length in the section below titled
 [Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split)
-section below.
 
 The behavior of `keep` can be affected by the value of `separate`.
 For more information, see the next section, on `separate`.
@@ -2177,10 +2179,11 @@ one uses `maxsplit`.
 
 ### Reimplementing library functions using `multisplit`
 
-Finally, here are some concrete examples of how you could use
+Here are some examples of how you could use
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 to replace some common Python string splitting methods.  These exactly duplicate the
-behavior of the originals:
+behavior of the originals.
+
 ```Python
 def _multisplit_to_split(s, sep, maxsplit, reverse):
     separate = sep != None
@@ -2232,6 +2235,9 @@ def str_partition(s, sep):
 def str_rpartition(s, sep):
     return _partition_to_multisplit(s, sep, True)
 ```
+
+You wouldn't want to use these, of course--Python's built-in
+functions are so much faster!
 
 ### Why do you sometimes get empty strings when you split?
 
