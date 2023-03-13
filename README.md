@@ -848,18 +848,28 @@ Only one entry so far.
 > implement a minimum of three methods: `now`,
 > `sleep`, and `wake`.  It must also provide an
 > attribute called 'lock'.  The lock must implement
-> the context manager protocol, and should lock
-> the `Regulator` as needed.  (It doesn't need to be
-> a recursive lock.)
+> the context manager protocol, and should ensure thread
+> safety for the `Regulator`.  (`Scheduler` will only
+> request the `Regulator`'s lock if it's not already
+> holding it.  Put another way, the `Regulator` doesn't
+> need to be a "reentrant" lock, aka a "recursive" lock.)
 >
 > Normally a `Regulator` represents time using
 > a floating-point number, representing a fractional
 > number of seconds since some epoch.  But this
 > isn't strictly necessary.  Any Python object that
-> implements `__le__`, `__eq__`, `__add__`,
-> and `__sub__` in a consistent manner will work;
-> time values must also implement rich comparison
-> with numbers (integers and floats).
+> fulfills these requirements will work:
+>
+> * The time class must implement `__le__`, `__eq__`, `__add__`,
+> and `__sub__`, and these operations must be consistent in the
+> same way they are for number objects.
+> * If `a` and `b` are instances of the time class,
+> and `a.__le__(b)` is true, then `a` must either be
+> an earlier time, or a smaller interval of time.
+> * The time class must also implement rich comparison
+> with numbers (integers and floats), and `0` must
+> represent both the earliest time and a zero-length
+> interval of time.
 
 #### `Regulator.now()`
 
