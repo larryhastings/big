@@ -3152,7 +3152,7 @@ in the **big** test suite.
 * Tweaked the implementation of `multisplit`.  Internally, it does the
   string splitting using `re.split`, which returns a `list`.  It used
   to iterate over the list and yield each element.  But that meant keeping
-  tne entire list around in memory until `multisplit` exited.  Now,
+  the entire list around in memory until `multisplit` exited.  Now,
   `multisplit` reverses the list, pops off the final element, and yields
   that.  This means `multisplit` drops all references to the split strings
   as it iterates over the string, which may help in low-memory situations.
