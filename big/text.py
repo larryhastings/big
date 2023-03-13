@@ -595,13 +595,13 @@ def multisplit(s, separators=None, *,
     the beginning.  Second, if there are overlapping instances of
     separators in the string, multisplit will prefer the rightmost
     separator rather than the left.  For example:
-        multisplit(" x x ", (" x ",), keep=big.ALTERNATING)
+        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING)
     will split on the leftmost instance of " x ", yielding
-        "", " x ", "x "
+        "A", " x ", "x Z"
     whereas
-        multisplit(" x x ", (" x ",), keep=big.ALTERNATING, reverse=True)
+        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True)
     will split on the rightmost instance of " x ", yielding
-        " x", " x ", ""
+        "A x", " x ", "Z"
     """
     type_of_s = type(s)
     as_bytes = type_of_s == bytes
