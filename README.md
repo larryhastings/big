@@ -2900,9 +2900,9 @@ others.  Views are completely independent from each other.
 
 #### Overview
 
-One minor complaint I have about Python is about inner classes.
+One minor complaint I have about Python regards inner classes.
 An "inner class" is a class defined inside another class.  And,
-well, inner classes seem kind of half-baked.   Unlike methods,
+well, inner classes seem kind of half-baked.  Unlike functions,
 inner classes don't get bound to the object.
 
 Consider this Python code:
@@ -2924,9 +2924,10 @@ When `o.method` is called, Python automatically passes in the `o` object as the 
 (generally called `self`).  In object-oriented lingo, `o` is *bound* to `method`, and indeed
 Python calls this object a *bound method*:
 
-
+```
     >>> o.method
     <bound method Outer.method of <__main__.Outer object at 0x########>>
+```
 
 But that doesn't happen when `o.Inner` is called.  (It *does* pass in
 a `self`, but in this case it's the newly-created `Inner` object.)
@@ -2951,7 +2952,8 @@ This seems redundant.  You don't have to pass in `o` explicitly to method calls,
 why should you have to pass it in explicitly to inner classes?
 
 Well--now you don't have to!
-You just need to decorate the inner class with `@big.BoundInnerClass`.
+You just decorate the inner class with `@big.BoundInnerClass`,
+and `BoundInnerClass` takes care of the rest!
 
 #### Using bound inner classes
 
@@ -2975,15 +2977,15 @@ o.method()
 i = o.Inner()
 ```
 
-Notice that `Inner.__init__` now accepts an `outer` parameter,
+Notice that `Inner.__init__` now requires an `outer` parameter,
 even though you didn't pass in any arguments to `o.Inner`.
-And when it's called, `o` is magically passed in to `outer`!
-Thanks, [`BoundInnerClass`](#boundinnerclasscls)!  You've saved the day.
+When it's called, `o` is magically passed in to `outer`!
+Thanks, [`BoundInnerClass`](#boundinnerclasscls)!  You've saved the day!
 
 Decorating an inner class like this always adds a second positional
-parameter, after `self`.  And, like `self`, in theory you don't have
-to use the name `outer`.  (Although for consistency's sakes, it's probably
-a good idea.)
+parameter, after `self`.  And, like `self`, you don't have
+to use the name `outer`, you can use any name you like.
+(Although it's probably a good idea, for consistency's sakes.)
 
 #### Inheritance
 
@@ -3000,15 +3002,15 @@ outer class, the "class" you see is actually an instance of a
 [`BoundInnerClass`](#boundinnerclasscls) object.
 
 3. *All classes that inherit from a bound inner class must always call the
-superclass's `__init__`. You don't need to pass in the outer parameter;
+superclass's `__init__`. You don't need to pass in the `outer` parameter;
 it'll be automatically passed in to the superclass's `__init__` as before.*
 
-4. *An inner class that inherits from a bound inner class, and which also wants
-to be bound to the outer object, should be decorated with
+4. *An inner class that inherits from a bound inner class, and which also
+wants to be bound to the outer object, should be decorated with
 [`BoundInnerClass`](#boundinnerclasscls).*
 
-5. *An inner class that inherits from a bound inner class, but doesn't want
-to be bound to the outer object, should be decorated with
+5. *An inner class that inherits from a bound inner class, but doesn't
+want to be bound to the outer object, should be decorated with
 [`UnboundInnerClass`](#unboundinnerclasscls).*
 
 Restating the last two rules: every class that descends from any
@@ -3017,6 +3019,9 @@ should be decorated with either
 [`BoundInnerClass`](#boundinnerclasscls)
 or
 [`UnboundInnerClass`](#unboundinnerclasscls).
+Which one you use depends on what behavior you want--whether or
+not you want your inner subclass to automatically get the `outer`
+instance passed in to its `__init__`.
 
 Here's a simple example using inheritance with bound inner classes:
 
@@ -3096,13 +3101,15 @@ in the **big** test suite.
 
 #### Miscellaneous notes
 
-* If you refer to a bound inner class directly from the outer class,
-  rather than using the outer instance, you get the original class.
-  This means that references to `Outer.Inner` are consistent, and it's
-  a base class of all the bound inner classes. This also means that if
-  you attempt to construct one without using an outer instance, you must
-  pass in the outer parameter by hand, just as you would have to pass
-  in the self parameter by hand when calling an unbound method.
+* If you refer to a bound inner class directly from the outer *class,*
+  rather than using the outer *instance,* you get the original class.
+  This ensures that references to `Outer.Inner` are consistent; this
+  class is also a base class of all the bound inner classes. Additionally,
+  if you attempt to construct an instance of an unbound `Outer.Inner`
+  class without referencing it via an instance, you must pass in the
+  outer parameter by hand--just like you'd have to pass in the `self`
+  parameter by hand when calling a method on the *class itself* rather
+  than on an *instance* of the class.
 
 * If you refer to a bound inner class from an outer instance,
   you get a subclass of the original class.
@@ -3162,7 +3169,6 @@ in the **big** test suite.
   `multisplit` reverses the list, pops off the final element, and yields
   that.  This means `multisplit` drops all references to the split strings
   as it iterates over the string, which may help in low-memory situations.
-
 * Minor doc fixes.
 
 **0.7**
@@ -3195,7 +3201,6 @@ in the **big** test suite.
     objects anyway.)
   * The `Scheduler` now guarantees that it will only call `now` and `wake`
     on a `Regulator` object while holding that `Regulator`'s lock.
-
 * Minor doc fixes.
 
 **0.6.18**
@@ -3261,8 +3266,8 @@ in the **big** test suite.
   colon to a period (`'.'`), which looks a little more natural.  A colon
   followed by a space is still converted to a dash followed by a space.
 
-*p.s.* There's a revision with a comment claiming it represents 0.6.13.  But
-I forgot to actually tag it and release it, and I forgot to actually.  Oops!
+*p.s.* I forgot to release packages for 0.6.11 and 0.6.12.  But they're
+tagged, in case you want to examine them for some reason.
 
 **0.6.12**
 
