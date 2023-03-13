@@ -2010,9 +2010,7 @@ string there:
 
 Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
 strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
-2-tuple contains a non-separator string followed by a separator string.  (In this
-way, `AS_PAIRS` is the *opposite* of `ALTERNATING`, as it always emits an *even*
-number of strings.)
+2-tuple contains a non-separator string followed by a separator string.
 
 If the original string starts with a separator, the first 2-tuple will contain
 an empty non-separator string and the separator:
@@ -2031,17 +2029,23 @@ The last 2-tuple will *always* contain an empty separator string:
     [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
 ```
 
+(This rule means that `AS_PAIRS` always emits an *even* number of strings.
+Contrast that with `ALTERNATING`, which always emits an *odd* number of strings,
+and the last string it emits is always a non-separator string.  Put another
+way: the list of strings emitted by `AS_PAIRS` is the same as `ALTERNATING`,
+except `AS_PAIRS` appends an empty string.)
+
 Because of this rule, if the original string ends with a separator,
-and `multisplit` doesn't `strip` the right side, `AS_PAIRS`
-will emit a 2-tuple containing two empty strings:
+and `multisplit` doesn't `strip` the right side, the final tuple
+emitted by `AS_PAIRS` will be a 2-tuple containing two empty strings:
 
 ```Python
     >>> list(big.multisplit('appleXbananaYcookieX', ('X', 'Y'), keep=big.AS_PAIRS))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', 'X'), ('', '')]
 ```
 
-This looks strange--but it *is* what you want.  This behavior is discussed
-at length in the section below titled
+This looks strange and unnecessary.  But it *is* what you want.
+This odd-looking behavior is discussed at length in the section below, titled
 [Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split)
 
 The behavior of `keep` can be affected by the value of `separate`.
