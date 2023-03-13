@@ -3161,7 +3161,7 @@ in the **big** test suite.
     [`Event`](#eventscheduler-event-time-priority-sequence)
     objects anyway.)
   * The `Scheduler` now guarantees that it will only call `now` and `wake`
-    on a `Regulator` object while holding its lock.
+    on a `Regulator` object while holding that `Regulator`'s lock.
 
 * Minor doc fixes.
 
