@@ -2032,8 +2032,9 @@ The last 2-tuple will *always* contain an empty separator string:
 (This rule means that `AS_PAIRS` always emits an *even* number of strings.
 Contrast that with `ALTERNATING`, which always emits an *odd* number of strings,
 and the last string it emits is always a non-separator string.  Put another
-way: the list of strings emitted by `AS_PAIRS` is the same as `ALTERNATING`,
-except `AS_PAIRS` appends an empty string.)
+way: if you ignore the tuples, the list of strings emitted by `AS_PAIRS` is the
+same as those emitted by `ALTERNATING`, except `AS_PAIRS` appends an empty
+string.)
 
 Because of this rule, if the original string ends with a separator,
 and `multisplit` doesn't `strip` the right side, the final tuple
