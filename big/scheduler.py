@@ -66,10 +66,18 @@ class Regulator:
     floating-point number, representing a fractional
     number of seconds since some epoch.  But this
     isn't strictly necessary.  Any Python object
-    that implements '__le__', '__eq__', '__add__',
-    and '__sub__' in a consistent manner will work;
-    time values must also implement rich comparison
-    with numbers (integers and floats).
+    that fulfills these requirements will work:
+
+    * The time class must implement `__le__`, `__eq__`, `__add__`,
+      and `__sub__`, and these operations must be consistent in the
+      same way they are for number objects.
+    * If `a` and `b` are instances of the time class,
+      and `a.__le__(b)` is true, then `a` must either be
+      an earlier time, or a smaller interval of time.
+    * The time class must also implement rich comparison
+      with numbers (integers and floats), and `0` must
+      represent both the earliest time and a zero-length
+      interval of time.
     """
 
     # A context manager that provides thread-safety
@@ -130,8 +138,8 @@ class SingleThreadedRegulator(Regulator):
     no thread safety, but is much higher performance
     than thread-safe Regulator implementations.
 
-    (This Regulator is also not safe for use from
-    inside a signal handler.)
+    This `Regulator` isn't guaranteed to be safe
+    for use while in a signal-handler callback.
     """
 
     def __repr__(self): # pragma: no cover
@@ -154,6 +162,9 @@ class ThreadSafeRegulator(Regulator):
     """
     A thread-safe implementation of Regulator
     designed for use in multithreaded programs.
+
+    This `Regulator` isn't guaranteed to be safe
+    for use while in a signal-handler callback.
     """
 
     def __init__(self):

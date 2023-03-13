@@ -971,17 +971,21 @@ Only one entry so far.
 ### `SingleThreadedRegulator()`
 
 > An implementation of `Regulator` designed for
-> use in single-threaded programs.  It provides
-> no thread safety, but is much higher performance
+> use in single-threaded programs.  It doesn't support
+> multiple threads, and in particular is not thread-safe.
+> But it's much higher performance
 > than thread-safe `Regulator` implementations.
 >
-> (This `Regulator` is also not safe for use from
-> inside a signal handler.)
+> This `Regulator` isn't guaranteed to be safe
+> for use while in a signal-handler callback.
 
 ### `ThreadSafeRegulator()`
 
 > A thread-safe implementation of `Regulator`
 > designed for use in multithreaded programs.
+>
+> This `Regulator` isn't guaranteed to be safe
+> for use while in a signal-handler callback.
 
 
 ## `big.text`
