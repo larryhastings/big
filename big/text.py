@@ -55,9 +55,9 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     """
     Like str.partition, but pattern is matched as a regular expression.
 
-    s can be a string or a bytes object.
+    s can be either a str or bytes object.
 
-    pattern can be a string, bytes, or an re.Pattern object.
+    pattern can be a str, bytes, or re.Pattern object.
 
     s and pattern (or pattern.pattern) must be the same type.
 
@@ -87,36 +87,59 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     If reverse is true, partitions starting at the right,
     like re_rpartition.
 
+    You can pass in an instance of a subclass of bytes or str
+    for s and pattern (or pattern.pattern), but the base class
+    for both must be the same (str or bytes).  re_partition will
+    only return str or bytes objects.
+
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
     if reverse:
         return re_rpartition(s, pattern, count, flags=flags)
+
+    s_is_str = isinstance(s, str)
+    s_is_bytes = isinstance(s, bytes)
+    if s_is_str:
+        if s_is_bytes:
+            raise TypeError("s must be str or bytes, but not both")
+        empty = ''
+        s_type = str
+        if type(s) != str:
+            s = str(s)
+    elif s_is_bytes:
+        empty = b''
+        s_type = bytes
+        if type(s) != bytes:
+            s = bytes(s)
+    else:
+        raise TypeError("s must be str or bytes")
+
     if not isinstance(pattern, re_Pattern):
+        if not isinstance(pattern, s_type):
+            raise TypeError("pattern must be the same type as s")
+        if type(pattern) != s_type:
+            pattern = s_type(pattern)
         pattern = re.compile(pattern, flags=flags)
-    if not (isinstance(s, (str, bytes)) and
-        (type(s) == type(pattern.pattern))):
-        raise ValueError("s must be str or int, and string used in pattern must be the same type")
-    as_bytes = isinstance(s, bytes)
-    empty = b'' if as_bytes else ''
+
+    # optimize for the most frequent use case
+    if count == 1:
+        match = pattern.search(s)
+        if not match:
+            return (s, None, empty)
+        before, _, after = s.partition(match.group(0))
+        assert _
+        return (before, match, after)
+
+    if count == 0:
+        return (s,)
 
     if count < 0:
         raise ValueError("count must be >= 0")
 
     result = [s]
-    if count == 0:
-        return result
-
-    if count == 1:
-        # much cheaper for the general case
-        match = pattern.search(s)
-        if match:
-            matches = [match]
-        else:
-            matches = ()
-    else:
-        matches = list(pattern.finditer(s))
-        matches.reverse()
+    matches = list(pattern.finditer(s))
+    matches.reverse()
 
     for _ in range(count):
         if not matches:
@@ -166,26 +189,56 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     If pattern is a string, flags is passed in
     as the flags argument to re.compile.
 
+    You can pass in an instance of a subclass of bytes or str
+    for s and pattern (or pattern.pattern), but the base class
+    for both must be the same (str or bytes).  re_rpartition will
+    only return str or bytes objects.
+
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
+    s_is_str = isinstance(s, str)
+    s_is_bytes = isinstance(s, bytes)
+    if s_is_str:
+        if s_is_bytes:
+            raise TypeError("s must be str or bytes, but not both")
+        empty = ''
+        s_type = str
+        if type(s) != str:
+            s = str(s)
+    elif s_is_bytes:
+        empty = b''
+        s_type = bytes
+        if type(s) != bytes:
+            s = bytes(s)
+    else:
+        raise TypeError("s must be str or bytes")
+
     if not isinstance(pattern, re_Pattern):
+        if not isinstance(pattern, s_type):
+            raise TypeError("pattern must be the same type as s")
+        if type(pattern) != s_type:
+            pattern = s_type(pattern)
         pattern = re.compile(pattern, flags=flags)
-    if not (isinstance(s, (str, bytes)) and
-        (type(s) == type(pattern.pattern))):
-        raise ValueError("s must be str or int, and string used in pattern must be the same type")
+
+    if count == 0:
+        return (s,)
 
     if count < 0:
         raise ValueError("count must be >= 0")
 
-    result = [s]
-    if count == 0:
-        return result
-
-    as_bytes = not isinstance(s, str)
-    empty = b'' if as_bytes else ''
     matches = list(pattern.finditer(s))
 
+    # optimize for the most frequent use case
+    if count == 1:
+        if not matches:
+            return (empty, None, s)
+        match = matches[-1]
+        before, _, after = s.rpartition(match.group(0))
+        assert _
+        return (before, match, after)
+
+    result = [s]
     for i in range(count):
         if not matches:
             r = [empty, None]
@@ -200,6 +253,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
 
 
 # a list of all unicode whitespace characters known to Python
+# (note: we check this list is correct and complete in a unit test)
 _export_name('whitespace')
 whitespace = (
     '\t'    , #     9 0x0009 - tab
@@ -232,10 +286,10 @@ whitespace = (
     '\u205f', #  8287 0x205f - medium mathematical space
     '\u3000', # 12288 0x3000 - ideographic space
 
-    '\r\n'  , # the classic DOS newline sequence
+    '\r\n'  , # bonus! the classic DOS newline sequence!
     )
 
-# this omits the DOS convention '\r\n'
+# this omits the DOS newline sequence '\r\n'
 _export_name('whitespace_without_dos')
 whitespace_without_dos = tuple(s for s in whitespace if s != '\r\n')
 
@@ -367,8 +421,8 @@ def _re_quote(s):
 
 
 @functools.lru_cache(re._MAXCACHE)
-def __separators_to_re(separators, as_bytes, separate=False, keep=False):
-    if as_bytes:
+def __separators_to_re(separators, separators_is_bytes, separate=False, keep=False):
+    if separators_is_bytes:
         pipe = b'|'
         separate_start = b'(?:'
         separate_end = b')+'
@@ -396,12 +450,14 @@ def __separators_to_re(separators, as_bytes, separate=False, keep=False):
     # print(f"  P3 {pattern!r}")
     return pattern
 
-def _separators_to_re(separators, as_bytes, separate=False, keep=False):
+def _separators_to_re(separators, separators_is_bytes, separate=False, keep=False):
+    # this ensures that separators is hashable,
+    # which will keep functools.lru_cache happy.
     try:
         hash(separators)
     except TypeError:
         separators = tuple(separators)
-    return __separators_to_re(separators, bool(as_bytes), separate=bool(separate), keep=bool(keep))
+    return __separators_to_re(separators, bool(separators_is_bytes), separate=bool(separate), keep=bool(keep))
 
 
 
@@ -413,6 +469,10 @@ def multistrip(s, separators, left=True, right=True):
     Strips from the string "s" all leading and trailing
     instances of strings found in "separators".
 
+    Returns a copy of s with the leading and/or trailing
+    separators stripped.  (If left and right are both false,
+    the contents are unchanged.)
+
     s should be str or bytes.
     separators should be an iterable of either str or bytes
     objects matching the type of s.
@@ -423,45 +483,75 @@ def multistrip(s, separators, left=True, right=True):
     If right is a true value, strips all trailing separators
     from s.
 
-    Processing always stops at the first character that
-    doesn't match one of the separators.
+    multistrip first removes leading separators, until the
+    string does not start with a separator (or is empty).
+    Then it removes trailing separators, until the string
+    until the string does not end with a separator (or is
+    empty).
 
-    Returns a copy of s with the leading and/or trailing
-    separators stripped.  (If left and right are both
-    false, returns s unchanged.)
+    multistrip is "greedy"; if more than one separator
+    matches, multistrip will strip the longest one.
+
+    You can pass in an instance of a subclass of bytes or str
+    for s and elements of separators, but the base class
+    for both must be the same (str or bytes).  multistrip will
+    only return str or bytes objects, even if left and right
+    are both false.
     """
-    type_of_s = type(s)
-    as_bytes = type_of_s == bytes
+    s_is_bytes = isinstance(s, bytes)
+    s_is_str = isinstance(s, str)
 
-    if not (as_bytes or (type_of_s == str)):
-        raise TypeError('s must be str or bytes')
-
-    type_of_separators = type(separators)
-    if as_bytes:
+    if s_is_str and s_is_bytes:
+        raise TypeError('s must be str or bytes, but not both')
+    elif s_is_str:
+        s_type = str
+        head = '^'
+        tail = '$'
+        if type(s) != str:
+            s = str(s)
+        check_separators = not isinstance(separators, str)
+        if not check_separators:
+            if not separators:
+                raise ValueError("separators must be an iterable of non-empty objects the same type as s")
+            separators = tuple(separators)
+    elif s_is_bytes:
+        s_type = bytes
         head = b'^'
         tail = b'$'
-        if type_of_separators == bytes:
+        if type(s) != bytes:
+            s = bytes(s)
+
+        if isinstance(separators, bytes):
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.  otherwise, _separators_to_re will
-            # iterate over it, and... oops! it gets bytes!
+            # iterate over it, which... yields integers! oops!
+            if not separators:
+                raise ValueError("separators must be an iterable of non-empty objects the same type as s")
             check_separators = False
             separators = tuple(separators[i:i+1] for i in range(len(separators)))
         else:
             check_separators = True
     else:
-        head = '^'
-        tail = '$'
-        check_separators = type_of_separators != str
+        raise TypeError('s must be str or bytes')
 
     if check_separators:
+        if not separators:
+            raise ValueError("separators must be an iterable of non-empty objects the same type as s")
+        cast_separators = []
         for o in separators:
-            if not isinstance(o, type_of_s):
-                raise TypeError("separators must be an iterable of objects the same type as s")
+            if not o:
+                raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
+            if not isinstance(o, s_type):
+                raise TypeError("separators must be an iterable of non-empty objects the same type as s, or None")
+            cast_separators.append(s_type(o))
+        separators = tuple(cast_separators)
 
     if not (left or right):
         return s
 
-    pattern = _separators_to_re(separators, as_bytes, separate=False, keep=False)
+    # we can sidestep the hashability test of _separators_to_re,
+    # separators is guaranteed to always a tuple at this point
+    pattern = __separators_to_re(separators, s_is_bytes, separate=False, keep=False)
 
     start = 0
     end = len(s)
@@ -602,36 +692,49 @@ def multisplit(s, separators=None, *,
         multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True)
     will split on the rightmost instance of " x ", yielding
         "A x", " x ", "Z"
+
+    You can pass in an instance of a subclass of bytes or str
+    for s and elements of separators, but the base class
+    for both must be the same (str or bytes).  multisplit will
+    only return str or bytes objects.
     """
     type_of_s = type(s)
-    as_bytes = type_of_s == bytes
-    if not (as_bytes or (type_of_s == str)):
+    s_is_bytes = isinstance(s, bytes)
+    s_is_str = isinstance(s, str)
+    if not (s_is_bytes or (type_of_s == str)):
         raise TypeError('s must be str or bytes')
 
     if separators is None:
-        separators = ascii_whitespace if as_bytes else whitespace
+        separators = ascii_whitespace if s_is_bytes else whitespace
         check_separators = False
-    elif not separators:
-        raise TypeError("separators must be either None or an iterable of objects the same type as s")
     else:
         check_separators = True
 
-    type_of_separators = type(separators)
-    if as_bytes:
-        if type_of_separators == bytes:
+    separators_is_bytes = isinstance(separators, bytes)
+    separators_is_str = isinstance(separators, str)
+    if s_is_bytes:
+        if separators_is_bytes:
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.
             separators = tuple(separators[i:i+1] for i in range(len(separators)))
             check_separators = False
+        elif separators_is_str:
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
         empty = b''
     else:
+        if separators_is_bytes:
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
         empty = ''
         if check_separators:
-            check_separators = type_of_separators != str
+            check_separators = not separators_is_str
 
     # check_separators is True if separators isn't str or bytes
     # or something we split ourselves.
     if check_separators:
+        if not separators:
+            raise ValueError("separators must be either None or an iterable of objects the same type as s")
+        if not hasattr(separators, '__iter__'):
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
         for o in separators:
             if not isinstance(o, type_of_s):
                 raise TypeError("separators must be either None or an iterable of objects the same type as s")
@@ -692,7 +795,7 @@ def multisplit(s, separators=None, *,
         else:
             separators = _multisplit_reversed(separators, 'separators')
 
-    pattern = _separators_to_re(separators, as_bytes, keep=separators_to_re_keep, separate=separate)
+    pattern = _separators_to_re(separators, s_is_bytes, keep=separators_to_re_keep, separate=separate)
     # print("PATTERN", pattern, f"{separators_to_re_keep=} {separate=}")
 
     l = re.split(pattern, s, re_split_maxsplit)
@@ -805,6 +908,11 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     If reverse is true, multipartition behaves like str.rpartition.
     It partitions starting on the right, scanning backwards through
     s looking for separators.
+
+    You can pass in an instance of a subclass of bytes or str
+    for s and elements of separators, but the base class
+    for both must be the same (str or bytes).  multipartition
+    will only yield str or bytes objects.
     """
     if count < 0:
         raise ValueError("count must be positive")
@@ -817,8 +925,8 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     desired_length = (2 * count) + 1
     result_length = len(result)
     if result_length < desired_length:
-        as_bytes = isinstance(s, bytes)
-        if as_bytes:
+        s_is_bytes = isinstance(s, bytes)
+        if s_is_bytes:
             empty = b''
         else:
             empty = ''
@@ -893,9 +1001,12 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     is set to a string containing these Unicode double quote
     code points:
         "“”„‟«»‹›
+
+    You can pass in an instance of a subclass of bytes or str
+    for s, but gently_title will only return str or bytes objects.
     """
-    as_bytes = isinstance(s, bytes)
-    if as_bytes:
+    s_is_bytes = isinstance(s, bytes)
+    if s_is_bytes:
         empty = b""
         if not apostrophes:
             apostrophes = b"'"
@@ -955,7 +1066,6 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         result.append(c)
     return empty.join(result)
 
-
 @_export
 def normalize_whitespace(s, separators=None, replacement=None):
     """
@@ -977,46 +1087,100 @@ def normalize_whitespace(s, separators=None, replacement=None):
     be replaced with the replacement string, e.g.:
 
        normalize_whitespace("   a    b   c") == " a b c".
+
+    You can pass in an instance of a subclass of bytes or str
+    for s and elements of separators, but the base class
+    for both must be the same (str or bytes).
+    normalize_whitespace will only return str or bytes objects.
     """
-    as_bytes = isinstance(s, bytes)
-    if as_bytes:
-        empty = b''
-        default_replacement = b' '
-        default_separators = ascii_whitespace
-    else:
+    s_type = type(s)
+    s_is_str = isinstance(s, str)
+    s_is_bytes = isinstance(s, bytes)
+    if s_is_str and s_is_bytes:
+        raise TypeError("s must be str or bytes, but not both")
+    elif s_is_str:
         empty = ''
         default_replacement = ' '
-        default_separators = whitespace
+        default_separators = whitespace_without_dos
+        if s_type != str:
+            s = str(s)
+            s_type = str
+    elif s_is_bytes:
+        empty = b''
+        default_replacement = b' '
+        default_separators = ascii_whitespace_without_dos
+        if s_type != bytes:
+            s = bytes(s)
+            s_type = bytes
+    else:
+        raise TypeError("s must be str or bytes")
+
+    if separators is None:
+        separators = default_separators
+    else:
+        if s_is_bytes:
+            if isinstance(separators, bytes):
+                # not iterable of bytes, literally a bytes string.
+                # split it ourselves.  otherwise, _separators_to_re will
+                # iterate over it, which... yields integers! oops!
+                check_separators = False
+                separators = tuple(separators[i:i+1] for i in range(len(separators)))
+            else:
+                check_separators = True
+        else:
+            check_separators = not isinstance(separators, str)
+            if not check_separators:
+                separators = tuple(separators)
+
+        if not separators:
+            raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
+
+        if check_separators:
+            cast_separators = []
+            for o in separators:
+                if not isinstance(o, s_type):
+                    raise TypeError("separators must be an iterable of non-empty objects the same type as s, or None")
+                if not o:
+                    raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
+                cast_separators.append(s_type(o))
+            separators = tuple(cast_separators)
+
+    if replacement is None:
+        replacement = default_replacement
+    else:
+        if not isinstance(replacement, s_type):
+            raise TypeError("replacement must be the same type as s, or None")
 
     if not s:
         return empty
 
-    if separators is None:
-        separators = default_separators
-    if replacement is None:
-        replacement = default_replacement
-
-    if separators in (whitespace, ascii_whitespace, utf8_whitespace, None):
+    # normalize_whitespace has a fast path for
+    # normalizing whitespace on str objects.
+    # if your "separators" qualifies,
+    # it'll automatically use the fast path.
+    #
+    # (we can't use the fast path for bytes objects,
+    # because it won't work with encoded whitespace
+    # characters > chr(127).  it'd *usually* work,
+    # sure.  but "usually" isn't good enough for big!)
+    if (   (separators is whitespace_without_dos)
+        or (separators is whitespace)
+        ):
+        if not separators:
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
         if not s.strip():
             return replacement
         words = s.split()
-        cleaned = replacement.join(words)
-        del words
         if s[:1].isspace():
-            cleaned = replacement + cleaned
+            words.insert(0, empty)
         if s[-1:].isspace():
-            cleaned = cleaned + replacement
+            words.append(empty)
+        cleaned = replacement.join(words)
         return cleaned
 
-    words = list(multisplit(s, separators, keep=False, separate=False, strip=True, reverse=False, maxsplit=-1))
+    words = list(multisplit(s, separators, keep=False, separate=False, strip=False, reverse=False, maxsplit=-1))
     cleaned = replacement.join(words)
     del words
-    stripped_left = multistrip(s, separators, left=True, right=False) != s
-    if stripped_left:
-        cleaned = replacement + cleaned
-    stripped_right = multistrip(s, separators, left=False, right=True) != s
-    if stripped_right:
-        cleaned = cleaned + replacement
     return cleaned
 
 
@@ -1037,9 +1201,14 @@ def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
 
     If backslash is a character, this character will quoting characters inside
     a quoted string, like the backslash character inside strings in Python.
+
+    You can pass in an instance of a subclass of bytes or str
+    for s and quotes, but the base class for both must be
+    the same (str or bytes).  split_quoted_strings will only
+    return str or bytes objects.
     """
-    as_bytes = isinstance(s, bytes)
-    if as_bytes:
+    s_is_bytes = isinstance(s, bytes)
+    if s_is_bytes:
         empty = b''
         if quotes is None:
             quotes=(b'"', b"'")
@@ -1240,6 +1409,11 @@ class lines:
         all keyword arguments passed in via kwargs are stored internally
         and can be accessed by user-defined lines modifier functions.
 
+        You can pass in an instance of a subclass of bytes or str
+        for s and elements of separators, but the base class
+        for both must be the same (str or bytes).  lines will
+        only yield str or bytes objects.
+
         Composable with all the lines_ modifier functions in the big.text module.
         """
         if not isinstance(line_number, int):
@@ -1249,22 +1423,22 @@ class lines:
         if not isinstance(tab_width, int):
             raise TypeError("tab_width must be int")
 
-        as_bytes = isinstance(s, bytes)
+        s_is_bytes = isinstance(s, bytes)
         as_str = isinstance(s, str)
-        if as_bytes or as_str:
+        if s_is_bytes or as_str:
             if not separators:
                 separators = newlines if as_str else ascii_newlines
             i = multisplit(s, separators, keep=False, separate=True, strip=False)
         else:
             i = iter(s)
-            as_bytes = None
+            s_is_bytes = None
 
         self.s = s
         self.separators = separators
         self.line_number = line_number
         self.column_number = column_number
         self.tab_width = tab_width
-        self.as_bytes = as_bytes
+        self.s_is_bytes = s_is_bytes
 
         self.i = i
 
@@ -1275,8 +1449,8 @@ class lines:
 
     def __next__(self):
         line = next(self.i)
-        if self.as_bytes is None:
-            self.as_bytes = isinstance(line, bytes)
+        if self.s_is_bytes is None:
+            self.s_is_bytes = isinstance(line, bytes)
         return_value = (LineInfo(line, self.line_number, self.column_number), line)
         self.line_number += 1
         return return_value
@@ -1344,11 +1518,11 @@ def lines_filter_comment_lines(li, comment_separators):
 
     if isinstance(comment_separators, bytes):
         comment_separators = tuple(comment_separators[i:i+1] for i in range(len(comment_separators)))
-        as_bytes = True
+        comment_separators_is_bytes = True
     else:
-        as_bytes = isinstance(comment_separators[0], bytes)
+        comment_separators_is_bytes = isinstance(comment_separators[0], bytes)
 
-    comment_pattern = _separators_to_re(tuple(comment_separators), as_bytes, separate=False, keep=False)
+    comment_pattern = _separators_to_re(tuple(comment_separators), comment_separators_is_bytes, separate=False, keep=False)
     comment_re = re.compile(comment_pattern)
     for info, line in li:
         s = line.lstrip()
@@ -1471,17 +1645,17 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
 
     if isinstance(comment_separators, bytes):
         comment_separators = tuple(comment_separators[i:i+1] for i in range(len(comment_separators)))
-        as_bytes = True
+        comment_separators_is_bytes = True
     else:
-        as_bytes = isinstance(comment_separators[0], bytes)
+        comment_separators_is_bytes = isinstance(comment_separators[0], bytes)
 
-    if as_bytes:
+    if comment_separators_is_bytes:
         empty = b''
     else:
         empty = ''
     empty_join = empty.join
 
-    comment_pattern = _separators_to_re(comment_separators, as_bytes=as_bytes, separate=True, keep=True)
+    comment_pattern = _separators_to_re(comment_separators, separators_is_bytes=comment_separators_is_bytes, separate=True, keep=True)
     re_comment = re.compile(comment_pattern)
     split = re_comment.split
     for info, line in li:
@@ -1624,8 +1798,8 @@ def wrap_words(words, margin=79, *, two_spaces=True):
     Combines 'words' into lines and returns the result as a string.
     Similar to textwrap.wrap.
 
-    'words' should be an iterator containing text split at word
-    boundaries.  Example:
+    'words' should be an iterator of str or bytes objects which
+    represent text split at word boundaries.  Example:
         "this is an example of text split at word boundaries".split()
     If you want a paragraph break, embed two '\n' characters in a row.
 
@@ -1640,6 +1814,11 @@ def wrap_words(words, margin=79, *, two_spaces=True):
     Elements in 'words' are not modified; any leading or trailing
     whitespace will be preserved.  You can use this to preserve
     whitespace where necessary, like in code examples.
+
+    The objects yielded by words can be a subclass of either
+    str or bytes, though wrap_words will only return str or bytes.
+    All the objects yielded by words must have the same base class
+    (str or bytes).
     """
     words = iter(words)
     col = 0
@@ -1776,6 +1955,9 @@ class _column_wrapper_splitter:
 
         leading = self.leading
         word = self.word
+        write_word = None
+        write_newline = False
+        append_c_to_leading = False
 
         for c in s:
             # print(f"<{c!r}> ", end='')
@@ -1785,23 +1967,35 @@ class _column_wrapper_splitter:
                 continue
 
             if word:
-                w = "".join(word)
+                write_word = "".join(word)
                 word.clear()
-                if leading:
-                    l = ''.join(leading)
-                else:
-                    l = ''
-                leading.clear()
-                self.state(l, w)
+
             if c == '\n':
+                if write_word:
+                    write_newline = True
+                else:
+                    write_word = c
+            else:
+                append_c_to_leading = True
+
+            if write_word:
                 if leading:
                     l = ''.join(leading)
+                    leading.clear()
                 else:
                     l = ''
-                leading.clear()
-                self.state(l, c)
-            else:
+
+                self.state(l, write_word)
+                write_word = None
+                write_leading = None
+
+                if write_newline:
+                    self.state('', '\n')
+                    write_newline = False
+
+            if append_c_to_leading:
                 leading.append(c)
+                append_c_to_leading = False
 
     def close(self):
         # flush the current word, if any.
@@ -1924,6 +2118,9 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
     preserved.  (This will preserve the formatting of code
     examples, when these words are rejoined into lines
     by wrap_words.)
+
+    s can be str, bytes, or a subclass of either, though
+    split_text_with_code will only return str or bytes.
     """
     cws = _column_wrapper_splitter(tab_width, allow_code, code_indent, convert_tabs_to_spaces)
     for c in s:
@@ -1991,6 +2188,11 @@ def merge_columns(*columns, column_separator=" ",
     either overflow_before or overflow_after is nonzero, these
     specify the number of extra lines before or after
     the overflowed lines in a column.
+
+    text and column_separator can be str, bytes, or a subclass
+    of either, though merge_columns will only return str or bytes.
+    All these objects (text and column_separator) must have the
+    same baseclass, str or bytes.
     """
     assert overflow_strategy in (OverflowStrategy.INTRUDE_ALL, OverflowStrategy.DELAY_ALL, OverflowStrategy.RAISE)
     raise_overflow_error = overflow_strategy == OverflowStrategy.RAISE

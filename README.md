@@ -1472,21 +1472,15 @@ Only one entry so far.
 >    greater than 0, the splits will start at the end of the string
 >    rather than the beginning.  Second, if there are overlapping
 >    instances of separators in the string, `multisplit` will prefer
->    the rightmost separator rather than the left.  For example:
+>    the rightmost separator rather than the left.  Consider this
+>    example, where `reverse` is false:
 >
->        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING)
+>        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING) => "A", " x ", "x Z"
 >
->    will split on the leftmost instance of `" x "`, yielding
+>    If you pass in a true value for `reverse`, `multisplit` will prefer
+>    the rightmost overlapping separator:
 >
->        "A", " x ", "x Z"
->
->    whereas
->
->        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True)
->
->    will split on the rightmost instance of `" x "`, yielding
->
->        "A x", " x ", "Z"
+>        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True) => "A x", " x ", "Z"
 >
 > For more information, see the deep-dive on
 > [**The `multi-` family of functions.**](#The-multi--family-of-functions)
@@ -1524,8 +1518,11 @@ Only one entry so far.
 > A list of all newline characters recognized by Python.
 > Includes many Unicode newline characters, like `'\u2029'`
 > (a paragraph separator).  Useful as a list of separator
-> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)` et al; `newlines` is specifically
-> used by the [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator constructor.
+> strings for
+> [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+> et al; `newlines` is specifically used by the
+> [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+> iterator constructor.
 >
 > **big** also defines `utf8_newlines`, which is `newlines`
 > with all strings encoded to UTF-8 (as bytes),
@@ -1538,9 +1535,9 @@ Only one entry so far.
 > text-processing functions recognize this sequence as a
 > *single* newline marker, rather than as two *separate*
 > newline characters.  If you don't want this behavior,
-> you can use `newlines_without_dos` instead;
-> **big** also provides `utf8_newlines_without_dos` and
-> `ascii_newlines_without_dos`.
+> you can use `newlines_without_dos` instead.
+> (**big** also provides `utf8_newlines_without_dos` and
+> `ascii_newlines_without_dos`.)
 
 
 #### `normalize_whitespace(s, separators=None, replacement=None)`
@@ -3164,6 +3161,16 @@ in the **big** test suite.
 
 
 ## Release history
+
+**next version** *(under development)*
+
+* Functions in `big.text` now accept `str`, `bytes`, or a *subclass*
+  of either `str` or `bytes`.  (Previously they only accepted `str`
+  or `bytes`.)
+* Code cleanup in `split_text_with_code`, removed redundant code.
+  I think it has about the same number of `if` statements; if anything
+  it might be slightly faster.
+* Lots of doc fixes, as usual.
 
 **0.7.1**
 

@@ -28,6 +28,7 @@ import copy
 import big.all as big
 import math
 import re
+import sys
 import unittest
 
 
@@ -66,6 +67,23 @@ def printable_separators(separators):
         if separators == known:
             return f"{name}"
     return separators
+
+class StrSubclass(str):
+    def __repr__(self):
+        return f"<StrSubclass {str(self)!r}>"
+
+class DifferentStrSubclass(str):
+    def __repr__(self):
+        return f"<DifferentStrSubclass {str(self)!r}>"
+
+class BytesSubclass(bytes):
+    def __repr__(self):
+        return f"<BytesSubclass {bytes(self)!r}>"
+
+class DifferentBytesSubclass(bytes):
+    def __repr__(self):
+        return f"<DifferentBytesSubclass {bytes(self)!r}>"
+
 
 class BigTextTests(unittest.TestCase):
 
@@ -128,6 +146,7 @@ class BigTextTests(unittest.TestCase):
         for forwards, backwards in big.text._reversed_builtin_separators.items():
             self.assertEqual(set(backwards), set(big.text._multisplit_reversed(forwards)), f"failed on {printable_separators(forwards)}")
 
+
     def test_re_partition(self):
         def group0(re_partition_result):
             result = []
@@ -186,64 +205,92 @@ class BigTextTests(unittest.TestCase):
                 self.assertEqual(match.group(1), c("89"))
 
             def test_re_partition(s, pattern, count, expected):
-                self.assertEqual(group0(big.re_partition(s, pattern, count)),
-                    expected )
+                self.assertEqual(group0(big.re_partition(s, pattern, count)), expected)
 
-            test_re_partition("a:b:c:d", ":", 0, ("a:b:c:d",))
-            test_re_partition("a:b:c:d", ":", 1, ("a", ":", "b:c:d"))
-            test_re_partition("a:b:c:d", ":", 2, ("a", ":", "b", ":", "c:d"))
-            test_re_partition("a:b:c:d", ":", 3, ("a", ":", "b", ":", "c", ":", "d"))
-            test_re_partition("a:b:c:d", ":", 4, ("a", ":", "b", ":", "c", ":", "d", None, ''))
-            test_re_partition("a:b:c:d", ":", 5, ("a", ":", "b", ":", "c", ":", "d", None, '', None, ''))
+            test_re_partition(c("a:b:c:d"), c(":"), 0, (c("a:b:c:d"),))
+            test_re_partition(c("a:b:c:d"), c(":"), 1, (c("a"),      c(":"), c("b:c:d")))
+            test_re_partition(c("a:b:c:d"), c(":"), 2, (c("a"),      c(":"), c("b"), c(":"), c("c:d")))
+            test_re_partition(c("a:b:c:d"), c(":"), 3, (c("a"),      c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
+            test_re_partition(c("a:b:c:d"), c(":"), 4, (c("a"),      c(":"), c("b"), c(":"), c("c"), c(":"), c("d"), None, c('')))
+            test_re_partition(c("a:b:c:d"), c(":"), 5, (c("a"),      c(":"), c("b"), c(":"), c("c"), c(":"), c("d"), None, c(''), None, c('')))
+            test_re_partition(c("a:b:c:d"), c("x"), 5, (c("a:b:c:d"), None,  c(''),    None, c(''),    None, c(''),  None, c(''), None, c('')))
 
             def test_re_rpartition(s, pattern, count, expected):
-                self.assertEqual(group0(big.re_rpartition(s, pattern, count)),
-                    expected )
-                self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)),
-                    expected )
+                self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
+                self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)
 
-            test_re_rpartition("a:b:c:d", ":", 0, ("a:b:c:d",))
-            test_re_rpartition("a:b:c:d", ":", 1, ("a:b:c", ':' ,"d"))
-            test_re_rpartition("a:b:c:d", ":", 2, ("a:b", ":", "c", ':' ,"d"))
-            test_re_rpartition("a:b:c:d", ":", 3, ("a", ":", "b", ":", "c", ':' ,"d"))
-            test_re_rpartition("a:b:c:d", ":", 4, ("", None, "a", ":", "b", ":", "c", ':' ,"d"))
-            test_re_rpartition("a:b:c:d", ":", 5, ("", None, "", None, "a", ":", "b", ":", "c", ':' ,"d"))
+            test_re_rpartition(c("a:b:c:d"), c(":"), 0, (c("a:b:c:d"),))
+            test_re_rpartition(c("a:b:c:d"), c(":"), 1, (c("a:b:c"), c(':'), c("d")))
+            test_re_rpartition(c("a:b:c:d"), c(":"), 2, (c("a:b"),   c(":"), c("c"), c(":"), c("d")))
+            test_re_rpartition(c("a:b:c:d"), c(":"), 3, (c("a"),     c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
+            test_re_rpartition(c("a:b:c:d"), c(":"), 4, (c(""),        None, c("a"), c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
+            test_re_rpartition(c("a:b:c:d"), c(":"), 5, (c(""),        None, c(''),    None, c("a"), c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
+            test_re_rpartition(c("a:b:c:d"), c("x"), 5, (c(''),        None, c(''),    None, c(''),    None, c(''),    None, c(''),    None, c("a:b:c:d")))
 
         s = "abc123def456ghi"
-        pattern = b"[0-9]+"
-        with self.assertRaises(ValueError):
-            big.re_partition(s, pattern)
-        with self.assertRaises(ValueError):
-            big.re_rpartition(s, pattern)
-        pattern = re.compile(pattern)
-        with self.assertRaises(ValueError):
-            big.re_partition(s, pattern)
-        with self.assertRaises(ValueError):
-            big.re_rpartition(s, pattern)
+        bytes_pattern = b"[0-9]+"
+        with self.assertRaises(TypeError):
+            big.re_partition(s, bytes_pattern)
+        with self.assertRaises(TypeError):
+            big.re_rpartition(s, bytes_pattern)
+
+        bytes_pattern = re.compile(bytes_pattern)
+        with self.assertRaises(TypeError):
+            big.re_partition(s, bytes_pattern)
+        with self.assertRaises(TypeError):
+            big.re_rpartition(s, bytes_pattern)
 
         with self.assertRaises(ValueError):
             big.re_partition('a:b', ':', -1)
         with self.assertRaises(ValueError):
             big.re_partition(b'a:b', b':', -1)
-        with self.assertRaises(ValueError):
-            big.re_rpartition('a:b', ':', -1)
-        with self.assertRaises(ValueError):
-            big.re_rpartition(b'a:b', b':', -1)
+
+        self.assertEqual(group0(big.re_partition(StrSubclass("a:b:c:d"), StrSubclass(":"))),
+            ("a", ":", "b:c:d") )
+        self.assertEqual(group0(big.re_partition(StrSubclass("a:b:c:d"), DifferentStrSubclass(":"))),
+            ("a", ":", "b:c:d") )
+
+        self.assertEqual(group0(big.re_partition(BytesSubclass(b"a:b:c:d"), BytesSubclass(b":"))),
+            (b"a", b":", b"b:c:d") )
+        self.assertEqual(group0(big.re_partition(BytesSubclass(b"a:b:c:d"), DifferentBytesSubclass(b":"))),
+            (b"a", b":", b"b:c:d") )
+
 
     def test_multistrip(self):
-        def test_multistrip(left, s, right, separators):
-            for _ in range(2):
-                if _ == 1:
-                    left = left.encode('ascii')
-                    s = s.encode('ascii')
-                    right = right.encode('ascii')
-                    if separators == big.whitespace:
+        def test_multistrip(original_left, original_s, original_right, original_separators):
+            for round in range(4):
+                if round == 0:
+                    left = original_left
+                    s = original_s
+                    right = original_right
+                    separators = original_separators
+                elif round == 1:
+                    left = StrSubclass(left)
+                    s = StrSubclass(s)
+                    right = StrSubclass(right)
+                    if isinstance(separators, str):
+                        separators = StrSubclass(separators)
+                    else:
+                        separators = [StrSubclass(o) for o in separators]
+                elif round == 2:
+                    left = original_left.encode('ascii')
+                    s = original_s.encode('ascii')
+                    right = original_right.encode('ascii')
+                    if original_separators == big.whitespace:
                         separators = big.ascii_whitespace
-                    elif separators == big.newlines:
+                    elif original_separators == big.newlines:
                         separators = big.ascii_newlines
                     else:
-                        assert isinstance(separators, str)
-                        separators = separators.encode('ascii')
+                        assert isinstance(original_separators, str)
+                        separators = original_separators.encode('ascii')
+                elif round == 3:
+                    left = BytesSubclass(left)
+                    s = BytesSubclass(s)
+                    right = BytesSubclass(right)
+                    if isinstance(separators, bytes):
+                        separators = BytesSubclass(separators)
+                    else:
+                        separators = tuple((BytesSubclass(o) for o in separators))
 
                 self.assertEqual(big.multistrip(s, separators, left=False, right=False), s)
                 self.assertEqual(big.multistrip(s, separators, left=False, right=True ), s)
@@ -274,8 +321,25 @@ class BigTextTests(unittest.TestCase):
         test_multistrip("\r\n\n\r", "abcde", "\n\r\r\n", big.whitespace)
         test_multistrip("xXXxxxXx", "iiiiiii", "yyYYYyyyyy", "xyXY")
 
+        # test mixed subclasses of str and bytes
+        self.assertEqual(big.multistrip(StrSubclass('  abcde  '), DifferentStrSubclass(' ')), 'abcde')
+        self.assertEqual(big.multistrip(BytesSubclass(b'  abcde  '), DifferentBytesSubclass(b' ')), b'abcde')
+
+        # this should be covered in the loop above,
+        # but we'll explicitly check it anyway:
+        # multistrip *always* returns either str or bytes
+        # objects, even when it doesn't strip anything.
+        self.assertEqual(big.multistrip(StrSubclass('abcde'), StrSubclass(' ')), 'abcde')
+        self.assertEqual(type(big.multistrip(StrSubclass('abcde'), StrSubclass(' '))), str)
+        self.assertEqual(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' ')), b'abcde')
+        self.assertEqual(type(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' '))), bytes)
+
         # regression test:
         # the old approach had a bug that had to do with overlapping separators.
+        # what if you strip the string ' x x ' with the separator ' x '?
+        # It should eat the initial separator, which leaves behind "x ", which doesn't match
+        # the separator, so it shouldn't be stripped.
+
         # we used to separately measure "where does the beginning run of separators end"
         # and "where does the ending run of separators start", then only keep
         # the part of the string in the middle.  but if your string was " x x "
@@ -319,6 +383,22 @@ class BigTextTests(unittest.TestCase):
             big.multistrip('s', b'abc')
         with self.assertRaises(TypeError):
             big.multistrip(b's', 'abc')
+
+        with self.assertRaises(TypeError):
+            big.multistrip(StrSubclass(b'  abcde  '), BytesSubclass(b' '))
+
+        with self.assertRaises(ValueError):
+            big.multistrip('s', '')
+        with self.assertRaises(ValueError):
+            big.multistrip('s', [])
+        with self.assertRaises(ValueError):
+            big.multistrip('s', [])
+        with self.assertRaises(ValueError):
+            big.multistrip(b's', b'')
+        with self.assertRaises(ValueError):
+            big.multistrip(b's', [])
+        with self.assertRaises(ValueError):
+            big.multistrip(b's', ())
 
 
     def test_multisplit(self):
@@ -414,13 +494,12 @@ class BigTextTests(unittest.TestCase):
 
             with self.assertRaises(TypeError):
                 list_multisplit(c('s'), 3.1415)
-            with self.assertRaises(TypeError):
+            with self.assertRaises(ValueError):
                 list_multisplit(c('s'), [])
-            with self.assertRaises(TypeError):
+            with self.assertRaises(ValueError):
                 list_multisplit(c('s'), ())
             with self.assertRaises(TypeError):
-                list_multisplit(c('s'), c(''))
-
+                list_multisplit(c('s'), not_c(''))
             with self.assertRaises(TypeError):
                 list_multisplit(c('s'), [c('a'), not_c('b'), c('c')])
             with self.assertRaises(TypeError):
@@ -1486,9 +1565,9 @@ class BigTextTests(unittest.TestCase):
 
             s = s.encode('ascii')
             expected = expected.encode('ascii')
-            if separators:
+            if separators is not None:
                 separators = [s.encode('ascii') for s in separators]
-            if replacement:
+            if replacement is not None:
                 replacement = replacement.encode('ascii')
 
             result = big.normalize_whitespace(s, separators=separators, replacement=replacement)
@@ -1504,11 +1583,34 @@ class BigTextTests(unittest.TestCase):
 
         test("   j     kl   mnop    ", "XjXklXmnopX", replacement="X")
         test("   j     kl   mnop    ", "QQjQQklQQmnopQQ", replacement="QQ")
+        test("   j     kl   mnop    ", "jklmnop", replacement="")
 
-        test("abcDEFabacabGHIaaa", "+DEF+GHI+", separators=("a", "b", "c"), replacement="+")
+        test('DEFabacabGHI',        'DEF+GHI',  separators=('a', 'b', 'c'), replacement='+')
+        test('DEFabacabGHIaaa',     'DEF+GHI+', separators=('a', 'b', 'c'), replacement='+')
+        test('abcDEFabacabGHI',    '+DEF+GHI',  separators=('a', 'b', 'c'), replacement='+')
+        test('abcDEFabacabGHIaaa', '+DEF+GHI+', separators=('a', 'b', 'c'), replacement='+')
 
+        with self.assertRaises(TypeError):
+            big.normalize_whitespace("abc", "b", -1)
+        with self.assertRaises(TypeError):
+            big.normalize_whitespace("abc", -1, "b")
         with self.assertRaises(ValueError):
-            big.multipartition("abc", "b", -1)
+            big.normalize_whitespace("abc", "", "c")
+        with self.assertRaises(ValueError):
+            big.normalize_whitespace("abc", ('a', "", 'b'), "c")
+        with self.assertRaises(TypeError):
+            big.normalize_whitespace(b"abc", "b", "c")
+        with self.assertRaises(TypeError):
+            big.normalize_whitespace("abc", b"b", "c")
+        with self.assertRaises(TypeError):
+            big.normalize_whitespace("abc", "b", b"c")
+
+        # test that we didn't accidentally use the "fast path"
+        # with bytes objects
+        string_with_em_space = "ab\u2003cd"
+        result = "ab cd"
+        self.assertEqual(big.normalize_whitespace("ab\u2003cd"), result)
+        self.assertEqual(big.normalize_whitespace("ab\u2003cd".encode('utf-8'), big.utf8_whitespace), result.encode('utf-8'))
 
     def test_split_quoted_strings(self):
         def test(s, expected, **kwargs):
