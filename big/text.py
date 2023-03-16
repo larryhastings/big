@@ -354,6 +354,8 @@ utf8_newlines_without_dos =  tuple(s for s in utf8_newlines if s != b'\r\n')
 
 # reverse an iterable thing.
 # o must be str, bytes, list, tuple, set, or frozenset.
+# if o is a collection (not str or bytes),
+# the elements of o are recursively reversed.
 # value returned is the same type as o.
 #
 # we don't need to bother checking the type of o.
@@ -501,9 +503,8 @@ def multistrip(s, separators, left=True, right=True):
     s_is_bytes = isinstance(s, bytes)
     s_is_str = isinstance(s, str)
 
-    if s_is_str and s_is_bytes:
-        raise TypeError('s must be str or bytes, but not both')
-    elif s_is_str:
+    # assert not (s_is_str and s_is_bytes) # this is impossible in CPython
+    if s_is_str:
         s_type = str
         head = '^'
         tail = '$'
@@ -698,45 +699,50 @@ def multisplit(s, separators=None, *,
     for both must be the same (str or bytes).  multisplit will
     only return str or bytes objects.
     """
-    type_of_s = type(s)
     s_is_bytes = isinstance(s, bytes)
     s_is_str = isinstance(s, str)
-    if not (s_is_bytes or (type_of_s == str)):
-        raise TypeError('s must be str or bytes')
-
-    if separators is None:
-        separators = ascii_whitespace if s_is_bytes else whitespace
-        check_separators = False
-    else:
-        check_separators = True
-
     separators_is_bytes = isinstance(separators, bytes)
     separators_is_str = isinstance(separators, str)
-    if s_is_bytes:
+
+    # assert not (s_is_str and s_is_bytes) # this is impossible in CPython
+    if s_is_str:
         if separators_is_bytes:
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
+        check_separators = not separators_is_str
+        empty = ''
+        s_type = str
+        if type(s) != str:
+            s = str(s)
+    elif s_is_bytes:
+        if separators_is_str:
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
+        elif separators_is_bytes:
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.
             separators = tuple(separators[i:i+1] for i in range(len(separators)))
             check_separators = False
-        elif separators_is_str:
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
+        else:
+            check_separators = True
         empty = b''
+        s_type = bytes
+        if type(s) != bytes:
+            s = bytes(s)
     else:
-        if separators_is_bytes:
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
-        empty = ''
-        if check_separators:
-            check_separators = not separators_is_str
+        raise TypeError('s must be str or bytes')
+
+    if separators is None:
+        separators = whitespace if s_is_str else ascii_whitespace
+        check_separators = False
+    elif not separators:
+        raise ValueError("separators must be either None or an iterable of objects the same type as s")
 
     # check_separators is True if separators isn't str or bytes
     # or something we split ourselves.
     if check_separators:
-        if not separators:
-            raise ValueError("separators must be either None or an iterable of objects the same type as s")
         if not hasattr(separators, '__iter__'):
             raise TypeError("separators must be either None or an iterable of objects the same type as s")
         for o in separators:
-            if not isinstance(o, type_of_s):
+            if not isinstance(o, s_type):
                 raise TypeError("separators must be either None or an iterable of objects the same type as s")
 
     separators_to_re_keep = keep
@@ -942,6 +948,22 @@ def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
 
+apostrophes = unicode_apostrophes = "'‘’‚‛"
+_export_name('apostrophes')
+double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
+_export_name('double_quotes')
+
+ascii_apostrophes = b"'"
+_export_name('ascii_apostrophes')
+ascii_double_quotes = b'"'
+_export_name('ascii_double_quotes')
+
+utf8_apostrophes = apostrophes.encode('utf-8')
+_export_name('utf8_apostrophes')
+utf8_double_quotes = double_quotes.encode('utf-8')
+_export_name('utf8_double_quotes')
+
+
 _invalid_state = "_invalid_state"
 _in_word = "_in_word"
 _after_whitespace = "_after_whitespace"
@@ -952,8 +974,8 @@ _after_whitespace_then_D_or_O_then_apostrophe = "_after_whitespace_then_D_or_O_t
 @_export
 def gently_title(s, *, apostrophes=None, double_quotes=None):
     """
-    Uppercase the first character of every word in s.
-    Leave the other letters alone.  s should be str or bytes.
+    Uppercase the first character of every word in s,
+    and leave all other characters alone.
 
     (For the purposes of this algorithm, words are
     any blob of non-whitespace characters.)
@@ -983,52 +1005,59 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     quote marks is considered one quote mark for
     the purposes of capitalization.
 
-    If specified, apostrophes should be a str
-    or bytes object containing characters that
-    should be considered apostrophes.  If apostrophes
-    is false, and s is bytes, apostrophes is set to "'".
-    If apostrophes is false and s is str, apostrophes
-    is set to a string containing these Unicode
-    apostrophe code points:
-        '‘’‚‛
+    s should be a str or bytes object.  s can also
+    be an instance of a subclass of str or bytes,
+    however, gently_title will only ever return a
+    str or bytes object.
 
-    If specified, double_quotes should be a str
-    or bytes object containing characters that
-    should be considered double-quote characters.
-    If double_quotes is false, and s is bytes,
-    double_quotes is set to "'".
-    If double_quotes is false, and s is str, double_quotes
-    is set to a string containing these Unicode double quote
-    code points:
-        "“”„‟«»‹›
+    If specified, apostrophes and double_quotes should be
+    the same type as s, or an iterable of objects all
+    of the same type as s.  We can express this type
+    relationship more precisely as code:
 
-    You can pass in an instance of a subclass of bytes or str
-    for s, but gently_title will only return str or bytes objects.
+        assert isinstance(s, (str, bytes))
+        s_type = str if isinstance(s, str) else bytes
+        for i in (apostrophes, double_quotes):
+            for o in i:
+                assert isinstance(o, s_type)
+
+    If apostrophes is false:
+        If s is str, apostrophes is set to
+        big.text.apostrophes, a string containing all
+        Unicode code points that represent apostrophes.
+        If s is bytes, apostrophes is set to
+        big.text.ascii_apostrophes, which only contains b"'".
+
+    If double_quotes is false:
+        If s is str, double_quotes is set to
+        big.text.double_quotes, a string containing all
+        Unicode code points representing double-quote marks.
+        If s is bytes, double_quotes is set to
+        big.text.ascii_double_quotes, which only contains b"'".
     """
     s_is_bytes = isinstance(s, bytes)
     if s_is_bytes:
         empty = b""
         if not apostrophes:
-            apostrophes = b"'"
+            apostrophes = ascii_apostrophes
         if not double_quotes:
-            double_quotes = b'"'
-        d_and_o = b'DO'
+            double_quotes = ascii_double_quotes
+        _is_d_or_o = b'DO'.__contains__
         lparen = b'('
         characters_in_s = (s[i:i+1] for i in range(len(s)))
     else:
         empty = ""
         if not apostrophes:
-            apostrophes = "'‘’‚‛"
+            apostrophes = unicode_apostrophes
         if not double_quotes:
-            double_quotes = '"“”„‟«»‹›'
-        d_and_o = 'DO'
+            double_quotes = unicode_double_quotes
+        _is_d_or_o = 'DO'.__contains__
         lparen = '('
         characters_in_s = iter(s)
 
     # ooh, fancy!
     _is_apostrophe = apostrophes.__contains__
     _is_double_quote = double_quotes.__contains__
-    _is_d_or_o = d_and_o.__contains__
 
     result = []
     state = _after_whitespace
@@ -1096,9 +1125,8 @@ def normalize_whitespace(s, separators=None, replacement=None):
     s_type = type(s)
     s_is_str = isinstance(s, str)
     s_is_bytes = isinstance(s, bytes)
-    if s_is_str and s_is_bytes:
-        raise TypeError("s must be str or bytes, but not both")
-    elif s_is_str:
+    # assert not (s_is_str and s_is_bytes) # this is impossible in CPython
+    if s_is_str:
         empty = ''
         default_replacement = ' '
         default_separators = whitespace_without_dos
@@ -1987,7 +2015,6 @@ class _column_wrapper_splitter:
 
                 self.state(l, write_word)
                 write_word = None
-                write_leading = None
 
                 if write_newline:
                     self.state('', '\n')

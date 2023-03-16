@@ -505,16 +505,26 @@ class BigTextTests(unittest.TestCase):
             with self.assertRaises(TypeError):
                 list_multisplit(c('s'), [c('a'), 1234, c('c')])
 
-        with self.assertRaises(TypeError):
-            list_multisplit('s', b'abc')
-        with self.assertRaises(TypeError):
-            list_multisplit(b's', 'abc')
+        for str_type_1 in (str, StrSubclass, DifferentStrSubclass):
+            for str_type_2 in (str, StrSubclass, DifferentStrSubclass):
+                self.assertEqual(list_multisplit(str_type_1('abcde'), str_type_2('c')), ['ab', 'de'])
 
-        # just making sure!
-        with self.assertRaises(TypeError):
-            list_multisplit('s', ['a', b'b', 'c'])
-        with self.assertRaises(TypeError):
-            list_multisplit(b's', [b'a', 'b', b'c'])
+        for bytes_type_1 in (bytes, BytesSubclass, DifferentBytesSubclass):
+            for bytes_type_2 in (bytes, BytesSubclass, DifferentBytesSubclass):
+                self.assertEqual(list_multisplit(bytes_type_1(b'abcde'), bytes_type_2(b'c')), [b'ab', b'de'])
+
+        for str_type in (str, StrSubclass, DifferentStrSubclass):
+            for bytes_type in (bytes, BytesSubclass, DifferentBytesSubclass):
+                with self.assertRaises(TypeError):
+                    list_multisplit(str_type('s'), bytes_type(b'abc'))
+                with self.assertRaises(TypeError):
+                    list_multisplit(bytes_type(b's'), str_type('abc'))
+
+                # just making sure!
+                with self.assertRaises(TypeError):
+                    list_multisplit(str_type('s'), [str_type('a'), bytes_type(b'b'), str_type('c')])
+                with self.assertRaises(TypeError):
+                    list_multisplit(bytes_type(b's'), [bytes_type(b'a'), str_type('b'), bytes_type(b'c')])
 
         # regression: multisplit didn't used to verify
         # that s was either str or bytes.

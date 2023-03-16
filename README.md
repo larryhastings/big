@@ -990,21 +990,69 @@ Only one entry so far.
 
 ## `big.text`
 
-> Functions for working with text strings.  There are
-> several families of functions inside the `text` module;
-> for a higher-level view of those families, read the
-> following deep-dives:
->
-> * [**The `multi-` family of functions**](#The-multi--family-of-functions)
-> * [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
-> * [**Word wrapping and formatting**](#word-wrapping-and-formatting)
->
-> All the functions in `big.text` will work with either
-> `str` or `bytes` objects, except the three
-> [**Word wrapping and formatting**](#word-wrapping-and-formatting)
-> functions.  When working with `bytes`,
-> by default the functions will only work with ASCII
-> characters.
+Functions for working with text strings.  There are
+several families of functions inside the `text` module;
+for a higher-level view of those families, read the
+following deep-dives:
+
+* [**The `multi-` family of functions**](#The-multi--family-of-functions)
+* [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
+* [**Word wrapping and formatting**](#word-wrapping-and-formatting)
+
+All the functions in `big.text` will work with either
+`str` or `bytes` objects, except the three
+[**Word wrapping and formatting**](#word-wrapping-and-formatting)
+functions.  When working with `bytes`,
+by default the functions will only work with ASCII
+characters.
+
+#### Conformant types
+
+Several places in the documentation for `big.text` functions,
+it refers to *conformant* string types.  This is always in the
+context of a function that takes multiple arguments that are
+either strings, or iterables of strings.  What a *conformant type*
+means in this context is a type whose base class is the same
+as another object's base class, and in the context of `big.text`
+the base class is always either `str` or `bytes`.
+
+Since that's probably not clear, maybe an example will help.
+Consider
+[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+which takes the two parameters `s` and `separators`.
+
+`s` must be a string; it can be a `str` object,
+or a `bytes` object, or an instance of any subclass
+of either `str` or `bytes`.
+
+`separators` should be either a string of a *conformant
+type* to s, or an iterable of strings of a *conformant type*
+to s.  That means it should be either a `str` or
+`bytes` object, an instance of a subclass of `str` or `bytes`,
+or an iterable of any of these types.
+But in each case, the base class of the string's
+type has to match the base type of `s`, which must be
+either `str` or `bytes`.
+
+Here's a more specific example.  Let's say `s` is a `str`
+object, or an instance of any subclass of `str`.  In that
+case, `separators` can be:
+
+* a `str`,
+* an instance of any subclass of `str`,
+* or an iterable of any combination of `str` objects and
+  instances of any subclass of `str`.
+
+If `StrSubclass` and `AnotherStrSubclass` were both subclasses
+of `str`, `s` could be of type `str`, `StrSubclass`, or `AnotherStrSubclass`.
+And `separators` could be of type `str`, `StrSubclass`, or `AnotherStrSubclass`,
+or an iterable yielding one or more objects of type `str`, `StrSubclass`,
+or `AnotherStrSubclass`.  You can mix and match these types as much as
+you want, as long as the base class of all these strings objects
+are the same, either `str` or `bytes`.
+
+Subclasses of `str` and `bytes` are rare.  But `big` has still
+gone to the trouble of fully supporting them.  You're welcome!
 
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
 
@@ -3167,6 +3215,12 @@ in the **big** test suite.
 * Functions in `big.text` now accept `str`, `bytes`, or a *subclass*
   of either `str` or `bytes`.  (Previously they only accepted `str`
   or `bytes`.)
+* Added `apostrophes`, `double_quotes`,
+  `ascii_apostrophes`, `ascii_double_quotes`,
+  `utf8_apostrophes`, and `utf8_double_quotes`
+  to the `big.text` module.  Previously the first
+  four of these were hard-coded strings inside
+  [`gently_title`.](#gently_titles-apostrophesnone-double_quotesnone)
 * Code cleanup in `split_text_with_code`, removed redundant code.
   I think it has about the same number of `if` statements; if anything
   it might be slightly faster.
