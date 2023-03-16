@@ -1135,6 +1135,10 @@ class BigTextTests(unittest.TestCase):
         test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'))
         test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'), reverse=True)
 
+        # I don't bother to test the str / subclass of str / etc stuff
+        # with multipartition, because it literally uses multisplit
+        # to do the splitting.  so multisplit handles it.
+
     def test_reimplemented_str_split(self):
         def _multisplit_to_split(s, sep, maxsplit, reverse):
             separate = sep != None
@@ -1545,12 +1549,16 @@ class BigTextTests(unittest.TestCase):
         def test(s, expected, test_ascii=True, apostrophes=None, double_quotes=None):
             result = big.gently_title(s, apostrophes=apostrophes, double_quotes=double_quotes)
             self.assertEqual(result, expected)
+            result = big.gently_title(StrSubclass(s), apostrophes=apostrophes, double_quotes=double_quotes)
+            self.assertEqual(result, expected)
             if test_ascii:
                 if apostrophes:
                     apostrophes = apostrophes.encode('ascii')
                 if double_quotes:
                     double_quotes = double_quotes.encode('ascii')
                 result = big.gently_title(s.encode('ascii'), apostrophes=apostrophes, double_quotes=double_quotes)
+                self.assertEqual(result, expected.encode('ascii'))
+                result = big.gently_title(BytesSubclass(s.encode('ascii')), apostrophes=apostrophes, double_quotes=double_quotes)
                 self.assertEqual(result, expected.encode('ascii'))
 
         test("", "")
@@ -1567,6 +1575,40 @@ class BigTextTests(unittest.TestCase):
         test('my head is my only house (when it rains)', 'My Head Is My Only House (When It Rains)')
 
         test("""i said ZdonXt touch that, oXconnell!Z, you 2nd rate idiot!""", """I Said ZDonXt Touch That, OXConnell!Z, You 2nd Rate Idiot!""", apostrophes='X', double_quotes='Z')
+
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", apostrophes=big.ascii_apostrophes)
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", double_quotes=big.ascii_double_quotes)
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", apostrophes=big.ascii_apostrophes, double_quotes=big.ascii_double_quotes)
+
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes)
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", double_quotes=big.double_quotes)
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes, double_quotes=big.double_quotes)
+
+        with self.assertRaises(ValueError):
+            big.gently_title(StrSubclass("the \"string's\" the thing"), apostrophes=BytesSubclass(big.ascii_apostrophes))
+        with self.assertRaises(ValueError):
+            big.gently_title(StrSubclass("the \"string's\" the thing"), double_quotes=BytesSubclass(big.ascii_double_quotes))
+
+        with self.assertRaises(ValueError):
+            big.gently_title(BytesSubclass(b"the \"string's\" the thing"), apostrophes=StrSubclass(big.apostrophes))
+        with self.assertRaises(ValueError):
+            big.gently_title(BytesSubclass(b"the \"string's\" the thing"), double_quotes=StrSubclass(big.double_quotes))
+
+        self.assertEqual(
+            big.gently_title(StrSubclass("peter o'toole"), apostrophes=DifferentStrSubclass(big.apostrophes)),
+             "Peter O'Toole"
+             )
+        self.assertEqual(
+            big.gently_title(BytesSubclass(b"peter o'toole"), apostrophes=DifferentBytesSubclass(big.ascii_apostrophes)),
+             b"Peter O'Toole"
+             )
+
 
     def test_normalize_whitespace(self):
         def test(s, expected, *, separators=None, replacement=" "):

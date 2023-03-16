@@ -948,6 +948,11 @@ def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
 
+# I think that, for our purposes,
+#     ` (the "back-tick" character U+0060)
+# is *not* an apostrophe.  it's a diacritical
+# used to modify a letter, rather than a
+# separator used to separate letters.
 apostrophes = unicode_apostrophes = "'‘’‚‛"
 _export_name('apostrophes')
 double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
@@ -970,6 +975,11 @@ _after_whitespace = "_after_whitespace"
 _after_whitespace_then_apostrophe_or_double_quote = "_after_whitespace_then_apostrophe_or_double_quote"
 _after_whitespace_then_D_or_O = "_after_whitespace_then_D_or_O"
 _after_whitespace_then_D_or_O_then_apostrophe = "_after_whitespace_then_D_or_O_then_apostrophe"
+
+_default_str_is_apostrophe = frozenset(unicode_apostrophes).__contains__
+_default_str_is_double_quote = frozenset(unicode_double_quotes).__contains__
+_default_bytes_is_apostrophe = ascii_apostrophes.__eq__
+_default_bytes_is_double_quote = ascii_double_quotes.__eq__
 
 @_export
 def gently_title(s, *, apostrophes=None, double_quotes=None):
@@ -1010,58 +1020,84 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     however, gently_title will only ever return a
     str or bytes object.
 
-    If specified, apostrophes and double_quotes should be
-    the same type as s, or an iterable of objects all
-    of the same type as s.  We can express this type
-    relationship more precisely as code:
+    If specified, apostrophes and double_quotes should
+    an string, or iterable of strings, of the same type
+    as s (or a conformant type).
 
-        assert isinstance(s, (str, bytes))
-        s_type = str if isinstance(s, str) else bytes
-        for i in (apostrophes, double_quotes):
-            for o in i:
-                assert isinstance(o, s_type)
+    If apostrophes is false, gently_title will use a
+    default value for apostrophes:
+        If s is str, the default value is big.text.apostrophes,
+        a string containing all Unicode code points that
+        represent apostrophes.
 
-    If apostrophes is false:
-        If s is str, apostrophes is set to
-        big.text.apostrophes, a string containing all
-        Unicode code points that represent apostrophes.
-        If s is bytes, apostrophes is set to
-        big.text.ascii_apostrophes, which only contains b"'".
+        If s is bytes, the default value is
+        big.text.ascii_apostrophes, which is the string b"'".
 
-    If double_quotes is false:
-        If s is str, double_quotes is set to
-        big.text.double_quotes, a string containing all
-        Unicode code points representing double-quote marks.
-        If s is bytes, double_quotes is set to
-        big.text.ascii_double_quotes, which only contains b"'".
+    If double_quotes is false, gently_title will use a
+    default value for double_quotes:
+        If s is str, the default value is big.text.double_quotes,
+        a string containing all Unicode code points representing
+        double-quote marks.
+
+        If s is bytes, the default value is
+        big.text.ascii_double_quotes, which is the string b"'".
     """
-    s_is_bytes = isinstance(s, bytes)
-    if s_is_bytes:
-        empty = b""
-        if not apostrophes:
-            apostrophes = ascii_apostrophes
-        if not double_quotes:
-            double_quotes = ascii_double_quotes
-        _is_d_or_o = b'DO'.__contains__
-        lparen = b'('
-        characters_in_s = (s[i:i+1] for i in range(len(s)))
-    else:
+    if isinstance(s, str):
+        s = str(s)
+        s_type = str
+        not_s_type = bytes
         empty = ""
-        if not apostrophes:
-            apostrophes = unicode_apostrophes
-        if not double_quotes:
-            double_quotes = unicode_double_quotes
+        default_is_apostrophe = _default_str_is_apostrophe
+        default_is_double_quote = _default_str_is_double_quote
         _is_d_or_o = 'DO'.__contains__
         lparen = '('
-        characters_in_s = iter(s)
+        iterator = iter
+    elif isinstance(s, bytes):
+        s = bytes(s)
+        s_type = bytes
+        not_s_type = str
+        empty = b""
+        _is_d_or_o = b'DO'.__contains__
+        lparen = b'('
+        def iterator(b):
+            for i in range(len(b)):
+                yield b[i:i+1]
+        default_is_apostrophe = _default_bytes_is_apostrophe
+        default_is_double_quote = _default_bytes_is_double_quote
+    else:
+        raise TypeError('s must be str or bytes')
 
-    # ooh, fancy!
-    _is_apostrophe = apostrophes.__contains__
-    _is_double_quote = double_quotes.__contains__
+    if apostrophes is None:
+        _is_apostrophe = default_is_apostrophe
+    else:
+        if not apostrophes or isinstance(apostrophes, not_s_type):
+            raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s")
+        cast_apostrophes = []
+        for o in iterator(apostrophes):
+            if not o:
+                raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
+            if not isinstance(o, s_type):
+                raise TypeError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
+            cast_apostrophes.append(s_type(o))
+        _is_apostrophe = frozenset(cast_apostrophes).__contains__
+
+    if double_quotes is None:
+        _is_double_quote = default_is_double_quote
+    else:
+        if not double_quotes or isinstance(double_quotes, not_s_type):
+            raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s")
+        cast_double_quotes = []
+        for o in iterator(double_quotes):
+            if not o:
+                raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s, or None")
+            if not isinstance(o, s_type):
+                raise TypeError("double_quotes must be an iterable of non-empty objects the same type as s, or None")
+            cast_double_quotes.append(s_type(o))
+        _is_double_quote = frozenset(cast_double_quotes).__contains__
 
     result = []
     state = _after_whitespace
-    for c in characters_in_s:
+    for c in iterator(s):
         original_c = c
         original_state = state
         is_space = c.isspace() or (c == lparen)
