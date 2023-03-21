@@ -28,6 +28,7 @@ import copy
 import big.all as big
 import math
 import re
+import regex
 import sys
 import unittest
 
@@ -154,7 +155,6 @@ class BigTextTests(unittest.TestCase):
         for forwards, backwards in big.text._reversed_builtin_separators.items():
             self.assertEqual(set(backwards), set(big.text._multisplit_reversed(forwards)), f"failed on {printable_separators(forwards)}")
 
-
     def test_re_partition(self):
         def group0(re_partition_result):
             result = []
@@ -163,6 +163,9 @@ class BigTextTests(unittest.TestCase):
                     o = o.group(0)
                 result.append(o)
             return tuple(result)
+
+        def finditer_group0(i):
+            return [match.group(0) for match in i]
 
         for c in (unchanged, to_bytes):
 
@@ -173,8 +176,27 @@ class BigTextTests(unittest.TestCase):
                 s = c(s)
                 pattern = c(pattern)
                 expected = c(expected)
+
+                # We implicitly test reversed_re_finditer
+                # every time we test re_rpartition.
+                #
+                # But we also explicitly test reversed_re_finditer,
+                # by running it directly on the pattern & string
+                # inputs we use to test re_rpartition,
+                # then comparing its output with the output of
+                # the regex library with REVERSE mode turned on.
+                if isinstance(pattern, re_Pattern):
+                    p = pattern.pattern
+                else:
+                    p = pattern
+                p = regex.compile(p, regex.REVERSE)
+                regex_result = finditer_group0(p.finditer(s))
+                big_result = finditer_group0(big.reversed_re_finditer(pattern, s))
+                self.assertEqual(regex_result, big_result)
+
                 self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
                 self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)
+
 
             pattern = c("[0-9]+")
 

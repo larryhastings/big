@@ -199,6 +199,8 @@ notice on the source code.
 
 [`Regulator.wake()`](#regulatorwake)
 
+[`reversed_re_finditer(pattern, string, flags=0)`](#reversed_re_finditerpattern-string-flags0)
+
 [`safe_mkdir(path)`](#safe_mkdirpath)
 
 [`safe_unlink(path)`](#safe_unlinkpath)
@@ -1691,6 +1693,17 @@ gone to the trouble of fully supporting them.  You're welcome!
 >
 > (In older versions of Python, `re.Pattern` was a private type called
 > `re._pattern_type`.)
+
+#### `reversed_re_finditer(pattern, string, flags=0)`
+
+> An iterator.  Behaves almost identically to the Python
+> standard library function `re.finditer`, yielding
+> non-overlapping matches of `pattern` in `string`.  The difference
+> is, `reversed_re_finditer` searches `string` from right to left.
+>
+> `pattern` can be a precompiled `re.Pattern` object
+> or a string.  If it's a string, it'll be compiled
+> with `re.compile` using the `flags` you passed in.
 
 #### `split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`
 
@@ -3212,6 +3225,9 @@ in the **big** test suite.
 
 **next version** *(under development)*
 
+* Functions in `big.text` now accept `str`, `bytes`, or a *subclass*
+  of either `str` or `bytes`.  (Previously they only accepted `str`
+  or `bytes`.)
 * Major rewrite of
   [`re_rpartition`.](#re_rpartitiontext-pattern-count1--flags0)
   I realized it had the same "reverse mode" problem that
@@ -3237,9 +3253,13 @@ in the **big** test suite.
   In the future, **big** will probably add support for the
   PyPI package `regex`, which reimplements Python's `re` module
   but adds many features... including reverse mode!
-* Functions in `big.text` now accept `str`, `bytes`, or a *subclass*
-  of either `str` or `bytes`.  (Previously they only accepted `str`
-  or `bytes`.)
+* New function:
+  [`reversed_re_finditer`.](#reversed_re_finditerpattern-string-flags0)
+  Behaves almost identically to the Python
+  standard library function `re.finditer`, yielding
+  non-overlapping matches of `pattern` in `string`.  The difference
+  is, `reversed_re_finditer` searches `string` from right to left.
+  (Written as part of the `re_rpartition` rewrite mentioned above.)
 * Added `apostrophes`, `double_quotes`,
   `ascii_apostrophes`, `ascii_double_quotes`,
   `utf8_apostrophes`, and `utf8_double_quotes`
@@ -3249,6 +3269,13 @@ in the **big** test suite.
 * Code cleanup in `split_text_with_code`, removed redundant code.
   I think it has about the same number of `if` statements; if anything
   it might be slightly faster.
+* Retooled
+  [`re_partition`](#re_partitiontext-pattern-count1--flags0)
+  and
+  [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0)
+  slightly, should now be very-slightly faster.  (Well, `re_rpartition`
+  will be slower if your pattern finds overlapping matches.  But at
+  least now it's correct!)
 * Lots of doc fixes, as usual.
 
 **0.7.1**

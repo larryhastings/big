@@ -27,3 +27,6 @@ Source = "https://github.com/larryhastings/big/"
 time = [
     "python-dateutil",
     ]
+test = [
+    "regex",
+    ]
