@@ -129,13 +129,12 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
             pattern = s_type(pattern)
         pattern = re.compile(pattern, flags=flags)
 
-    # optimize for the most frequent use case
+    # optimized fast path for the most frequent use case
     if count == 1:
         match = pattern.search(s)
         if not match:
             return (s, None, empty)
-        before, _, after = s.partition(match.group(0))
-        assert _
+        before, separator, after = s.partition(match.group(0))
         return (before, match, after)
 
     if count == 0:
@@ -146,7 +145,6 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
 
     result = []
     extend = result.extend
-    append = result.append
     matches_iterator = pattern.finditer(s)
 
     try:
@@ -157,8 +155,8 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
         extension = ()
     except StopIteration:
         extension = (None, empty) * remaining
-    append(s)
 
+    result.append(s)
     return tuple(result) + extension
 
 @_export
@@ -388,6 +386,16 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     else:
         raise TypeError("s must be str or bytes")
 
+    # optimized fast path for the most frequent use case
+    if count == 1:
+        matches_iterator = reversed_re_finditer(pattern, s, flags)
+        try:
+            match = next(matches_iterator)
+            before, separator, after = s.rpartition(match.group(0))
+            return (before, match, after)
+        except StopIteration:
+            return (empty, None, s)
+
     if count == 0:
         return (s,)
 
@@ -396,7 +404,6 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
 
     result = []
     extend = result.extend
-    append = result.append
     matches_iterator = reversed_re_finditer(pattern, s, flags)
 
     try:
@@ -408,7 +415,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     except StopIteration:
         extension = ((empty, None) * remaining)
 
-    append(s)
+    result.append(s)
     result.reverse()
     return extension + tuple(result)
 
