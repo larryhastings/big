@@ -40,6 +40,12 @@ try:
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
 
+try:
+    import regex
+    regex_Pattern = regex.Pattern
+except ImportError: # pragma: no cover
+    regex_Pattern = re_Pattern
+
 
 __all__ = []
 
@@ -116,7 +122,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     else:
         raise TypeError("s must be str or bytes")
 
-    if not isinstance(pattern, re_Pattern):
+    if not isinstance(pattern, (re_Pattern, regex_Pattern)):
         if not isinstance(pattern, s_type):
             raise TypeError("pattern must be the same type as s")
         if type(pattern) != s_type:
@@ -146,15 +152,16 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
         for i in range(count):
             match = next(matches_iterator)
             before, separator, s = s.partition(match.group(0))
+            # assert separator
             extend((before, match))
     except StopIteration:
         # we ran out of matches before we hit count.
         # therefore i is at least one less than count.
         extend((s, None))
         s = empty
-        empty_extension = (empty, None)
-        for j in range(i+1, count):
-            extend(empty_extension)
+        trailing_empty_partitions_count = count - (i + 1)
+        if trailing_empty_partitions_count:
+            extend((empty, None) * trailing_empty_partitions_count)
 
     result.append(s)
     return tuple(result)
@@ -168,44 +175,51 @@ def reversed_re_finditer(pattern, string, flags=0):
     reversed_re_finditer searches "string" from right to left.
 
     "pattern" can be a precompiled re.Pattern object or a string.
-    If it's a string, it'll be compiled with re.compile using the
+    If it's a string, it'll be compiled by re.compile using the
     "flags" you passed in.
     """
-    if not isinstance(pattern, re_Pattern):
+    if not isinstance(pattern, (re_Pattern, regex_Pattern)):
         pattern = re.compile(pattern, flags=flags)
 
     # matches are found by re.search *going forwards.*
     # but what we need here is the *reverse* matches.
     #
-    # consider
+    # consider this call:
     #    re_rpartition('abcdefgh', '(abcdef|efg|ab|b|c|d)', count=4)
-    # we do re.finditer(pattern, s), and it returns one match, 'abcdef'.
-    # when we check that match for overlaps we find a bunch.
-    # all those matches go into overlapping_matches.
     #
-    # so what we do is: we ask re for all the forward matches
-    # (with re.finditer).  then for every match it found,
-    # we check every overlapping character to see if
-    # there's a different match there that we might prefer.
-    # if we prefer one of those, we partition there--but
-    # then keep checking the other overlapping matches because
-    # one of those might also work.  (it's a lot of work!)
+    # re.finditer with that string and pattern yields one match:
+    #    'abcdef'
+    # but reverse searching, e.g. with
+    # regex.finditer(flags=regex.REVERSE), yields four matches:
+    #    'efg', 'd', 'c', 'ab'
+    #
+    # so what we do is: we ask re.finditer for all the forward
+    # matches.  then, for every match it found, we check every
+    # overlapping character to see if there's a different match
+    # there that we might prefer.  if we prefer one of those,
+    # we yield that--but we keep around the other matches,
+    # because one of those (or a truncated version of it) might
+    # also work.
+
 
     # matches and overlapping_matches are lists of 3-tuples of:
     #    (end_pos, -start_pos, match)
     # if we sort the list, the last element will be the correct
-    # last match in "reverse" order.
+    # last match in "reverse" order.  see
+    #    https://en.wikipedia.org/wiki/Schwartzian_transform
     #
-    # matches contains the list of matches from re.finditer().
-    # since this was found using re in "forward" order, we need
-    # to check every match in this list for potential overlapping
-    # matches.
-    #
-    # overlapping_matches is a list of all overlapping matches
-    # we found.
-    overlapping_matches = []
+    # matches contains the list of matches we got directly from
+    # re.finditer(), reversed.  since this was found using re in
+    # "forward" order, we need to check every match in this list
+    # for potential overlapping matches.
     matches = [(match.end(), -match.start(), match) for match in pattern.finditer(string)]
     matches.sort()
+
+    # overlapping_matches is a list of the possibly-viable
+    # overlapping matches we found from checking a match
+    # we got from "matches".
+    overlapping_matches = []
+
     result = []
     match = None
 
@@ -215,48 +229,55 @@ def reversed_re_finditer(pattern, string, flags=0):
 
     while True:
         if overlapping_matches:
-            # truncate s as we go along
-            endpos = match.start()
-            need_to_truncate = True
+            # if overlapping_matches is true, match is guaranteed
+            # to be set to the previously yielded match.
+            # (it's left over from the previous iteration.)
+            # all we need it for is the starting position.
+            previous_match_start = match.start()
+            need_to_truncate_s = True
 
             # overlapping_matches contains the overlapping
-            # matches found *last* time around, before the most
-            # recent partitioning of the string.
+            # matches found *last* time around, before we
+            # yielded the most recent match.
             #
-            # since the string has presumably now been truncated,
-            # we need to recalculate the potential overlapping matches.
-            # we build the updated list by checking each of the
-            # old matches.
+            # the thing is, some of these matches might overlap that match.
+            # but we only yield *non*-overlapping matches.  so we need to
+            # filter the matches in overlapping_matches accordingly.
 
             truncated_matches = []
             # overlapping_matches will be set to truncated_matches in a few lines
             append = truncated_matches.append
+
             for t in overlapping_matches:
                 end, negated_start, match = t
                 start = -negated_start
-                if start >= endpos:
-                    # the *start* of this match is after where we truncated.
-                    # all matches at this position are no longer relevant.
-                    # throw away the match.
+                if start >= previous_match_start:
+                    # this match starts *at or after* the previous match started.
+                    # all matches starting at this position are no longer
+                    # viable.  throw away the match.
                     # print(f"  {match=} starts after the truncation, it's no longer relevant.")
                     continue
-                if end <= endpos:
-                    # the *end* of this match is *before* where we truncated.
-                    # in other words, this match is still viable.
-                    # keep it, unmodified.
+                if end <= previous_match_start:
+                    # this match ends *before* the previous match started.
+                    # in other words, this match is still 100% viable.
+                    # keep it, we don't need to change it at all.
                     # print(f"  {match=} still fits inside the truncated string, keep it.")
                     append(t)
                     continue
 
-                # this match starts inside the truncated string, but ends after where we
-                # truncated the string.  (it overlapped with the previous
-                # match we used to partition the string.)
+                # this match starts before the previous match started,
+                # but ends after the previous match start.
+                # in other words, it overlaps the previous match.
                 #
-                # so, we check to see if the pattern can find a *different* match at this start
-                # position.  note that s is the already-truncated string!  we can just match against it.
-                if need_to_truncate:
-                    string = string[:endpos]
-                    need_to_truncate = False
+                # so this match is itself no longer viable.  but!
+                # there might be a *different* match starting at this
+                # position in the string.  so we do a fresh re.match here,
+                # but we truncate the string at the start of the previously
+                # yielded match.
+
+                if need_to_truncate_s:
+                    string = string[:previous_match_start]
+                    need_to_truncate_s = False
 
                 match = pattern_match(string, start)
                 # print(f"  the old match extended past the truncation, try a new match, result {match!r}")
@@ -266,28 +287,30 @@ def reversed_re_finditer(pattern, string, flags=0):
             overlapping_matches = truncated_matches
 
         if (not overlapping_matches) and matches:
-            # we don't have a handy list of overlapping matches
-            # we can just use.
+            # we don't currently have any pre-screened
+            # overlapping matches we can use.
             #
             # but we *do* have a match (or matches) found in forwards mode.
             # let's pop the rightmost one off the list and scan it for
             # overlapping matches.
 
-            # we probe every** position in the match for an overlapping
-            # match.  all the matches go on overlapping_matches, and
-            # we sort and partition on the last one.
+            # we probe every** position inside the match for an
+            # overlapping match.  all the matches we find go in
+            # overlapping_matches; then we sort it and yield
+            # the last one.
             #
             # ** we don't actually need to check the *first* position,
             #   start, because we already know what we'll find:
-            #   the match that we're scanning for overlaps.
+            #   the match that we got from re.finditer() and
+            #   scanned for overlaps.
 
             t = matches.pop()
             assert not overlapping_matches
+            # as mentioned, the match we got from finditer
+            # is viable here, so add it to the list.
+            overlapping_matches.append(t)
 
             end, negated_start, match = t
-            # t contains the match at our starting position.
-            # it's viable, so we keep it.
-            overlapping_matches.append(t)
 
             for pos in range((-negated_start) + 1, end):
                 match = pattern_match(string, pos)
@@ -297,9 +320,8 @@ def reversed_re_finditer(pattern, string, flags=0):
         if not overlapping_matches:
             return
 
-        # overlapping_matches is now guaranteed
-        # current and non-empty.  the last entry
-        # contains the match we want to use to partition right now.
+        # overlapping_matches is now guaranteed current, non-empty,
+        # and sorted with the rightmost match last.  yield that match.
         overlapping_matches.sort()
         match = overlapping_matches.pop()[2]
         yield match
@@ -322,9 +344,12 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     match is the re.Match object resulting from the match, and
     after is the text after the match.
 
-    If pattern appears in s multiple times,
-    re_partition will match against the last (rightmost)
-    appearance.
+    re_rpartition searches for pattern in s from right
+    to left, and partitions at the non-overlapping
+    matches it finds.
+
+    If pattern matches multiple substrings of s, re_partition
+    will match against the last (rightmost) appearance.
 
     If pattern is not found in s, returns a tuple
         ('', None, s)
@@ -343,11 +368,6 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     for s and pattern (or pattern.pattern), but the base class
     for both must be the same (str or bytes).  re_rpartition will
     only return str or bytes objects.
-
-    If your regular expression has OR tokens ("|"), this function
-    will only work correctly if the pattern on the left of every OR
-    is guaranteed to produce a longer result than the pattern on
-    the right.
 
     You can pass in a regex Pattern object (see the PyPi 'regex'
     package).  Patterns using the "Reverse Searching" feature
@@ -387,16 +407,16 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
         for i in range(count):
             match = next(matches_iterator)
             s, separator, after = s.rpartition(match.group(0))
-            assert separator
+            # assert separator
             extend((after, match))
     except StopIteration:
         # we ran out of matches before we hit count.
         # therefore i is at least one less than count.
         extend((s, None))
         s = empty
-        empty_extension = (s, None)
-        for j in range(i+1, count):
-            extend(empty_extension)
+        trailing_empty_partitions_count = count - (i + 1)
+        if trailing_empty_partitions_count:
+            extend((empty, None) * trailing_empty_partitions_count)
 
     result.append(s)
     result.reverse()
@@ -1786,7 +1806,7 @@ def lines_grep(li, pattern, *, invert=False, flags=0):
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
-    if not isinstance(pattern, re_Pattern):
+    if not isinstance(pattern, (re_Pattern, regex_Pattern)):
         pattern = re.compile(pattern, flags=flags)
     search = pattern.search
     if invert:
