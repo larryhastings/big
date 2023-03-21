@@ -99,6 +99,18 @@ class DifferentBytesSubclass(bytes):
         return f"<DifferentBytesSubclass {bytes(self)!r}>"
 
 
+def group0(re_partition_result):
+    result = []
+    for i, o in enumerate(re_partition_result):
+        if (i % 2) and (o is not None):
+            o = o.group(0)
+        result.append(o)
+    return tuple(result)
+
+def finditer_group0(i):
+    return tuple(match.group(0) for match in i)
+
+
 class BigTextTests(unittest.TestCase):
 
     def test_whitespace_and_newlines(self):
@@ -160,49 +172,85 @@ class BigTextTests(unittest.TestCase):
         for forwards, backwards in big.text._reversed_builtin_separators.items():
             self.assertEqual(set(backwards), set(big.text._multisplit_reversed(forwards)), f"failed on {printable_separators(forwards)}")
 
-    def test_re_partition(self):
-        def group0(re_partition_result):
-            result = []
-            for i, o in enumerate(re_partition_result):
-                if (i % 2) and (o is not None):
-                    o = o.group(0)
-                result.append(o)
-            return tuple(result)
+    def test_reversed_re_finditer(self):
+        # Cribbed off the test suite from the 'regex' package
+        def test(pattern, string, expected):
+            pattern = c(pattern)
+            string = c(string)
+            expected = c(expected)
+            got = finditer_group0(big.reversed_re_finditer(pattern, string))
+            self.assertEqual(expected, got)
 
-        def finditer_group0(i):
-            return [match.group(0) for match in i]
+            if have_regex:
+                if isinstance(pattern, re_Pattern):
+                    p = pattern.pattern
+                else:
+                    p = pattern
+                p = regex.compile(p, regex.REVERSE)
+                regex_result = finditer_group0(p.finditer(string))
+                self.assertEqual(regex_result, got)
 
         for c in (unchanged, to_bytes):
+            test(r'abcdef', 'abcdef', ('abcdef',))
+            test('.', 'abc', ('c', 'b', 'a'))
+            test('..', 'abcde', ('de', 'bc'))
+            test('.-.', 'a-b-c', ('b-c',))
+            test('a|b', '111a222', ('a',))
+            test('b|a', '111a222', ('a',))
+            test('x|X', 'xaxbXcxd', ('x', 'X', 'x', 'x',))
+            test(r'estonia\w', 'fine estonian workers', ('estonian',))
+            test(r'\westonia', 'fine nestonian workers', ('nestonia',))
 
-            def test_re_partition(s, pattern, count, expected):
-                self.assertEqual(group0(big.re_partition(c(s), c(pattern), count)), c(expected))
+            # gosh, I really don't understand this one.
+            test(r'q*', 'qqwe', ('', '', 'qq', ''))
 
-            def test_re_rpartition(s, pattern, count, expected):
-                s = c(s)
-                pattern = c(pattern)
-                expected = c(expected)
+            test(r'.{2}', 'abc', ('bc',))
+            test(r'\w+ \w+', 'first second third fourth fifth', ('fourth fifth', 'second third'))
 
-                # We implicitly test reversed_re_finditer
-                # every time we test re_rpartition.
-                #
-                # But we also explicitly test reversed_re_finditer,
-                # by running it directly on the pattern & string
-                # inputs we use to test re_rpartition,
-                # then comparing its output with the output of
-                # the regex library with REVERSE mode turned on.
-                if have_regex:
-                    if isinstance(pattern, re_Pattern):
-                        p = pattern.pattern
-                    else:
-                        p = pattern
-                    p = regex.compile(p, regex.REVERSE)
-                    regex_result = finditer_group0(p.finditer(s))
-                    big_result = finditer_group0(big.reversed_re_finditer(pattern, s))
-                    self.assertEqual(regex_result, big_result)
+            # Python 3.7 fixed a long-standing bug with zero-width matching.
+            # See https://github.com/python/cpython/issues/44519
+            assert sys.version_info.major >= 3
+            if (sys.version_info.major == 3) and (sys.version_info.minor <= 6):
+                # wrong, but consistent
+                result = ('bar', 'oo', '')
+            else:
+                # correct
+                result = ('bar', 'foo', '')
+            test(r'^|\w+', 'foo bar', result)
 
-                self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
-                self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)
+    def test_re_partition(self):
+        def test_re_partition(s, pattern, count, expected):
+            self.assertEqual(group0(big.re_partition(c(s), c(pattern), count)), c(expected))
 
+        def test_re_rpartition(s, pattern, count, expected):
+            s = c(s)
+            pattern = c(pattern)
+            expected = c(expected)
+
+            self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
+            self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)
+
+            # We implicitly test reversed_re_finditer
+            # every time we test re_rpartition.
+            #
+            # But, if regex is installed, let's throw
+            # in an explicit test for reversed_re_finditer too.
+            # We run it directly on the pattern & string
+            # inputs we use to test re_rpartition,
+            # then compare its output with the output of
+            # the regex library with REVERSE mode turned on.
+            if have_regex:
+                if isinstance(pattern, re_Pattern):
+                    p = pattern.pattern
+                else:
+                    p = pattern
+                p = regex.compile(p, regex.REVERSE)
+                regex_result = finditer_group0(p.finditer(s))
+                big_result = finditer_group0(big.reversed_re_finditer(pattern, s))
+                self.assertEqual(regex_result, big_result)
+
+
+        for c in (unchanged, to_bytes):
 
             pattern = c("[0-9]+")
 
