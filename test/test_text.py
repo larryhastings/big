@@ -28,7 +28,6 @@ import copy
 import big.all as big
 import math
 import re
-import regex
 import sys
 import unittest
 
@@ -36,6 +35,12 @@ try:
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
+
+try:
+    import regex
+    have_regex = True
+except ImportError:
+    have_regex = False
 
 def unchanged(o):
     return o
@@ -185,14 +190,15 @@ class BigTextTests(unittest.TestCase):
                 # inputs we use to test re_rpartition,
                 # then comparing its output with the output of
                 # the regex library with REVERSE mode turned on.
-                if isinstance(pattern, re_Pattern):
-                    p = pattern.pattern
-                else:
-                    p = pattern
-                p = regex.compile(p, regex.REVERSE)
-                regex_result = finditer_group0(p.finditer(s))
-                big_result = finditer_group0(big.reversed_re_finditer(pattern, s))
-                self.assertEqual(regex_result, big_result)
+                if have_regex:
+                    if isinstance(pattern, re_Pattern):
+                        p = pattern.pattern
+                    else:
+                        p = pattern
+                    p = regex.compile(p, regex.REVERSE)
+                    regex_result = finditer_group0(p.finditer(s))
+                    big_result = finditer_group0(big.reversed_re_finditer(pattern, s))
+                    self.assertEqual(regex_result, big_result)
 
                 self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
                 self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)

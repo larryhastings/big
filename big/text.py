@@ -217,7 +217,7 @@ def reversed_re_finditer(pattern, string, flags=0):
         if overlapping_matches:
             # truncate s as we go along
             endpos = match.start()
-            string = string[:endpos]
+            need_to_truncate = True
 
             # overlapping_matches contains the overlapping
             # matches found *last* time around, before the most
@@ -254,6 +254,10 @@ def reversed_re_finditer(pattern, string, flags=0):
                 #
                 # so, we check to see if the pattern can find a *different* match at this start
                 # position.  note that s is the already-truncated string!  we can just match against it.
+                if need_to_truncate:
+                    string = string[:endpos]
+                    need_to_truncate = False
+
                 match = pattern_match(string, start)
                 # print(f"  the old match extended past the truncation, try a new match, result {match!r}")
                 if match:
