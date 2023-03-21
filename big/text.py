@@ -146,25 +146,20 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
 
     result = []
     extend = result.extend
+    append = result.append
     matches_iterator = pattern.finditer(s)
 
     try:
-        for i in range(count):
+        for remaining in range(count, 0, -1):
             match = next(matches_iterator)
             before, separator, s = s.partition(match.group(0))
-            # assert separator
             extend((before, match))
+        extension = ()
     except StopIteration:
-        # we ran out of matches before we hit count.
-        # therefore i is at least one less than count.
-        extend((s, None))
-        s = empty
-        trailing_empty_partitions_count = count - (i + 1)
-        if trailing_empty_partitions_count:
-            extend((empty, None) * trailing_empty_partitions_count)
+        extension = (None, empty) * remaining
+    append(s)
 
-    result.append(s)
-    return tuple(result)
+    return tuple(result) + extension
 
 @_export
 def reversed_re_finditer(pattern, string, flags=0):
@@ -401,26 +396,21 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
 
     result = []
     extend = result.extend
+    append = result.append
     matches_iterator = reversed_re_finditer(pattern, s, flags)
 
     try:
-        for i in range(count):
+        for remaining in range(count, 0, -1):
             match = next(matches_iterator)
             s, separator, after = s.rpartition(match.group(0))
-            # assert separator
             extend((after, match))
+        extension = ()
     except StopIteration:
-        # we ran out of matches before we hit count.
-        # therefore i is at least one less than count.
-        extend((s, None))
-        s = empty
-        trailing_empty_partitions_count = count - (i + 1)
-        if trailing_empty_partitions_count:
-            extend((empty, None) * trailing_empty_partitions_count)
+        extension = ((empty, None) * remaining)
 
-    result.append(s)
+    append(s)
     result.reverse()
-    return tuple(result)
+    return extension + tuple(result)
 
 
 # a list of all unicode whitespace characters known to Python
