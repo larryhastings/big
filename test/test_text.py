@@ -31,17 +31,25 @@ import re
 import sys
 import unittest
 
+try:
+    from re import Pattern as re_Pattern
+except ImportError: # pragma: no cover
+    re_Pattern = re._pattern_type
 
 def unchanged(o):
     return o
 
 def to_bytes(o): # pragma: no cover
+    if o is None:
+        return None
     if isinstance(o, str):
         return o.encode('ascii')
     if isinstance(o, list):
         return [to_bytes(x) for x in o]
     if isinstance(o, tuple):
         return tuple(to_bytes(x) for x in o)
+    if isinstance(o, re_Pattern):
+        o = re.compile(to_bytes(o.pattern), flags=o.flags)
     return o
 
 
@@ -69,19 +77,19 @@ def printable_separators(separators):
     return separators
 
 class StrSubclass(str):
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return f"<StrSubclass {str(self)!r}>"
 
 class DifferentStrSubclass(str):
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return f"<DifferentStrSubclass {str(self)!r}>"
 
 class BytesSubclass(bytes):
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return f"<BytesSubclass {bytes(self)!r}>"
 
 class DifferentBytesSubclass(bytes):
-    def __repr__(self):
+    def __repr__(self): # pragma: no cover
         return f"<DifferentBytesSubclass {bytes(self)!r}>"
 
 
@@ -157,41 +165,40 @@ class BigTextTests(unittest.TestCase):
             return tuple(result)
 
         for c in (unchanged, to_bytes):
+
+            def test_re_partition(s, pattern, count, expected):
+                self.assertEqual(group0(big.re_partition(c(s), c(pattern), count)), c(expected))
+
+            def test_re_rpartition(s, pattern, count, expected):
+                s = c(s)
+                pattern = c(pattern)
+                expected = c(expected)
+                self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
+                self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)
+
             pattern = c("[0-9]+")
 
-            s = c("abc123def456ghi")
-            self.assertEqual(group0(big.re_partition(s, pattern)),
-                c(("abc", "123", "def456ghi")) )
-            self.assertEqual(group0(big.re_rpartition(s, pattern)),
-                c(("abc123def", "456", "ghi")) )
-            self.assertEqual(group0(big.re_partition(s, pattern, reverse=True)),
-                c(("abc123def", "456", "ghi")) )
+            s = "abc123def456ghi"
+            test_re_partition( s, pattern, 1, ("abc", "123", "def456ghi") )
+            test_re_rpartition(s, pattern, 1, ("abc123def", "456", "ghi") )
 
-            s = c("abc12345def67890ghi")
-            self.assertEqual(group0(big.re_partition(s, pattern)),
-                c(("abc", "12345", "def67890ghi")) )
-            self.assertEqual(group0(big.re_rpartition(s, pattern)),
-                c(("abc12345def", "67890", "ghi")) )
+            s = "abc12345def67890ghi"
+            test_re_partition( s, pattern, 1, ("abc", "12345", "def67890ghi") )
+            test_re_rpartition(s, pattern, 1, ("abc12345def", "67890", "ghi") )
 
             pattern = re.compile(pattern)
-            self.assertEqual(group0(big.re_partition(s, pattern)),
-                c(("abc", "12345", "def67890ghi")) )
-            self.assertEqual(group0(big.re_rpartition(s, pattern)),
-                c(("abc12345def", "67890", "ghi")) )
+            test_re_partition( s, pattern, 1, ("abc", "12345", "def67890ghi") )
+            test_re_rpartition(s, pattern, 1, ("abc12345def", "67890", "ghi") )
 
             pattern = c("fa+rk")
-            self.assertEqual(group0(big.re_partition(s, pattern)),
-                c(("abc12345def67890ghi", None, "")) )
-            self.assertEqual(group0(big.re_rpartition(s, pattern)),
-                c(("", None, "abc12345def67890ghi")) )
+            test_re_partition( s, pattern, 1, ("abc12345def67890ghi", None, "") )
+            test_re_rpartition(s, pattern, 1, ("", None, "abc12345def67890ghi") )
 
             # test overlapping matches
             pattern = c("thisANDthis")
             s = c("thisANDthisANDthis")
-            self.assertEqual(group0(big.re_partition(s, pattern)),
-                c(("", "thisANDthis", "ANDthis")) )
-            self.assertEqual(group0(big.re_rpartition(s, pattern)),
-                c(("thisAND", "thisANDthis", "")) )
+            test_re_partition( s, pattern, 1, ("", "thisANDthis", "ANDthis") )
+            test_re_rpartition(s, pattern, 1, ("thisAND", "thisANDthis", "") )
 
             for fn in (big.re_partition, big.re_rpartition):
                 s = c("Let's find the number 89 in this string")
@@ -204,29 +211,76 @@ class BigTextTests(unittest.TestCase):
                 self.assertEqual(match.group(0), c("number 89"))
                 self.assertEqual(match.group(1), c("89"))
 
-            def test_re_partition(s, pattern, count, expected):
-                self.assertEqual(group0(big.re_partition(s, pattern, count)), expected)
+            test_re_partition("a:b:c:d", ":", 0, ("a:b:c:d",) )
+            test_re_partition("a:b:c:d", ":", 1, ("a",       ":",  "b:c:d" ) )
+            test_re_partition("a:b:c:d", ":", 2, ("a",       ":",  "b", ":",  "c:d" ) )
+            test_re_partition("a:b:c:d", ":", 3, ("a",       ":",  "b", ":",  "c", ":",  "d" ) )
+            test_re_partition("a:b:c:d", ":", 4, ("a",       ":",  "b", ":",  "c", ":",  "d", None, '') )
+            test_re_partition("a:b:c:d", ":", 5, ("a",       ":",  "b", ":",  "c", ":",  "d", None, '', None, '') )
+            test_re_partition("a:b:c:d", "x", 5, ("a:b:c:d", None, '',  None, '',  None, '',  None, '', None, '') )
 
-            test_re_partition(c("a:b:c:d"), c(":"), 0, (c("a:b:c:d"),))
-            test_re_partition(c("a:b:c:d"), c(":"), 1, (c("a"),      c(":"), c("b:c:d")))
-            test_re_partition(c("a:b:c:d"), c(":"), 2, (c("a"),      c(":"), c("b"), c(":"), c("c:d")))
-            test_re_partition(c("a:b:c:d"), c(":"), 3, (c("a"),      c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
-            test_re_partition(c("a:b:c:d"), c(":"), 4, (c("a"),      c(":"), c("b"), c(":"), c("c"), c(":"), c("d"), None, c('')))
-            test_re_partition(c("a:b:c:d"), c(":"), 5, (c("a"),      c(":"), c("b"), c(":"), c("c"), c(":"), c("d"), None, c(''), None, c('')))
-            test_re_partition(c("a:b:c:d"), c("x"), 5, (c("a:b:c:d"), None,  c(''),    None, c(''),    None, c(''),  None, c(''), None, c('')))
+            test_re_rpartition("a:b:c:d", ":", 0, ("a:b:c:d",) )
+            test_re_rpartition("a:b:c:d", ":", 1, ("a:b:c", ':',  "d") )
+            test_re_rpartition("a:b:c:d", ":", 2, ("a:b",   ":",  "c", ":",  "d") )
+            test_re_rpartition("a:b:c:d", ":", 3, ("a",     ":",  "b", ":",  "c", ":",  "d") )
+            test_re_rpartition("a:b:c:d", ":", 4, ("",      None, "a", ":",  "b", ":",  "c", ":",  "d") )
+            test_re_rpartition("a:b:c:d", ":", 5, ("",      None, '',  None, "a", ":",  "b", ":",  "c", ":",  "d") )
+            test_re_rpartition("a:b:c:d", "x", 5, ('',      None, '',  None, '',  None, '',  None, '',  None, "a:b:c:d") )
 
-            def test_re_rpartition(s, pattern, count, expected):
-                self.assertEqual(group0(big.re_rpartition(s, pattern, count)), expected)
-                self.assertEqual(group0(big.re_partition(s, pattern, count, reverse=True)), expected)
+            # reverse mode, overlapping matches tests
+            test_re_rpartition('abcdefgh', '(abcdef|efg|ab|b|c|d)', 4, ('', 'ab', '', 'c', '', 'd', '', 'efg', 'h') )
+            test_re_rpartition('abcdefgh', '(abcdef|efg|a|b|c|d)', 4,  ('a', 'b', '', 'c', '', 'd', '', 'efg', 'h') )
 
-            test_re_rpartition(c("a:b:c:d"), c(":"), 0, (c("a:b:c:d"),))
-            test_re_rpartition(c("a:b:c:d"), c(":"), 1, (c("a:b:c"), c(':'), c("d")))
-            test_re_rpartition(c("a:b:c:d"), c(":"), 2, (c("a:b"),   c(":"), c("c"), c(":"), c("d")))
-            test_re_rpartition(c("a:b:c:d"), c(":"), 3, (c("a"),     c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
-            test_re_rpartition(c("a:b:c:d"), c(":"), 4, (c(""),        None, c("a"), c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
-            test_re_rpartition(c("a:b:c:d"), c(":"), 5, (c(""),        None, c(''),    None, c("a"), c(":"), c("b"), c(":"), c("c"), c(":"), c("d")))
-            test_re_rpartition(c("a:b:c:d"), c("x"), 5, (c(''),        None, c(''),    None, c(''),    None, c(''),    None, c(''),    None, c("a:b:c:d")))
+            test_re_rpartition('abcdef', '(bcd|cde|cd)', 1, ('ab', 'cde', 'f') )
+            test_re_rpartition('abcdef', '(bcd|cd)',     1, ('a', 'bcd', 'ef') )
 
+            # add x's to the beginning and end of s 100 times
+            pattern = '(bcdefghijklmn|nop)'
+            s = 'abcdefghijklmnopq'
+            before = 'abcdefghijklm'
+            after = 'q'
+            for i in range(100):
+                test_re_rpartition(s, pattern, 1, (before, 'nop', after) )
+                s = 'x' + s + 'x'
+                before = 'x' + before
+                after += 'x'
+
+            # match against xyz and a long string, we should always prefer xyz,
+            # progressively truncate characters from the *front* of the long string
+            s = 'abcdefghijklmnopqrstuvwxyz'
+            first_pattern = s[-1]
+            while first_pattern:
+                if len(first_pattern) >= 3:
+                    pattern = f'({first_pattern}|xyz)'
+                else:
+                    pattern = f'(xyz|{first_pattern})'
+                test_re_rpartition(s, pattern, 1, ('abcdefghijklmnopqrstuvw', 'xyz', ''))
+                first_pattern = first_pattern[1:]
+
+            # match against xyz and a long string, we should always prefer xyz,
+            # progressively truncate characters from the *end* of the long string
+            s = 'abcdefghijklmnopqrstuvwxyz'
+            first_pattern = s[:-1]
+            while first_pattern:
+                if len(first_pattern) >= 3:
+                    pattern = f'({first_pattern}|xyz)'
+                else:
+                    pattern = f'(xyz|{first_pattern})'
+                test_re_rpartition(s, pattern, 1, ('abcdefghijklmnopqrstuvw', 'xyz', ''))
+                first_pattern = first_pattern[:-1]
+
+            # 'abcdefghij' is the best match!
+            # all the overlapping matches are worse!
+            test_re_rpartition('abcdefghijk', '(abcdefghij|abcde|abcd|abc|ab|bc|cd|de|ef|fg|gh|hi|ij)', 1, ('', 'abcdefghij', 'k') )
+
+            # okay, now jk is the best match.
+            test_re_rpartition('abcdefghijkl', '(abcdefghij|abcde|abcd|abc|ab|bc|cd|de|ef|fg|gh|hi|ij|jk)', 1, ('abcdefghi', 'jk', 'l') )
+
+            test_re_rpartition('abcdefgh', '(bcd|cdefgh|de)', 1, ('ab', 'cdefgh', '') )
+            test_re_rpartition('abcdefgh', '(abcdef|efg|fb|b|c|d)', 4, ('a', 'b', '', 'c', '', 'd', '', 'efg', 'h') )
+            test_re_rpartition('abcdefgh', '(abcdef|efg|ab|b|c|d)', 4, ('', 'ab', '', 'c', '', 'd', '', 'efg', 'h') )
+
+        # do bytes vs str testing
         s = "abc123def456ghi"
         bytes_pattern = b"[0-9]+"
         with self.assertRaises(TypeError):
@@ -254,6 +308,7 @@ class BigTextTests(unittest.TestCase):
             (b"a", b":", b"b:c:d") )
         self.assertEqual(group0(big.re_partition(BytesSubclass(b"a:b:c:d"), DifferentBytesSubclass(b":"))),
             (b"a", b":", b"b:c:d") )
+
 
 
     def test_multistrip(self):

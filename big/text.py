@@ -29,6 +29,7 @@ import functools
 import itertools
 from itertools import zip_longest
 from .itertools import PushbackIterator
+import math
 import operator
 import re
 import struct
@@ -194,6 +195,15 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     for both must be the same (str or bytes).  re_rpartition will
     only return str or bytes objects.
 
+    If your regular expression has OR tokens ("|"), this function
+    will only work correctly if the pattern on the left of every OR
+    is guaranteed to produce a longer result than the pattern on
+    the right.
+
+    You can pass in a regex Pattern object (see the PyPi 'regex'
+    package).  Patterns using the "Reverse Searching" feature
+    of 'regex' (the REVERSE flag or the '(?r)' token) are unsupported.
+
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
@@ -227,28 +237,147 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     if count < 0:
         raise ValueError("count must be >= 0")
 
-    matches = list(pattern.finditer(s))
+    # matches are found by re.search *going forwards.*
+    # but what we need here is the *reverse* matches.
+    #
+    # consider
+    #    re_rpartition('abcdefgh', '(abcdef|efg|ab|b|c|d)', count=4)
+    # we do re.finditer(pattern, s), and it returns one match, 'abcdef'.
+    # when we check that match for overlaps we find a bunch.
+    # all those matches go into overlapping_matches.
+    #
+    # so what we do is: we ask re for all the forward matches
+    # (with re.finditer).  then for every match it found,
+    # we check every overlapping character to see if
+    # there's a different match there that we might prefer.
+    # if we prefer one of those, we partition there--but
+    # then keep checking the other overlapping matches because
+    # one of those might also work.  (it's a lot of work!)
 
-    # optimize for the most frequent use case
-    if count == 1:
-        if not matches:
-            return (empty, None, s)
-        match = matches[-1]
-        before, _, after = s.rpartition(match.group(0))
-        assert _
-        return (before, match, after)
+    # matches and overlapping_matches are lists of 3-tuples of:
+    #    (end_pos, -start_pos, match)
+    # if we sort the list, the last element will be the correct
+    # last match in "reverse" order.
+    #
+    # matches contains the list of matches from re.finditer().
+    # since this was found using re in "forward" order, we need
+    # to check every match in this list for potential overlapping
+    # matches.
+    #
+    # overlapping_matches is a list of all overlapping matches
+    # we found.
+    overlapping_matches = []
+    matches = [(match.end(), -match.start(), match) for match in pattern.finditer(s)]
+    matches.sort()
+    result = []
 
-    result = [s]
+    # cache some method lookups
+    pattern_match = pattern.match
+    append = overlapping_matches.append
+
     for i in range(count):
-        if not matches:
+        if overlapping_matches:
+            # overlapping_matches contains the overlapping
+            # matches found *last* time around, before the most
+            # recent partitioning of the string.
+            #
+            # since the string has presumably now been truncated,
+            # we need to recalculate the potential overlapping matches.
+            # we build the updated list by checking each of the
+            # old matches.
+
+            truncated_matches = []
+            # overlapping_matches will be set to truncated_matches in a few lines
+            append = truncated_matches.append
+            endpos = len(s) # since we're truncating s as we go, start/end positions never change
+            for t in overlapping_matches:
+                end, negated_start, match = t
+                start = -negated_start
+                if start >= endpos:
+                    # the *start* of this match is after where we truncated.
+                    # all matches at this position are no longer relevant.
+                    # throw away the match.
+                    # print(f"  {match=} starts after the truncation, it's no longer relevant.")
+                    continue
+                if end <= endpos:
+                    # the *end* of this match is *before* where we truncated.
+                    # in other words, this match is still viable.
+                    # keep it, unmodified.
+                    # print(f"  {match=} still fits inside the truncated string, keep it.")
+                    append(t)
+                    continue
+
+                # this match starts inside the truncated string, but ends after where we
+                # truncated the string.  (it overlapped with the previous
+                # match we used to partition the string.)
+                #
+                # so, we check to see if the pattern can find a *different* match at this start
+                # position.  note that s is the already-truncated string!  we can just match against it.
+                match = pattern_match(s, start)
+                # print(f"  the old match extended past the truncation, try a new match, result {match!r}")
+                if match:
+                    append((match.end(), -start, match))
+
+            overlapping_matches = truncated_matches
+
+        if (not overlapping_matches) and matches:
+            # we don't have a handy list of overlapping matches
+            # we can just use.
+            #
+            # but we *do* have a match (or matches) found in forwards mode.
+            # let's pop the rightmost one off the list and scan it for
+            # overlapping matches.
+
+            # we probe every** position in the match for an overlapping
+            # match.  all the matches go on overlapping_matches, and
+            # we sort and partition on the last one.
+            #
+            # ** we don't actually need to check the *first* position,
+            #   start, because we already know what we'll find:
+            #   the match that we're scanning for overlaps.
+
+            t = matches.pop()
+            assert not overlapping_matches
+
+            end, negated_start, match = t
+            # t contains the match at our starting position.
+            # it's viable, so we keep it.
+            overlapping_matches.append(t)
+
+            for pos in range((-negated_start) + 1, end):
+                match = pattern_match(s, pos)
+                if match:
+                    append((match.end(), -pos, match))
+
+        if not overlapping_matches:
+            # if we don't have any overlapping matches
+            # at this point, we've run out of matches.
+            # but the count demands that we continue
+            # partitioning.
+            #
+            # add empty partitions to the front.
             r = [empty, None]
-        else:
-            match = matches.pop()
-            s = result.pop(0)
-            before, separator, after = list(s.rpartition(match.group(0)))
-            r = [before, match, after]
+            if s is not None:
+                r.append(s)
+                s = None
+            r.extend(result)
+            result = r
+            continue
+
+        # overlapping_matches is now guaranteed
+        # current and non-empty.  the last entry
+        # contains the match we want to use to partition right now.
+        overlapping_matches.sort()
+        match = overlapping_matches.pop()[2]
+
+        s, separator, after = s.rpartition(match.group(0))
+        r = [match, after]
         r.extend(result)
         result = r
+
+    if s is not None:
+        result.insert(0, s)
+
     return tuple(result)
 
 

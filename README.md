@@ -3212,6 +3212,31 @@ in the **big** test suite.
 
 **next version** *(under development)*
 
+* Major rewrite of
+  [`re_rpartition`.](#re_rpartitiontext-pattern-count1--flags0)
+  I realized it had the same "reverse mode" problem that
+  I fixed in
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  back in version **0.6.10**: the regular expression should really
+  search the string in "reverse mode", from right to left.
+  Although this usually produces the same list of matches as you'd
+  find searching the string forwards, sometimes the matches come
+  out *very* different.  The difference is whether the regular
+  expression potentially matches against overlapping strings.
+  When in forwards mode, the regular expression should prefer
+  the *leftmost* overlapping match, but in reverse mode it
+  should prefer the *rightmost* overlapping match.
+  This was way harder to fix with `re_rpartition` than with `multisplit`,
+  because Python's `re` module only supports searching forwards.
+  I have to emulate reverse-mode searching by manually checking for
+  overlapping matches and figuring out which one(s) to keep--a *lot* of
+  work!  Fortunately it's only a minor speed hit if you don't have
+  overlapping matches.  (And if you *do* have overlapping matches,
+  you're probably just happy `re_rpartition` now produces correct
+  results--though I did my best to make it performant anyway.)
+  In the future, **big** will probably add support for the
+  PyPI package `regex`, which reimplements Python's `re` module
+  but adds many features... including reverse mode!
 * Functions in `big.text` now accept `str`, `bytes`, or a *subclass*
   of either `str` or `bytes`.  (Previously they only accepted `str`
   or `bytes`.)
