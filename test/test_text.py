@@ -39,7 +39,7 @@ except ImportError: # pragma: no cover
 try:
     import regex
     have_regex = True
-except ImportError:
+except ImportError: # pragma: no cover
     have_regex = False
 
 def unchanged(o):
@@ -55,7 +55,10 @@ def to_bytes(o): # pragma: no cover
     if isinstance(o, tuple):
         return tuple(to_bytes(x) for x in o)
     if isinstance(o, re_Pattern):
-        o = re.compile(to_bytes(o.pattern), flags=o.flags)
+        flags = o.flags
+        if flags & re.UNICODE:
+            flags = flags - re.UNICODE
+        o = re.compile(to_bytes(o.pattern), flags=flags)
     return o
 
 
@@ -196,7 +199,7 @@ class BigTextTests(unittest.TestCase):
             test('..', 'abcde', ('de', 'bc'))
             test('.-.', 'a-b-c', ('b-c',))
             test('a|b', '111a222', ('a',))
-            test('b|a', '111a222', ('a',))
+            test(re.compile('b|a'), '111a222', ('a',))
             test('x|X', 'xaxbXcxd', ('x', 'X', 'x', 'x',))
             test(r'estonia\w', 'fine estonian workers', ('estonian',))
             test(r'\westonia', 'fine nestonian workers', ('nestonia',))
@@ -210,7 +213,7 @@ class BigTextTests(unittest.TestCase):
             # Python 3.7 fixed a long-standing bug with zero-width matching.
             # See https://github.com/python/cpython/issues/44519
             assert sys.version_info.major >= 3
-            if (sys.version_info.major == 3) and (sys.version_info.minor <= 6):
+            if (sys.version_info.major == 3) and (sys.version_info.minor <= 6):  # pragma: no cover
                 # wrong, but consistent
                 result = ('bar', 'oo', '')
             else:
@@ -324,7 +327,7 @@ class BigTextTests(unittest.TestCase):
             # match against xyz and a long string, we should always prefer xyz,
             # progressively truncate characters from the *front* of the long string
             s = 'abcdefghijklmnopqrstuvwxyz'
-            first_pattern = s[-1]
+            first_pattern = s[:-1]
             while first_pattern:
                 if len(first_pattern) >= 3:
                     pattern = f'({first_pattern}|xyz)'
