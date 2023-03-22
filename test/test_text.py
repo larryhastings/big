@@ -182,16 +182,19 @@ class BigTextTests(unittest.TestCase):
             string = c(string)
             expected = c(expected)
             got = finditer_group0(big.reversed_re_finditer(pattern, string))
-            self.assertEqual(expected, got)
 
             if have_regex:
+                # confirm first that we match regex's output
                 if isinstance(pattern, re_Pattern):
                     p = pattern.pattern
                 else:
                     p = pattern
                 p = regex.compile(p, regex.REVERSE)
                 regex_result = finditer_group0(p.finditer(string))
+                # print(f"{pattern=} {string=} {regex_result=} {got=}")
                 self.assertEqual(regex_result, got)
+
+            self.assertEqual(expected, got)
 
         for c in (unchanged, to_bytes):
             test(r'abcdef', 'abcdef', ('abcdef',))
@@ -204,8 +207,11 @@ class BigTextTests(unittest.TestCase):
             test(r'estonia\w', 'fine estonian workers', ('estonian',))
             test(r'\westonia', 'fine nestonian workers', ('nestonia',))
 
-            # gosh, I really don't understand this one.
-            test(r'q*', 'qqwe', ('', '', 'qq', ''))
+            # this zero-length match stuff is blowing my mind
+            test(r'q*', 'qqwe',   ('', '', 'qq', ''))
+            test(r'q*', 'xyqqwe', ('', '', 'qq', '', '', ''))
+            test(r'q*', 'xyqq',   ('qq', '', '', ''))
+            test(r'q*', 'qq',     ('qq', ''))
 
             test(r'.{2}', 'abc', ('bc',))
             test(r'\w+ \w+', 'first second third fourth fifth', ('fourth fifth', 'second third'))
@@ -220,6 +226,11 @@ class BigTextTests(unittest.TestCase):
                 # correct
                 result = ('bar', 'foo', '')
             test(r'^|\w+', 'foo bar', result)
+
+            # regression test: the initial implementation got this wrong.
+            # it never truncated
+            test(r'cdefghijk|bcd|fgh|jkl', 'abcdefghijklmnopqrstuvwxyz', ('jkl', 'fgh', 'bcd'))
+
 
     def test_re_partition(self):
         def test_re_partition(s, pattern, count, expected):

@@ -43,8 +43,12 @@ except ImportError: # pragma: no cover
 try:
     import regex
     regex_Pattern = regex.Pattern
+    def isinstance_re_pattern(o):
+        return isinstance(o, (re_Pattern, regex_Pattern))
 except ImportError: # pragma: no cover
     regex_Pattern = re_Pattern
+    def isinstance_re_pattern(o):
+        return isinstance(o, re_Pattern)
 
 
 __all__ = []
@@ -110,19 +114,21 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     if s_is_str:
         if s_is_bytes:
             raise TypeError("s must be str or bytes, but not both")
-        empty = ''
+        empty_string = ''
+        extension = (None, '')
         s_type = str
         if type(s) != str:
             s = str(s)
     elif s_is_bytes:
-        empty = b''
+        empty_string = b''
+        extension = (None, b'')
         s_type = bytes
         if type(s) != bytes:
             s = bytes(s)
     else:
         raise TypeError("s must be str or bytes")
 
-    if not isinstance(pattern, (re_Pattern, regex_Pattern)):
+    if not isinstance_re_pattern(pattern):
         if not isinstance(pattern, s_type):
             raise TypeError("pattern must be the same type as s")
         if type(pattern) != s_type:
@@ -133,7 +139,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     if count == 1:
         match = pattern.search(s)
         if not match:
-            return (s, None, empty)
+            return (s, None, empty_string)
         before, separator, after = s.partition(match.group(0))
         return (before, match, after)
 
@@ -154,7 +160,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
             extend((before, match))
         extension = ()
     except StopIteration:
-        extension = (None, empty) * remaining
+        extension *= remaining
 
     result.append(s)
     return tuple(result) + extension
@@ -171,7 +177,7 @@ def reversed_re_finditer(pattern, string, flags=0):
     If it's a string, it'll be compiled by re.compile using the
     "flags" you passed in.
     """
-    if not isinstance(pattern, (re_Pattern, regex_Pattern)):
+    if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
 
     # matches are found by re.search *going forwards.*
@@ -206,6 +212,92 @@ def reversed_re_finditer(pattern, string, flags=0):
     # "forward" order, we need to check every match in this list
     # for potential overlapping matches.
     matches = [(match.end(), -match.start(), match) for match in pattern.finditer(string)]
+    if not matches:
+        # print(f"no matches at all! exiting immediately.")
+        return
+
+    # print(f"\n\n{string=}\n{pattern=}\n{matches=}")
+
+    zero_length_match = pattern.match(string, 0, 0)
+    if zero_length_match:
+        # this pattern matches zero-length strings.
+        # since the rules are a little different for
+        # zero-length strings when in reverse mode,
+        # we need to doctor the match results a little.
+
+        # these seem to be the rules:
+        #
+        # In forwards mode, we consider two matches to overlap
+        # if they start at the same position, or if they have
+        # any characters in common.  There's an implicit
+        # zero-length string at the beginning and end of every
+        # string, so if the pattern matches against a zero-length
+        # string at the start or end, and there isn't another
+        # (longer) match that starts at that position, we'll
+        # yield these matches too.  Since only a zero-length
+        # match can start at position len(string), we'll always
+        # yield a zero-length match starting and ending at
+        # position length(string) if the pattern matches there.
+        #
+        # In reverse mode, we consider two matches to overlap
+        # if they end at the same position, or if they have any
+        # characters in common with any other match.  There's an
+        # implicit zero-length string at the beginning and end of
+        # every string, so if the pattern matches a zero-length
+        # string at the start or end, and there isn't another
+        # (longer) match that ends at that position, we'll yield
+        # these matches too.  Since only a zero-length match can
+        # end at position 0, we'll always yield a zero-length
+        # match starting and ending at position 0 if the pattern
+        # matches there.
+
+        # we need to ensure that, for every non-zero-length match,
+        # if the pattern matches a zero-length string starting at
+        # the same position, we have that zero-length match in
+        # matches too.
+        #
+        # so specifically we're going to do this:
+        #
+        # for every match m in matches:
+        #   if m has nonzero length,
+        #     and the pattern matches a zero-length string
+        #     starting at m,
+        #     ensure that zero-length match is in matches.
+        #   elif m has zero length,
+        #     if we've already ensured that a zero-length
+        #     match starting at m.start() is in matches,
+        #     discard m.
+
+        zeroes = set()
+        new_matches = []
+        append = new_matches.append
+        for t in matches:
+            match = t[2]
+            # print(f"--{match=} {zeroes=}")
+            start, end = match.span()
+
+            if start == end:
+                if start in zeroes:
+                    # throw away this zero-length
+                    # print(f"  discarding old zero-length {match=}")
+                    pass
+                else:
+                    append(t)
+                    zeroes.add(start)
+                continue
+
+            if start not in zeroes:
+                zero_match = pattern.match(string, start, start)
+                if zero_match:
+                    t_zero_length = (start, -start, zero_match)
+                    append(t_zero_length)
+                    # print(f"  adding zero-length {zero_match=}")
+                    zeroes.add(start)
+            append(t)
+        del zeroes
+        matches = new_matches
+        # print(f"handled zero-length. {matches=}")
+
     matches.sort()
 
     # overlapping_matches is a list of the possibly-viable
@@ -216,19 +308,20 @@ def reversed_re_finditer(pattern, string, flags=0):
     result = []
     match = None
 
+    # we truncate each match at the start
+    # of the previously yielded match.
+    #
+    # the initial value allows the initial match
+    # to extend all the way to the end of the string.
+    previous_match_start = len(string)
+
     # cache some method lookups
     pattern_match = pattern.match
     append = overlapping_matches.append
 
     while True:
+        # print(f"  --\n  {previous_match_start=}\n  {matches=}\n  {overlapping_matches=}")
         if overlapping_matches:
-            # if overlapping_matches is true, match is guaranteed
-            # to be set to the previously yielded match.
-            # (it's left over from the previous iteration.)
-            # all we need it for is the starting position.
-            previous_match_start = match.start()
-            need_to_truncate_s = True
-
             # overlapping_matches contains the overlapping
             # matches found *last* time around, before we
             # yielded the most recent match.
@@ -244,8 +337,8 @@ def reversed_re_finditer(pattern, string, flags=0):
             for t in overlapping_matches:
                 end, negated_start, match = t
                 start = -negated_start
-                if start >= previous_match_start:
-                    # this match starts *at or after* the previous match started.
+                if start > previous_match_start:
+                    # this match starts *after* the previous match started.
                     # all matches starting at this position are no longer
                     # viable.  throw away the match.
                     # print(f"  {match=} starts after the truncation, it's no longer relevant.")
@@ -265,58 +358,77 @@ def reversed_re_finditer(pattern, string, flags=0):
                 # so this match is itself no longer viable.  but!
                 # there might be a *different* match starting at this
                 # position in the string.  so we do a fresh re.match here,
-                # but we truncate the string at the start of the previously
-                # yielded match.
+                # but we stop at the start of the previously yielded match.
+                # (that's the third parameter, "endpos".)
 
-                if need_to_truncate_s:
-                    string = string[:previous_match_start]
-                    need_to_truncate_s = False
-
-                match = pattern_match(string, start)
+                match = pattern_match(string, start, previous_match_start)
                 # print(f"  the old match extended past the truncation, try a new match, result {match!r}")
                 if match:
                     append((match.end(), -start, match))
 
             overlapping_matches = truncated_matches
+            # print(f"  recalculated {overlapping_matches=}")
 
         if (not overlapping_matches) and matches:
             # we don't currently have any pre-screened
             # overlapping matches we can use.
             #
             # but we *do* have a match (or matches) found in forwards mode.
-            # let's pop the rightmost one off the list and scan it for
-            # overlapping matches.
+            # grab the next one that's still viable (doesn't )
 
-            # we probe every** position inside the match for an
-            # overlapping match.  all the matches we find go in
-            # overlapping_matches; then we sort it and yield
-            # the last one.
-            #
-            # ** we don't actually need to check the *first* position,
-            #   start, because we already know what we'll find:
-            #   the match that we got from re.finditer() and
-            #   scanned for overlaps.
+            scan_for_overlapping_matches = False
+            while matches:
+                t = matches.pop()
+                end, negated_start, match = t
+                start = -negated_start
+                if end <= previous_match_start:
+                    # print(f"  keeping match={match!r}")
+                    append(t)
+                    start += 1
+                    scan_for_overlapping_matches = True
+                    break
+                if start <= previous_match_start:
+                    # print(f"  not keeping match={match!r} but proceeding")
+                    scan_for_overlapping_matches = True
+                    break
+                # print(f"  not keeping match={match!r}, try again.")
 
-            t = matches.pop()
-            assert not overlapping_matches
-            # as mentioned, the match we got from finditer
-            # is viable here, so add it to the list.
-            overlapping_matches.append(t)
+            if scan_for_overlapping_matches:
+                # we scan every** position inside the match for an
+                # overlapping match.  all the matches we find go in
+                # overlapping_matches; then we sort it and yield
+                # the last one.
+                #
+                # ** we don't actually need to check the *first* position,
+                #   start, because we already know what we'll find:
+                #   the match that we got from re.finditer() and
+                #   scanned for overlaps.
 
-            end, negated_start, match = t
+                # as mentioned, the match we got from finditer
+                # is viable here, so add it to the list.
 
-            for pos in range((-negated_start) + 1, end):
-                match = pattern_match(string, pos)
-                if match:
-                    append((match.end(), -pos, match))
+                # print(f"  scan for overlapping matches in {start=} {end=}")
+
+                end = min(end, previous_match_start)
+                for pos in range(start, end):
+                    match = pattern_match(string, pos, previous_match_start)
+                    if match:
+                        # print(f"  found {match=}")
+                        append((match.end(), -pos, match))
 
         if not overlapping_matches:
+            # matches and overlapping matches are both empty.
+            # we've exhausted the matches.  stop iterating.
+            # print(f"  done.")
             return
 
-        # overlapping_matches is now guaranteed current, non-empty,
-        # and sorted with the rightmost match last.  yield that match.
+        # overlapping_matches is now guaranteed current and non-empty.
+        # we sort it so the rightmost match is last, and yield that.
         overlapping_matches.sort()
+        # print(f"  final {overlapping_matches=}")
         match = overlapping_matches.pop()[2]
+        previous_match_start = match.start()
+        # print(f"  yielding {match=}")
         yield match
 
 
@@ -374,12 +486,14 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     if s_is_str:
         if s_is_bytes:
             raise TypeError("s must be str or bytes, but not both")
-        empty = ''
+        empty_string = ''
+        extension = ('', None)
         s_type = str
         if type(s) != str:
             s = str(s)
     elif s_is_bytes:
-        empty = b''
+        empty_string = b''
+        extension = (b'', None)
         s_type = bytes
         if type(s) != bytes:
             s = bytes(s)
@@ -394,7 +508,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
             before, separator, after = s.rpartition(match.group(0))
             return (before, match, after)
         except StopIteration:
-            return (empty, None, s)
+            return (empty_string, None, s)
 
     if count == 0:
         return (s,)
@@ -413,7 +527,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
             extend((after, match))
         extension = ()
     except StopIteration:
-        extension = ((empty, None) * remaining)
+        extension *= remaining
 
     result.append(s)
     result.reverse()
@@ -1803,7 +1917,7 @@ def lines_grep(li, pattern, *, invert=False, flags=0):
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
-    if not isinstance(pattern, (re_Pattern, regex_Pattern)):
+    if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
     search = pattern.search
     if invert:
