@@ -212,6 +212,10 @@ class BigTextTests(unittest.TestCase):
             test(r'q*', 'xyqqwe', ('', '', 'qq', '', '', ''))
             test(r'q*', 'xyqq',   ('qq', '', '', ''))
             test(r'q*', 'qq',     ('qq', ''))
+            test(r'q*', 'q-qqwe',   ('', '', 'qq', '', 'q', ''))
+            test(r'q*', 'xyq-qqwe', ('', '', 'qq', '', 'q', '', '', ''))
+            test(r'q*', 'xyq-qq',   ('qq', '', 'q', '', '', ''))
+            test(r'q*', 'q-qq',     ('qq', '', 'q', ''))
 
             test(r'.{2}', 'abc', ('bc',))
             test(r'\w+ \w+', 'first second third fourth fifth', ('fourth fifth', 'second third'))
