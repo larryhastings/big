@@ -1745,7 +1745,9 @@ gone to the trouble of fully supporting them.  You're welcome!
 > A list of all whitespace characters recognized by Python.
 > Includes many Unicode whitespace strings, like `'\xa0'`
 > (a non-breaking space).  Useful as a list of separator
-> strings for [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)` et al.
+> strings for
+> [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+> et al.
 >
 > **big** also defines `utf8_whitespace`, which is `whitespace`
 > with all strings encoded to UTF-8 (as bytes),
