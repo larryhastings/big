@@ -380,12 +380,12 @@ them should ever raise an exception--no matter *what* nonsense you pass in.
 
 #### `try_float(o)`
 
-> Returns `True` if `o` can be converted into a float,
+> Returns `True` if `o` can be converted into a `float`,
 > and `False` if it can't.
 
 #### `try_int(o)`
 
-> Returns `True` if `o` can be converted into an int,
+> Returns `True` if `o` can be converted into an `int`,
 > and `False` if it can't.
 
 
@@ -408,9 +408,9 @@ Functions for working with files, directories, and I/O.
 >
 > `encoding` is used as the file encoding when opening the file.
 >
-> if `text` is a str, the file is opened in text mode.
-> if `text` is a bytes object, the file is opened in binary mode.
-> `encoding` must be `None` when the file is opened in binary mode.
+> * If `text` is a str, the file is opened in text mode.
+> * If `text` is a bytes object, the file is opened in binary mode.
+>   `encoding` must be `None` when the file is opened in binary mode.
 >
 > If `case_insensitive` is true, perform the search in a case-insensitive
 > manner.
@@ -423,7 +423,8 @@ Functions for working with files, directories, and I/O.
 > The first line of the file is line number 1.
 >
 > For simplicity of implementation, the entire file is read in to memory
-> at one time.  If `case_insensitive` is True, a lowercased copy is also used.
+> at one time.  If `case_insensitive` is true, `fgrep` also makes a lowercased
+> copy.
 
 #### `file_mtime(path)`
 
@@ -443,7 +444,7 @@ Functions for working with files, directories, and I/O.
 #### `grep(path, pattern, *, encoding=None, enumerate=False, flags=0)`
 
 > Look for matches to a regular expression pattern in the lines of a file,
-> like the UNIX `grep` utility program.
+> similarly to the UNIX `grep` utility program.
 >
 > `path` should be an object representing a path to an existing file, one of:
 >
@@ -500,6 +501,8 @@ Functions for working with files, directories, and I/O.
 > You can change directories in the nested block;
 > this won't affect pushd restoring the original current
 > working directory upon exiting the nested block.
+>
+> You can safely nest `with pushd` blocks.
 
 #### `safe_mkdir(path)`
 
@@ -508,20 +511,21 @@ Functions for working with files, directories, and I/O.
 > it guarantees that a directory exists at `path`.
 >
 > If a directory already exists at `path`,
-> does nothing.
+> `safe_mkdir` does nothing.
 >
-> If a file exists at `path`, unlinks it
-> then creates the directory.
+> If a file exists at `path`, `safe_mkdir`
+> unlinks `path` then creates the directory.
 >
 > If the parent directory doesn't exist,
-> creates it, then creates `path`.
+> `safe_mkdir` creates that directory,
+> then creates `path`.
 >
 > This function can still fail:
 >
-> * 'path' could be on a read-only filesystem.
+> * `path` could be on a read-only filesystem.
 > * You might lack the permissions to create `path`.
-> * You could ask to create the directory 'x/y'
->   and 'x' is a file (not a directory).
+> * You could ask to create the directory `x/y`
+>   and `x` is a file (not a directory).
 
 #### `safe_unlink(path)`
 
@@ -1747,7 +1751,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 > (a non-breaking space).  Useful as a list of separator
 > strings for
 > [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-> et al.
+>5 et al.
 >
 > **big** also defines `utf8_whitespace`, which is `whitespace`
 > with all strings encoded to UTF-8 (as bytes),
