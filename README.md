@@ -1745,7 +1745,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 > A list of all whitespace characters recognized by Python.
 > Includes many Unicode whitespace strings, like `'\xa0'`
 > (a non-breaking space).  Useful as a list of separator
-> strings for `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)` et al.
+> strings for [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)` et al.
 >
 > **big** also defines `utf8_whitespace`, which is `whitespace`
 > with all strings encoded to UTF-8 (as bytes),
@@ -1979,7 +1979,7 @@ is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 *five keyword-only parameters* after all.  However, they're
 designed to be reasonably memorable, and their default values
-are designedo to be easy to remember.  But the best
+are designed to be easy to remember.  But the best
 way to combat the complexity of calling
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 is to use it as a building block for your own
@@ -1988,7 +1988,7 @@ text splitting functions.  For example, inside **big**,
 is used to implement
 [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 [`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
-[`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
+[`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 and several others.
 
 ### Demonstrations of each `multisplit` keyword-only parameter
@@ -2846,23 +2846,24 @@ columns that contain one or more overflow lines.
 
 What does
 [`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
-do when it encounters overflow?  It depends on what you want.
+do when it encounters overflow?
 [`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
-provides three "strategies" to deal with this condition, and you can specify
-which one you want with its `overflow_strategy` parameter.  The three are:
+supports three "strategies" to deal with this condition, and you can specify
+which one you want using its `overflow_strategy` parameter.  The three
+strategies are:
 
 - `OverflowStrategy.RAISE`: Raise an `OverflowError` exception.  The default.
 
 - `OverflowStrategy.INTRUDE_ALL`: Intrude into all subsequent columns on
-all lines where the overflowed column is wider than its max_width.
+all lines where the overflowed column is wider than its `max_width`.
 The subsequent columns "make space" for the overflow text by not adding
 text on those overflowed lines; this is called "pausing" their output.
 
 - `OverflowStrategy.DELAY_ALL`:  Delay all columns after the overflowed
 column, not beginning any until after the last overflowed line
-in the overflowed column.  This is like `INTRUDE_ALL`, except that
-they "make space" by pausing their output until the last overflowed
-line.
+in the overflowed column.  This is like the `INTRUDE_ALL` strategy,
+except that the columns "make space" by pausing their output until
+the last overflowed line.
 
 When `overflow_strategy` is `INTRUDE_ALL` or `DELAY_ALL`, and
 either `overflow_before` or `overflow_after` is nonzero, these
