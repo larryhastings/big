@@ -3287,12 +3287,17 @@ in the **big** test suite.
 
 **0.7.1**
 
-* Tweaked the implementation of `multisplit`.  Internally, it does the
+* Tweaked the implementation of
+  [`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  Internally, it does the
   string splitting using `re.split`, which returns a `list`.  It used
   to iterate over the list and yield each element.  But that meant keeping
   the entire list around in memory until `multisplit` exited.  Now,
-  `multisplit` reverses the list, pops off the final element, and yields
-  that.  This means `multisplit` drops all references to the split strings
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  reverses the list, pops off the final element, and yields
+  that.  This means
+  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  drops all references to the split strings
   as it iterates over the string, which may help in low-memory situations.
 * Minor doc fixes.
 
