@@ -1,4 +1,4 @@
-![# big](/resources/images/big.header.png)
+![# big](https://raw.githubusercontent.com/larryhastings/big/master/resources/images/big.header.png)
 
 ##### Copyright 2022-2023 by Larry Hastings
 
