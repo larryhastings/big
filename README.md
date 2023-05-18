@@ -2550,6 +2550,76 @@ If the `AS_PAIRS` output *didn't* end with that tuple of empty strings,
 you'd need to add an `if` statement to restore the trailing empty
 strings as needed.
 
+### Other differences between multisplit and str.split
+
+`str.split` returns an *empty list* when you split an
+empty string by whitespace:
+
+```Python
+>>> ''.split()
+[]
+```
+
+But not when you split by an explicit separator:
+
+```Python
+>>> ''.split('x')
+['']
+```
+
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+is consistent here.  If you split an empty string, it always returns an empty string,
+as long as the separators are valid:
+
+```Python
+>>> list(big.multisplit(''))
+['']
+>>> list(big.multisplit('', ('a', 'b', 'c')))
+['']
+```
+
+Similarly, when splitting a string that only contains whitespace, `str.split` also
+returns an empty list:
+
+```Python
+>>> '     '.split()
+[]
+```
+
+This is really the same as "splitting an empty string", because when `str.split`
+splits on whitespace, the first thing it does is strip leading whitespace.
+
+If you [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+a string that only contains whitespace, and you split on whitespace characters,
+it returns two empty strings:
+
+```Python
+>>> list(big.multisplit('     '))
+['', '']
+```
+
+This is because the string conceptually starts with a zero-length string,
+then has a run of whitespace characters, then ends with another zero-length
+string.  So those two empty strings are the leading and trailing zero-length
+strings, separated by whitespace.  If you tell
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+to also strip the string, you'll get back a single empty string:
+
+```Python
+>>> list(big.multisplit('     ', strip=True))
+['']
+```
+
+And
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+behaves consistently even when you use different separators:
+
+```Python
+>>> list(big.multisplit('ababa', 'ab'))
+['', '']
+>>> list(big.multisplit('ababa', 'ab', strip=True))
+['']
+```
 
 ## `lines` and lines modifier functions
 
