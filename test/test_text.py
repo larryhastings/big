@@ -217,6 +217,11 @@ class BigTextTests(unittest.TestCase):
             test(r'q*', 'xyq-qq',   ('qq', '', 'q', '', '', ''))
             test(r'q*', 'q-qq',     ('qq', '', 'q', ''))
 
+            test(r'bcd|cde', 'abcdefg',     ('cde',))
+
+            # force a zero-length match to have the same start as a
+            # test(r'q*', 'aqqwe',   ('', '', 'qq', '', ''))
+
             test(r'.{2}', 'abc', ('bc',))
             test(r'\w+ \w+', 'first second third fourth fifth', ('fourth fifth', 'second third'))
 
@@ -234,7 +239,6 @@ class BigTextTests(unittest.TestCase):
             # regression test: the initial implementation got this wrong.
             # it never truncated
             test(r'cdefghijk|bcd|fgh|jkl', 'abcdefghijklmnopqrstuvwxyz', ('jkl', 'fgh', 'bcd'))
-
 
     def test_re_partition(self):
         def test_re_partition(s, pattern, count, expected):
@@ -403,6 +407,12 @@ class BigTextTests(unittest.TestCase):
         self.assertEqual(group0(big.re_partition(BytesSubclass(b"a:b:c:d"), DifferentBytesSubclass(b":"))),
             (b"a", b":", b"b:c:d") )
 
+        with self.assertRaises(ValueError):
+            big.re_partition('ab c de', ' ', count=-1)
+
+        with self.assertRaises(ValueError):
+            big.re_rpartition('ab c de', ' ', count=-1)
+
 
 
     def test_multistrip(self):
@@ -549,6 +559,9 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.multistrip(b's', ())
 
+
+        with self.assertRaises(ValueError):
+            big.multistrip('abcde', ('c', ''))
 
     def test_multisplit(self):
         for c in (unchanged, to_bytes):
@@ -1290,6 +1303,9 @@ class BigTextTests(unittest.TestCase):
         # with multipartition, because it literally uses multisplit
         # to do the splitting.  so multisplit handles it.
 
+        with self.assertRaises(ValueError):
+            big.multipartition("a x x b y y c", (" x ", " y "), -1)
+
     def test_reimplemented_str_split(self):
         def _multisplit_to_split(s, sep, maxsplit, reverse):
             separate = sep != None
@@ -1478,6 +1494,9 @@ class BigTextTests(unittest.TestCase):
             "a b\n\nc d\ne.",
             4)
 
+        with self.assertRaises(ValueError):
+            big.wrap_words([])
+
     def test_split_text_with_code(self):
         def test(s, expected, **kwargs):
             got = big.split_text_with_code(s, **kwargs)
@@ -1633,23 +1652,29 @@ class BigTextTests(unittest.TestCase):
 
     def test_text_pipeline(self):
         def test(columns, expected):
-            splits = [(big.split_text_with_code(column), min, max) for column, min, max in columns]
-            wrapped = [(big.wrap_words(split, margin=max), min, max) for split, min, max in splits]
-            got = big.merge_columns(*wrapped, overflow_strategy=big.OverflowStrategy.INTRUDE_ALL)
-            if 0:
-                print("_"*70)
-                print("columns")
-                print(repr(columns))
-                print("expected:")
-                print()
-                print(expected)
-                print()
-                print("got:")
-                print()
-                print(got)
-                print()
-                print()
-            self.assertEqual(got, expected)
+            for i in range(2):
+                splits = [(big.split_text_with_code(column), min, max) for column, min, max in columns]
+                wrapped = [(big.wrap_words(split, margin=max), min, max) for split, min, max in splits]
+                got = big.merge_columns(*wrapped, overflow_strategy=big.OverflowStrategy.INTRUDE_ALL)
+                if 0:
+                    print("_"*70)
+                    print("columns")
+                    print(repr(columns))
+                    print("expected:")
+                    print()
+                    print(expected)
+                    print()
+                    print("got:")
+                    print()
+                    print(got)
+                    print()
+                    print()
+                self.assertEqual(got, expected)
+                if i:
+                    break
+                columns = [(to_bytes(t[0]), t[1], t[2]) for t in columns]
+                expected = to_bytes(expected)
+
 
         test(
             (
@@ -1745,11 +1770,26 @@ class BigTextTests(unittest.TestCase):
             big.gently_title("the \"string's\" the thing", apostrophes=big.ascii_apostrophes, double_quotes=big.ascii_double_quotes)
 
         with self.assertRaises(TypeError):
+            big.gently_title("the \"string's\" the thing", apostrophes=(b"'",))
+        with self.assertRaises(TypeError):
+            big.gently_title("the \"string's\" the thing", double_quotes=(b'"',))
+        with self.assertRaises(TypeError):
+            big.gently_title("the \"string's\" the thing", apostrophes=(b"'",), double_quotes=(b'"',))
+
+
+        with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes)
         with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", double_quotes=big.double_quotes)
         with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes, double_quotes=big.double_quotes)
+
+        with self.assertRaises(TypeError):
+            big.gently_title(b"the \"string's\" the thing", apostrophes=("'",))
+        with self.assertRaises(TypeError):
+            big.gently_title(b"the \"string's\" the thing", double_quotes=('"',))
+        with self.assertRaises(TypeError):
+            big.gently_title(b"the \"string's\" the thing", apostrophes=("'",), double_quotes=('"',))
 
         with self.assertRaises(TypeError):
             big.gently_title(StrSubclass("the \"string's\" the thing"), apostrophes=BytesSubclass(big.ascii_apostrophes))
@@ -1770,21 +1810,37 @@ class BigTextTests(unittest.TestCase):
              b"Peter O'Toole"
              )
 
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", apostrophes='')
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", apostrophes=("'", ''))
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", double_quotes='')
+        with self.assertRaises(ValueError):
+            big.gently_title("the \"string's\" the thing", double_quotes=('"', ''))
+
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", apostrophes=b'')
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", apostrophes=(b"'", b''))
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", double_quotes=b'')
+        with self.assertRaises(ValueError):
+            big.gently_title(b"the \"string's\" the thing", double_quotes=(b'"', b''))
+
 
     def test_normalize_whitespace(self):
         def test(s, expected, *, separators=None, replacement=" "):
-            result = big.normalize_whitespace(s, separators=separators, replacement=replacement)
-            self.assertEqual(result, expected)
+            for i in range(2):
+                result = big.normalize_whitespace(s, separators=separators, replacement=replacement)
+                self.assertEqual(result, expected)
+                if i:
+                    break
 
-            s = s.encode('ascii')
-            expected = expected.encode('ascii')
-            if separators is not None:
-                separators = [s.encode('ascii') for s in separators]
-            if replacement is not None:
-                replacement = replacement.encode('ascii')
-
-            result = big.normalize_whitespace(s, separators=separators, replacement=replacement)
-            self.assertEqual(result, expected)
+                s = to_bytes(s)
+                expected = to_bytes(expected)
+                separators = to_bytes(separators)
+                replacement = to_bytes(replacement)
 
         test("   a    b    c", " a b c")
 
@@ -1802,6 +1858,7 @@ class BigTextTests(unittest.TestCase):
         test('DEFabacabGHIaaa',     'DEF+GHI+', separators=('a', 'b', 'c'), replacement='+')
         test('abcDEFabacabGHI',    '+DEF+GHI',  separators=('a', 'b', 'c'), replacement='+')
         test('abcDEFabacabGHIaaa', '+DEF+GHI+', separators=('a', 'b', 'c'), replacement='+')
+        test('abcDEFabacabGHIaaa', '+DEF+GHI+', separators='abc', replacement='+')
 
         with self.assertRaises(TypeError):
             big.normalize_whitespace("abc", "b", -1)
@@ -1824,6 +1881,15 @@ class BigTextTests(unittest.TestCase):
         result = "ab cd"
         self.assertEqual(big.normalize_whitespace("ab\u2003cd"), result)
         self.assertEqual(big.normalize_whitespace("ab\u2003cd".encode('utf-8'), big.utf8_whitespace), result.encode('utf-8'))
+
+        with self.assertRaises(ValueError):
+            big.normalize_whitespace("a b c d   e", separators='')
+        with self.assertRaises(ValueError):
+            big.normalize_whitespace("a b c d   e", separators=[])
+        with self.assertRaises(ValueError):
+            big.normalize_whitespace(b"a b c d   e", separators=b'')
+        with self.assertRaises(ValueError):
+            big.normalize_whitespace(b"a b c d   e", separators=[])
 
     def test_split_quoted_strings(self):
         def test(s, expected, **kwargs):

@@ -62,7 +62,13 @@ def _export(o):
 
 
 def _iterate_over_bytes(b):
-    return (b[i:i+1] for i in range(len(b)))
+    # this may not actually iterate over bytes.
+    # for example, we iterate over apostrophes and double_quotes
+    # for gently_title, and those might be strings or bytes,
+    # or iterables of strings or bytes.
+    if isinstance(b, bytes):
+        return (b[i:i+1] for i in range(len(b)))
+    return iter(b)
 
 
 @_export
@@ -263,27 +269,24 @@ def reversed_re_finditer(pattern, string, flags=0):
         zeroes = set()
         new_matches = []
         append = new_matches.append
+        last_start = -1
         for t in matches:
             match = t[2]
             start, end = match.span()
 
-            if start == end:
-                if start in zeroes:
-                    # throw away this zero-length
-                    pass
-                else:
+            if start not in zeroes:
+                if (start == end):
                     append(t)
                     zeroes.add(start)
-                continue
+                    continue
 
-            if start not in zeroes:
                 zero_match = pattern.match(string, start, start)
                 if zero_match:
                     t_zero_length = (start, -start, zero_match)
                     append(t_zero_length)
-                    zeroes.add(start)
+                zeroes.add(start)
             append(t)
-        del zeroes
+        # del zeroes
         matches = new_matches
 
     matches.sort()
@@ -365,11 +368,9 @@ def reversed_re_finditer(pattern, string, flags=0):
                 end, negated_start, match = t
                 start = -negated_start
                 if end <= previous_match_start:
+                    assert start <= previous_match_start
                     append(t)
                     start += 1
-                    scan_for_overlapping_matches = True
-                    break
-                if start <= previous_match_start:
                     scan_for_overlapping_matches = True
                     break
 
@@ -1298,26 +1299,20 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     if apostrophes is None:
         _is_apostrophe = default_is_apostrophe
     else:
-        if not isinstance(apostrophes, s_type):
-            raise TypeError("apostrophes must be an iterable of non-empty objects the same type as s")
-        if not apostrophes:
-            raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s")
         cast_apostrophes = []
         for o in iterator(apostrophes):
             if not isinstance(o, s_type):
-                raise TypeError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
+                raise TypeError(f"apostrophes must be an iterable of non-empty objects the same type as s, or None {o=} {s_type=} {apostrophes=} {s=}")
             if not o:
                 raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
             cast_apostrophes.append(o)
+        if not apostrophes:
+            raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s")
         _is_apostrophe = frozenset(cast_apostrophes).__contains__
 
     if double_quotes is None:
         _is_double_quote = default_is_double_quote
     else:
-        if not isinstance(double_quotes, s_type):
-            raise TypeError("double_quotes must be an iterable of non-empty objects the same type as s")
-        if not double_quotes:
-            raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s")
         cast_double_quotes = []
         for o in iterator(double_quotes):
             if not isinstance(o, s_type):
@@ -1325,6 +1320,8 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
             if not o:
                 raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s, or None")
             cast_double_quotes.append(o)
+        if not double_quotes:
+            raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s")
         _is_double_quote = frozenset(cast_double_quotes).__contains__
 
     result = []
@@ -1444,8 +1441,6 @@ def normalize_whitespace(s, separators=None, replacement=None):
     if (   (separators is whitespace_without_dos)
         or (separators is whitespace)
         ):
-        if not separators:
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
         if not s.strip():
             return replacement
         words = s.split()
@@ -2106,7 +2101,6 @@ def wrap_words(words, margin=79, *, two_spaces=True):
     text = []
     first_word = True
 
-
     for word in words:
         if first_word:
             first_word = False
@@ -2150,8 +2144,8 @@ def wrap_words(words, margin=79, *, two_spaces=True):
         col += len(word)
         lastword = word
 
-    if not text:
-        raise ValueError("can't word wrap, iterator yielded zero words")
+    if first_word:
+        raise ValueError("no words to wrap")
     return empty.join(text)
 
 
