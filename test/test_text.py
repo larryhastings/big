@@ -479,9 +479,9 @@ class BigTextTests(unittest.TestCase):
         # multistrip *always* returns either str or bytes
         # objects, even when it doesn't strip anything.
         self.assertEqual(big.multistrip(StrSubclass('abcde'), StrSubclass(' ')), 'abcde')
-        self.assertEqual(type(big.multistrip(StrSubclass('abcde'), StrSubclass(' '))), str)
+        self.assertEqual(type(big.multistrip(StrSubclass('abcde'), StrSubclass(' '))), StrSubclass)
         self.assertEqual(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' ')), b'abcde')
-        self.assertEqual(type(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' '))), bytes)
+        self.assertEqual(type(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' '))), BytesSubclass)
 
         # regression test:
         # the old approach had a bug that had to do with overlapping separators.
@@ -1455,6 +1455,8 @@ class BigTextTests(unittest.TestCase):
         def test(words, expected, margin=79):
             got = big.wrap_words(words, margin)
             self.assertEqual(got, expected)
+            got = big.wrap_words(to_bytes(words), margin)
+            self.assertEqual(got, to_bytes(expected))
 
         test(
             "hello there. how are you? i am fine! so there's that.".split(),
@@ -1487,6 +1489,9 @@ class BigTextTests(unittest.TestCase):
                 print("   ", repr(expected))
                 print()
             self.assertEqual(expected, got)
+            got = big.split_text_with_code(to_bytes(s), **kwargs)
+            self.assertEqual(to_bytes(expected), got)
+
         def xtest(*a, **kw): pass
 
         test(
@@ -1542,6 +1547,11 @@ class BigTextTests(unittest.TestCase):
                 print()
                 print()
             self.assertEqual(got, expected)
+            bytes_columns = [(to_bytes(c[0]), c[1], c[2]) for c in columns]
+            if 'column_separator' in kwargs:
+                kwargs['column_separator'] = to_bytes(kwargs['column_separator'])
+            got = big.merge_columns(*bytes_columns, **kwargs)
+            self.assertEqual(got, to_bytes(expected))
 
         with self.assertRaises(OverflowError):
             test([("1\n2\n3 4 5 6 7 8", 4, 4), ("howdy\nhello\nhi, how are you?\ni'm fine.", 5, 16), ("ending\ntext!".split("\n"), 79, 79)],
@@ -1725,28 +1735,28 @@ class BigTextTests(unittest.TestCase):
 
         test("""i said ZdonXt touch that, oXconnell!Z, you 2nd rate idiot!""", """I Said ZDonXt Touch That, OXConnell!Z, You 2nd Rate Idiot!""", apostrophes='X', double_quotes='Z')
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title("the \"string's\" the thing", apostrophes=big.ascii_apostrophes)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title("the \"string's\" the thing", double_quotes=big.ascii_double_quotes)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title("the \"string's\" the thing", apostrophes=big.ascii_apostrophes, double_quotes=big.ascii_double_quotes)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", double_quotes=big.double_quotes)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes, double_quotes=big.double_quotes)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(StrSubclass("the \"string's\" the thing"), apostrophes=BytesSubclass(big.ascii_apostrophes))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(StrSubclass("the \"string's\" the thing"), double_quotes=BytesSubclass(big.ascii_double_quotes))
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(BytesSubclass(b"the \"string's\" the thing"), apostrophes=StrSubclass(big.apostrophes))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             big.gently_title(BytesSubclass(b"the \"string's\" the thing"), double_quotes=StrSubclass(big.double_quotes))
 
         self.assertEqual(

@@ -1621,7 +1621,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 >
 > `text` can be a string or a bytes object.
 >
-> `pattern` can be a string, bytes, or an `re.Pattern` object.
+> `pattern` can be a string, bytes, or `re.Pattern` object.
 >
 > `text` and `pattern` (or `pattern.pattern`) must be the same type.
 >
@@ -1662,9 +1662,9 @@ gone to the trouble of fully supporting them.  You're welcome!
 
 > Like `str.rpartition`, but `pattern` is matched as a regular expression.
 >
-> `text` can be a string or a bytes object.
+> `text` can be a str or bytes object.
 >
-> `pattern` can be a string, bytes, or an `re.Pattern` object.
+> `pattern` can be a str, bytes, or `re.Pattern` object.
 >
 > `text` and `pattern` (or `pattern.pattern`) must be the same type.
 >
@@ -1903,6 +1903,28 @@ to make it easy to use best practices.
 
 
 # Topic deep-dives
+
+## Support for bytes and str
+
+The **big** text functions all support both `bytes` and `str`.
+This behavior is intentionally simple and predictable.
+It works as follows:
+
+At the start of each function, it'll test its first "string"
+argument to see if it's a `bytes` object:
+
+```Python
+is_bytes = isinstance(<argument>, bytes)
+```
+
+If `isinstance` returns `True`, the function assumes all arguments are
+`bytes` objects.  Otherwise the function assumes all arguments
+are `str` objects.
+
+As a rule, no further further testing, casting, or catching exceptions
+is done.  However, some functions that accept two arguments containing
+strings will additionally check that both arguments are of a compatible
+type.
 
 ## The `multi-` family of functions
 
@@ -3232,9 +3254,20 @@ in the **big** test suite.
 
 **next version** *(under development)*
 
-* Functions in `big.text` now accept `str`, `bytes`, or a *subclass*
-  of either `str` or `bytes`.  (Previously they only accepted `str`
-  or `bytes`.)
+* Major retooling of `str` and `bytes` support in `big.text`.
+  * Functions in `big.text` now uniformly accept `str` or `bytes`
+    or a subclass of either.  See the
+    [Support for bytes and str](#Support-for-bytes-and-str) section
+    for how it works.
+  * Functions in `big.text` are now more consistent about raising
+    `TypeError` vs `ValueError`.  If you mix `bytes` and `str`
+    objects together in one call, you'll get a `TypeError`, but
+    if you pass in an empty iterable (of a correct type) where
+    a non-empty iterable is required you'll get a `ValueError`.
+    `big.text` generally tries to give the `TypeError` higher
+    priority; if you pass in a value that fails both the type
+    check and the value check, the `big.text` function will raise
+    `TypeError` first.
 * Major rewrite of
   [`re_rpartition`.](#re_rpartitiontext-pattern-count1--flags0)
   I realized it had the same "reverse mode" problem that
@@ -3242,13 +3275,14 @@ in the **big** test suite.
   [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
   back in version **0.6.10**: the regular expression should really
   search the string in "reverse mode", from right to left.
-  Although this usually produces the same list of matches as you'd
-  find searching the string forwards, sometimes the matches come
-  out *very* different.  The difference is whether the regular
+  The difference is whether the regular
   expression potentially matches against overlapping strings.
   When in forwards mode, the regular expression should prefer
   the *leftmost* overlapping match, but in reverse mode it
-  should prefer the *rightmost* overlapping match.
+  should prefer the *rightmost* overlapping match.  Most of the
+  time this produces the same list of matches as you'd
+  find searching the string forwards--but sometimes the matches come
+  out *very* different.
   This was way harder to fix with `re_rpartition` than with `multisplit`,
   because Python's `re` module only supports searching forwards.
   I have to emulate reverse-mode searching by manually checking for
@@ -3266,7 +3300,9 @@ in the **big** test suite.
   standard library function `re.finditer`, yielding
   non-overlapping matches of `pattern` in `string`.  The difference
   is, `reversed_re_finditer` searches `string` from right to left.
-  (Written as part of the `re_rpartition` rewrite mentioned above.)
+  (Written as part of the
+  [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0)
+  rewrite mentioned above.)
 * Added `apostrophes`, `double_quotes`,
   `ascii_apostrophes`, `ascii_double_quotes`,
   `utf8_apostrophes`, and `utf8_double_quotes`

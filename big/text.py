@@ -61,6 +61,10 @@ def _export(o):
     return o
 
 
+def _iterate_over_bytes(b):
+    return (b[i:i+1] for i in range(len(b)))
+
+
 @_export
 def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     """
@@ -86,6 +90,11 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
         (s, None, '')
     where the empty string is str or bytes as appropriate.
 
+    To convert the output into a tuple of strings like str.partition,
+    use
+        t = re_partition(...)
+        t2 = (t[0], t[1].group(0) if t[1] else '', t[2])
+
     Passing in an explicit "count" lets you control how many times
     re_partition partitions the string.  re_partition will always
     return a tuple containing (2*count)+1 elements, and
@@ -109,30 +118,14 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     if reverse:
         return re_rpartition(s, pattern, count, flags=flags)
 
-    s_is_str = isinstance(s, str)
-    s_is_bytes = isinstance(s, bytes)
-    if s_is_str:
-        if s_is_bytes:
-            raise TypeError("s must be str or bytes, but not both")
-        empty_string = ''
-        extension = (None, '')
-        s_type = str
-        if type(s) != str:
-            s = str(s)
-    elif s_is_bytes:
+    if isinstance(s, bytes):
         empty_string = b''
         extension = (None, b'')
-        s_type = bytes
-        if type(s) != bytes:
-            s = bytes(s)
     else:
-        raise TypeError("s must be str or bytes")
+        empty_string = ''
+        extension = (None, '')
 
     if not isinstance_re_pattern(pattern):
-        if not isinstance(pattern, s_type):
-            raise TypeError("pattern must be the same type as s")
-        if type(pattern) != s_type:
-            pattern = s_type(pattern)
         pattern = re.compile(pattern, flags=flags)
 
     # optimized fast path for the most frequent use case
@@ -175,7 +168,7 @@ def reversed_re_finditer(pattern, string, flags=0):
 
     "pattern" can be a precompiled re.Pattern object or a string.
     If it's a string, it'll be compiled by re.compile using the
-    "flags" you passed in.
+    "flags" argument.
     """
     if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
@@ -216,16 +209,15 @@ def reversed_re_finditer(pattern, string, flags=0):
         # print(f"no matches at all! exiting immediately.")
         return
 
-    # print(f"\n\n{string=}\n{pattern=}\n{matches=}")
-
+    # Does this pattern match zero-length strings?
     zero_length_match = pattern.match(string, 0, 0)
     if zero_length_match:
-        # this pattern matches zero-length strings.
-        # since the rules are a little different for
+        # This pattern matches zero-length strings.
+        # Since the rules are a little different for
         # zero-length strings when in reverse mode,
         # we need to doctor the match results a little.
 
-        # these seem to be the rules:
+        # These seem to be the rules:
         #
         # In forwards mode, we consider two matches to overlap
         # if they start at the same position, or if they have
@@ -251,18 +243,18 @@ def reversed_re_finditer(pattern, string, flags=0):
         # match starting and ending at position 0 if the pattern
         # matches there.
 
-        # we need to ensure that, for every non-zero-length match,
+        # We need to ensure that, for every non-zero-length match,
         # if the pattern matches a zero-length string starting at
         # the same position, we have that zero-length match in
         # matches too.
         #
-        # so specifically we're going to do this:
+        # So specifically we're going to do this:
         #
         # for every match m in matches:
         #   if m has nonzero length,
         #     and the pattern matches a zero-length string
-        #     starting at m,
-        #     ensure that zero-length match is in matches.
+        #       starting at m,
+        #     ensure that the zero-length match is also in matches.
         #   elif m has zero length,
         #     if we've already ensured that a zero-length
         #     match starting at m.start() is in matches,
@@ -273,13 +265,11 @@ def reversed_re_finditer(pattern, string, flags=0):
         append = new_matches.append
         for t in matches:
             match = t[2]
-            # print(f"--{match=} {zeroes=}")
             start, end = match.span()
 
             if start == end:
                 if start in zeroes:
                     # throw away this zero-length
-                    # print(f"  discarding old zero-length {match=}")
                     pass
                 else:
                     append(t)
@@ -291,12 +281,10 @@ def reversed_re_finditer(pattern, string, flags=0):
                 if zero_match:
                     t_zero_length = (start, -start, zero_match)
                     append(t_zero_length)
-                    # print(f"  adding zero-length {zero_match=}")
                     zeroes.add(start)
             append(t)
         del zeroes
         matches = new_matches
-        # print(f"handled zero-length. {matches=}")
 
     matches.sort()
 
@@ -308,10 +296,10 @@ def reversed_re_finditer(pattern, string, flags=0):
     result = []
     match = None
 
-    # we truncate each match at the start
+    # We truncate each match at the start
     # of the previously yielded match.
     #
-    # the initial value allows the initial match
+    # The initial value allows the initial match
     # to extend all the way to the end of the string.
     previous_match_start = len(string)
 
@@ -320,61 +308,56 @@ def reversed_re_finditer(pattern, string, flags=0):
     append = overlapping_matches.append
 
     while True:
-        # print(f"  --\n  {previous_match_start=}\n  {matches=}\n  {overlapping_matches=}")
         if overlapping_matches:
             # overlapping_matches contains the overlapping
             # matches found *last* time around, before we
             # yielded the most recent match.
             #
-            # the thing is, some of these matches might overlap that match.
-            # but we only yield *non*-overlapping matches.  so we need to
+            # The thing is, some of these matches might overlap that match.
+            # But we only yield *non*-overlapping matches.  So we need to
             # filter the matches in overlapping_matches accordingly.
 
             truncated_matches = []
-            # overlapping_matches will be set to truncated_matches in a few lines
+            # (overlapping_matches will be set to truncated_matches in a few lines)
             append = truncated_matches.append
 
             for t in overlapping_matches:
                 end, negated_start, match = t
                 start = -negated_start
                 if start > previous_match_start:
-                    # this match starts *after* the previous match started.
-                    # all matches starting at this position are no longer
-                    # viable.  throw away the match.
-                    # print(f"  {match=} starts after the truncation, it's no longer relevant.")
+                    # This match starts *after* the previous match started.
+                    # All matches starting at this position are no longer
+                    # viable.  Throw away the match.
                     continue
                 if end <= previous_match_start:
-                    # this match ends *before* the previous match started.
-                    # in other words, this match is still 100% viable.
-                    # keep it, we don't need to change it at all.
-                    # print(f"  {match=} still fits inside the truncated string, keep it.")
+                    # This match ends *before* the previous match started.
+                    # In other words, this match is still 100% viable.
+                    # Keep it, we don't need to change it at all.
                     append(t)
                     continue
 
-                # this match starts before the previous match started,
+                # This match starts before the previous match started,
                 # but ends after the previous match start.
-                # in other words, it overlaps the previous match.
+                # In other words, it overlaps the previous match.
                 #
-                # so this match is itself no longer viable.  but!
-                # there might be a *different* match starting at this
-                # position in the string.  so we do a fresh re.match here,
-                # but we stop at the start of the previously yielded match.
-                # (that's the third parameter, "endpos".)
+                # So this match is itself no longer viable.  But!
+                # There might be a *different* match starting at this
+                # position in the string.  So we do a fresh re.match here,
+                # stopping at the start of the previously yielded match.
+                # (That's the third parameter, "endpos".)
 
                 match = pattern_match(string, start, previous_match_start)
-                # print(f"  the old match extended past the truncation, try a new match, result {match!r}")
                 if match:
                     append((match.end(), -start, match))
 
             overlapping_matches = truncated_matches
-            # print(f"  recalculated {overlapping_matches=}")
 
         if (not overlapping_matches) and matches:
-            # we don't currently have any pre-screened
+            # We don't currently have any pre-screened
             # overlapping matches we can use.
             #
-            # but we *do* have a match (or matches) found in forwards mode.
-            # grab the next one that's still viable (doesn't )
+            # But we *do* have a match (or matches) found in forwards mode.
+            # Grab the next one that's still viable.
 
             scan_for_overlapping_matches = False
             while matches:
@@ -382,32 +365,27 @@ def reversed_re_finditer(pattern, string, flags=0):
                 end, negated_start, match = t
                 start = -negated_start
                 if end <= previous_match_start:
-                    # print(f"  keeping match={match!r}")
                     append(t)
                     start += 1
                     scan_for_overlapping_matches = True
                     break
                 if start <= previous_match_start:
-                    # print(f"  not keeping match={match!r} but proceeding")
                     scan_for_overlapping_matches = True
                     break
-                # print(f"  not keeping match={match!r}, try again.")
 
             if scan_for_overlapping_matches:
-                # we scan every** position inside the match for an
-                # overlapping match.  all the matches we find go in
-                # overlapping_matches; then we sort it and yield
+                # We scan every** position inside the match for an
+                # overlapping match.  All the matches we find go in
+                # overlapping_matches, then we sort it and yield
                 # the last one.
                 #
-                # ** we don't actually need to check the *first* position,
-                #   start, because we already know what we'll find:
-                #   the match that we got from re.finditer() and
-                #   scanned for overlaps.
-
-                # as mentioned, the match we got from finditer
+                # ** We don't actually need to check the *first* position,
+                #    "start", because we already know what we'll find:
+                #    the match that we got from re.finditer() and
+                #    scanned for overlaps.
+                #
+                # As mentioned, the match we got from finditer
                 # is viable here, so add it to the list.
-
-                # print(f"  scan for overlapping matches in {start=} {end=}")
 
                 end = min(end, previous_match_start)
                 for pos in range(start, end):
@@ -418,17 +396,14 @@ def reversed_re_finditer(pattern, string, flags=0):
 
         if not overlapping_matches:
             # matches and overlapping matches are both empty.
-            # we've exhausted the matches.  stop iterating.
-            # print(f"  done.")
+            # We've exhausted the matches.  Stop iterating.
             return
 
         # overlapping_matches is now guaranteed current and non-empty.
-        # we sort it so the rightmost match is last, and yield that.
+        # We sort it so the rightmost match is last, and yield that.
         overlapping_matches.sort()
-        # print(f"  final {overlapping_matches=}")
         match = overlapping_matches.pop()[2]
         previous_match_start = match.start()
-        # print(f"  yielding {match=}")
         yield match
 
 
@@ -460,6 +435,11 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
         ('', None, s)
     where the empty string is str or bytes as appropriate.
 
+    To convert the output into a tuple of strings like str.rpartition,
+    use
+        t = re_rpartition(...)
+        t2 = (t[0], t[1].group(0) if t[1] else '', t[2])
+
     Passing in an explicit "count" lets you control how many times
     re_rpartition partitions the string.  re_rpartition will always
     return a tuple containing (2*count)+1 elements, and
@@ -481,24 +461,12 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
-    s_is_str = isinstance(s, str)
-    s_is_bytes = isinstance(s, bytes)
-    if s_is_str:
-        if s_is_bytes:
-            raise TypeError("s must be str or bytes, but not both")
-        empty_string = ''
-        extension = ('', None)
-        s_type = str
-        if type(s) != str:
-            s = str(s)
-    elif s_is_bytes:
+    if isinstance(s, bytes):
         empty_string = b''
         extension = (b'', None)
-        s_type = bytes
-        if type(s) != bytes:
-            s = bytes(s)
     else:
-        raise TypeError("s must be str or bytes")
+        empty_string = ''
+        extension = ('', None)
 
     # optimized fast path for the most frequent use case
     if count == 1:
@@ -695,12 +663,11 @@ def _re_quote(s):
     # hurt anything really, but it makes the patterns harder
     # to read for us humans.)
     if not s.isspace():
-        s = re.escape(s)
+        return re.escape(s)
     if len(s) > 1:
         if isinstance(s, bytes):
-            s = b"(?:" + s + b")"
-        else:
-            s = f"(?:{s})"
+            return b"(?:" + s + b")"
+        return f"(?:{s})"
     return s
 
 
@@ -725,13 +692,10 @@ def __separators_to_re(separators, separators_is_bytes, separate=False, keep=Fal
     separators = list(separators)
     separators.sort(key=lambda o: -len(o))
     pattern = pipe.join(_re_quote(o) for o in separators)
-    # print(f"  P1 {pattern!r}")
     if not separate:
         pattern = separate_start + pattern + separate_end
-    # print(f"  P2 {pattern!r}")
     if keep:
         pattern = keep_start + pattern + keep_end
-    # print(f"  P3 {pattern!r}")
     return pattern
 
 def _separators_to_re(separators, separators_is_bytes, separate=False, keep=False):
@@ -741,7 +705,7 @@ def _separators_to_re(separators, separators_is_bytes, separate=False, keep=Fals
         hash(separators)
     except TypeError:
         separators = tuple(separators)
-    return __separators_to_re(separators, bool(separators_is_bytes), separate=bool(separate), keep=bool(keep))
+    return __separators_to_re(separators, separators_is_bytes, separate=bool(separate), keep=bool(keep))
 
 
 
@@ -782,59 +746,56 @@ def multistrip(s, separators, left=True, right=True):
     only return str or bytes objects, even if left and right
     are both false.
     """
-    s_is_bytes = isinstance(s, bytes)
-    s_is_str = isinstance(s, str)
 
-    # assert not (s_is_str and s_is_bytes) # this is impossible in CPython
-    if s_is_str:
-        s_type = str
-        head = '^'
-        tail = '$'
-        if type(s) != str:
-            s = str(s)
-        check_separators = not isinstance(separators, str)
-        if not check_separators:
-            if not separators:
-                raise ValueError("separators must be an iterable of non-empty objects the same type as s")
-            separators = tuple(separators)
-    elif s_is_bytes:
+    is_bytes = isinstance(s, bytes)
+    if is_bytes:
         s_type = bytes
         head = b'^'
         tail = b'$'
-        if type(s) != bytes:
-            s = bytes(s)
 
+        if isinstance(separators, str):
+            raise TypeError("separators must be an iterable of non-empty objects the same type as s")
         if isinstance(separators, bytes):
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.  otherwise, _separators_to_re will
             # iterate over it, which... yields integers! oops!
-            if not separators:
-                raise ValueError("separators must be an iterable of non-empty objects the same type as s")
+            separators = tuple(_iterate_over_bytes(separators))
             check_separators = False
-            separators = tuple(separators[i:i+1] for i in range(len(separators)))
         else:
             check_separators = True
     else:
-        raise TypeError('s must be str or bytes')
+        s_type = str
+        head = '^'
+        tail = '$'
 
+        if isinstance(separators, bytes):
+            raise TypeError("separators must be an iterable of non-empty objects the same type as s")
+        if isinstance(separators, str):
+            separators = tuple(separators)
+            check_separators = False
+        else:
+            check_separators = True
+
+    if not separators:
+        raise ValueError("separators must be an iterable of non-empty objects the same type as s")
     if check_separators:
-        if not separators:
-            raise ValueError("separators must be an iterable of non-empty objects the same type as s")
-        cast_separators = []
+        s2 = []
         for o in separators:
-            if not o:
-                raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
             if not isinstance(o, s_type):
-                raise TypeError("separators must be an iterable of non-empty objects the same type as s, or None")
-            cast_separators.append(s_type(o))
-        separators = tuple(cast_separators)
+                raise TypeError("separators must be an iterable of non-empty objects the same type as s")
+            if not o:
+                raise ValueError("separators must be an iterable of non-empty objects the same type as s")
+            s2.append(o)
+        separators = tuple(s2)
 
+    # deliberately do this *after* checking types,
+    # so we complain about bad types even if this is a do-nothing call.
     if not (left or right):
         return s
 
     # we can sidestep the hashability test of _separators_to_re,
     # separators is guaranteed to always a tuple at this point
-    pattern = __separators_to_re(separators, s_is_bytes, separate=False, keep=False)
+    pattern = __separators_to_re(separators, is_bytes, separate=False, keep=False)
 
     start = 0
     end = len(s)
@@ -981,39 +942,31 @@ def multisplit(s, separators=None, *,
     for both must be the same (str or bytes).  multisplit will
     only return str or bytes objects.
     """
-    s_is_bytes = isinstance(s, bytes)
-    s_is_str = isinstance(s, str)
+    is_bytes = isinstance(s, bytes)
     separators_is_bytes = isinstance(separators, bytes)
     separators_is_str = isinstance(separators, str)
 
-    # assert not (s_is_str and s_is_bytes) # this is impossible in CPython
-    if s_is_str:
+    if is_bytes:
         if separators_is_bytes:
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
-        check_separators = not separators_is_str
-        empty = ''
-        s_type = str
-        if type(s) != str:
-            s = str(s)
-    elif s_is_bytes:
-        if separators_is_str:
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
-        elif separators_is_bytes:
             # not iterable of bytes, literally a bytes string.
             # split it ourselves.
-            separators = tuple(separators[i:i+1] for i in range(len(separators)))
+            separators = tuple(_iterate_over_bytes(separators))
             check_separators = False
         else:
+            if separators_is_str:
+                raise TypeError("separators must be either None or an iterable of objects the same type as s")
             check_separators = True
         empty = b''
         s_type = bytes
-        if type(s) != bytes:
-            s = bytes(s)
     else:
-        raise TypeError('s must be str or bytes')
+        if separators_is_bytes:
+            raise TypeError("separators must be either None or an iterable of objects the same type as s")
+        check_separators = True
+        empty = ''
+        s_type = str
 
     if separators is None:
-        separators = whitespace if s_is_str else ascii_whitespace
+        separators = ascii_whitespace if is_bytes else whitespace
         check_separators = False
     elif not separators:
         raise ValueError("separators must be either None or an iterable of objects the same type as s")
@@ -1048,7 +1001,7 @@ def multisplit(s, separators=None, *,
 
     if maxsplit == None:
         maxsplit = -1
-    if maxsplit == 0:
+    elif maxsplit == 0:
         if keep == ALTERNATING:
             yield s
         elif keep == AS_PAIRS:
@@ -1066,7 +1019,7 @@ def multisplit(s, separators=None, *,
     # (re.split doesn't have a way to express
     #  "don't split" with its maxsplit parameter,
     #  which is why we handled it already.)
-    re_split_maxsplit = maxsplit if maxsplit != -1 else 0
+    re_split_maxsplit = 0 if maxsplit == -1 else maxsplit
 
     if reverse:
         # if reverse is true, when separators overlap,
@@ -1083,7 +1036,7 @@ def multisplit(s, separators=None, *,
         else:
             separators = _multisplit_reversed(separators, 'separators')
 
-    pattern = _separators_to_re(separators, s_is_bytes, keep=separators_to_re_keep, separate=separate)
+    pattern = _separators_to_re(separators, is_bytes, keep=separators_to_re_keep, separate=separate)
     # print("PATTERN", pattern, f"{separators_to_re_keep=} {separate=}")
 
     l = re.split(pattern, s, re_split_maxsplit)
@@ -1213,14 +1166,13 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     desired_length = (2 * count) + 1
     result_length = len(result)
     if result_length < desired_length:
-        s_is_bytes = isinstance(s, bytes)
-        if s_is_bytes:
-            empty = b''
+        if isinstance(s, bytes):
+            empty = (b'',)
         else:
-            empty = ''
-        extension = [empty] * (desired_length - result_length)
+            empty = ('',)
+        extension = empty * (desired_length - result_length)
         if reverse:
-            result = extension + result
+            result = list(extension) + result
         else:
             result.extend(extension)
     return tuple(result)
@@ -1262,6 +1214,8 @@ _default_str_is_apostrophe = frozenset(unicode_apostrophes).__contains__
 _default_str_is_double_quote = frozenset(unicode_double_quotes).__contains__
 _default_bytes_is_apostrophe = ascii_apostrophes.__eq__
 _default_bytes_is_double_quote = ascii_double_quotes.__eq__
+_str_do_contains = 'DO'.__contains__
+_bytes_do_contains = b'DO'.__contains__
 
 @_export
 def gently_title(s, *, apostrophes=None, double_quotes=None):
@@ -1324,57 +1278,53 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         If s is bytes, the default value is
         big.text.ascii_double_quotes, which is the string b"'".
     """
-    if isinstance(s, str):
-        s = str(s)
-        s_type = str
-        not_s_type = bytes
-        empty = ""
-        default_is_apostrophe = _default_str_is_apostrophe
-        default_is_double_quote = _default_str_is_double_quote
-        _is_d_or_o = 'DO'.__contains__
-        lparen = '('
-        iterator = iter
-    elif isinstance(s, bytes):
-        s = bytes(s)
+    if isinstance(s, bytes):
         s_type = bytes
-        not_s_type = str
         empty = b""
-        _is_d_or_o = b'DO'.__contains__
+        _is_d_or_o = _bytes_do_contains
         lparen = b'('
-        def iterator(b):
-            for i in range(len(b)):
-                yield b[i:i+1]
+        iterator = _iterate_over_bytes
         default_is_apostrophe = _default_bytes_is_apostrophe
         default_is_double_quote = _default_bytes_is_double_quote
     else:
-        raise TypeError('s must be str or bytes')
+        s_type = str
+        empty = ""
+        default_is_apostrophe = _default_str_is_apostrophe
+        default_is_double_quote = _default_str_is_double_quote
+        _is_d_or_o = _str_do_contains
+        lparen = '('
+        iterator = iter
 
     if apostrophes is None:
         _is_apostrophe = default_is_apostrophe
     else:
-        if not apostrophes or isinstance(apostrophes, not_s_type):
+        if not isinstance(apostrophes, s_type):
+            raise TypeError("apostrophes must be an iterable of non-empty objects the same type as s")
+        if not apostrophes:
             raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s")
         cast_apostrophes = []
         for o in iterator(apostrophes):
-            if not o:
-                raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
             if not isinstance(o, s_type):
                 raise TypeError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
-            cast_apostrophes.append(s_type(o))
+            if not o:
+                raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
+            cast_apostrophes.append(o)
         _is_apostrophe = frozenset(cast_apostrophes).__contains__
 
     if double_quotes is None:
         _is_double_quote = default_is_double_quote
     else:
-        if not double_quotes or isinstance(double_quotes, not_s_type):
+        if not isinstance(double_quotes, s_type):
+            raise TypeError("double_quotes must be an iterable of non-empty objects the same type as s")
+        if not double_quotes:
             raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s")
         cast_double_quotes = []
         for o in iterator(double_quotes):
-            if not o:
-                raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s, or None")
             if not isinstance(o, s_type):
                 raise TypeError("double_quotes must be an iterable of non-empty objects the same type as s, or None")
-            cast_double_quotes.append(s_type(o))
+            if not o:
+                raise ValueError("double_quotes must be an iterable of non-empty objects the same type as s, or None")
+            cast_double_quotes.append(o)
         _is_double_quote = frozenset(cast_double_quotes).__contains__
 
     result = []
@@ -1409,7 +1359,6 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         elif state == _after_whitespace_then_D_or_O_then_apostrophe:
             c = c.upper()
             state = _in_word
-        # print(f"  {original_c!r} {repr(is_space):5} {original_state!r:49} -> {c!r} {state!r}")
         result.append(c)
     return empty.join(result)
 
@@ -1440,62 +1389,43 @@ def normalize_whitespace(s, separators=None, replacement=None):
     for both must be the same (str or bytes).
     normalize_whitespace will only return str or bytes objects.
     """
-    s_type = type(s)
-    s_is_str = isinstance(s, str)
-    s_is_bytes = isinstance(s, bytes)
-    # assert not (s_is_str and s_is_bytes) # this is impossible in CPython
-    if s_is_str:
-        empty = ''
-        default_replacement = ' '
-        default_separators = whitespace_without_dos
-        if s_type != str:
-            s = str(s)
-            s_type = str
-    elif s_is_bytes:
+
+    if isinstance(s, bytes):
         empty = b''
         default_replacement = b' '
         default_separators = ascii_whitespace_without_dos
-        if s_type != bytes:
-            s = bytes(s)
-            s_type = bytes
+        s_type = bytes
     else:
-        raise TypeError("s must be str or bytes")
+        empty = ''
+        default_replacement = ' '
+        default_separators = whitespace_without_dos
+        s_type = str
 
     if separators is None:
         separators = default_separators
+    elif isinstance(separators, s_type):
+        if s_type == bytes:
+            # not iterable of bytes, literally a bytes string.
+            # split it ourselves.  otherwise, _separators_to_re will
+            # iterate over it, which... yields integers! oops!
+            separators = _iterate_over_bytes(separators)
+        separators = tuple(separators)
     else:
-        if s_is_bytes:
-            if isinstance(separators, bytes):
-                # not iterable of bytes, literally a bytes string.
-                # split it ourselves.  otherwise, _separators_to_re will
-                # iterate over it, which... yields integers! oops!
-                check_separators = False
-                separators = tuple(separators[i:i+1] for i in range(len(separators)))
-            else:
-                check_separators = True
-        else:
-            check_separators = not isinstance(separators, str)
-            if not check_separators:
-                separators = tuple(separators)
-
-        if not separators:
+        cast_separators = []
+        for o in separators:
+            if not isinstance(o, s_type):
+                raise TypeError("separators must be an iterable of non-empty objects the same type as s, or None")
+            if not o:
+                raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
+            cast_separators.append(o)
+        if not cast_separators:
             raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
-
-        if check_separators:
-            cast_separators = []
-            for o in separators:
-                if not isinstance(o, s_type):
-                    raise TypeError("separators must be an iterable of non-empty objects the same type as s, or None")
-                if not o:
-                    raise ValueError("separators must be an iterable of non-empty objects the same type as s, or None")
-                cast_separators.append(s_type(o))
-            separators = tuple(cast_separators)
+        separators = tuple(cast_separators)
 
     if replacement is None:
         replacement = default_replacement
-    else:
-        if not isinstance(replacement, s_type):
-            raise TypeError("replacement must be the same type as s, or None")
+    elif not isinstance(replacement, s_type):
+        raise TypeError("replacement must be the same type as s, or None")
 
     if not s:
         return empty
@@ -1505,10 +1435,12 @@ def normalize_whitespace(s, separators=None, replacement=None):
     # if your "separators" qualifies,
     # it'll automatically use the fast path.
     #
-    # (we can't use the fast path for bytes objects,
+    # we can't use the fast path for bytes objects,
     # because it won't work with encoded whitespace
-    # characters > chr(127).  it'd *usually* work,
-    # sure.  but "usually" isn't good enough for big!)
+    # characters > chr(127).
+    #
+    # (it'd *usually* work, sure.
+    # but "usually" isn't good enough for big!)
     if (   (separators is whitespace_without_dos)
         or (separators is whitespace)
         ):
@@ -1553,14 +1485,13 @@ def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
     the same (str or bytes).  split_quoted_strings will only
     return str or bytes objects.
     """
-    s_is_bytes = isinstance(s, bytes)
-    if s_is_bytes:
+    if isinstance(s, bytes):
         empty = b''
         if quotes is None:
             quotes=(b'"', b"'")
         if backslash is None:
             backslash = b'\\'
-        i = (s[i:i+1] for i in range(len(s)))
+        i = _iterate_over_bytes(s)
     else:
         empty = ''
         if quotes is None:
@@ -1769,22 +1700,22 @@ class lines:
         if not isinstance(tab_width, int):
             raise TypeError("tab_width must be int")
 
-        s_is_bytes = isinstance(s, bytes)
-        as_str = isinstance(s, str)
-        if s_is_bytes or as_str:
+        is_bytes = isinstance(s, bytes)
+        is_str = isinstance(s, str)
+        if is_bytes or is_str:
             if not separators:
-                separators = newlines if as_str else ascii_newlines
+                separators = newlines if is_str else ascii_newlines
             i = multisplit(s, separators, keep=False, separate=True, strip=False)
         else:
             i = iter(s)
-            s_is_bytes = None
+            is_bytes = None
 
         self.s = s
         self.separators = separators
         self.line_number = line_number
         self.column_number = column_number
         self.tab_width = tab_width
-        self.s_is_bytes = s_is_bytes
+        self.s_is_bytes = is_bytes
 
         self.i = i
 
@@ -1863,12 +1794,13 @@ def lines_filter_comment_lines(li, comment_separators):
         raise ValueError("illegal comment_separators")
 
     if isinstance(comment_separators, bytes):
-        comment_separators = tuple(comment_separators[i:i+1] for i in range(len(comment_separators)))
+        comment_separators = _iterate_over_bytes(comment_separators)
         comment_separators_is_bytes = True
     else:
         comment_separators_is_bytes = isinstance(comment_separators[0], bytes)
+    comment_separators = tuple(comment_separators)
 
-    comment_pattern = _separators_to_re(tuple(comment_separators), comment_separators_is_bytes, separate=False, keep=False)
+    comment_pattern = _separators_to_re(comment_separators, comment_separators_is_bytes, separate=False, keep=False)
     comment_re = re.compile(comment_pattern)
     for info, line in li:
         s = line.lstrip()
@@ -1990,10 +1922,11 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
         raise ValueError("illegal comment_separators")
 
     if isinstance(comment_separators, bytes):
-        comment_separators = tuple(comment_separators[i:i+1] for i in range(len(comment_separators)))
+        comment_separators = _iterate_over_bytes(comment_separators)
         comment_separators_is_bytes = True
     else:
         comment_separators_is_bytes = isinstance(comment_separators[0], bytes)
+    comment_separators = tuple(comment_separators)
 
     if comment_separators_is_bytes:
         empty = b''
@@ -2001,7 +1934,7 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
         empty = ''
     empty_join = empty.join
 
-    comment_pattern = _separators_to_re(comment_separators, separators_is_bytes=comment_separators_is_bytes, separate=True, keep=True)
+    comment_pattern = __separators_to_re(comment_separators, separators_is_bytes=comment_separators_is_bytes, separate=True, keep=True)
     re_comment = re.compile(comment_pattern)
     split = re_comment.split
     for info, line in li:
@@ -2168,10 +2101,28 @@ def wrap_words(words, margin=79, *, two_spaces=True):
     """
     words = iter(words)
     col = 0
-    lastword = ''
+    empty = None
+    lastword = None
     text = []
+    first_word = True
+
 
     for word in words:
+        if first_word:
+            first_word = False
+            if isinstance(word, bytes):
+                empty = lastword = b''
+                sentence_ending_punctuation = (b'.', b'?', b'!')
+                two_spaces = b'  '
+                one_space = b' '
+                newline = b'\n'
+            else:
+                empty = lastword = ''
+                sentence_ending_punctuation = ('.', '?', '!')
+                two_spaces = '  '
+                one_space = ' '
+                newline = '\n'
+
         if word.isspace():
             lastword = word
             col = 0
@@ -2180,16 +2131,16 @@ def wrap_words(words, margin=79, *, two_spaces=True):
 
         l = len(word)
 
-        if two_spaces and lastword.endswith(('.', '?', '!')):
-            space = "  "
+        if two_spaces and lastword.endswith(sentence_ending_punctuation):
+            space = two_spaces
             len_space = 2
         else:
-            space = " "
+            space = one_space
             len_space = 1
 
         if (l + len_space + col) > margin:
             if col:
-                text.append('\n')
+                text.append(newline)
                 col = 0
         elif col:
             text.append(space)
@@ -2199,7 +2150,9 @@ def wrap_words(words, margin=79, *, two_spaces=True):
         col += len(word)
         lastword = word
 
-    return "".join(text)
+    if not text:
+        raise ValueError("can't word wrap, iterator yielded zero words")
+    return empty.join(text)
 
 
 
@@ -2208,8 +2161,23 @@ _text_paragraph = "text paragraph"
 
 class _column_wrapper_splitter:
 
-    def __init__(self, tab_width, allow_code, code_indent, convert_tabs_to_spaces):
+    def __init__(self, is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces):
         # print(f"\n_column_wrapper_splitter({tab_width=}, {allow_code=}, {convert_tabs_to_spaces=})")
+        self.is_bytes = is_bytes
+        if is_bytes:
+            self.empty = b''
+            self.tab_string = b'\t'
+            self.space_string = b' '
+            self.newline_string = b'\n'
+            self.paragraph_string = b'\n\n'
+            self.make_iterator = _iterate_over_bytes
+        else:
+            self.empty = ''
+            self.tab_string = '\t'
+            self.space_string = ' '
+            self.newline_string = '\n'
+            self.paragraph_string = '\n\n'
+            self.make_iterator = iter
         self.tab_width = tab_width
         self.allow_code = allow_code
         self.code_indent = code_indent
@@ -2237,11 +2205,11 @@ class _column_wrapper_splitter:
 
     def line_break(self):
         # print(f" [  \\n]")
-        self.words.append('\n')
+        self.words.append(self.newline_string)
 
     def paragraph_break(self):
         # print(f" [\\n\\n]")
-        self.words.append('\n\n')
+        self.words.append(self.paragraph_string)
 
     def next(self, state, leading=None, word=None):
         # print(f" [  ->]", state.__name__, repr(leading), repr(word))
@@ -2250,8 +2218,8 @@ class _column_wrapper_splitter:
         if word is not None:
             self.state(leading, word)
 
-    def write(self, s):
-        # write consumes s and makes calls as appropriate to
+    def write(self, c):
+        # write consumes c and makes calls as appropriate to
         # self.state().
         #
         # first, write aggregates together all consecutive
@@ -2304,48 +2272,50 @@ class _column_wrapper_splitter:
         write_word = None
         write_newline = False
         append_c_to_leading = False
+        empty = self.empty
+        newline_string = self.newline_string
 
-        for c in s:
-            # print(f"<{c!r}> ", end='')
+        # print(f"<{c!r}> ", end='')
 
-            if not c.isspace():
-                word.append(c)
-                continue
+        if not c.isspace():
+            word.append(c)
+            return
 
-            if word:
-                write_word = "".join(word)
-                word.clear()
+        if word:
+            write_word = empty.join(word)
+            word.clear()
 
-            if c == '\n':
-                if write_word:
-                    write_newline = True
-                else:
-                    write_word = c
-            else:
-                append_c_to_leading = True
-
+        if c == newline_string:
             if write_word:
-                if leading:
-                    l = ''.join(leading)
-                    leading.clear()
-                else:
-                    l = ''
+                write_newline = True
+            else:
+                write_word = c
+        else:
+            append_c_to_leading = True
 
-                self.state(l, write_word)
-                write_word = None
+        if write_word:
+            if leading:
+                l = empty.join(leading)
+                leading.clear()
+            else:
+                l = empty
 
-                if write_newline:
-                    self.state('', '\n')
-                    write_newline = False
+            self.state(l, write_word)
+            write_word = None
 
-            if append_c_to_leading:
-                leading.append(c)
-                append_c_to_leading = False
+            if write_newline:
+                self.state(empty, newline_string)
+                write_newline = False
+
+        if append_c_to_leading:
+            leading.append(c)
+            append_c_to_leading = False
 
     def close(self):
         # flush the current word, if any.
         if self.word:
-            self.state("".join(self.leading), "".join(self.word))
+            empty = self.empty
+            self.state(empty.join(self.leading), empty.join(self.word))
             self.leading.clear()
             self.word.clear()
 
@@ -2355,7 +2325,7 @@ class _column_wrapper_splitter:
         after encountering two '\n's in a row after
         a text line.
         """
-        if word == '\n':
+        if word == self.newline_string:
             return
         if self.previous_paragraph:
             self.paragraph_break()
@@ -2365,7 +2335,7 @@ class _column_wrapper_splitter:
     state_initial = state_paragraph_start
 
     def state_line_start(self, leading, word):
-        if word == '\n':
+        if word == self.newline_string:
             # two '\n's in a row.
             if self.previous_paragraph == _code_paragraph:
                 # we could still be in a code block.
@@ -2380,10 +2350,10 @@ class _column_wrapper_splitter:
         if self.allow_code:
             col = 0
             tab_width = self.tab_width
-            for c in leading:
-                if c == '\t':
+            for c in self.make_iterator(leading):
+                if c == self.tab_string:
                     col = col + tab_width - (col % tab_width)
-                elif c == ' ':
+                elif c == self.space_string:
                     col += 1
                 else:
                     raise RuntimeError("unhandled whitespace character " + repr(c))
@@ -2410,7 +2380,7 @@ class _column_wrapper_splitter:
         self.next(self.state_in_text_line, leading, word)
 
     def state_in_text_line(self, leading, word):
-        if word == '\n':
+        if word == self.newline_string:
             self.next(self.state_line_start)
             return
         self.emit(word)
@@ -2421,24 +2391,26 @@ class _column_wrapper_splitter:
         self.next(self.state_in_code_line, leading, word)
 
     def state_in_code_line(self, leading, word):
-        if word == '\n':
-            self.emit("".join(self.code))
+        if word == self.newline_string:
+            self.emit(self.empty.join(self.code))
             self.code.clear()
-            self.next(self.state_line_start, '', word)
+            self.next(self.state_line_start, self.empty, word)
             return
 
         tab_width = self.tab_width
         convert_tabs_to_spaces = self.convert_tabs_to_spaces
         col = self.col
-        for c in leading:
-            if c == '\t':
+        tab_string = self.tab_string
+        space_string = self.space_string
+        for c in self.make_iterator(leading):
+            if c == tab_string:
                 delta = tab_width - (col % tab_width)
                 col += delta
                 if convert_tabs_to_spaces:
-                    self.code.append(' ' * delta)
+                    self.code.append(space_string * delta)
                 else:
                     self.code.append(c)
-            elif c == ' ':
+            elif c == space_string:
                 col += 1
                 self.code.append(c)
             else:
@@ -2466,12 +2438,26 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
 
     s can be str, bytes, or a subclass of either, though
     split_text_with_code will only return str or bytes.
+
+    if s is empty, returns a list containing an empty string.
     """
-    cws = _column_wrapper_splitter(tab_width, allow_code, code_indent, convert_tabs_to_spaces)
-    for c in s:
+    is_bytes = isinstance(s, bytes)
+    if is_bytes:
+        iterable = _iterate_over_bytes(s)
+        empty = b''
+    else:
+        iterable = s
+        empty = ''
+
+    cws = _column_wrapper_splitter(is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces)
+
+    for c in iterable:
         cws.write(c)
     cws.close()
-    return cws.words
+    return_value = cws.words
+    if not return_value:
+        return [empty]
+    return return_value
 
 
 @_export
@@ -2488,7 +2474,7 @@ class OverflowStrategy(enum.Enum):
     # DELAY_MINIMUM = enum.auto()  # not implemented yet
 
 @_export
-def merge_columns(*columns, column_separator=" ",
+def merge_columns(*columns, column_separator=None,
     overflow_strategy=OverflowStrategy.RAISE,
     overflow_before=0,
     overflow_after=0,
@@ -2543,6 +2529,21 @@ def merge_columns(*columns, column_separator=" ",
     raise_overflow_error = overflow_strategy == OverflowStrategy.RAISE
     delay_all = overflow_strategy == OverflowStrategy.DELAY_ALL
 
+    assert columns
+    is_bytes = isinstance(columns[0][0], bytes)
+
+    if is_bytes:
+        empty = b''
+        space = b' '
+        newline = b'\n'
+    else:
+        empty = ''
+        space = ' '
+        newline = '\n'
+
+    if column_separator is None:
+        column_separator = space
+
     _columns = columns
     columns = []
     empty_columns = []
@@ -2557,10 +2558,10 @@ def merge_columns(*columns, column_separator=" ",
         operator.index(min_width)
         operator.index(max_width)
 
-        empty_columns.append(max_width * " ")
+        empty_columns.append(max_width * space)
 
-        if isinstance(s, str):
-            lines = s.rstrip().split('\n')
+        if isinstance(s, (str, bytes)):
+            lines = s.rstrip().split(newline)
         else:
             lines = s
         max_lines = max(max_lines, len(lines))
@@ -2587,7 +2588,7 @@ def merge_columns(*columns, column_separator=" ",
 
         for line_number, line in enumerate(lines):
             line = line.rstrip()
-            assert not "\n" in line
+            assert not newline in line
             rstripped_lines.append(line)
 
             length = len(line)
@@ -2609,7 +2610,7 @@ def merge_columns(*columns, column_separator=" ",
             overflow_end = line_number + overflow_after
             add_overflow()
             for i in range(overflow_after):
-                rstripped_lines.append('')
+                rstripped_lines.append(empty)
 
         if delay_all and overflows:
             overflows.clear()
@@ -2667,9 +2668,9 @@ def merge_columns(*columns, column_separator=" ",
                 break
         if all_iterators_are_exhausted:
             break
-        line = "".join(line).rstrip()
+        line = empty.join(line).rstrip()
         lines.append(line)
 
-    text = "\n".join(lines)
+    text = newline.join(lines)
     return text.rstrip()
 
