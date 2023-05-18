@@ -1012,53 +1012,36 @@ functions.  When working with `bytes`,
 by default the functions will only work with ASCII
 characters.
 
-#### Conformant types
+## Support for bytes and str
 
-Several places in the documentation for `big.text` functions,
-it refers to *conformant* string types.  This is always in the
-context of a function that takes multiple arguments that are
-either strings, or iterables of strings.  What a *conformant type*
-means in this context is a type whose base class is the same
-as another object's base class, and in the context of `big.text`
-the base class is always either `str` or `bytes`.
+The **big** text functions all support both `str` and `bytes`.
+The functions all automatically detect whether you passed in
+`str` or `bytes`  using an
+intentionally simple and predictable process, as follows:
 
-Since that's probably not clear, maybe an example will help.
-Consider
-[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-which takes the two parameters `s` and `separators`.
+At the start of each function, it'll test its first "string"
+argument to see if it's a `bytes` object.
 
-`s` must be a string; it can be a `str` object,
-or a `bytes` object, or an instance of any subclass
-of either `str` or `bytes`.
+```Python
+is_bytes = isinstance(<argument>, bytes)
+```
 
-`separators` should be either a string of a *conformant
-type* to s, or an iterable of strings of a *conformant type*
-to s.  That means it should be either a `str` or
-`bytes` object, an instance of a subclass of `str` or `bytes`,
-or an iterable of any of these types.
-But in each case, the base class of the string's
-type has to match the base type of `s`, which must be
-either `str` or `bytes`.
+If `isinstance` returns `True`, the function assumes all arguments are
+`bytes` objects.  Otherwise the function assumes all arguments
+are `str` objects.
 
-Here's a more specific example.  Let's say `s` is a `str`
-object, or an instance of any subclass of `str`.  In that
-case, `separators` can be:
+As a rule, no further further testing, casting, or catching exceptions
+is done.
 
-* a `str`,
-* an instance of any subclass of `str`,
-* or an iterable of any combination of `str` objects and
-  instances of any subclass of `str`.
+Functions that take multiple string-like parameters require all
+such arguments to be the same type.
+These functions will check that all such arguments
+are of the same type.
 
-If `StrSubclass` and `AnotherStrSubclass` were both subclasses
-of `str`, `s` could be of type `str`, `StrSubclass`, or `AnotherStrSubclass`.
-And `separators` could be of type `str`, `StrSubclass`, or `AnotherStrSubclass`,
-or an iterable yielding one or more objects of type `str`, `StrSubclass`,
-or `AnotherStrSubclass`.  You can mix and match these types as much as
-you want, as long as the base class of all these strings objects
-are the same, either `str` or `bytes`.
+Subclasses of `str` and `bytes` will also work; anywhere you
+should pass in a `str`, you can also pass in a subclass of
+`str`, and likewise for `bytes`.
 
-Subclasses of `str` and `bytes` are rare.  But `big` has still
-gone to the trouble of fully supporting them.  You're welcome!
 
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
 
@@ -1122,18 +1105,17 @@ gone to the trouble of fully supporting them.  You're welcome!
 
 > A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
 >
-> `s` can be `str`, `bytes`, or any iterable.
+> `s` can be `str`, `bytes`, or any iterable of `str` or `bytes`.
 >
-> By default, if `s` is `str`, splits `s` by all Unicode line break characters.
-> If `s` is `bytes`, splits `s` by all ASCII line break characters.
+> If `s` is neither `str` nor `bytes`, `s` must be an iterable;
+> `lines` yields successive elements of `s` as lines.  All objects
+> yielded by this iterable should be homogeneous, either `str` or `bytes`.
 >
-> If `s` is neither str nor bytes, `s` must be an iterable;
-> lines yields successive elements of `s` as lines.
->
-> `separators`, if not `None`, must be an iterable of strings of the
-> same type as `s`.  `lines` will split `s` using those strings as
-> separator strings (using
-> [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)).
+> If `s` is `str` or `bytes`, and `separators` is `None`, `lines`
+> will split `s` at line boundaries and yield those lines, including
+> empty lines.  If `separators` is not `None`, it must be an iterable
+> of strings of the same type as `s`; `lines` will split `s` using
+> [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse).
 >
 > When iterated over, yields 2-tuples:
 >     (info, line)
@@ -1351,10 +1333,10 @@ gone to the trouble of fully supporting them.  You're welcome!
 > ```Python
 >     (text, min_width, max_width)
 > ```
-> `text` should be a single text string, with newline
-> characters separating lines. `min_width` and `max_width`
-> are the minimum and maximum permissible widths for that
-> column, not including the column separator (if any).
+> `text` should be a single string, either `str` or `bytes`,
+> with newline characters separating lines. `min_width`
+> and `max_width` are the minimum and maximum permissible widths
+> for that column, not including the column separator (if any).
 >
 > Note that this function does not text-wrap the lines.
 >
@@ -1384,7 +1366,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 > Like `str.partition`, but supports partitioning based on multiple
 > separator strings, and can partition more than once.
 >
-> `s` can be str or bytes.
+> `s` can be either `str` or `bytes`.
 >
 > `separators` should be an iterable of objects of the same type as `s`.
 >
@@ -1428,10 +1410,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 >
 > `s` can be `str` or `bytes`.
 >
-> `separators` should be an iterable.  Each element of `separators`
-> should be the same type as `text`.  If `separators` is a string or bytes
-> object, `multisplit` behaves as separators is a tuple containing each
-> individual character.
+> `separators` should be an iterable of `str` or `bytes`, matching `s`.
 >
 > Returns an iterator yielding the strings split from `s`.  If `keep`
 > is true (or `ALTERNATING`), and `strip` is false, joining these strings
@@ -1546,7 +1525,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 > Strips from the string `s` all leading and trailing instances of strings
 > found in `separators`.
 >
-> `s` should be str or bytes.
+> `s` should be `str` or `bytes`.
 >
 > `separators` should be an iterable of either `str` or `bytes`
 > objects matching the type of `s`.
@@ -1607,8 +1586,7 @@ gone to the trouble of fully supporting them.  You're welcome!
 > `replacement` should be either a `str` or `bytes` object,
 > also matching `s`, or `None` (the default).
 > If `replacement` is `None`, `normalize_whitespace` will use
-> a replacement string consisting of a single space character,
-> either `str` or `bytes` as appropriate.)
+> a replacement string consisting of a single space character.
 >
 > Leading or trailing runs of separator characters will
 > be replaced with the replacement string, e.g.:
@@ -1662,9 +1640,9 @@ gone to the trouble of fully supporting them.  You're welcome!
 
 > Like `str.rpartition`, but `pattern` is matched as a regular expression.
 >
-> `text` can be a str or bytes object.
+> `text` can be a `str` or `bytes` object.
 >
-> `pattern` can be a str, bytes, or `re.Pattern` object.
+> `pattern` can be a `str`, `bytes`, or `re.Pattern` object.
 >
 > `text` and `pattern` (or `pattern.pattern`) must be the same type.
 >
@@ -1705,20 +1683,27 @@ gone to the trouble of fully supporting them.  You're welcome!
 > non-overlapping matches of `pattern` in `string`.  The difference
 > is, `reversed_re_finditer` searches `string` from right to left.
 >
-> `pattern` can be a precompiled `re.Pattern` object
-> or a string.  If it's a string, it'll be compiled
+> `pattern` can be str, bytes, or a precompiled `re.Pattern` object.
+> If it's str or bytes, it'll be compiled
 > with `re.compile` using the `flags` you passed in.
+>
+> `string` should be the same type as `pattern` (or `pattern.pattern`).
 
 #### `split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`
 
-> Splits s into quoted and unquoted segments.  Returns an iterator yielding 2-tuples:
+> Splits `s` into quoted and unquoted segments.
+>
+> `s` can be either `str` or `bytes`.
+>
+> `quotes` is an iterable of quote separators, either `str` or `bytes`
+> matching `s`.  Note that `split_quoted_strings`
+> only supports quote *characters,* as in, each quote separator must be exactly
+> one character long.
+>
+> Returns an iterator yielding 2-tuples:
 >     (is_quoted, segment)
 > where `segment` is a substring of `s`, and `is_quoted` is true if the segment is
 > quoted.  Joining all the segments together recreates `s`.
->
-> `quotes` is an iterable of quote separators.  Note that `split_quoted_strings`
-> only supports quote *characters,* as in, each quote separator must be exactly
-> one character long.
 >
 > If `triple_quotes` is true, supports "triple-quoted" strings like Python.
 >
@@ -1727,9 +1712,11 @@ gone to the trouble of fully supporting them.  You're welcome!
 
 #### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
 
-> Splits the string `s` into individual words,
+> Splits `s` into individual words,
 > suitable for feeding into
 > [`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).
+>
+> `s` may be either `str` or `bytes`.
 >
 > Paragraphs indented by less than `code_indent` will be
 > broken up into individual words.
@@ -1773,8 +1760,9 @@ gone to the trouble of fully supporting them.  You're welcome!
 > Combines `words` into lines and returns the result as a string.
 > Similar to `textwrap.wrap`.
 >
-> `words` should be an iterator containing text split at word
-> boundaries.  Example:
+> `words` should be an iterator yielding str or bytes strings,
+> and these strings should already be split at word boundaries.
+> Here's an example of a valid argument for `words`:
 > ```Python
 >      "this is an example of text split at word boundaries".split()
 > ```
@@ -1903,28 +1891,6 @@ to make it easy to use best practices.
 
 
 # Topic deep-dives
-
-## Support for bytes and str
-
-The **big** text functions all support both `bytes` and `str`.
-This behavior is intentionally simple and predictable.
-It works as follows:
-
-At the start of each function, it'll test its first "string"
-argument to see if it's a `bytes` object:
-
-```Python
-is_bytes = isinstance(<argument>, bytes)
-```
-
-If `isinstance` returns `True`, the function assumes all arguments are
-`bytes` objects.  Otherwise the function assumes all arguments
-are `str` objects.
-
-As a rule, no further further testing, casting, or catching exceptions
-is done.  However, some functions that accept two arguments containing
-strings will additionally check that both arguments are of a compatible
-type.
 
 ## The `multi-` family of functions
 

@@ -172,9 +172,11 @@ def reversed_re_finditer(pattern, string, flags=0):
     matches of "pattern" in "string".  The difference is,
     reversed_re_finditer searches "string" from right to left.
 
-    "pattern" can be a precompiled re.Pattern object or a string.
-    If it's a string, it'll be compiled by re.compile using the
-    "flags" argument.
+    pattern can be str, bytes, or a precompiled re.Pattern object.
+    If it's str or bytes, it'll be compiled with re.compile using
+    the flags you passed in.
+
+    string should be the same type as pattern (or pattern.pattern).
     """
     if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
@@ -846,7 +848,7 @@ def multisplit(s, separators=None, *,
     is true (or ALTERNATING), and strip is false, joining these strings
     together will recreate s.
 
-    multisplit is *greedy*: if two or more separators start at the same
+    multisplit is "greedy": if two or more separators start at the same
     location in "s", multisplit splits using the longest matching separator.
     For example:
         big.multisplit('wxabcyz', ('a', 'abc'))
@@ -1373,8 +1375,7 @@ def normalize_whitespace(s, separators=None, replacement=None):
     replacement should be either a str or bytes object,
     also matching s, or None (the default).
     If replacement is None, normalize_whitespace will use
-    a replacement string consisting of a single space character,
-    either str or bytes as appropriate.
+    a replacement string consisting of a single space character.
 
     Leading or trailing runs of separator characters will
     be replaced with the replacement string, e.g.:
@@ -1460,15 +1461,18 @@ def normalize_whitespace(s, separators=None, replacement=None):
 @_export
 def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
     """
-    Splits s into quoted and unquoted segments.  Returns an iterator yielding
-    2-tuples:
+    Splits s into quoted and unquoted segments.
+
+    s can be either str or bytes.
+
+    quotes is an iterable of quote separators, either str or bytes matching s.
+    Note that split_quoted_strings only supports quote *characters*, as in,
+    each quote separator must be exactly one character long.
+
+    Returns an iterator yielding 2-tuples:
         (is_quoted, segment)
     where segment is a substring of s, and is_quoted is true if the segment is
     quoted.  Joining all the segments together recreates s.
-
-    quotes is an iterable of quote separators.  Note that split_quoted_strings
-    only supports quote *characters*, as in, each quote separator must be exactly
-    one character long.
 
     If triple_quotes is true, supports "triple-quoted" strings like Python.
 
@@ -1652,17 +1656,17 @@ class lines:
         """
         A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
 
-        "s" can be str, bytes, or any iterable.
+        "s" can be str, bytes, or any iterable of str or bytes.
 
-        By default, if "s" is str, splits "s" by all Unicode line break characters.
-        If "s" is bytes, splits "s" by all ASCII line break characters.
+        If s is neither str nor bytes, s must be an iterable;
+        lines yields successive elements of s as lines.  All objects
+        yielded by this iterable should be homogeneous, either str or bytes.
 
-        If "s" is neither str nor bytes, "s" must be an iterable;
-        lines yields successive elements of "s" as lines.
-
-        "separators", if not None, must be an iterable of strings of the
-        same type as "s".  lines will split "s" using those strings as
-        separator strings (using big.multisplit).
+        If s is str or bytes, and separators is None, lines
+        will split s at line boundaries and yield those lines,
+        including empty lines.  If separators is not None,
+        it must be an iterable of strings of the same type as s;
+        lines will split s using multisplit.
 
         When iterated over, yields 2-tuples:
             (info, line)
@@ -2072,9 +2076,12 @@ def wrap_words(words, margin=79, *, two_spaces=True):
     Combines 'words' into lines and returns the result as a string.
     Similar to textwrap.wrap.
 
-    'words' should be an iterator of str or bytes objects which
-    represent text split at word boundaries.  Example:
+    'words' should be an iterator yielding str or bytes strings, and
+    these strings should already be split at word boundaries.
+    Here's an example of a valid argument for words:
         "this is an example of text split at word boundaries".split()
+
+    A single '\n' indicates a line break.
     If you want a paragraph break, embed two '\n' characters in a row.
 
     'margin' specifies the maximum length of each line. The length of
@@ -2420,6 +2427,8 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
     Splits the string s into individual words,
     suitable for feeding into wrap_words.
 
+    s may be either str or bytes.
+
     Paragraphs indented by less than code_indent will be
     broken up into individual words.
 
@@ -2481,10 +2490,11 @@ def merge_columns(*columns, column_separator=None,
     columns should be an iterable of column tuples.
     Each column tuple should contain three items:
         (text, min_width, max_width)
-    text should be a single text string, with newline
-    characters separating lines. min_width and max_width
-    are the minimum and maximum permissible widths for that
-    column, not including the column separator (if any).
+    text should be a single string, either str or bytes,
+    with newline characters separating lines. min_width
+    and max_width are the minimum and maximum permissible
+    widths for that column, not including the column
+    separator (if any).
 
     Note that this function doesn't text-wrap the lines.
 
