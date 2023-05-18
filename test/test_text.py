@@ -640,6 +640,8 @@ class BigTextTests(unittest.TestCase):
             # and multisplit does not.
             self.assertEqual(list_multisplit(c('   ')), c(['', '']))
             self.assertEqual(list_multisplit(c('   '), reverse=True), c(['', '']))
+            self.assertEqual(list_multisplit(c('   '), strip=True), c(['']))
+            self.assertEqual(list_multisplit(c('   '), strip=True, reverse=True), c(['']))
 
             with self.assertRaises(TypeError):
                 list_multisplit(c('s'), 3.1415)
@@ -699,11 +701,11 @@ class BigTextTests(unittest.TestCase):
                     s = s.encode('ascii')
                     if separators == big.whitespace:
                         separators = big.ascii_whitespace
-                    elif isinstance(separators, str):
-                        separators = separators.encode('ascii')
+                    elif separators == big.newlines:
+                        separators = big.ascii_newlines
                     else:
-                        separators = big.text._cheap_encode_iterable_of_strings(separators)
-                    expected = list(big.text._cheap_encode_iterable_of_strings(expected))
+                        separators = to_bytes(separators)
+                    expected = to_bytes(expected)
                 # print()
                 # print(f"s={s} expected={expected}\nseparators={separators}")
                 result = list(big.multisplit(s, separators, **kwargs))
