@@ -3288,7 +3288,7 @@ in the **big** test suite.
 
 ## Release history
 
-**next version** *(under development)*
+**0.8**
 
 * Major retooling of `str` and `bytes` support in `big.text`.
   * Functions in `big.text` now uniformly accept `str` or `bytes`
@@ -3345,6 +3345,7 @@ in the **big** test suite.
   to the `big.text` module.  Previously the first
   four of these were hard-coded strings inside
   [`gently_title`.](#gently_titles-apostrophesnone-double_quotesnone)
+  (And the last two didn't exist!)
 * Code cleanup in `split_text_with_code`, removed redundant code.
   I think it has about the same number of `if` statements; if anything
   it might be slightly faster.
@@ -3355,7 +3356,7 @@ in the **big** test suite.
   slightly, should now be very-slightly faster.  (Well, `re_rpartition`
   will be slower if your pattern finds overlapping matches.  But at
   least now it's correct!)
-* Lots of doc fixes, as usual.
+* Lots and lots of doc improvements, as usual.
 
 **0.7.1**
 

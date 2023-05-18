@@ -1304,7 +1304,7 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         cast_apostrophes = []
         for o in iterator(apostrophes):
             if not isinstance(o, s_type):
-                raise TypeError(f"apostrophes must be an iterable of non-empty objects the same type as s, or None {o=} {s_type=} {apostrophes=} {s=}")
+                raise TypeError(f"apostrophes must be an iterable of non-empty objects the same type as s, or None")
             if not o:
                 raise ValueError("apostrophes must be an iterable of non-empty objects the same type as s, or None")
             cast_apostrophes.append(o)
