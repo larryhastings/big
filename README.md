@@ -1016,7 +1016,7 @@ functions.  When working with `bytes`,
 by default the functions will only work with ASCII
 characters.
 
-## Support for bytes and str
+#### Support for bytes and str
 
 The **big** text functions all support both `str` and `bytes`.
 The functions all automatically detect whether you passed in
