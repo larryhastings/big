@@ -1931,6 +1931,108 @@ class BigTextTests(unittest.TestCase):
             ],
             triple_quotes=False)
 
+    def test_parse_delimiters(self):
+
+        def test(s, expected, *, delimiters=None):
+            empty = ''
+            for i in range(2):
+                got = tuple(big.parse_delimiters(s, delimiters=delimiters))
+
+                flattened = []
+                for t in got:
+                    flattened.extend(t)
+                s2 = empty.join(flattened)
+                self.assertEqual(s, s2)
+
+                self.assertEqual(expected, got)
+
+                if not i:
+                    s = to_bytes(s)
+                    expected = to_bytes(expected)
+                    empty = b''
+
+        test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
+            (
+                ('a',                '[',  ''),
+                ('x',                 '', ']'),
+                (' = foo',           '(',  ''),
+                ('',                 '"',  ''),
+                ('howdy (folks)\\n',  '', '"'),
+                (', ',               '{',  ''),
+                ('1:2, 3:4',          '', '}'),
+                ('',                  '', ')'),
+            ),
+            )
+
+        test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
+            (
+                ('a', '[',  ''),
+                ('',  '[',  ''),
+                ('',  '[',  ''),
+                ('z',  '', ']'),
+                ('',   '', ']'),
+                ('',   '', ']'),
+                ('',  '{',  ''),
+                ('',  '{',  ''),
+                ('',  '{',  ''),
+                ('',  '{',  ''),
+                ('q',  '', '}'),
+                ('',   '', '}'),
+                ('',   '', '}'),
+                ('',   '', '}'),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('z',  '', '}'),
+                ('',   '', ']'),
+                ('',   '', '}'),
+                ('',   '', ']'),
+                ('',   '', '}'),
+                ('',   '', ']'),
+                ('',   '', '}'),
+                ('',   '', ']'),
+                ('!',  '',  ''),
+            ),
+            )
+
+        with self.assertRaises(ValueError):
+            test('a[3)', None)
+        with self.assertRaises(ValueError):
+            test('a{3]', None)
+        with self.assertRaises(ValueError):
+            test('a(3}', None)
+
+        with self.assertRaises(ValueError):
+            test('delimiters is empty', None, delimiters=[])
+        with self.assertRaises(ValueError):
+            test('delimiter is abc (huh!)', None, delimiters=['()', 'abc'])
+        with self.assertRaises(TypeError):
+            test('delimiters contains 3', None, delimiters=['{}', 3])
+        with self.assertRaises(ValueError):
+            test('delimiters contains a <backslash>', None, delimiters=['<>', '\\/'])
+        with self.assertRaises(ValueError):
+            test('delimiters contains <angle> <brackets> <twice>', None, delimiters=['<>', '<>'])
+
+        with self.assertRaises(ValueError):
+            test('unclosed_paren(a[3]', None)
+        with self.assertRaises(ValueError):
+            test('x[3] = unclosed_curly{', None)
+        with self.assertRaises(ValueError):
+            test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
+        with self.assertRaises(ValueError):
+            test('"unterminated string\\', None)
+        with self.assertRaises(ValueError):
+            test('open_everything( { a[35 "foo', None)
+
+        with self.assertRaises(TypeError):
+            big.Delimiter('(', b')')
+        with self.assertRaises(TypeError):
+            big.Delimiter(b'(', ')')
 
     def test_lines(self):
         def test(i, expected):

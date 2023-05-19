@@ -1611,6 +1611,230 @@ def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
         yield in_quote, empty_join(text)
 
 
+
+
+@_export
+class Delimiter:
+    """
+    Class representing a delimiter for parse_delimiters.
+
+    open is the opening delimiter character, can be str or bytes, must be length 1.
+    close is the closing delimiter character, must be the same type as open, and length 1.
+    backslash is a boolean: when inside this delimiter, can you escape delimiters
+       with a backslash?  (You usually can inside single or double quotes.)
+    nested is a boolean: must other delimiters nest in this delimiter?
+       (Delimiters don't usually need to be nested inside single and double quotes.)
+    """
+    def __init__(self, open, close, *, backslash=False, nested=True):
+        if isinstance(open, bytes):
+            t = bytes
+        else:
+            t = str
+        if not (isinstance(open, t) and isinstance(close, t)):
+            raise TypeError(f"open={open!r} and close={close!r}, they must be the same type, either str or bytes")
+
+        self.open = open
+        self.close = close
+        self.backslash = backslash
+        self.nested = nested
+
+    def __repr__(self):
+        return f"Delimiter(open={self.open!r}, close={self.close!r}, backslash={self.backslash}, nested={self.nested})"
+
+delimiter_parentheses = "()"
+_export_name('delimiter_parentheses')
+
+delimiter_square_brackets = "[]"
+_export_name('delimiter_square_brackets')
+
+delimiter_curly_braces = "{}"
+_export_name('delimiter_curly_braces')
+
+delimiter_angle_brackets = "<>"
+_export_name('delimiter_angle_brackets')
+
+delimiter_single_quote = Delimiter("'", "'", backslash=True, nested=False)
+_export_name('delimiter_single_quote')
+
+delimiter_double_quotes = Delimiter('"', '"', backslash=True, nested=False)
+_export_name('delimiter_double_quotes')
+
+parse_delimiters_default_delimiters = (
+    delimiter_parentheses,
+    delimiter_square_brackets,
+    delimiter_curly_braces,
+    delimiter_single_quote,
+    delimiter_double_quotes,
+    )
+_export_name('parse_delimiters_default_delimiters')
+
+parse_delimiters_default_delimiters_bytes = (
+    b'()',
+    b'[]',
+    b'{}',
+    Delimiter(b"'", b"'", backslash=True, nested=False),
+    Delimiter(b'"', b'"', backslash=True, nested=False),
+    )
+_export_name('parse_delimiters_default_delimiters_bytes')
+
+
+# break the rules
+_base_delimiter = Delimiter('a', 'b')
+_base_delimiter.open = _base_delimiter.close = None
+
+@_export
+def parse_delimiters(s, delimiters=None):
+    """
+    Parses a string containing nesting delimiters.
+    Raises an exception if mismatched delimiters are detected.
+
+    s may be str or bytes.
+
+    delimiters may be either None or an iterable containing
+    either Delimiter objects or objects matching s (str or bytes).
+    Entries in the delimiters iterable which are str or bytes
+    should be exactly two characters long; these will be used
+    as the open and close arguments for a new Delimiter object.
+
+    If delimiters is None, parse_delimiters uses a default
+    value matching these pairs of delimiters:
+        () [] {} "" ''
+    The quote mark delimiters enable backslash quoting and disable nesting.
+
+    Yields 3-tuples containing strings:
+        (text, open, close)
+    where text is the text before the next opening or closing delimiter,
+    open is the trailing opening delimiter,
+    and close is the trailing closing delimiter.
+    At least one of these three strings will always be non-empty.
+    If open is non-empty, close will be empty, and vice-versa.
+    If s does not end with a closing delimiter, in the final tuple
+    yielded, both open and close will be empty strings.
+
+    You can only specify a particular character as an opening delimiter
+    once, though you may reuse a particular character as a closing
+    delimiter multiple times.
+    """
+    if isinstance(s, bytes):
+        s_type = bytes
+        if delimiters is None:
+            delimiters = parse_delimiters_default_delimiters_bytes
+        backslash_character = b'\\'
+        disallowed_delimiters = backslash_character
+        empty = b''
+    else:
+        s_type = str
+        if delimiters is None:
+            delimiters = parse_delimiters_default_delimiters
+        backslash_character = '\\'
+        disallowed_delimiters = backslash_character
+        empty = ''
+
+    if not delimiters:
+        raise ValueError("invalid delimiters")
+    # convert
+    delimiters2 = []
+    for d in delimiters:
+        if isinstance(d, Delimiter):
+            delimiters2.append(d)
+            continue
+        if isinstance(d, s_type):
+            if not len(d) == 2:
+                raise ValueError(f"illegal delimiter string {d!r}, must be 2 characters long")
+            delimiters2.append(Delimiter(d[0:1], d[1:2]))
+            continue
+        raise TypeError(f"invalid delimiter {d!r}")
+
+    delimiters = delimiters2
+    # early-detect errors
+
+    # scan for disallowed
+    delimiter_characters = {d.open for d in delimiters} | {d.close for d in delimiters}
+    disallowed = {disallowed_delimiters}
+    illegal_delimiters = disallowed & delimiter_characters
+    if illegal_delimiters:
+        raise ValueError("illegal delimiters used: " + "".join(illegal_delimiters))
+
+    # closers is a set of closing delimiters *only*.
+    # if open and close delimiters are the same (e.g. quote marks)
+    # it shouldn't go in closers.
+    seen = set()
+    repeated = []
+    closers = set()
+    for d in delimiters:
+        if d.open in seen:
+            repeated.append(d.open)
+        seen.add(d.open)
+        if d.close != d.open:
+            closers.add(d.close)
+
+    if repeated:
+        raise ValueError("these opening delimiters were used multiple times: " + " ".join(repeated))
+
+    def parse_delimiters(s, delimiters):
+        open_to_delimiter = {d.open: d for d in delimiters}
+
+        text = []
+        append = text.append
+        def flush(open, close):
+            s = empty.join(text)
+            text.clear()
+            assert s or open or close
+            return s, open, close
+
+        # d stores the *current* delimiter
+        # d is not in stack.
+        d = _base_delimiter
+        stack = []
+        backslash = d.backslash
+        nested = d.nested
+        close = None
+        quoted = False
+
+        for i, c in enumerate(_iterate_over_bytes(s)):
+            if quoted:
+                append(c)
+                quoted = False
+                continue
+            if c == close:
+                yield flush(empty, c)
+                d = stack.pop()
+                backslash = d.backslash
+                nested = d.nested
+                close = d.close
+                continue
+            if nested:
+                if c in closers:
+                    # this is a closing delimiter,
+                    # but it doesn't match.
+                    # (if it did, we'd have handled it
+                    #  in "if c == close" above.)
+                    raise ValueError(f"mismatched closing delimiter at s[{i}]: expected {close}, got {c}")
+                next_d = open_to_delimiter.get(c)
+                if next_d:
+                    yield flush(c, empty)
+                    stack.append(d)
+                    d = next_d
+                    backslash = d.backslash
+                    nested = d.nested
+                    close = d.close
+                    continue
+            if backslash and (c == backslash_character):
+                quoted = True
+            append(c)
+
+        if len(stack):
+            stack.pop(0)
+            stack.append(d)
+            raise ValueError("s does not close all opened delimiters, needs " + " ".join(d.close for d in reversed(stack)))
+
+        if text:
+            yield flush(empty, empty)
+
+    return parse_delimiters(s, delimiters)
+
+
+
 @_export
 class LineInfo:
     """

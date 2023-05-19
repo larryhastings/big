@@ -97,6 +97,8 @@ notice on the source code.
 
 [`CycleError`](#cycleerror)
 
+[`Delimiter(open, close, *, backslash=False, nested=True)`](delimiteropen-close--backslash-nested)
+
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
 
 [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
@@ -176,6 +178,8 @@ notice on the source code.
 [`newlines_without_dos`](#newlines)
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
+
+[`parse_delimiters(s, delimiters=None)`](#parse_delimiterss-delimitersNone)
 
 [`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
 
@@ -1042,6 +1046,20 @@ Subclasses of `str` and `bytes` will also work; anywhere you
 should pass in a `str`, you can also pass in a subclass of
 `str`, and likewise for `bytes`.
 
+#### `Delimiter(open, close, *, backslash=False, nested=True)`
+
+> Class representing a delimiter for
+> [`parse_delimiters(s, delimiters=None)`.](#parse_delimiterss-delimitersNone)
+>
+> `open` is the opening delimiter character, can be `str` or `bytes`, must be length 1.
+>
+> `close` is the closing delimiter character, must be the same type as `open`, and length 1.
+>
+> `backslash` is a boolean: when inside this delimiter, can you escape delimiters
+> with a backslash?  (You usually can inside single or double quotes.)
+>
+> `nested` is a boolean: must other delimiters nest in this delimiter?
+> (Delimiters don't usually need to be nested inside single and double quotes.)
 
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
 
@@ -1592,6 +1610,42 @@ should pass in a `str`, you can also pass in a subclass of
 > be replaced with the replacement string, e.g.:
 >
 >     normalize_whitespace("   a    b   c") == " a b c"
+
+#### `parse_delimiters(s, delimiters=None)`
+
+> Parses a string containing nesting delimiters.
+> Raises an exception if mismatched delimiters are detected.
+>
+> `s` may be `str` or `bytes`.
+>
+> `delimiters` may be either `None` or an iterable containing
+> either
+> [`Delimiter(open, close, *, backslash=False, nested=True)`](delimiteropen-close--backslash-nested)
+> objects or objects matching `s` (`str` or `bytes`).
+> Entries in the `delimiters` iterable which are `str` or `bytes`
+> should be exactly two characters long; these will be used
+> as the `open` and `close` arguments for a new `Delimiter` object.
+>
+> If `delimiters` is `None`, `parse_delimiters` uses a default
+> value matching these pairs of delimiters:
+>
+>     () [] {} "" ''
+>
+> The quote mark delimiters enable backslash quoting and disable nesting.
+>
+> Yields 3-tuples containing strings:
+>     (text, open, close)
+> where `text` is the text before the next opening or closing delimiter,
+> `open` is the trailing opening delimiter,
+> and `close` is the trailing closing delimiter.
+> At least one of these three strings will always be non-empty.
+> If `open` is non-empty, `close` will be empty, and vice-versa.
+> If `s` does not end with a closing delimiter, in the final tuple
+> yielded, both `open` and `close` will be empty strings.
+>
+> You can only specify a particular character as an opening delimiter
+> once, though you may reuse a particular character as a closing
+> delimiter multiple times.
 
 #### `re_partition(text, pattern, count=1, *, flags=0, reverse=False)`
 
@@ -3287,6 +3341,13 @@ in the **big** test suite.
 
 
 ## Release history
+
+**0.8.1**
+
+* Added
+  [`parse_delimiters`](#parse_delimiterss-delimitersNone)
+  and
+  [`Delimiter(open, close, *, backslash=False, nested=True)`.](delimiteropen-close--backslash-nested)
 
 **0.8**
 
