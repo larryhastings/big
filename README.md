@@ -3344,6 +3344,16 @@ in the **big** test suite.
 
 ## Release history
 
+**0.8.2**
+
+* Convert all iterator functions to use my new approach:
+  instead of checking arguments inside the iterator,
+  the function you call checks arguments, then has a
+  nested iterator function which it runs and returns the
+  result.  This means bad inputs raise their exceptions
+  at the call site where the iterator is constructed,
+  rather than when the first value is yielded by the iterator!
+
 **0.8.1**
 
 * Added
