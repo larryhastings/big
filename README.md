@@ -97,7 +97,7 @@ notice on the source code.
 
 [`CycleError`](#cycleerror)
 
-[`Delimiter(open, close, *, backslash=False, nested=True)`](delimiteropen-close--backslash-nested)
+[`Delimiter(open, close, *, backslash=False, nested=True)`](#delimiteropen-close--backslash-nested)
 
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
 
@@ -1620,7 +1620,7 @@ should pass in a `str`, you can also pass in a subclass of
 >
 > `delimiters` may be either `None` or an iterable containing
 > either
-> [`Delimiter`](delimiteropen-close--backslash-nested)
+> [`Delimiter`](#delimiteropen-close--backslash-nested)
 > objects or objects matching `s` (`str` or `bytes`).
 > Entries in the `delimiters` iterable which are `str` or `bytes`
 > should be exactly two characters long; these will be used
