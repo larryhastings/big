@@ -1049,7 +1049,7 @@ should pass in a `str`, you can also pass in a subclass of
 #### `Delimiter(open, close, *, backslash=False, nested=True)`
 
 > Class representing a delimiter for
-> [`parse_delimiters(s, delimiters=None)`.](#parse_delimiterss-delimitersNone)
+> [`parse_delimiters`.](#parse_delimiterss-delimitersNone)
 >
 > `open` is the opening delimiter character, can be `str` or `bytes`, must be length 1.
 >
@@ -1620,7 +1620,7 @@ should pass in a `str`, you can also pass in a subclass of
 >
 > `delimiters` may be either `None` or an iterable containing
 > either
-> [`Delimiter(open, close, *, backslash=False, nested=True)`](delimiteropen-close--backslash-nested)
+> [`Delimiter`](delimiteropen-close--backslash-nested)
 > objects or objects matching `s` (`str` or `bytes`).
 > Entries in the `delimiters` iterable which are `str` or `bytes`
 > should be exactly two characters long; these will be used
@@ -3347,7 +3347,7 @@ in the **big** test suite.
 * Added
   [`parse_delimiters`](#parse_delimiterss-delimitersNone)
   and
-  [`Delimiter(open, close, *, backslash=False, nested=True)`.](delimiteropen-close--backslash-nested)
+  [`Delimiter`.](delimiteropen-close--backslash-nested)
 
 **0.8**
 
