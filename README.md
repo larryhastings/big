@@ -97,11 +97,11 @@ notice on the source code.
 
 [`CycleError`](#cycleerror)
 
-[`Delimiter(open, close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
-
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
 
 [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
+
+[`Delimiter(open, close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
 
 [`Event(scheduler, event, time, priority, sequence)`](#eventscheduler-event-time-priority-sequence)
 
