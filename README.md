@@ -1634,7 +1634,9 @@ should pass in a `str`, you can also pass in a subclass of
 > The quote mark delimiters enable backslash quoting and disable nesting.
 >
 > Yields 3-tuples containing strings:
+>
 >     (text, open, close)
+>
 > where `text` is the text before the next opening or closing delimiter,
 > `open` is the trailing opening delimiter,
 > and `close` is the trailing closing delimiter.
