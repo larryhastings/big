@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import big.all as big
 import datetime
 import re
@@ -120,8 +123,6 @@ class BigTests(unittest.TestCase):
     except ImportError: # pragma: no cover
         pass
 
-
-import bigtestlib
 
 def run_tests():
     bigtestlib.run(name="big.time", module=__name__)

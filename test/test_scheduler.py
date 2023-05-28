@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import big.all as big
 import queue
 import unittest
@@ -387,11 +390,6 @@ class SchedModuleTests(unittest.TestCase):
             events.append(event) # pragma: no cover
         self.assertEqual(events, [])
 
-
-
-
-
-import bigtestlib
 
 def run_tests():
     bigtestlib.run(name="big.scheduler", module=__name__)

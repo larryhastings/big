@@ -24,6 +24,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
+
 import big.all as big
 import unittest
 
@@ -139,8 +143,6 @@ class BigTests(unittest.TestCase):
         self.assertEqual(big.get_int_or_float(None), None)
         self.assertEqual(big.get_int_or_float("abc"), "abc")
 
-
-import bigtestlib
 
 def run_tests():
     bigtestlib.run(name="big.__init__", module=__name__)

@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import big.all as big
 from big.boundinnerclass import *
 import itertools
@@ -152,8 +155,6 @@ class BigBICTests(unittest.TestCase):
 
         self.assertIn("<test_boundinnerclass.InnerChild object bound to <test_boundinnerclass.Outer object at", repr(inner_child))
 
-
-import bigtestlib
 
 def run_tests():
     bigtestlib.run(name="big.boundinnerclass", module=__name__)

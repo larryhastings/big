@@ -43,6 +43,24 @@ attribute_names = {
     "skipped": "skipped",
     }
 
+def preload_local_big():
+    """
+    Pre-load the local "big" module, to preclude finding
+    an already-installed one on the path.
+    """
+    from os.path import abspath, dirname, isfile, join, normpath
+    import sys
+    big_dir = abspath(dirname(sys.argv[0]))
+    while True:
+        big_init = join(big_dir, "big/__init__.py")
+        if isfile(big_init):
+            break
+        big_dir = normpath(join(big_dir, ".."))
+    sys.path.insert(1, big_dir)
+    import big
+    return big_dir
+
+
 def run(name, module, permutations=None):
     if name:
         print(f"Testing {name}...")

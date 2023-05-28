@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import big.all as big
 import unittest
 
@@ -149,10 +152,6 @@ class BigTests(unittest.TestCase):
         h = big.Heap(original_values)
         self.assertEqual(repr(h)[:6], '<Heap ')
         self.assertEqual(repr(iter(h))[:20], '<HeapIterator <Heap ')
-
-
-
-import bigtestlib
 
 def run_tests():
     bigtestlib.run(name="big.heap", module=__name__)

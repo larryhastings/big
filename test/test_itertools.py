@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import copy
 import big.all as big
 import math
@@ -84,9 +87,6 @@ class BigItertoolsTests(unittest.TestCase):
         for i in pbi:
             self.assertEqual(True, False, "shouldn't reach here! pbi is exhausted!") # pragma: no cover
 
-
-
-import bigtestlib
 
 def run_tests():
     bigtestlib.run(name="big.itertools", module=__name__)

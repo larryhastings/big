@@ -145,6 +145,8 @@ notice on the source code.
 
 [`Heap.queue`](#heapqueue)
 
+[`int_to_words(i, flowery=True)`](#int_to_words-flowerytrue)
+
 [`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
 [`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
@@ -1118,6 +1120,22 @@ should pass in a `str`, you can also pass in a subclass of
 > If `double_quotes` is false and `s` is `str`, double_quotes
 > is set to a string containing these Unicode double quote code points:
 >     "“”„‟«»‹›
+
+#### `int_to_words(i, flowery=True)`
+
+> Converts an integer into the equivalent English string.
+>
+>     int_to_words(2) -> "two"
+>     int_to_words(35) -> "thirty-five"
+>
+> If the keyword-only parameter `flowery` is true (the default),
+> you also get commas and the word `and` where you'd expect them.
+> (When `flowery` is true, `int_to_words(i)` produces identical
+> output to `inflect.engine().number_to_words(i)`.)
+
+> Numbers >= `10**66` (one thousand vigintillion)
+> are only converted using `str(i)`.  Sorry!
+
 
 #### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
 
@@ -3343,6 +3361,15 @@ in the **big** test suite.
 
 
 ## Release history
+
+**next version**
+
+* Added
+  [`int_to_words`](#int_to_words-flowerytrue).
+* All tests now insert the local **big** directory
+  onto `sys.path`, so you can run the tests on your
+  local copy without having to install.  Especially
+  convenient for testing with old version of Python!
 
 **0.8.2**
 

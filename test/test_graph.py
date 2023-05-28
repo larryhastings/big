@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import itertools
 import unittest
 
@@ -362,7 +365,6 @@ try:
 except ImportError: # pragma: no cover
     have_test_graphlib = False
 
-import bigtestlib
 
 def run_tests(exit=False):
     bigtestlib.run(name="big.graph", module=__name__, permutations=lambda: tests_run)

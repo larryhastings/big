@@ -2918,3 +2918,96 @@ def merge_columns(*columns, column_separator=None,
     text = newline.join(lines)
     return text.rstrip()
 
+@_export
+def int_to_words(i, flowery=True):
+    """
+    Converts an integer into the equivalent English string.
+
+    int_to_words(2) -> "two"
+    int_to_words(35) -> "thirty-five"
+
+    If the keyword-only parameter "flowery" is true,
+    you also get commas and the word "and" where you'd expect them.
+    (When "flowery" is True, int_to_words(i) produces identical
+    output to inflect.engine().number_to_words(i).)
+
+    Numbers >= 10*66 (one thousand vigintillion)
+    are only converted using str(i).  Sorry!
+    """
+    if not isinstance(i, int):
+        raise ValueError("i must be int")
+
+    if i >= 10**66:
+        return str(i)
+
+    first_twenty = (
+        "zero",
+        "one", "two", "three", "four", "five",
+        "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+        "sixteen", "seventeen", "eighteen", "nineteen",
+        )
+    tens = (
+        None, None, "twenty", "thirty", "forty", "fifty",
+        "sixty", "seventy", "eighty", "ninety",
+        )
+
+    strings = []
+    spacer = ''
+
+    if i < 0:
+        i = -i
+        strings.append("negative")
+        spacer = ' '
+
+    for threshold, english in (
+        # note!        v  leading spaces!
+        (10**63,      " vigintillion"),
+        (10**60,    " novemdecillion"),
+        (10**57,     " octodecillion"),
+        (10**54,     " septdecillion"),
+        (10**51,      " sexdecillion"),
+        (10**48,      " qindecillion"),
+        (10**45, " quattuordecillion"),
+        (10**42,      " tredecillion"),
+        (10**39,      " duodecillion"),
+        (10**36,       " undecillion"),
+        (10**33,       "   decillion"),
+        (10**30,       "   nonillion"),
+        (10**27,       "   octillion"),
+        (10**24,       "  septillion"),
+        (10**21,       "  sextillion"),
+        (10**18,       " quintillion"),
+        (10**15,       " quadrillion"),
+        (10**12,          " trillion"),
+        (10** 9,           " billion"),
+        (10** 6,           " million"),
+        (10** 3,          " thousand"),
+        (10** 2,           " hundred"),
+        ):
+        if i >= threshold:
+            upper = i // threshold
+            i = i % threshold
+            strings.append(spacer)
+            strings.append(int_to_words(upper, flowery=flowery))
+            strings.append(english)
+            spacer = ', ' if flowery else ' '
+
+    if strings:
+        spacer = " and " if flowery else " "
+
+    if i >= 20:
+        t = i // 10
+        strings.append(spacer)
+        strings.append(tens[t])
+        spacer = '-'
+        i = i % 10
+
+    # don't add "zero" to the end if we already have strings
+    if i or (not strings):
+        strings.append(spacer)
+        strings.append(first_twenty[i])
+
+    return "".join(strings)
+
+

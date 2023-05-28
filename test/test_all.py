@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
 for test_module in """
     test_boundinnerclass
     test_builtin
@@ -38,5 +41,4 @@ for test_module in """
     module = __import__(test_module)
     module.run_tests()
 
-import bigtestlib
 bigtestlib.finish()

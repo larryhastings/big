@@ -31,6 +31,10 @@ import re
 import sys
 import unittest
 
+import bigtestlib
+bigtestlib.preload_local_big()
+
+
 try:
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
@@ -2485,8 +2489,719 @@ outdent
         self.assertTrue(hasattr(info, 'quark'))
         self.assertEqual(getattr(info, 'quark'), 35)
 
+    def test_int_to_words(self):
+        # confirm default of flowery
+        self.assertEqual(big.int_to_words(12345678), big.int_to_words(12345678, flowery=True))
 
-import bigtestlib
+        def test(i, normal, flowery):
+            got = big.int_to_words(i, flowery=False)
+            self.assertEqual(got, normal)
+            got = big.int_to_words(i, flowery=True)
+            self.assertEqual(got, flowery)
+
+        test(                    0,
+            'zero',
+            'zero')
+
+        test(                    1,
+            'one',
+            'one')
+
+        test(                    2,
+            'two',
+            'two')
+
+        test(                    3,
+            'three',
+            'three')
+
+        test(                    4,
+            'four',
+            'four')
+
+        test(                    5,
+            'five',
+            'five')
+
+        test(                    6,
+            'six',
+            'six')
+
+        test(                    7,
+            'seven',
+            'seven')
+
+        test(                    8,
+            'eight',
+            'eight')
+
+        test(                    9,
+            'nine',
+            'nine')
+
+        test(                   10,
+            'ten',
+            'ten')
+
+        test(                   11,
+            'eleven',
+            'eleven')
+
+        test(                   12,
+            'twelve',
+            'twelve')
+
+        test(                   13,
+            'thirteen',
+            'thirteen')
+
+        test(                   14,
+            'fourteen',
+            'fourteen')
+
+        test(                   15,
+            'fifteen',
+            'fifteen')
+
+        test(                   16,
+            'sixteen',
+            'sixteen')
+
+        test(                   17,
+            'seventeen',
+            'seventeen')
+
+        test(                   18,
+            'eighteen',
+            'eighteen')
+
+        test(                   19,
+            'nineteen',
+            'nineteen')
+
+        test(                   20,
+            'twenty',
+            'twenty')
+
+        test(                   21,
+            'twenty-one',
+            'twenty-one')
+
+        test(                   22,
+            'twenty-two',
+            'twenty-two')
+
+        test(                   23,
+            'twenty-three',
+            'twenty-three')
+
+        test(                   24,
+            'twenty-four',
+            'twenty-four')
+
+        test(                   25,
+            'twenty-five',
+            'twenty-five')
+
+        test(                   26,
+            'twenty-six',
+            'twenty-six')
+
+        test(                   27,
+            'twenty-seven',
+            'twenty-seven')
+
+        test(                   28,
+            'twenty-eight',
+            'twenty-eight')
+
+        test(                   29,
+            'twenty-nine',
+            'twenty-nine')
+
+        test(                   30,
+            'thirty',
+            'thirty')
+
+        test(                   40,
+            'forty',
+            'forty')
+
+        test(                   41,
+            'forty-one',
+            'forty-one')
+
+        test(                   42,
+            'forty-two',
+            'forty-two')
+
+        test(                   50,
+            'fifty',
+            'fifty')
+
+        test(                   51,
+            'fifty-one',
+            'fifty-one')
+
+        test(                   52,
+            'fifty-two',
+            'fifty-two')
+
+        test(                   60,
+            'sixty',
+            'sixty')
+
+        test(                   61,
+            'sixty-one',
+            'sixty-one')
+
+        test(                   62,
+            'sixty-two',
+            'sixty-two')
+
+        test(                   70,
+            'seventy',
+            'seventy')
+
+        test(                   71,
+            'seventy-one',
+            'seventy-one')
+
+        test(                   72,
+            'seventy-two',
+            'seventy-two')
+
+        test(                   80,
+            'eighty',
+            'eighty')
+
+        test(                   81,
+            'eighty-one',
+            'eighty-one')
+
+        test(                   82,
+            'eighty-two',
+            'eighty-two')
+
+        test(                   90,
+            'ninety',
+            'ninety')
+
+        test(                   91,
+            'ninety-one',
+            'ninety-one')
+
+        test(                   92,
+            'ninety-two',
+            'ninety-two')
+
+        test(                  100,
+            'one hundred',
+            'one hundred')
+
+        test(                  101,
+            'one hundred one',
+            'one hundred and one')
+
+        test(                  102,
+            'one hundred two',
+            'one hundred and two')
+
+        test(                  200,
+            'two hundred',
+            'two hundred')
+
+        test(                  201,
+            'two hundred one',
+            'two hundred and one')
+
+        test(                  202,
+            'two hundred two',
+            'two hundred and two')
+
+        test(                  211,
+            'two hundred eleven',
+            'two hundred and eleven')
+
+        test(                  222,
+            'two hundred twenty-two',
+            'two hundred and twenty-two')
+
+        test(                  300,
+            'three hundred',
+            'three hundred')
+
+        test(                  301,
+            'three hundred one',
+            'three hundred and one')
+
+        test(                  302,
+            'three hundred two',
+            'three hundred and two')
+
+        test(                  311,
+            'three hundred eleven',
+            'three hundred and eleven')
+
+        test(                  322,
+            'three hundred twenty-two',
+            'three hundred and twenty-two')
+
+        test(                  400,
+            'four hundred',
+            'four hundred')
+
+        test(                  401,
+            'four hundred one',
+            'four hundred and one')
+
+        test(                  402,
+            'four hundred two',
+            'four hundred and two')
+
+        test(                  411,
+            'four hundred eleven',
+            'four hundred and eleven')
+
+        test(                  422,
+            'four hundred twenty-two',
+            'four hundred and twenty-two')
+
+        test(                  500,
+            'five hundred',
+            'five hundred')
+
+        test(                  501,
+            'five hundred one',
+            'five hundred and one')
+
+        test(                  502,
+            'five hundred two',
+            'five hundred and two')
+
+        test(                  511,
+            'five hundred eleven',
+            'five hundred and eleven')
+
+        test(                  522,
+            'five hundred twenty-two',
+            'five hundred and twenty-two')
+
+        test(                  600,
+            'six hundred',
+            'six hundred')
+
+        test(                  601,
+            'six hundred one',
+            'six hundred and one')
+
+        test(                  602,
+            'six hundred two',
+            'six hundred and two')
+
+        test(                  611,
+            'six hundred eleven',
+            'six hundred and eleven')
+
+        test(                  622,
+            'six hundred twenty-two',
+            'six hundred and twenty-two')
+
+        test(                  700,
+            'seven hundred',
+            'seven hundred')
+
+        test(                  701,
+            'seven hundred one',
+            'seven hundred and one')
+
+        test(                  702,
+            'seven hundred two',
+            'seven hundred and two')
+
+        test(                  711,
+            'seven hundred eleven',
+            'seven hundred and eleven')
+
+        test(                  722,
+            'seven hundred twenty-two',
+            'seven hundred and twenty-two')
+
+        test(                  800,
+            'eight hundred',
+            'eight hundred')
+
+        test(                  801,
+            'eight hundred one',
+            'eight hundred and one')
+
+        test(                  802,
+            'eight hundred two',
+            'eight hundred and two')
+
+        test(                  811,
+            'eight hundred eleven',
+            'eight hundred and eleven')
+
+        test(                  822,
+            'eight hundred twenty-two',
+            'eight hundred and twenty-two')
+
+        test(                  900,
+            'nine hundred',
+            'nine hundred')
+
+        test(                  901,
+            'nine hundred one',
+            'nine hundred and one')
+
+        test(                  902,
+            'nine hundred two',
+            'nine hundred and two')
+
+        test(                  911,
+            'nine hundred eleven',
+            'nine hundred and eleven')
+
+        test(                  922,
+            'nine hundred twenty-two',
+            'nine hundred and twenty-two')
+
+        test(                 1000,
+            'one thousand',
+            'one thousand')
+
+        test(                 1001,
+            'one thousand one',
+            'one thousand and one')
+
+        test(                 1002,
+            'one thousand two',
+            'one thousand and two')
+
+        test(                 1023,
+            'one thousand twenty-three',
+            'one thousand and twenty-three')
+
+        test(                 1034,
+            'one thousand thirty-four',
+            'one thousand and thirty-four')
+
+        test(                 1456,
+            'one thousand four hundred fifty-six',
+            'one thousand, four hundred and fifty-six')
+
+        test(                 1567,
+            'one thousand five hundred sixty-seven',
+            'one thousand, five hundred and sixty-seven')
+
+        test(                 2000,
+            'two thousand',
+            'two thousand')
+
+        test(                 2001,
+            'two thousand one',
+            'two thousand and one')
+
+        test(                 2002,
+            'two thousand two',
+            'two thousand and two')
+
+        test(                 2023,
+            'two thousand twenty-three',
+            'two thousand and twenty-three')
+
+        test(                 2034,
+            'two thousand thirty-four',
+            'two thousand and thirty-four')
+
+        test(                 2456,
+            'two thousand four hundred fifty-six',
+            'two thousand, four hundred and fifty-six')
+
+        test(                 2567,
+            'two thousand five hundred sixty-seven',
+            'two thousand, five hundred and sixty-seven')
+
+        test(                 3000,
+            'three thousand',
+            'three thousand')
+
+        test(                 3001,
+            'three thousand one',
+            'three thousand and one')
+
+        test(                 3002,
+            'three thousand two',
+            'three thousand and two')
+
+        test(                 3023,
+            'three thousand twenty-three',
+            'three thousand and twenty-three')
+
+        test(                 3034,
+            'three thousand thirty-four',
+            'three thousand and thirty-four')
+
+        test(                 3456,
+            'three thousand four hundred fifty-six',
+            'three thousand, four hundred and fifty-six')
+
+        test(                 3567,
+            'three thousand five hundred sixty-seven',
+            'three thousand, five hundred and sixty-seven')
+
+        test(                 4000,
+            'four thousand',
+            'four thousand')
+
+        test(                 4001,
+            'four thousand one',
+            'four thousand and one')
+
+        test(                 4002,
+            'four thousand two',
+            'four thousand and two')
+
+        test(                 4023,
+            'four thousand twenty-three',
+            'four thousand and twenty-three')
+
+        test(                 4034,
+            'four thousand thirty-four',
+            'four thousand and thirty-four')
+
+        test(                 4456,
+            'four thousand four hundred fifty-six',
+            'four thousand, four hundred and fifty-six')
+
+        test(                 4567,
+            'four thousand five hundred sixty-seven',
+            'four thousand, five hundred and sixty-seven')
+
+        test(                 5000,
+            'five thousand',
+            'five thousand')
+
+        test(                 5001,
+            'five thousand one',
+            'five thousand and one')
+
+        test(                 5002,
+            'five thousand two',
+            'five thousand and two')
+
+        test(                 5023,
+            'five thousand twenty-three',
+            'five thousand and twenty-three')
+
+        test(                 5034,
+            'five thousand thirty-four',
+            'five thousand and thirty-four')
+
+        test(                 5456,
+            'five thousand four hundred fifty-six',
+            'five thousand, four hundred and fifty-six')
+
+        test(                 5567,
+            'five thousand five hundred sixty-seven',
+            'five thousand, five hundred and sixty-seven')
+
+        test(                 6000,
+            'six thousand',
+            'six thousand')
+
+        test(                 6001,
+            'six thousand one',
+            'six thousand and one')
+
+        test(                 6002,
+            'six thousand two',
+            'six thousand and two')
+
+        test(                 6023,
+            'six thousand twenty-three',
+            'six thousand and twenty-three')
+
+        test(                 6034,
+            'six thousand thirty-four',
+            'six thousand and thirty-four')
+
+        test(                 6456,
+            'six thousand four hundred fifty-six',
+            'six thousand, four hundred and fifty-six')
+
+        test(                 6567,
+            'six thousand five hundred sixty-seven',
+            'six thousand, five hundred and sixty-seven')
+
+        test(                 7000,
+            'seven thousand',
+            'seven thousand')
+
+        test(                 7001,
+            'seven thousand one',
+            'seven thousand and one')
+
+        test(                 7002,
+            'seven thousand two',
+            'seven thousand and two')
+
+        test(                 7023,
+            'seven thousand twenty-three',
+            'seven thousand and twenty-three')
+
+        test(                 7034,
+            'seven thousand thirty-four',
+            'seven thousand and thirty-four')
+
+        test(                 7456,
+            'seven thousand four hundred fifty-six',
+            'seven thousand, four hundred and fifty-six')
+
+        test(                 7567,
+            'seven thousand five hundred sixty-seven',
+            'seven thousand, five hundred and sixty-seven')
+
+        test(                 8000,
+            'eight thousand',
+            'eight thousand')
+
+        test(                 8001,
+            'eight thousand one',
+            'eight thousand and one')
+
+        test(                 8002,
+            'eight thousand two',
+            'eight thousand and two')
+
+        test(                 8023,
+            'eight thousand twenty-three',
+            'eight thousand and twenty-three')
+
+        test(                 8034,
+            'eight thousand thirty-four',
+            'eight thousand and thirty-four')
+
+        test(                 8456,
+            'eight thousand four hundred fifty-six',
+            'eight thousand, four hundred and fifty-six')
+
+        test(                 8567,
+            'eight thousand five hundred sixty-seven',
+            'eight thousand, five hundred and sixty-seven')
+
+        test(                 9000,
+            'nine thousand',
+            'nine thousand')
+
+        test(                 9001,
+            'nine thousand one',
+            'nine thousand and one')
+
+        test(                 9002,
+            'nine thousand two',
+            'nine thousand and two')
+
+        test(                 9023,
+            'nine thousand twenty-three',
+            'nine thousand and twenty-three')
+
+        test(                 9034,
+            'nine thousand thirty-four',
+            'nine thousand and thirty-four')
+
+        test(                 9456,
+            'nine thousand four hundred fifty-six',
+            'nine thousand, four hundred and fifty-six')
+
+        test(                 9567,
+            'nine thousand five hundred sixty-seven',
+            'nine thousand, five hundred and sixty-seven')
+
+        test(                10000,
+            'ten thousand',
+            'ten thousand')
+
+        test(                10001,
+            'ten thousand one',
+            'ten thousand and one')
+
+        test(                10002,
+            'ten thousand two',
+            'ten thousand and two')
+
+        test(                10023,
+            'ten thousand twenty-three',
+            'ten thousand and twenty-three')
+
+        test(                10034,
+            'ten thousand thirty-four',
+            'ten thousand and thirty-four')
+
+        test(                10456,
+            'ten thousand four hundred fifty-six',
+            'ten thousand, four hundred and fifty-six')
+
+        test(                10567,
+            'ten thousand five hundred sixty-seven',
+            'ten thousand, five hundred and sixty-seven')
+
+        test(                11000,
+            'eleven thousand',
+            'eleven thousand')
+
+        test(                11001,
+            'eleven thousand one',
+            'eleven thousand and one')
+
+        test(                11002,
+            'eleven thousand two',
+            'eleven thousand and two')
+
+        test(                11023,
+            'eleven thousand twenty-three',
+            'eleven thousand and twenty-three')
+
+        test(                11034,
+            'eleven thousand thirty-four',
+            'eleven thousand and thirty-four')
+
+        test(                11456,
+            'eleven thousand four hundred fifty-six',
+            'eleven thousand, four hundred and fifty-six')
+
+        test(                11567,
+            'eleven thousand five hundred sixty-seven',
+            'eleven thousand, five hundred and sixty-seven')
+
+        test(                 1234,
+            'one thousand two hundred thirty-four',
+            'one thousand, two hundred and thirty-four')
+
+        test(                 2468,
+            'two thousand four hundred sixty-eight',
+            'two thousand, four hundred and sixty-eight')
+
+        test(           1234567890,
+            'one billion two hundred thirty-four million five hundred sixty-seven thousand eight hundred ninety',
+            'one billion, two hundred and thirty-four million, five hundred and sixty-seven thousand, eight hundred and ninety')
+
+        test(        1234567890123,
+            'one trillion two hundred thirty-four billion five hundred sixty-seven million eight hundred ninety thousand one hundred twenty-three',
+            'one trillion, two hundred and thirty-four billion, five hundred and sixty-seven million, eight hundred and ninety thousand, one hundred and twenty-three')
+
+        test(     1234567890123456,
+            'one quadrillion two hundred thirty-four trillion five hundred sixty-seven billion eight hundred ninety million one hundred twenty-three thousand four hundred fifty-six',
+            'one quadrillion, two hundred and thirty-four trillion, five hundred and sixty-seven billion, eight hundred and ninety million, one hundred and twenty-three thousand, four hundred and fifty-six')
+
+        test(  1234567890123456789,
+            'one quintillion two hundred thirty-four quadrillion five hundred sixty-seven trillion eight hundred ninety billion one hundred twenty-three million four hundred fifty-six thousand seven hundred eighty-nine',
+            'one quintillion, two hundred and thirty-four quadrillion, five hundred and sixty-seven trillion, eight hundred and ninety billion, one hundred and twenty-three million, four hundred and fifty-six thousand, seven hundred and eighty-nine')
+
+        test(451234567890123456789,
+            'four hundred fifty-one quintillion two hundred thirty-four quadrillion five hundred sixty-seven trillion eight hundred ninety billion one hundred twenty-three million four hundred fifty-six thousand seven hundred eighty-nine',
+            'four hundred and fifty-one quintillion, two hundred and thirty-four quadrillion, five hundred and sixty-seven trillion, eight hundred and ninety billion, one hundred and twenty-three million, four hundred and fifty-six thousand, seven hundred and eighty-nine')
 
 def run_tests():
     bigtestlib.run(name="big.text", module=__name__)
