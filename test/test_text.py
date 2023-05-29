@@ -36,6 +36,13 @@ bigtestlib.preload_local_big()
 
 
 try:
+    import inflect
+    engine = inflect.engine()
+except ImportError:
+    engine = None
+
+
+try:
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
@@ -2490,14 +2497,38 @@ outdent
         self.assertEqual(getattr(info, 'quark'), 35)
 
     def test_int_to_words(self):
-        # confirm default of flowery
+        # confirm that flowery has a default of True
         self.assertEqual(big.int_to_words(12345678), big.int_to_words(12345678, flowery=True))
 
         def test(i, normal, flowery):
-            got = big.int_to_words(i, flowery=False)
-            self.assertEqual(got, normal)
-            got = big.int_to_words(i, flowery=True)
-            self.assertEqual(got, flowery)
+            for multiplier, prefix, inflected_prefix in (
+                (1, "", ""),
+                (-1, "negative ", "minus ")
+                ):
+
+                if (i >= 10**75) and prefix:
+                    prefix = "-"
+
+                i *= multiplier
+
+                self.assertEqual(big.int_to_words(i, flowery=False), prefix + normal)
+                self.assertEqual(big.int_to_words(i, flowery=True),  prefix + flowery)
+
+                # if inflect is available, confirm that int_to_words
+                # produces identical output to inflect.number_to_words.
+                # well, except, they prefer prepending the word "minus"
+                # for negative numbers, and I prefer prepending "negative".
+
+                if engine:
+                    try:
+                        minus_fixed_flowery = big.int_to_words(i, flowery=True).replace("negative ", "minus ")
+                        self.assertEqual(engine.number_to_words(i), minus_fixed_flowery)
+                    except inflect.NumOutOfRangeError:
+                        pass
+
+                # don't test "-0".  this dumb test harness isn't smart enough.
+                if not i:
+                    break
 
         test(                    0,
             'zero',
@@ -3202,6 +3233,17 @@ outdent
         test(451234567890123456789,
             'four hundred fifty-one quintillion two hundred thirty-four quadrillion five hundred sixty-seven trillion eight hundred ninety billion one hundred twenty-three million four hundred fifty-six thousand seven hundred eighty-nine',
             'four hundred and fifty-one quintillion, two hundred and thirty-four quadrillion, five hundred and sixty-seven trillion, eight hundred and ninety billion, one hundred and twenty-three million, four hundred and fifty-six thousand, seven hundred and eighty-nine')
+
+        # test the top end
+        test(10**75 - 1,
+            'nine hundred ninety-nine billion nine hundred ninety-nine million nine hundred ninety-nine thousand nine hundred ninety-nine vigintillion nine hundred ninety-nine novemdecillion nine hundred ninety-nine octodecillion nine hundred ninety-nine septdecillion nine hundred ninety-nine sexdecillion nine hundred ninety-nine qindecillion nine hundred ninety-nine quattuordecillion nine hundred ninety-nine tredecillion nine hundred ninety-nine duodecillion nine hundred ninety-nine undecillion nine hundred ninety-nine   decillion nine hundred ninety-nine   nonillion nine hundred ninety-nine   octillion nine hundred ninety-nine  septillion nine hundred ninety-nine  sextillion nine hundred ninety-nine quintillion nine hundred ninety-nine quadrillion nine hundred ninety-nine trillion nine hundred ninety-nine billion nine hundred ninety-nine million nine hundred ninety-nine thousand nine hundred ninety-nine',
+            'nine hundred and ninety-nine billion, nine hundred and ninety-nine million, nine hundred and ninety-nine thousand, nine hundred and ninety-nine vigintillion, nine hundred and ninety-nine novemdecillion, nine hundred and ninety-nine octodecillion, nine hundred and ninety-nine septdecillion, nine hundred and ninety-nine sexdecillion, nine hundred and ninety-nine qindecillion, nine hundred and ninety-nine quattuordecillion, nine hundred and ninety-nine tredecillion, nine hundred and ninety-nine duodecillion, nine hundred and ninety-nine undecillion, nine hundred and ninety-nine   decillion, nine hundred and ninety-nine   nonillion, nine hundred and ninety-nine   octillion, nine hundred and ninety-nine  septillion, nine hundred and ninety-nine  sextillion, nine hundred and ninety-nine quintillion, nine hundred and ninety-nine quadrillion, nine hundred and ninety-nine trillion, nine hundred and ninety-nine billion, nine hundred and ninety-nine million, nine hundred and ninety-nine thousand, nine hundred and ninety-nine',
+            )
+
+        test(10**75,
+            '1000000000000000000000000000000000000000000000000000000000000000000000000000',
+            '1000000000000000000000000000000000000000000000000000000000000000000000000000',
+            )
 
 def run_tests():
     bigtestlib.run(name="big.text", module=__name__)

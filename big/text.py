@@ -2931,14 +2931,18 @@ def int_to_words(i, flowery=True):
     (When "flowery" is True, int_to_words(i) produces identical
     output to inflect.engine().number_to_words(i).)
 
-    Numbers >= 10*66 (one thousand vigintillion)
+    Numbers >= 10*75 (one quadrillion vigintillion)
     are only converted using str(i).  Sorry!
     """
     if not isinstance(i, int):
         raise ValueError("i must be int")
 
-    if i >= 10**66:
+    if (i >= 10**75) or (i <= -10**75):
         return str(i)
+
+    is_negative = i < 0
+    if is_negative:
+        i = -i
 
     first_twenty = (
         "zero",
@@ -2952,61 +2956,81 @@ def int_to_words(i, flowery=True):
         "sixty", "seventy", "eighty", "ninety",
         )
 
-    strings = []
+    # leave a spot to put in "negative " if needed
+    strings = ['']
+    append = strings.append
     spacer = ''
+    written = False
 
-    if i < 0:
-        i = -i
-        strings.append("negative")
-        spacer = ' '
+    # go-faster stripes shortcut:
+    # most numbers are small.
+    # the fastest route is for numbers < 100.
+    # the next-fastest is for numbers < 1 trillion.
+    # the slow route handles numbers < 10**66.
+    if i >= 100:
+        if i >= 10**12:
+            quantities = (
+            # note!        v  leading spaces!
+            (10**63,      " vigintillion"),
+            (10**60,    " novemdecillion"),
+            (10**57,     " octodecillion"),
+            (10**54,     " septdecillion"),
+            (10**51,      " sexdecillion"),
+            (10**48,      " qindecillion"),
+            (10**45, " quattuordecillion"),
+            (10**42,      " tredecillion"),
+            (10**39,      " duodecillion"),
+            (10**36,       " undecillion"),
+            (10**33,       "   decillion"),
+            (10**30,       "   nonillion"),
+            (10**27,       "   octillion"),
+            (10**24,       "  septillion"),
+            (10**21,       "  sextillion"),
+            (10**18,       " quintillion"),
+            (10**15,       " quadrillion"),
+            (10**12,          " trillion"),
+            (10** 9,           " billion"),
+            (10** 6,           " million"),
+            (10** 3,          " thousand"),
+            (10** 2,           " hundred"),
+            )
+        else:
+            quantities = (
+            # note!             v  leading spaces!
+            (10** 9,           " billion"),
+            (10** 6,           " million"),
+            (10** 3,          " thousand"),
+            (10** 2,           " hundred"),
+            )
 
-    for threshold, english in (
-        # note!        v  leading spaces!
-        (10**63,      " vigintillion"),
-        (10**60,    " novemdecillion"),
-        (10**57,     " octodecillion"),
-        (10**54,     " septdecillion"),
-        (10**51,      " sexdecillion"),
-        (10**48,      " qindecillion"),
-        (10**45, " quattuordecillion"),
-        (10**42,      " tredecillion"),
-        (10**39,      " duodecillion"),
-        (10**36,       " undecillion"),
-        (10**33,       "   decillion"),
-        (10**30,       "   nonillion"),
-        (10**27,       "   octillion"),
-        (10**24,       "  septillion"),
-        (10**21,       "  sextillion"),
-        (10**18,       " quintillion"),
-        (10**15,       " quadrillion"),
-        (10**12,          " trillion"),
-        (10** 9,           " billion"),
-        (10** 6,           " million"),
-        (10** 3,          " thousand"),
-        (10** 2,           " hundred"),
-        ):
-        if i >= threshold:
-            upper = i // threshold
-            i = i % threshold
-            strings.append(spacer)
-            strings.append(int_to_words(upper, flowery=flowery))
-            strings.append(english)
-            spacer = ', ' if flowery else ' '
+        for threshold, english in quantities:
+            if i >= threshold:
+                upper = i // threshold
+                i = i % threshold
+                append(spacer)
+                append(int_to_words(upper, flowery=flowery))
+                append(english)
+                spacer = ', ' if flowery else ' '
+                written = True
 
-    if strings:
+    if written:
         spacer = " and " if flowery else " "
 
     if i >= 20:
         t = i // 10
-        strings.append(spacer)
-        strings.append(tens[t])
+        append(spacer)
+        append(tens[t])
+        written = True
         spacer = '-'
         i = i % 10
 
     # don't add "zero" to the end if we already have strings
-    if i or (not strings):
-        strings.append(spacer)
-        strings.append(first_twenty[i])
+    if i or (not written):
+        append(spacer)
+        append(first_twenty[i])
+
+    if is_negative:
+        strings[0] = "negative "
 
     return "".join(strings)
 
