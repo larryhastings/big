@@ -25,6 +25,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import io
+import pathlib
 import unittest
 
 stats = {
@@ -50,14 +51,23 @@ def preload_local_big():
     """
     from os.path import abspath, dirname, isfile, join, normpath
     import sys
-    big_dir = abspath(dirname(sys.argv[0]))
+    argv_0 = pathlib.Path(sys.argv[0])
+    big_dir = argv_0.resolve().parent
     while True:
-        big_init = join(big_dir, "big/__init__.py")
-        if isfile(big_init):
+        big_init = big_dir / "big" / "__init__.py"
+        if big_init.is_file():
             break
-        big_dir = normpath(join(big_dir, ".."))
-    sys.path.insert(1, big_dir)
+        big_dir = big_dir.parent
+
+    # this almost certainly *is* a git checkout
+    # ... but that's not required, so don't assert it.
+    # assert (big_dir / ".git" / "config").is_file()
+
+    if big_dir not in sys.path:
+        sys.path.insert(1, str(big_dir))
+
     import big
+    assert big.__file__.startswith(str(big_dir))
     return big_dir
 
 

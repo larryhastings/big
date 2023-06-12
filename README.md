@@ -1131,7 +1131,9 @@ should pass in a `str`, you can also pass in a subclass of
 > If the keyword-only parameter `flowery` is true (the default),
 > you also get commas and the word `and` where you'd expect them.
 > (When `flowery` is true, `int_to_words(i)` produces identical
-> output to `inflect.engine().number_to_words(i)`.)
+> output to `inflect.engine().number_to_words(i)`, except for
+> negative numbers: `inflect` starts negative numbers with
+> "minus", **big** starts them with "negative".)
 
 > Numbers >= `10**66` (one thousand vigintillion)
 > are only converted using `str(i)`.  Sorry!
@@ -3362,14 +3364,14 @@ in the **big** test suite.
 
 ## Release history
 
-**next version**
+**0.8.3**
 
 * Added
   [`int_to_words`](#int_to_words-flowerytrue).
 * All tests now insert the local **big** directory
   onto `sys.path`, so you can run the tests on your
   local copy without having to install.  Especially
-  convenient for testing with old version of Python!
+  convenient for testing with old versions of Python!
 
 **0.8.2**
 

@@ -27,9 +27,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
-
 import big.all as big
 import unittest
+
 
 class BigTests(unittest.TestCase):
 

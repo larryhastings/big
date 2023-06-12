@@ -27,8 +27,8 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
-import copy
 import big.all as big
+import copy
 import math
 import re
 import unittest

@@ -24,21 +24,21 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-import copy
+import bigtestlib
+bigtestlib.preload_local_big()
+
 import big.all as big
+import copy
 import math
 import re
 import sys
 import unittest
 
-import bigtestlib
-bigtestlib.preload_local_big()
-
 
 try:
     import inflect
     engine = inflect.engine()
-except ImportError:
+except ImportError: # pragma: no cover
     engine = None
 
 
@@ -2499,6 +2499,13 @@ outdent
     def test_int_to_words(self):
         # confirm that flowery has a default of True
         self.assertEqual(big.int_to_words(12345678), big.int_to_words(12345678, flowery=True))
+
+        with self.assertRaises(ValueError):
+            big.int_to_words(3.14159)
+        with self.assertRaises(ValueError):
+            big.int_to_words('hello sailor')
+        with self.assertRaises(ValueError):
+            big.int_to_words({1:2, 3:4})
 
         def test(i, normal, flowery):
             for multiplier, prefix, inflected_prefix in (

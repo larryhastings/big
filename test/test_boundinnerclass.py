@@ -32,6 +32,7 @@ from big.boundinnerclass import *
 import itertools
 import unittest
 
+
 class Outer(object):
     @BoundInnerClass
     class Inner(object):

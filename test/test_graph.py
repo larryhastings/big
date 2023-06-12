@@ -27,10 +27,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
+from big.all import TopologicalSorter
 import itertools
 import unittest
-
-from big.all import TopologicalSorter
 
 
 def _parse(nodes_and_dependencies):
