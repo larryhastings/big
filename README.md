@@ -3364,7 +3364,7 @@ in the **big** test suite.
 
 ## Release history
 
-**0.8.4**
+**0.8.4** *currently under development*
 
 * Modified `tests/test_boundinnerclasses.py`:
 
