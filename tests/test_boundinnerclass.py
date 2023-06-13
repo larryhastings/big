@@ -30,6 +30,7 @@ bigtestlib.preload_local_big()
 import big.all as big
 from big.boundinnerclass import *
 import itertools
+import re
 import unittest
 
 
@@ -42,24 +43,24 @@ class Outer(object):
     @BoundInnerClass
     class SubclassOfInner(Inner.cls):
         def __init__(self, outer):
-            super(Outer.SubclassOfInner, self).__init__()
+            super().__init__()
             assert self.outer == outer
 
     @BoundInnerClass
     class SubsubclassOfInner(SubclassOfInner.cls):
         def __init__(self, outer):
-            super(Outer.SubsubclassOfInner, self).__init__()
+            super().__init__()
             assert self.outer == outer
 
     @BoundInnerClass
     class Subclass2OfInner(Inner.cls):
         def __init__(self, outer):
-            super(Outer.Subclass2OfInner, self).__init__()
+            super().__init__()
             assert self.outer == outer
 
     class RandomUnboundInner(object):
         def __init__(self):
-            super(Outer.RandomUnboundInner, self).__init__()
+            super().__init__()
             pass
 
     @BoundInnerClass
@@ -67,15 +68,19 @@ class Outer(object):
                  RandomUnboundInner,
                  Subclass2OfInner.cls):
         def __init__(self, outer, unittester):
-            super(Outer.MultipleInheritanceTest, self).__init__()
+            super().__init__()
             unittester.assertEqual(self.outer, outer)
 
     @UnboundInnerClass
     class UnboundSubclassOfInner(Inner.cls):
         pass
 
+    @UnboundInnerClass
+    class SubclassOfUnboundSubclassOfInner(UnboundSubclassOfInner.cls):
+        pass
 
-class BigBICTests(unittest.TestCase):
+
+class BigBoundInnerClassesTests(unittest.TestCase):
 
     def test_cached(self):
         outer = Outer()
@@ -84,12 +89,12 @@ class BigBICTests(unittest.TestCase):
         self.assertIs(inner1, inner2)
 
     def test_permutations(self):
-        for order in itertools.permutations([1, 2, 3]):
+        def test_permutation(ordering):
             outer = Outer()
             # This strange "for" statement lets us test every possible order of
             # initialization for the "inner" / "subclass" / "subsubclass" objects.
             # We always iterate over all three numbers, but in a different order each time.
-            for which in order:
+            for which in ordering:
                 if   which == 1: inner = outer.Inner()
                 elif which == 2: subclass = outer.SubclassOfInner()
                 elif which == 3: subsubclass = outer.SubsubclassOfInner()
@@ -109,6 +114,9 @@ class BigBICTests(unittest.TestCase):
             self.assertIsInstance(subsubclass, outer.SubclassOfInner)
             self.assertIsInstance(subsubclass, Outer.Inner)
             self.assertIsInstance(subsubclass, outer.Inner)
+
+        for ordering in itertools.permutations([1, 2, 3]):
+            test_permutation(ordering)
 
     def test_multiple_inheritance(self):
         outer = Outer()
@@ -132,14 +140,27 @@ class BigBICTests(unittest.TestCase):
 
     def test_unbound_subclass_of_inner_class(self):
         outer = Outer()
-        unbound = outer.UnboundSubclassOfInner()
-        self.assertEqual(outer.UnboundSubclassOfInner.mro(),
+        UnboundSubclassOfInner = outer.UnboundSubclassOfInner
+        self.assertEqual(UnboundSubclassOfInner.mro(),
             [
             outer.UnboundSubclassOfInner,
             Outer.UnboundSubclassOfInner,
             outer.Inner,
             Outer.Inner,
             object
+            ]
+            )
+
+        SubclassOfUnboundSubclassOfInner = outer.SubclassOfUnboundSubclassOfInner
+        self.assertEqual(SubclassOfUnboundSubclassOfInner.mro(),
+            [
+            outer.SubclassOfUnboundSubclassOfInner,
+            Outer.SubclassOfUnboundSubclassOfInner,
+            outer.UnboundSubclassOfInner,
+            Outer.UnboundSubclassOfInner,
+            outer.Inner,
+            Outer.Inner,
+            object,
             ]
             )
 
@@ -154,7 +175,9 @@ class BigBICTests(unittest.TestCase):
         self.assertIsInstance(inner_child, InnerChild)
         self.assertIsInstance(inner_child, outer.Inner)
 
-        self.assertIn("<test_boundinnerclass.InnerChild object bound to <test_boundinnerclass.Outer object at", repr(inner_child))
+        repr_re = re.compile(r"^<[A-Za-z0-9_]+\.InnerChild object bound to <[A-Za-z0-9_]+\.Outer object at 0x")
+        match = repr_re.match(repr(inner_child))
+        self.assertTrue(match)
 
 
 def run_tests():

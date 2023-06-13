@@ -3242,7 +3242,7 @@ class Outer(object):
     @UnboundInnerClass
     class ChildOfInner(Inner.cls):
         def __init__(self):
-            super(Outer.ChildOfInner, self).__init__()
+            super().__init__()
 
 o = Outer()
 i = o.ChildOfInner()
@@ -3288,7 +3288,7 @@ class Outer(object):
     @BoundInnerClass
     class ChildOfInner(Inner.cls):
         def __init__(self, outer):
-            super(Outer.ChildOfInner, self).__init__()
+            super().__init__()
             assert self.outer == outer
 
 o = Outer()
@@ -3363,6 +3363,13 @@ in the **big** test suite.
 
 
 ## Release history
+
+**0.8.4**
+
+* Modified `tests/test_boundinnerclasses.py`:
+
+    - It now takes advantage of that newfangled "zero-argument `super`".
+    - Added testing of an unbound subclass of an unbound subclass.
 
 **0.8.3**
 
