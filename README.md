@@ -329,14 +329,24 @@ deep-dive for more information.
 > def __init__(self, outer, *args, **kwargs):
 > ```
 > where `outer` is the instance of the outer class.
+>
+> Note that this has an implication for all subclasses.
+> If class ***B*** is decorated with `BoundInnerClass`,
+> and class ***S*** is a subclass of ***B***, such that
+> `issubclass(`***S***`, `***B***`)`,
+> class ***S*** *must* be decorated with either
+> `BoundInnerClass` or `UnboundInnerClass`.
 
 #### `UnboundInnerClass(cls)`
 
 > Class decorator for an inner class that prevents binding
 > the inner class to an instance of the outer class.
 >
-> Subclasses of a class decorated with `BoundInnerClass` must always
-> be decorated with either `BoundInnerClass` or `UnboundInnerClass`.
+> If class ***B*** is decorated with `BoundInnerClass`,
+> and class ***S*** is a subclass of ***B***, such that
+> `issubclass(`***S***`, `***B***`)` returns `True`,
+> class ***S*** *must* be decorated with either
+> `BoundInnerClass` or `UnboundInnerClass`.
 
 
 ## `big.builtin`
@@ -3364,14 +3374,21 @@ in the **big** test suite.
 
 ## Release history
 
-**0.8.4** *currently under development*
+**0.9** *2023/06/15*
 
+* Bugfix!  If an outer class `Outer` had an inner class `Inner`
+  decorated with `@BoundInnerClass`, and `o` is an instance of
+  `Outer`, and `o` evaluated to false in a boolean context,
+  `o.Inner` would be the *unbound* version of `Inner`.  Now
+  it's the bound version, as is proper.
 * Modified `tests/test_boundinnerclasses.py`:
 
+    - Added regression test for the above bugfix (of course!).
     - It now takes advantage of that newfangled "zero-argument `super`".
     - Added testing of an unbound subclass of an unbound subclass.
 
-**0.8.3**
+**0.8.3** *2023/06/11*
+
 
 * Added
   [`int_to_words`](#int_to_words-flowerytrue).
@@ -3380,7 +3397,9 @@ in the **big** test suite.
   local copy without having to install.  Especially
   convenient for testing with old versions of Python!
 
-**0.8.2**
+> *Note:* tomorrow, **big** will be one year old!
+
+**0.8.2** *2023/05/19*
 
 * Convert all iterator functions to use my new approach:
   instead of checking arguments inside the iterator,
@@ -3390,14 +3409,14 @@ in the **big** test suite.
   at the call site where the iterator is constructed,
   rather than when the first value is yielded by the iterator!
 
-**0.8.1**
+**0.8.1** *2023/05/19*
 
 * Added
   [`parse_delimiters`](#parse_delimiterss-delimitersNone)
   and
   [`Delimiter`.](#delimiteropen-close--backslashfalse-nestedtrue)
 
-**0.8**
+**0.8** *2023/05/18*
 
 * Major retooling of `str` and `bytes` support in `big.text`.
   * Functions in `big.text` now uniformly accept `str` or `bytes`
@@ -3467,7 +3486,7 @@ in the **big** test suite.
   least now it's correct!)
 * Lots and lots of doc improvements, as usual.
 
-**0.7.1**
+**0.7.1** *2023/03/13*
 
 * Tweaked the implementation of
   [`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -3483,7 +3502,7 @@ in the **big** test suite.
   as it iterates over the string, which may help in low-memory situations.
 * Minor doc fixes.
 
-**0.7**
+**0.7** *2023/03/11*
 
 * Breaking changes to the
   [`Scheduler`](#schedulerregulatordefault_regulator):
@@ -3515,7 +3534,7 @@ in the **big** test suite.
     on a `Regulator` object while holding that `Regulator`'s lock.
 * Minor doc fixes.
 
-**0.6.18**
+**0.6.18** *2023/03/09*
 
 * Retooled
   [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -3524,7 +3543,7 @@ in the **big** test suite.
   argument verification code.  Both functions now consistently check all
   their inputs, and use consistent error messages when raising an exception.
 
-**0.6.17**
+**0.6.17** *2023/03/09*
 
 * Fixed a minor crashing bug in
   [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse):
@@ -3537,7 +3556,7 @@ in the **big** test suite.
 * Updated all copyright date notices to 2023.
 * Lots of doc fixes.
 
-**0.6.16**
+**0.6.16** *2023/02/26*
 
 * Fixed Python 3.6 support! Some equals-signs-in-f-strings and some
   other anachronisms had crept in.  0.6.16 has been tested on all
@@ -3547,7 +3566,7 @@ in the **big** test suite.
 * Minor cleanup in [`PushbackIterator()`](#pushbackiteratoriterablenone).
   It also uses slots now, which should make it a bit faster.
 
-**0.6.15**
+**0.6.15** *2023/01/07*
 
 * Added the new functions
   [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone) and
@@ -3563,14 +3582,14 @@ in the **big** test suite.
   another way, `multipartition(reverse=X)` and `multirpartition(reverse=not X)`
   now do the same thing.
 
-**0.6.14**
+**0.6.14** *2022/12/11*
 
 * Improved the text of the `RuntimeError` raised by `TopologicalSorter.View`
   when the view is incoherent.  Now it tells you exactly what nodes are
   conflicting.
 * Expanded the deep dive on `multisplit`.
 
-**0.6.13**
+**0.6.13** *2022/12/11*
 
 * Changed [`translate_filename_to_exfat(s)`](#translate_filename_to_exfats)
   behavior: when modifying a string with a colon (`':'`) *not* followed by
@@ -3578,10 +3597,7 @@ in the **big** test suite.
   colon to a period (`'.'`), which looks a little more natural.  A colon
   followed by a space is still converted to a dash followed by a space.
 
-*p.s.* I forgot to release packages for 0.6.11 and 0.6.12.  But they're
-tagged, in case you want to examine them for some reason.
-
-**0.6.12**
+**0.6.12** *2022/12/04*
 
 * Bugfix: When calling
   [`TopologicalSorter.print()`](#topologicalsorterprintprintprint),
@@ -3596,7 +3612,9 @@ tagged, in case you want to examine them for some reason.
 * Added the list of conflicted nodes to the "node is incoherent"
   exception text.
 
-**0.6.11**
+> *Note:* although version **0.6.12** was tagged, it was never packaged for release.
+
+**0.6.11**  *2022/11/13*
 
 * Changed the import strategy.  The top-level **big** module used
   to import all its child modules, and `import *` all the symbols
@@ -3607,7 +3625,9 @@ tagged, in case you want to examine them for some reason.
   can either import just the submodules you need, or you can import
   **big.all** to get all the symbols (like **big** itself used to do).
 
-**0.6.10**
+> *Note:* although version **0.6.11** was tagged, it was never packaged for release.
+
+**0.6.10** *2022/10/26*
 
 * All code changes had to do with
   [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse):
@@ -3638,7 +3658,7 @@ tagged, in case you want to examine them for some reason.
 * Modernized `pyproject.toml` metadata to make `flit` happier.  This was
   necessary to ensure that `pip install big` also installs its dependencies.
 
-**0.6.8**
+**0.6.8** *2022/10/16*
 
 * Renamed two of the three freshly-added lines modifier functions:
   `lines_filter_contains` is now 
@@ -3646,7 +3666,7 @@ tagged, in case you want to examine them for some reason.
   and `lines_filter_grep` is now
   [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0).
 
-**0.6.7**
+**0.6.7** *2022/10/16*
 
 * Added three new lines modifier functions
   to the [`text`](#bigtext) module:
@@ -3658,7 +3678,7 @@ tagged, in case you want to examine them for some reason.
   now accepts `str` or `bytes`.  Also added the `apostrophes` and
   `double_quotes` arguments.
 
-**0.6.6**
+**0.6.6** *2022/10/14*
 
 * Fixed a bug in
   [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse).
@@ -3676,7 +3696,7 @@ tagged, in case you want to examine them for some reason.
       whitespace and newline characters.
 * Lots more documentation and formatting fixes.
 
-**0.6.5**
+**0.6.5** *2022/10/13*
 
 * Added the new [`itertools`](#bigitertools) module, which so far only contains
   [`PushbackIterator`](#pushbackiteratoriterablenone).
@@ -3688,7 +3708,7 @@ tagged, in case you want to examine them for some reason.
   [`text`](#bigtext)
   module.
 
-**0.6.1**
+**0.6.1** *2022/10/13*
 
 * I realized that [`whitespace`](#whitespace) should contain the DOS end-of-line
   sequence (`'\r\n'`), as it should be considered a single separator
@@ -3697,7 +3717,7 @@ tagged, in case you want to examine them for some reason.
   [`ascii_whitespace_no_dos`](#whitespace) too.
 * Minor doc fixes.
 
-**0.6**
+**0.6** *2022/10/13*
 
 A **big** upgrade!
 
@@ -3759,12 +3779,12 @@ A **big** upgrade!
   and
   [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0).
 
-**0.5.2**
+**0.5.2** *2022/09/12*
 
 * Added `stripped_lines` and `rstripped_lines` to the [`text`](#bigtext) module.
 * Added support for `len` to the [`TopologicalSorter`](#topologicalsortergraphnone) object.
 
-**0.5.1**
+**0.5.1** *2022/09/04*
 
 * Added
   [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
@@ -3780,6 +3800,6 @@ A **big** upgrade!
   This is good for tiresome modern gobbledygook like `'Re:code'`, which
   will now be translated to `'Re-code'`.
 
-**0.5**
+**0.5** *2022/06/12*
 
 * Initial release.

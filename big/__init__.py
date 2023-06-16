@@ -31,5 +31,5 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-__version__ = "0.8.3"
+__version__ = "0.9"
 

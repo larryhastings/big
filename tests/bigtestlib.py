@@ -91,8 +91,9 @@ def run(name, module, permutations=None):
 
         if permutations:
             fields = line.split()
-            assert fields[2] == "tests"
-            fields[2] = f"tests, with {permutations()} total permutations,"
+            tests = fields[2]
+            assert tests in ("test", "tests"), f"expected fields[2] to be 'test' or 'tests', but fields={fields}"
+            fields[2] = f"{tests}, with {permutations()} total permutations,"
             line = " ".join(fields)
         print(line)
         print()

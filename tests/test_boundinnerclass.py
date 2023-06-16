@@ -179,6 +179,72 @@ class BigBoundInnerClassesTests(unittest.TestCase):
         match = repr_re.match(repr(inner_child))
         self.assertTrue(match)
 
+    def test_outer_evaluates_to_false(self):
+        """
+        Regression test for a bugfix!
+
+        The behavior:
+
+            If you have an outer class Outer, and it contains an
+            inner class Inner decorated with @BoundInnerClass,
+            and o is an instance of Outer, and o evaluates to
+            false in a boolean context,
+            o.Inner would be the *unbound* version of Inner.
+
+        The bug:
+            When you access a class descriptor--an object that
+            implements __get__--the parameters are contingent
+            on how you were accessed.
+
+            If you access Inner through an instance, e.g. o.Inner,
+            the descriptor is called with the instance:
+                __get__(self, o, Outer)
+
+            If you access Inner through the class itself,
+            e.g. Outer.Inner, the descriptor is called with None
+            instead of the instance:
+                __get__(self, None, Outer)
+
+            See
+                https://docs.python.org/3/howto/descriptor.html#invocation-from-an-instance
+            vs.
+                https://docs.python.org/3/howto/descriptor.html#invocation-from-a-class
+
+            The bug was, I wasn't checking to see if obj was None,
+            I was checking to see if obj was false.  Oops.
+
+        The fix:
+            Easy.  Use "if obj is None" instead of "if not obj".
+
+        -----
+
+        This bug is thirteen years old!
+        It's in the second revision of the Bound Inner Classes
+        recipe I posted to the good ol' cookbook:
+
+            https://code.activestate.com/recipes/577070-bound-inner-classes/history/2/
+
+        Before I made "big", it was inconvenient for me
+        to use BoundInnerClasses.  So I rarely used them.
+        I guess I just didn't put enough CPU seconds
+        through the class to stumble over this bug before.
+        """
+
+        class Outer:
+            def __bool__(self):
+                return False
+
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        o = Outer()
+        self.assertFalse(o)
+        self.assertNotEqual(Outer.Inner, o.Inner)
+        i = o.Inner()
+        self.assertEqual(o, i.outer)
+
 
 def run_tests():
     bigtestlib.run(name="big.boundinnerclass", module=__name__)
