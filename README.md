@@ -2728,7 +2728,7 @@ the output of one into the input of another.  For example,
 
 ```Python
      with open("textfile.txt", "rt") as f:
-         for info, lines in big.lines_filter_empty_lines(
+         for info, line in big.lines_filter_empty_lines(
      	     big.lines_rstrip(lines(f.read()))):
      	     ...
 ```
@@ -2745,7 +2745,7 @@ the opposite order:
 
 ```Python
      with open("textfile.txt", "rt") as f:
-         for info, lines in big.lines_rstrip(
+         for info, line in big.lines_rstrip(
      	     big.lines_filter_empty_lines(lines(f.read()))):
      	     ...
 ```
