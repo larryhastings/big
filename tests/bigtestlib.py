@@ -49,8 +49,9 @@ def preload_local_big():
     Pre-load the local "big" module, to preclude finding
     an already-installed one on the path.
     """
-    from os.path import abspath, dirname, isfile, join, normpath
+    import pathlib
     import sys
+
     argv_0 = pathlib.Path(sys.argv[0])
     big_dir = argv_0.resolve().parent
     while True:
