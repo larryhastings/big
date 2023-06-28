@@ -35,6 +35,7 @@ for test_module in """
     test_graph
     test_heap
     test_itertools
+    test_log
     test_scheduler
     test_text
     test_time

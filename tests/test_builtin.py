@@ -145,7 +145,7 @@ class BigTests(unittest.TestCase):
 
 
 def run_tests():
-    bigtestlib.run(name="big.__init__", module=__name__)
+    bigtestlib.run(name="big.builtin", module=__name__)
 
 if __name__ == "__main__": # pragma: no cover
     run_tests()

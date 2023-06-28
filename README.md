@@ -87,6 +87,8 @@ notice on the source code.
 
 [`big.itertools`](#bigitertools)
 
+[`big.log`](#biglog)
+
 [`big.scheduler`](#bigscheduler)
 
 [`big.text`](#bigtext)
@@ -100,6 +102,8 @@ notice on the source code.
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
 
 [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
+
+[`default_clock()`](#default_clock)
 
 [`Delimiter(open, close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
 
@@ -166,6 +170,16 @@ notice on the source code.
 [`lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
+
+[`Log`](#log)
+
+[`Log.enter(subsystem)`](#logentersubsystem)
+
+[`Log.exit()`](#logexit)
+
+[`Log.print(*, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9)`](#logprint--printnone-titleeventlog-headingstrue-indent2-seconds_width2-fractional_width9)
+
+[`Log.reset()`](#logreset)
 
 [`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
 
@@ -803,6 +817,102 @@ Only one entry so far.
 > any pushed values, the top value on the stack will be popped
 > and yielded.  `PushbackIterator` only yields from the
 > iterator it wraps when this internal stack is empty.
+
+
+## `big.log`
+
+A simple and lightweight logging class, useful for performance analysis.
+Not intended as a full-fledged logging facility like Python's
+[`logging`](https://docs.python.org/3/library/logging.html) module.
+
+#### `default_clock()`
+
+> The default clock function used by the `Log` class.
+> This function returns elapsed time in nanoseconds,
+> expressed as an integer.
+>
+> In Python 3.7+,
+> this is `time.monotonic_ns`; in Python 3.6 this is
+> a custom function that calls `time.perf_counter`,
+> then converts that time to requisite format.
+
+#### `Log(*, clock=None)`
+
+> A simple and lightweight logging class, useful for performance analysis.
+> Not intended as a full-fledged logging facility like Python's
+> [`logging`](https://docs.python.org/3/library/logging.html) module.
+>
+> Allows nesting, which is literally just a presentation thing.
+>
+> The `clock` named parameter specifies the function the `Log` object
+> should call to get the time.  This function should return an `int`,
+> representing elapsed time in nanoseconds.
+>
+> To use: first, create your `Log` object.
+>
+>     log = Log()
+>
+> Then log events by calling your `Log` object, passing in
+> a string describing the event.
+>
+>     log('text')
+>
+> Enter a nested subsystem containing events with log.enter:
+>
+>     log.enter('subsystem')
+>
+> Then later exit that subsystem with log.exit:
+>
+>     log.exit()
+>
+> And finally print the log:
+>
+>     log.print()
+>
+> You can also iterate over the log events using `iter(log)`.
+> This yields 4-tuples:
+>
+>     (start_time, elapsed_time, event, depth)
+
+#### `Log.enter(subsystem)`
+
+> Notifies the log that you've entered a subsystem.
+> The `subsystem` parameter should be a string describing the subsystem.
+>
+> This is really just a presentation
+> thing; all subsequent logged entries will be indented
+> until you make the corresponding `log.exit()` call.
+>
+> You may nest subsystems as deeply as you like.
+
+#### `Log.exit()`
+
+> Exits a logged subsystem.  See [`Log.enter.`](#logentersubsystem)
+
+#### `Log.print(*, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9)`
+
+> Prints the log.
+>
+> Keyword-only parameters:
+>
+> `print` specifies the print function to use, default is `builtins.print`.
+>
+> `title` specifies the title to print at the beginning.
+> Default is `"[event log]"`.  To suppress, pass in `None`.
+>
+> `headings` is a boolean; if `True` (the default),
+> prints column headings for the log.
+>
+> `indent` is the number of spaces to indent in front of log entries,
+> and also how many spaces to indent each time we enter a subsystem.
+>
+> `seconds_width` is how wide to make the seconds column, default 2.
+>
+> `fractional_width` is how wide to make the fractional column, default 9.
+
+#### `Log.reset()`
+
+> Resets the log to its initial state.
 
 
 ## `big.scheduler`
@@ -3373,6 +3483,12 @@ in the **big** test suite.
 
 
 ## Release history
+
+**0.9.1** *2023/0628*
+
+* Added the new [`big.log`](#biglog) module, with its new [`Log`](#log) class!
+  I wrote this for another project--but it turned out so nice
+  I just had to add it to **big**!
 
 **0.9** *2023/06/15*
 

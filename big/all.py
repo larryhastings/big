@@ -59,6 +59,10 @@ from . import itertools
 __all__.extend(itertools.__all__)
 from .itertools import *
 
+from . import log
+__all__.extend(log.__all__)
+from .log import *
+
 from . import scheduler
 __all__.extend(scheduler.__all__)
 from .scheduler import *
