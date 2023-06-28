@@ -242,8 +242,10 @@ class Scheduler:
     events as they become due.
 
     Scheduler also benefits from thirty years of improvements
-    to sched.scheduler, and in particular reimplements the
-    entire (relevant portion of the) sched.scheduler test suite.
+    to sched.scheduler.  In particular, big reimplements the
+    bulk of the sched.scheduler test suite, to ensure that
+    Scheduler never repeats the historical problems discovered
+    over the lifetime of sched.scheduler.
 
     The only argument to Scheduler is an instance of Regulator,
     that provides time and thread-safety to the Scheduler.

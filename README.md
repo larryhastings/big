@@ -951,8 +951,8 @@ Not intended as a full-fledged logging facility like Python's
 > events as they become due.
 >
 > `Scheduler` also benefits from thirty years of improvements
-> to `sched.scheduler`.  In particular, big reimplements the
-> bulk of the `sched.scheduler` test suite, to ensure that
+> to `sched.scheduler`.  In particular, **big** reimplements the
+> relevant parts of the `sched.scheduler` test suite, to ensure that
 > `Scheduler` never repeats the historical problems discovered
 > over the lifetime of `sched.scheduler`.
 
