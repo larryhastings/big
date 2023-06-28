@@ -876,6 +876,20 @@ Not intended as a full-fledged logging facility like Python's
 > This yields 4-tuples:
 >
 >     (start_time, elapsed_time, event, depth)
+>
+> `start_time` and `elapsed_time` are times, expressed as
+> an integer number of nanoseconds.  The first event
+> is at `start_time` 0, and all subsequent start times are
+> relative to that time.
+>
+> `event` is the event string you
+> passed in to `log()` (or `"<subsystem> start"` or
+> `"<subsystem> end"`).
+>
+> `depth` is an integer indicating
+> how many subsystems the event is nested in; larger
+> numbers indicate deeper nesting.
+
 
 #### `Log.enter(subsystem)`
 
