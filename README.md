@@ -171,13 +171,13 @@ notice on the source code.
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
-[`Log`](#log)
+[`Log`](#log-clocknone)
 
 [`Log.enter(subsystem)`](#logentersubsystem)
 
 [`Log.exit()`](#logexit)
 
-[`Log.print(*, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9)`](#logprint--printnone-titleeventlog-headingstrue-indent2-seconds_width2-fractional_width9)
+[`Log.print(*, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9)`](#logprint-printnone-titleevent-log-headingstrue-indent2-seconds_width2-fractional_width9)
 
 [`Log.reset()`](#logreset)
 
@@ -827,13 +827,16 @@ Not intended as a full-fledged logging facility like Python's
 
 #### `default_clock()`
 
-> The default clock function used by the `Log` class.
+> The default clock function used by the [`Log`](#log-clocknone) class.
 > This function returns elapsed time in nanoseconds,
 > expressed as an integer.
 >
 > In Python 3.7+,
-> this is `time.monotonic_ns`; in Python 3.6 this is
-> a custom function that calls `time.perf_counter`,
+> this is
+> [`time.monotonic_ns`](https://docs.python.org/3/library/time.html#time.monotonic_ns);
+> in Python 3.6 this is
+> a custom function that calls
+> [`time.perf_counter`](https://docs.python.org/3/library/time.html#time.perf_counter),
 > then converts that time to requisite format.
 
 #### `Log(*, clock=None)`
@@ -3486,7 +3489,8 @@ in the **big** test suite.
 
 **0.9.1** *2023/0628*
 
-* Added the new [`big.log`](#biglog) module, with its new [`Log`](#log) class!
+* Added the new [`big.log`](#biglog) module, with its new
+  [`Log`](#log-clocknone) class!
   I wrote this for another project--but it turned out so nice
   I just had to add it to **big**!
 
