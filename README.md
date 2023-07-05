@@ -301,7 +301,7 @@ notice on the source code.
 
 [`wrap_words(words, margin=79, *, two_spaces=True)`](#wrap_wordswords-margin79--two_spacestrue)
 
-[**The `multi-` family of functions**](#The-multi--family-of-functions)
+[**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
 
 [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 
@@ -1144,7 +1144,7 @@ several families of functions inside the `text` module;
 for a higher-level view of those families, read the
 following deep-dives:
 
-* [**The `multi-` family of functions**](#The-multi--family-of-functions)
+* [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
 * [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 * [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
@@ -1577,7 +1577,7 @@ should pass in a `str`, you can also pass in a subclass of
 > looking for separators.
 >
 > For more information, see the deep-dive on
-> [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 
 #### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`
 
@@ -1638,7 +1638,7 @@ should pass in a `str`, you can also pass in a subclass of
 >            characters between two separators.
 >
 > `strip` indicates whether multisplit should strip separators from
-> the beginning and/or end of `s`.  It supports six values:
+> the beginning and/or end of `s`.  It supports five values:
 >
 >        false (the default)
 >            Don't strip separators from the beginning or end of "s".
@@ -1691,7 +1691,7 @@ should pass in a `str`, you can also pass in a subclass of
 >        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True) => "A x", " x ", "Z"
 >
 > For more information, see the deep-dive on
-> [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 
 #### `multistrip(s, separators, left=True, right=True)`
 
@@ -1719,7 +1719,7 @@ should pass in a `str`, you can also pass in a subclass of
 > false, returns `s` unchanged.)
 >
 > For more information, see the deep-dive on
-> [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+> [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 
 #### `newlines`
 
@@ -2105,9 +2105,9 @@ to make it easy to use best practices.
 
 # Topic deep-dives
 
-## The `multi-` family of functions
+## The `multi-` family of string functions
 
-This family of functions was inspired by Python's `str.strip`,
+This family of string functions was inspired by Python's `str.strip`,
 `str.rstrip`, and `str.splitlines` functions.  These functions
 are well-designed, and often do what you want.  But they're
 surprisingly opinionated.  And... what if your use case doesn't
@@ -2116,8 +2116,9 @@ supports two specific modes of operation; if you want
 to split your string in a slightly different way, you
 probably can't use `str.strip`.
 
-So what *can* you use?  There's `re.strip`, but it can be
-hard to use.  Now there's a new answer:
+So what *can* you use?  There's `re.strip`, but that can be
+hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
+Now there's a new answer:
 [`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 
 [`multisplit`'s](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -2143,8 +2144,7 @@ is the `separators` argument.
 This is an iterable of strings, of the same type (`str` or `bytes`)
 as the string you want to split (`s`).  `multisplit` will split
 the string at *each* non-overlapping instance of any string
-specified in `separators`.  Internally, `multisplit` is
-implemented using `re.split` for speed.
+specified in `separators`.
 
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 also let you fine-tune how it splits, through five keyword-only
@@ -2350,7 +2350,7 @@ adjacent separators:
 #### `strip`
 
 `strip` indicates whether multisplit should strip separators from
-the beginning and/or end of `s`.  It supports six values:
+the beginning and/or end of `s`.  It supports five values:
 false, true, `big.LEFT`, `big.RIGHT`, and `big.PROGRESSIVE`.
 
 By default, `strip` is false, which means it doesn't strip any
@@ -3862,7 +3862,7 @@ A **big** upgrade!
   and
   [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
   collectively called
-  [**The `multi-` family of functions.**](#The-multi--family-of-functions)
+  [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
   (Thanks to Eric Smith for suggesting
   [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)
   Well, sort of.)
@@ -3937,3 +3937,10 @@ A **big** upgrade!
 **0.5** *2022/06/12*
 
 * Initial release.
+
+
+------------------------
+
+<ol><li id="re_strip_footnote"><p>
+I should know, `multisplit` is implemented using `re.split`!
+</p></li></ol>
