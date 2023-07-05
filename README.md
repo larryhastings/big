@@ -2817,7 +2817,7 @@ iterator and re-yield the values, possibly modifying or
 discarding them along the way.  For example, passing
 a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator into `lines_filter_empty_lines` results
 in an iterator that skips over the empty lines.
-All the lines modifier functions that ship with big
+All the lines modifier functions that ship with **big**
 start with the string `lines_`.
 
 Actually there are additional constraints on lines modifier
