@@ -2,7 +2,7 @@
 
 ##### Copyright 2022-2023 by Larry Hastings
 
-[![# shield](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# shield](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml)
+[![# test badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# coverage badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml) [![# python versions badge](https://img.shields.io/pypi/pyversions/big.svg?logo=python&logoColor=FBE072)]
 
 
 **big** is a Python package, a grab-bag of useful technology
@@ -64,9 +64,10 @@ from big.all import *
 
 but that's up to you.
 
-**big** is licensed using the [MIT license.](https://opensource.org/licenses/MIT)
-You're free to use it and even ship it in your own programs, as long as you leave my copyright
-notice on the source code.
+**big** is licensed using the
+[MIT license.](https://opensource.org/licenses/MIT)
+You're free to use it and even ship it in your own programs,
+as long as you leave my copyright notice on the source code.
 
 # Index
 
@@ -3504,7 +3505,25 @@ in the **big** test suite.
 
 ## Release history
 
-**0.9.1** *2023/0628*
+**0.9.2** *2023/07/22*
+
+Extremely minor release.  No new features or bug fixes.
+
+* Fixed coverage, now back to the usual 100%.
+  (This just required changing the tests, which
+  *didn't* find any new bugs.)
+* Made the tests for [`Log`](#log-clocknone)
+  deterministic.  They now use a fake clock
+  that always returns the same values.
+* Added GitHub Actions integration.  Tests and
+  coverage are run in the cloud after every checkin.
+  Thanks to [Dan Pope](https://github.com/lordmauve)
+  for gently walking me through this!
+* Fixed metadata in the `pyproject.toml` file.
+* Added badges for testing, coverage,
+  and supported Python versions.
+
+**0.9.1** *2023/06/28*
 
 * Added the new [`big.log`](#biglog) module, with its new
   [`Log`](#log-clocknone) class!
