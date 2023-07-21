@@ -33,7 +33,7 @@ jobs:
         coverage run --parallel-mode tests/test_all.py
     - name: Install optional dependencies
       run: |
-        python -m pip install --upgrade regex python-dateutil
+        python -m pip install . '.[test]'
     - name: Run coverage with optional dependencies
       run: |
         coverage run --parallel-mode tests/test_all.py
@@ -47,7 +47,7 @@ jobs:
     - name: Upload htmlcov
       uses: actions/upload-artifact@v3
       with:
-        name: htmlcov
+        name: big_htmlcov
         path: htmlcov/
     - name: Fail if not 100% coverage
       run: |

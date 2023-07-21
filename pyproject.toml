@@ -28,5 +28,7 @@ time = [
     "python-dateutil",
     ]
 test = [
+    "python-dateutil",
     "regex",
+    "inflect",
     ]
