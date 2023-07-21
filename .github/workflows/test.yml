@@ -59,7 +59,12 @@ jobs:
     - name: Install wheel
       run: |
         pip install *.whl
-    - name: Run tests
+    - name: Run tests without optional dependencies
       run: |
         python tests/test_all.py
-
+    - name: Install optional dependencies
+      run: |
+        python -m pip install *.whl '.[test]'
+    - name: Run tests with optional dependencies
+      run: |
+        python tests/test_all.py
