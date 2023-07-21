@@ -34,7 +34,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: wheel
-        path: dist/appeal*.whl
+        path: dist/*.whl
 
   test:
     needs: [build-wheel]
