@@ -2,7 +2,7 @@
 
 ##### Copyright 2022-2023 by Larry Hastings
 
-[![# shield](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master)](https://github.com/larryhastings/big/actions/workflows/test.yml)
+[![# shield](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# shield](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml)
 
 
 **big** is a Python package, a grab-bag of useful technology
