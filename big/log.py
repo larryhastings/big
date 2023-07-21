@@ -33,7 +33,7 @@ import builtins
 try:
     # new in 3.7
     from time import monotonic_ns as default_clock
-except ImportError:
+except ImportError: # pragma: no cover
     from time import perf_counter
     def default_clock():
         return int(perf_counter() * 1000000000.0)
@@ -174,7 +174,7 @@ class Log:
 
         def format_time(t):
             assert t is not None
-            seconds = t // 1000000000
+            seconds = t // 1_000_000_000
             nanoseconds = f"{t - seconds:>09}"
             nanoseconds = nanoseconds[:fractional_width]
             return f"{seconds:0{seconds_width}}.{nanoseconds}"
