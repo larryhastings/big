@@ -92,7 +92,7 @@ I'm proudest of:
 
 And here are five little functions/classes that I use all the time:
 
-* [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
+* [`gently_title`](#gently_titles--apostrophesnone-double_quotesnone)
 * [`Log`](#log-clocknone)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
@@ -165,7 +165,7 @@ And here are five little functions/classes that I use all the time:
 
 [`file_size(path)`](#file_sizepath)
 
-[`gently_title(s, *, apostrophes=None, double_quotes=None)`](#gently_titles-apostrophesnone-double_quotesnone)
+[`gently_title(s, *, apostrophes=None, double_quotes=None)`](#gently_titles--apostrophesnone-double_quotesnone)
 
 [`get_float(o, default=_sentinel)`](#get_floato-default_sentinel)
 
@@ -3885,17 +3885,22 @@ And I should know--`multisplit` is implemented using `re.split`!
 
 <dl><dd>
 
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) creates an iterator that yields individual lines
-split from a string.  It's designed to make it easy to write
-simple, well-behaved text parsers.
+[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+is a function that makes it easy to write well-behaved, feature-rich text parsers.
 
-For example, every yielded line is accompanied by a `LinesInfo`
-object, which provides the line number and starting column number
+
+[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) itself
+iterates over a string, returning an iterator that yields individual lines
+split from that string.  The iterator yields a 2-tuple:
+```
+(LinesInfo, line)
+```
+The `LinesInfo` object provides the line number and starting column number
 for each line.  This makes it easy for your parser to provide
 line and column information for error messages.
 
-The output of [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) can be modified by "lines modifier"
-functions.  These are functions that iterate over a lines
+This iterator is designed to be modified by "lines modifier"
+functions.  These are functions that consume a lines
 iterator and re-yield the values, possibly modifying or
 discarding them along the way.  For example, passing
 a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator into `lines_filter_empty_lines` results
@@ -3903,12 +3908,11 @@ in an iterator that skips over the empty lines.
 All the lines modifier functions that ship with **big**
 start with the string `lines_`.
 
-Actually there are additional constraints on lines modifier
-function names.  The second word in the function name,
-immediately after `lines_`, may denote the lines modifier's
-category.  Some examples:
+Most lines modifier function names belong to a category,
+encoded as the second word in the function name
+(immediately after `lines_`).  Some examples:
 
-* `lines_filter_` functions may remove
+* `lines_filter_` functions conditionally remove
   lines from the output.  For example, `lines_filter_empty_lines`
   will only yield a line if it isn't empty.
 * `lines_strip_` functions may remove one or
@@ -3963,21 +3967,21 @@ the opposite order:
 then it'd filter out empty lines first, and *then*
 "r-strip" the lines.  So lines in the input that contained
 only whitespace would still get yielded as empty lines,
-which is probably not what you want.
+which is probably not what you want.  Ordering is important!
 
-Of course, you can write your own lines modifier functions!
+Of course, you can write your own lines modifier functions.
 Simply accept a lines iterator as an argument, iterate over
 it, and yield each line info and line, modifying them
-(or not yielding them!) as you see fit.  You can potentially
+(or not yielding them!) as you see fit.  You could
 even write your own lines iterator, a replacement for
 [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
 if you need functionality
 [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) doesn't provide.
 
 Note that if you write your own lines modifier function,
-and it removes text from the beginning the line, you'll have to
-update the `LineInfo` object manually--it doesn't happen
-automatically.
+and it removes text from the beginning the line, you must
+update `column_number` in the `LineInfo` object manually--it
+doesn't happen automatically.
 
 </dd></dl>
 
