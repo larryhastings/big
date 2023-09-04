@@ -107,8 +107,8 @@ class StateManagerTests(unittest.TestCase):
 
 
     def test_methods_as_states(self):
-        @accessor('estate', 'state_manager')
-        class MiamiStateMachine:
+        @accessor()
+        class StateMachine:
             def __init__(self):
                 self.state_manager = StateManager(self.false)
 
@@ -119,7 +119,30 @@ class StateManagerTests(unittest.TestCase):
                 return True
 
             def toggle(self):
-                self.estate = self.true if self.estate == self.false else self.false
+                self.state = self.true if (self.state == self.false) else self.false
+
+        sm = StateMachine()
+        self.assertIs(sm.state(), False)
+        sm.toggle()
+        self.assertIs(sm.state(), True)
+        sm.toggle()
+        self.assertIs(sm.state(), False)
+
+
+    def test_accessor_funny_names(self):
+        @accessor('estate', 'estate_mangler')
+        class MiamiStateMachine:
+            def __init__(self):
+                self.estate_mangler = StateManager(self.false)
+
+            def false(self):
+                return False
+
+            def true(self):
+                return True
+
+            def toggle(self):
+                self.estate = self.true if (self.estate == self.false) else self.false
 
         msm = MiamiStateMachine()
         self.assertIs(msm.estate(), False)
@@ -127,6 +150,74 @@ class StateManagerTests(unittest.TestCase):
         self.assertIs(msm.estate(), True)
         msm.toggle()
         self.assertIs(msm.estate(), False)
+
+
+    def test_dispatch_funny_names(self):
+        events = []
+        event = events.append
+
+        @accessor(state_manager='estate_mangler')
+        class MiamiStateMachine:
+            def __init__(self):
+                self.estate_mangler = StateManager(self.FalseState(),
+                    on_enter='hey_lets_enter',
+                    on_exit='oh_no_exit_time',
+                    )
+
+            @big.BoundInnerClass
+            class FalseState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event("enter false!")
+
+                def oh_no_exit_time(self):
+                    event("exit false.")
+
+                def on_toggle_already(self):
+                    event("false.toggle")
+                    self.state_machine.state = self.state_machine.TrueState()
+
+            @big.BoundInnerClass
+            class TrueState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event("enter true!")
+
+                def oh_no_exit_time(self):
+                    event("exit true.")
+
+                def on_toggle_already(self):
+                    event("true.toggle")
+                    self.state_machine.state = self.state_machine.FalseState()
+
+            @dispatch('estate_mangler', prefix='on_', suffix='_already')
+            def toggle(self): # pragma: no cover
+                ...
+
+        msm = MiamiStateMachine()
+        event("before first toggle")
+        msm.toggle()
+        event("between the two toggles")
+        msm.toggle()
+        event("end.")
+
+        expected_events = [
+            'enter false!',
+            'before first toggle',
+            'false.toggle',
+            'exit false.',
+            'enter true!',
+            'between the two toggles',
+            'true.toggle',
+            'exit true.',
+            'enter false!',
+            'end.',
+            ]
+        self.assertEqual(events, expected_events)
 
 
     def test_integers_as_states(self):

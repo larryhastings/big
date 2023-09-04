@@ -4573,6 +4573,17 @@ in the **big** test suite.
 
 ## Release history
 
+
+#### 0.10.1
+<dl><dd>
+
+*under development, not released yet*
+
+* Changed `split_text_with_code` implementation to use `StateManager`.
+  (No API or semantic changes, just an change to the internal implementation.)
+* Added more tests for `big.state` to exercise all the string arguments
+  of `accessor` and `dispatch`.
+
 #### 0.10
 <dl><dd>
 

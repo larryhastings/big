@@ -29,6 +29,7 @@ import functools
 import itertools
 from itertools import zip_longest
 from .itertools import PushbackIterator
+from . import state
 import math
 import operator
 import re
@@ -2400,8 +2401,8 @@ def wrap_words(words, margin=79, *, two_spaces=True):
 _code_paragraph = "code paragraph"
 _text_paragraph = "text paragraph"
 
+@state.accessor()
 class _column_wrapper_splitter:
-
     def __init__(self, is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces):
         # print(f"\n_column_wrapper_splitter({tab_width=}, {allow_code=}, {convert_tabs_to_spaces=})")
         self.is_bytes = is_bytes
@@ -2424,9 +2425,6 @@ class _column_wrapper_splitter:
         self.code_indent = code_indent
         self.convert_tabs_to_spaces = convert_tabs_to_spaces
 
-        self.init()
-
-    def init(self):
         self.words = []
 
         self.leading = []
@@ -2438,7 +2436,7 @@ class _column_wrapper_splitter:
         # (if None, we've already handled the appropriate break.)
         self.previous_paragraph = None
 
-        self.state = self.state_initial
+        self.state_manager = state.StateManager(self.state_initial)
 
     def emit(self, c):
         # print(f" [emit]", repr(c))
@@ -2451,13 +2449,6 @@ class _column_wrapper_splitter:
     def paragraph_break(self):
         # print(f" [\\n\\n]")
         self.words.append(self.paragraph_string)
-
-    def next(self, state, leading=None, word=None):
-        # print(f" [  ->]", state.__name__, repr(leading), repr(word))
-        self.state = state
-        assert ((leading is None) and (word is None)) or ((leading is not None) and (word is not None))
-        if word is not None:
-            self.state(leading, word)
 
     def write(self, c):
         # write consumes c and makes calls as appropriate to
@@ -2571,7 +2562,8 @@ class _column_wrapper_splitter:
         if self.previous_paragraph:
             self.paragraph_break()
             self.previous_paragraph = None
-        self.next(self.state_line_start, leading, word)
+        self.state = self.state_line_start
+        self.state(leading, word)
 
     state_initial = state_paragraph_start
 
@@ -2585,7 +2577,7 @@ class _column_wrapper_splitter:
                 self.code.append(word)
                 return
 
-            self.next(self.state_paragraph_start)
+            self.state = self.state_paragraph_start
             return
 
         if self.allow_code:
@@ -2609,33 +2601,38 @@ class _column_wrapper_splitter:
                             self.line_break()
                         self.code.clear()
 
-                self.next(self.state_code_line_start, leading, word)
+                self.state = self.state_code_line_start
+                self.state(leading, word)
                 return
 
         if self.previous_paragraph == _code_paragraph:
             self.paragraph_break()
-        self.next(self.state_text_line_start, leading, word)
+        self.state = self.state_text_line_start
+        self.state(leading, word)
 
     def state_text_line_start(self, leading, word):
         self.previous_paragraph = _text_paragraph
-        self.next(self.state_in_text_line, leading, word)
+        self.state = self.state_in_text_line
+        self.state(leading, word)
 
     def state_in_text_line(self, leading, word):
         if word == self.newline_string:
-            self.next(self.state_line_start)
+            self.state = self.state_line_start
             return
         self.emit(word)
 
     def state_code_line_start(self, leading, word):
         self.previous_paragraph = _code_paragraph
         self.col = 0
-        self.next(self.state_in_code_line, leading, word)
+        self.state = self.state_in_code_line
+        self.state(leading, word)
 
     def state_in_code_line(self, leading, word):
         if word == self.newline_string:
             self.emit(self.empty.join(self.code))
             self.code.clear()
-            self.next(self.state_line_start, self.empty, word)
+            self.state = self.state_line_start
+            self.state(self.empty, word)
             return
 
         tab_width = self.tab_width
