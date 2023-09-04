@@ -2077,6 +2077,10 @@ after a quote mark if the quote mark
 * is after whitespace, or
 * is the first letter of a string.
 
+(A run of consecutive apostrophes and/or
+quote marks is considered one quote mark for
+the purposes of capitalization.)
+
 All these rules mean `gently_title` correctly handles
 internally quoted strings:
 
@@ -2097,14 +2101,16 @@ as well as certain Irish, French, and Italian names:
     Lord D'Arcy
 ```
 
-A run of consecutive apostrophes and/or
-quote marks is considered one quote mark for
-the purposes of capitalization.
-
 If specified, `apostrophes` should be a `str`
 or `bytes` object containing characters that
 should be considered apostrophes.  If `apostrophes`
-is false, and `s` is `bytes`, `apostrophes` is set to `"'"`.
+is false, and `s` is `bytes`, `apostrophes` is set to
+a bytes object containing the only ASCII apostrophe character:
+
+```
+    '
+```
+
 If `apostrophes` is false and s is `str`, `apostrophes`
 is set to a string containing these Unicode apostrophe code points:
 
@@ -2112,13 +2118,29 @@ is set to a string containing these Unicode apostrophe code points:
     '‘’‚‛
 ```
 
+Note that neither of these strings contains the "back-tick"
+character:
+
+```
+    `
+```
+
+This is a diacritical used for modifying letters, and isn't
+used as an apostrophe.
+
 If specified, `double_quotes` should be a `str`
 or `bytes` object containing characters that
 should be considered double-quote characters.
 If `double_quotes` is false, and `s` is `bytes`,
-`double_quotes` is set to "'".
+`double_quotes` is set to a bytes object containing
+the only ASCII double-quote character:
+
+```
+    "
+```
+
 If `double_quotes` is false and `s` is `str`, double_quotes
-is set to a string containing these Unicode double quote code points:
+is set to a string containing these Unicode double-quote code points:
 
 ```
     "“”„‟«»‹›
