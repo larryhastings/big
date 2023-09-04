@@ -76,7 +76,8 @@ def fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)
     The first line of the file is line number 1.
 
     For simplicity of implementation, the entire file is read in to memory
-    at one time.  If `case_insensitive` is True, a lowercased copy is also used.
+    at one time.  If `case_insensitive` is True, fgrep also makes a
+    lowercased copy.
     """
     if isinstance(text, bytes):
         if encoding is not None:

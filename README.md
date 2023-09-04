@@ -77,6 +77,28 @@ but that's up to you.
 You're free to use it and even ship it in your own programs,
 as long as you leave my copyright notice on the source code.
 
+## The best of big
+
+Although **big** is *crammed full* of fabulous code, a few of
+its subsystems rise above the rest.  If you're curious what
+**big** might do for you, here are the five things in **big**
+I'm proudest of:
+
+* [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
+* [`big.state`](#bigstate)
+* [**Bound inner classes**](#bound-inner-classes)
+* [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
+* [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
+
+And here are five little functions/classes that I use all the time:
+
+* [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
+* [`Log`](#log-clocknone)
+* [`pushd`](#pushddirectory)
+* [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
+* [`touch(path)`](#touchpath)
+
+
 # Index
 
 ### Functions, classes, values, and modules
@@ -195,7 +217,7 @@ as long as you leave my copyright notice on the source code.
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
-[`Log`](#log-clocknone)
+[`Log(clock=None)`](#log-clocknone)
 
 [`Log.enter(subsystem)`](#logentersubsystem)
 
@@ -2237,8 +2259,8 @@ A lines modifier function.  Only yields lines
 that contain `s`.  (Filters out lines that
 don't contain `s`.)
 
-If `invert` is true, returns the opposite--
-filters out lines that contain `s`.
+If `invert` is true, returns the opposite--filters
+out lines that contain `s`.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
@@ -2256,8 +2278,8 @@ that match the regular expression `pattern`.
 If `pattern` is not an `re.Pattern` object, it's compiled
 with `re.compile(pattern, flags=flags)`.
 
-If `invert` is true, returns the opposite--
-filters out lines that match `pattern`.
+If `invert` is true, returns the opposite--filters
+out lines that match `pattern`.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
