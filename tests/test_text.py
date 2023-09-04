@@ -2508,6 +2508,45 @@ outdent
             big.int_to_words({1:2, 3:4})
 
         def test(i, normal, flowery):
+            def cardinal_to_ordinal(s):
+                for old, new in (
+                    ("zero", "zeroth"),
+                    ("one", "first"),
+                    ("two", "second"),
+                    ("three", "third"),
+                    ("four", "fourth"),
+                    ("five", "fifth"),
+                    ("six", "sixth"),
+                    ("seven", "seventh"),
+                    ("eight", "eighth"),
+                    ("nine", "ninth"),
+                    ("ten", "tenth"),
+                    ("eleven", "eleventh"),
+                    ("twelve", "twelveth"),
+                    ("thirteen", "thirteenth"),
+                    ("fourteen", "fourteenth"),
+                    ("fifteen", "fifteenth"),
+                    ("sixteen", "sixteenth"),
+                    ("seventeen", "seventeenth"),
+                    ("eighteen", "eighteenth"),
+                    ("nineteen", "nineteenth"),
+                    ("twenty", "twentieth"),
+                    ("thirty", "thirtieth"),
+                    ("forty", "fortieth"),
+                    ("fifty", "fiftieth"),
+                    ("sixty", "sixtieth"),
+                    ("seventy", "seventieth"),
+                    ("eighty", "eightieth"),
+                    ("ninety", "ninetieth"),
+
+                    ("hundred", "hundredth"),
+                    ("thousand", "thousandth"),
+                    ("million", "millionth"),
+                    ):
+                    if s.endswith(old):
+                        s = s[:-len(old)] + new
+                return s
+
             for multiplier, prefix, inflected_prefix in (
                 (1, "", ""),
                 (-1, "negative ", "minus ")
@@ -2518,8 +2557,15 @@ outdent
 
                 i *= multiplier
 
-                self.assertEqual(big.int_to_words(i, flowery=False), prefix + normal)
-                self.assertEqual(big.int_to_words(i, flowery=True),  prefix + flowery)
+                result = prefix + normal
+                self.assertEqual(big.int_to_words(i, flowery=False), result)
+                result = cardinal_to_ordinal(result)
+                self.assertEqual(big.int_to_words(i, flowery=False, ordinal=True), result)
+
+                result = prefix + flowery
+                self.assertEqual(big.int_to_words(i, flowery=True), result)
+                result = cardinal_to_ordinal(result)
+                self.assertEqual(big.int_to_words(i, flowery=True, ordinal=True), result)
 
                 # if inflect is available, confirm that int_to_words
                 # produces identical output to inflect.number_to_words.

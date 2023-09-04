@@ -143,6 +143,14 @@ class BigTests(unittest.TestCase):
         self.assertEqual(big.get_int_or_float(None), None)
         self.assertEqual(big.get_int_or_float("abc"), "abc")
 
+    def test_pure_virtual(self):
+        @big.pure_virtual()
+        def uncallable(a): # pragma: no cover
+            print(f"hey, look! we wuz called! and a={a}, just ask Ayn Rand!")
+
+        with self.assertRaises(NotImplementedError):
+            uncallable('a')
+
 
 def run_tests():
     bigtestlib.run(name="big.builtin", module=__name__)

@@ -37,6 +37,7 @@ for test_module in """
     test_itertools
     test_log
     test_scheduler
+    test_state
     test_text
     test_time
 """.strip().split():

@@ -32,10 +32,11 @@ def export(o):
     return o
 
 
-import types
-namespace = types.SimpleNamespace
-__all__.append('namespace')
+from functools import update_wrapper
+from inspect import signature
 
+from types import SimpleNamespace as namespace
+__all__.append('namespace')
 
 
 @export
@@ -116,3 +117,17 @@ def get_int_or_float(o, default=_sentinel):
             if default != _sentinel:
                 return default
             return o
+
+@export
+def pure_virtual():
+    """
+    Decorator for pure virtual methods.  Calling a method
+    decorated with this raises a NotImplementedError exception.
+    """
+    def pure_virtual(fn):
+        def wrapper(self, *args, **kwargs):
+            raise NotImplementedError(f"pure virtual method {fn.__name__} called")
+        update_wrapper(wrapper, fn)
+        wrapper.__signature__ = signature(fn)
+        return wrapper
+    return pure_virtual

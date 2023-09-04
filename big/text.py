@@ -2919,7 +2919,7 @@ def merge_columns(*columns, column_separator=None,
     return text.rstrip()
 
 @_export
-def int_to_words(i, flowery=True):
+def int_to_words(i, flowery=True, ordinal=False):
     """
     Converts an integer into the equivalent English string.
 
@@ -2930,6 +2930,13 @@ def int_to_words(i, flowery=True):
     you also get commas and the word "and" where you'd expect them.
     (When "flowery" is True, int_to_words(i) produces identical
     output to inflect.engine().number_to_words(i).)
+
+    If the keyword-only parameter "ordinal" is true,
+    the string produced describes that *ordinal* number
+    (instead of that *cardinal* number).  Ordinal numbers
+    describe position, e.g. where a competitor placed in a
+    competition.  int_to_words(1) returns the string 'one',
+    but int_to_words(1, ordinal=True) returns the string 'first'.
 
     Numbers >= 10*75 (one quadrillion vigintillion)
     are only converted using str(i).  Sorry!
@@ -2944,23 +2951,31 @@ def int_to_words(i, flowery=True):
     if is_negative:
         i = -i
 
-    first_twenty = (
-        "zero",
-        "one", "two", "three", "four", "five",
-        "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-        "sixteen", "seventeen", "eighteen", "nineteen",
-        )
+    if ordinal:
+        first_twenty = (
+            "zeroth",
+            "first", "second", "third", "fourth", "fifth",
+            "sixth", "seventh", "eighth", "ninth", "tenth",
+            "eleventh", "twelveth", "thirteenth", "fourteenth", "fifteenth",
+            "sixteenth", "seventeenth", "eighteenth", "nineteenth",
+            )
+    else:
+        first_twenty = (
+            "zero",
+            "one", "two", "three", "four", "five",
+            "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+            "sixteen", "seventeen", "eighteen", "nineteen",
+            )
+
     tens = (
         None, None, "twenty", "thirty", "forty", "fifty",
         "sixty", "seventy", "eighty", "ninety",
         )
 
-    # leave a spot to put in "negative " if needed
-    strings = ['']
+    strings = []
     append = strings.append
     spacer = ''
-    written = False
 
     # go-faster stripes shortcut:
     # most numbers are small.
@@ -3011,26 +3026,29 @@ def int_to_words(i, flowery=True):
                 append(int_to_words(upper, flowery=flowery))
                 append(english)
                 spacer = ', ' if flowery else ' '
-                written = True
 
-    if written:
+    if strings:
         spacer = " and " if flowery else " "
 
     if i >= 20:
         t = i // 10
         append(spacer)
         append(tens[t])
-        written = True
         spacer = '-'
         i = i % 10
 
     # don't add "zero" to the end if we already have strings
-    if i or (not written):
+    if i or (not strings):
         append(spacer)
         append(first_twenty[i])
+    elif ordinal and strings:
+        if strings[-1][-1] == 'y':
+            s = strings.pop()
+            strings.append(s[:-1] + "ie")
+        strings.append("th")
 
     if is_negative:
-        strings[0] = "negative "
+        strings.insert(0, "negative ")
 
     return "".join(strings)
 
