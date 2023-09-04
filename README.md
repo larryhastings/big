@@ -2054,42 +2054,48 @@ with a backslash?  (You usually can inside single or double quotes.)
 <dl><dd>
 
 Uppercase the first character of every word in `s`.
-Leave the other letters alone.  s should be `str` or `bytes`.
+Leave the other letters alone.  `s` should be `str` or `bytes`.
 
 (For the purposes of this algorithm, words are
 any contiguous run of non-whitespace characters.)
 
-Capitalize the letter after an apostrophe if
+This function will also capitalize the letter after an apostrophe
+if the apostrophe
 
-* the apostrophe is after whitespace or a left parenthesis character (`'('`)
-  (or is the first letter of the string), or
-* if the apostrophe is after a letter O or D, and that O or D is after
-  whitespace (or is the first letter of the string).  The O or D
-  here will also be capitalized.
+  * is immediately after whitespace, or
+  * is immediately after a left parenthesis character (`'('`), or
+  * is the first letter of the string, or
+  * is immediately after a letter O or D, when that O or D
+      * is after whitespace, or
+      * is the first letter of the string.
 
-The first rule handles internally quoted strings:
+In this last case, the O or D will also be capitalized.
+
+Finally, this function will capitalize the letter
+after a quote mark if the quote mark
+
+* is after whitespace, or
+* is the first letter of a string.
+
+All these rules mean `gently_title` correctly handles
+internally quoted strings:
 
 ```
     He Said 'No I Did Not'
 ```
 
-and contractions that start with an apostrophe
+and contractions that start with an apostrophe:
 
 ```
     'Twas The Night Before Christmas
 ```
 
-The second rule handles certain Irish, French,
-and Italian names.
+as well as certain Irish, French, and Italian names:
 
 ```
     Peter O'Toole
     Lord D'Arcy
 ```
-
-Capitalize the letter after a quote mark if
-the quote mark is after whitespace (or is the
-first letter of a string).
 
 A run of consecutive apostrophes and/or
 quote marks is considered one quote mark for
