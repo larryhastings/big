@@ -586,7 +586,9 @@ def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
             a.append(c.encode(encoding))
     except UnicodeEncodeError:
         pass
-    return type(iterable)(a)
+    if isinstance(iterable, (list, tuple)):
+        return type(iterable)(a)
+    return a
 
 # use these with multisplit if your bytes strings are encoded as ascii.
 _export_name('ascii_whitespace')
@@ -845,7 +847,13 @@ def multisplit(s, separators=None, *,
 
     s can be str or bytes.
 
-    separators should be an iterable of str or bytes, matching s.
+    separators should either be None (the default),
+    or an iterable of str or bytes, matching s.
+
+    If separators is None and s is str, multisplit will
+    use big.whitespace as the list of separators.
+    If separators is None and s is bytes, multisplit will
+    use big.ascii_whitespace as the list of separators.
 
     Returns an iterator yielding the strings split from s.  If keep
     is true (or ALTERNATING), and strip is false, joining these strings
@@ -960,13 +968,13 @@ def multisplit(s, separators=None, *,
             check_separators = False
         else:
             if separators_is_str:
-                raise TypeError("separators must be either None or an iterable of objects the same type as s")
+                raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
             check_separators = True
         empty = b''
         s_type = bytes
     else:
         if separators_is_bytes:
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
+            raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
         check_separators = True
         empty = ''
         s_type = str
@@ -975,16 +983,16 @@ def multisplit(s, separators=None, *,
         separators = ascii_whitespace if is_bytes else whitespace
         check_separators = False
     elif not separators:
-        raise ValueError("separators must be either None or an iterable of objects the same type as s")
+        raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
 
     # check_separators is True if separators isn't str or bytes
     # or something we split ourselves.
     if check_separators:
         if not hasattr(separators, '__iter__'):
-            raise TypeError("separators must be either None or an iterable of objects the same type as s")
+            raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
         for o in separators:
             if not isinstance(o, s_type):
-                raise TypeError("separators must be either None or an iterable of objects the same type as s")
+                raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
 
     separators_to_re_keep = keep
 

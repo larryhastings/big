@@ -96,7 +96,7 @@ And here are five little functions/classes that I use all the time:
 * [`Log`](#log-clocknone)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
-* [`touch(path)`](#touchpath)
+* [`touch`](#touchpath)
 
 
 # Index
@@ -141,7 +141,7 @@ And here are five little functions/classes that I use all the time:
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
-[`CycleError`](#cycleerror)
+[`CycleError()`](#cycleerror)
 
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
 
@@ -245,7 +245,7 @@ And here are five little functions/classes that I use all the time:
 
 [`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
 
-[`pure_virtual`](#pure_virtual)
+[`pure_virtual()`](#pure_virtual)
 
 [`PushbackIterator(iterable=None)`](#pushbackiteratoriterablenone)
 
@@ -289,7 +289,7 @@ And here are five little functions/classes that I use all the time:
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
-[`State`](#state)
+[`State()`](#state)
 
 [`StateMachine(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`](#statemachinestate--on_enteron_enter-on_exiton_exit-state_classnone)
 
@@ -752,7 +752,7 @@ iteration over the graph more than once.
 
 See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) deep-dive for more information.
 
-#### `CycleError`
+#### `CycleError()`
 
 <dl><dd>
 
@@ -1776,7 +1776,7 @@ function it returns, and decorate with that.  Like so:
 </dd></dl>
 
 
-#### State
+#### `State()`
 
 <dl><dd>
 
@@ -1953,7 +1953,7 @@ and you transition it to `new_state`:
 </dd></dl>
 
 
-#### `TransitionError`
+#### `TransitionError()`
 
 <dl><dd>
 Exception raised when attempting to execute an illegal state transition.
@@ -2528,7 +2528,7 @@ For more information, see the deep-dive on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 </dd></dl>
 
-#### `multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`
+#### `multisplit(s, separators=None, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`
 
 <dl><dd>
 
@@ -2536,7 +2536,15 @@ Splits strings like `str.split`, but with multiple separators and options.
 
 `s` can be `str` or `bytes`.
 
-`separators` should be an iterable of `str` or `bytes`, matching `s`.
+`separators` should either be `None` (the default),
+or an iterable of `str` or `bytes`, matching `s`.
+
+If `separators` is `None` and `s` is `str`,
+`multisplit` will use [`big.whitespace`](#whitespace)
+as the list of separators.
+If `separators` is `None` and `s` is `bytes`,
+`multisplit` will use [`big.ascii_whitespace`](#whitespace)
+as the list of separators.
 
 Returns an iterator yielding the strings split from `s`.  If `keep`
 is true (or `ALTERNATING`), and `strip` is false, joining these strings
@@ -3207,13 +3215,13 @@ value `None`.
 <dl><dd>
 
 This family of string functions was inspired by Python's `str.strip`,
-`str.rstrip`, and `str.splitlines` functions.  These functions
-are well-designed, and often do what you want.  But they're
-surprisingly opinionated.  And... what if your use case doesn't
-fit exactly into their narrow functionality?  `str.strip`
-supports two specific modes of operation; if you want
-to split your string in a slightly different way, you
-probably can't use `str.strip`.
+`str.rstrip`, and `str.splitlines` methods.  These string splitting
+methods are well-designed and often do what you want.  But they're
+surprisingly narrow and opinionated.  What if your use case doesn't
+map neatly to one of these functions?  `str.strip` supports two
+*very specific* modes of operation--unless you want to split your
+string in *exactly* one of those two modes, you probably can't use
+`str.strip` to solve your problem.
 
 So what *can* you use?  There's `re.strip`, but that can be
 hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
@@ -3222,13 +3230,32 @@ Now there's a new answer:
 
 [`multisplit`'s](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 goal is to be the be-all end-all string splitting function.
-It's designed to replace every mode of operation for
+It's designed to replace *every* mode of operation provided by
 `str.split`, `str.rstrip`, and `str.splitlines`, and it
 can even replace `str.partition` and `str.rpartition`.
 (**big** uses
 [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
 to implement
 [`multipartition`.)](#multipartitions-separators-count1--reverseFalse-separateTrue)
+[`multisplit`] can do it all!
+
+The downside of [`multisplit`'s'](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+awesome flexibility is that, since it *is* so
+sophisticated and tunable, it can be hard to use.  It takes
+*five keyword-only parameters* after all.  However, they're
+designed to be reasonably memorable, and their default values
+are designed to be easy to remember.  The best way to cope with
+[`multisplit`'s'](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+complexitiy is to use it as a building block for your own
+text splitting functions.  For example **big** uses
+[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+to implement
+[`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+[`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
+[`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+and several others functions.
+
+### Using `multisplit`
 
 To use
 [`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
@@ -3279,23 +3306,6 @@ other **big** functions that take a `separators` argument; for
 consistency's sakes, the parameter name always has the word
 `separators` in it.
 (For example, `comment_separators` for `lines_filter_comment_lines`.)
-
-The downside of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is that, since it *is* so
-sophisticated and tunable, it can be hard to use.  It takes
-*five keyword-only parameters* after all.  However, they're
-designed to be reasonably memorable, and their default values
-are designed to be easy to remember.  But the best
-way to combat the complexity of calling
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is to use it as a building block for your own
-text splitting functions.  For example, inside **big**,
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
-is used to implement
-[`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
-[`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
-[`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-and several others.
 
 ### Demonstrations of each `multisplit` keyword-only parameter
 
@@ -4635,8 +4645,28 @@ in the **big** test suite.
 
 * Changed `split_text_with_code` implementation to use `StateManager`.
   (No API or semantic changes, just an change to the internal implementation.)
+* When you call 'multisplit' with a type mismatch
+  between 's' and 'separators', the exception it raises
+  now includes the value of 's' and 'separators'.
 * Added more tests for `big.state` to exercise all the string arguments
   of `accessor` and `dispatch`.
+* The exhaustive `multisplit` tester now lets you
+  specify test cases as cohesive strings, rather
+  than forcing you to split the string manually.
+* The exhaustive `multisplit` tester is better at
+  internally verifying that it's doing the right
+  thing.  (There are some internal sanity checks,
+  and those are more accurate now.)
+* Originally the 'multisplit' parameter 'separators'
+  was required.  I changed it to optional a while ago,
+  with a default of `None`.  (If you pass in `None`
+  it uses `big.whitespace` or `big.ascii_whitespace`,
+  depending on the type of `s`.)  But the documentation
+  didn't reflect this change until... now.
+* Improved the prose in the **multi- function
+  family deep dive**.  Hopefully now it does
+  a better job of selling `multisplit` to the reader.
+
 
 #### 0.10
 <dl><dd>

@@ -247,7 +247,7 @@ class BigTextTests(unittest.TestCase):
                 result = ('bar', 'foo', '')
             test(r'^|\w+', 'foo bar', result)
 
-            # regression test: the initial implementation got this wrong.
+            # regression test: the initial implementation of multisplit got this wrong.
             # it never truncated
             test(r'cdefghijk|bcd|fgh|jkl', 'abcdefghijklmnopqrstuvwxyz', ('jkl', 'fgh', 'bcd'))
 
@@ -379,10 +379,12 @@ class BigTextTests(unittest.TestCase):
                 first_pattern = first_pattern[:-1]
 
             # 'abcdefghij' is the best match!
-            # all the overlapping matches are worse!
-            test_re_rpartition('abcdefghijk', '(abcdefghij|abcde|abcd|abc|ab|bc|cd|de|ef|fg|gh|hi|ij)', 1, ('', 'abcdefghij', 'k') )
+            # the rightmost overlapping matches all end with 'j',
+            # and 'abcdefghij' is longest.
+            test_re_rpartition('abcdefghijkl', '(abcdefghij|abcde|abcd|abc|ab|bc|cd|de|ef|fg|gh|hi|ij)', 1, ('', 'abcdefghij', 'kl') )
 
-            # okay, now jk is the best match.
+            # but if we add 'jk' to the list of separators,
+            # that becomes the best match, because it's the rightmost.
             test_re_rpartition('abcdefghijkl', '(abcdefghij|abcde|abcd|abc|ab|bc|cd|de|ef|fg|gh|hi|ij|jk)', 1, ('abcdefghi', 'jk', 'l') )
 
             test_re_rpartition('abcdefgh', '(bcd|cdefgh|de)', 1, ('ab', 'cdefgh', '') )
@@ -423,7 +425,6 @@ class BigTextTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             big.re_rpartition('ab c de', ' ', count=-1)
-
 
 
     def test_multistrip(self):
@@ -575,6 +576,12 @@ class BigTextTests(unittest.TestCase):
             big.multistrip('abcde', ('c', ''))
 
     def test_multisplit(self):
+        """
+        The first of *six* multisplit test suites.
+        (multisplit has the biggest test suite in all of big.)
+
+        This test suite tests basic functionality and type safety.
+        """
         for c in (unchanged, to_bytes):
             not_c = to_bytes if (c == unchanged) else unchanged
             def list_multisplit(*a, **kw): return list(big.multisplit(*a, **kw))
@@ -718,6 +725,12 @@ class BigTextTests(unittest.TestCase):
         self.assertEqual(list_multisplit(b'axbyczd', [b'x', b'y', b'z'], maxsplit=2, reverse=True), [b'axb', b'c', b'd'])
 
     def test_advanced_multisplit(self):
+        """
+        The second of *six* multisplit test suites.
+        (multisplit has the biggest test suite in all of big.)
+
+        This test suite tests some funny boundary cases.
+        """
         def simple_test_multisplit(s, separators, expected, **kwargs):
             for _ in range(2):
                 if _ == 1:
@@ -759,24 +772,424 @@ class BigTextTests(unittest.TestCase):
 
         simple_test_multisplit("a,b,,,c", (",",), ['a,b,', '', 'c'], separate=True, maxsplit=2, reverse=True)
 
-    def test_multisplit_exhaustively(self):
-        def multisplit_tester(*segments):
-            """
-            segments represent split-up text segments.
-            each segment is either
-              a) a string appearing in separators, or
-              b) contains no separators at all.
-            segments *must* alternate between a) and b).
-            segments doesn't need to start or end with empty strings.
+    def test_reimplemented_str_split(self):
+        """
+        The fourth of *six* multisplit test suites.
+        (multisplit has the biggest test suite in all of big.)
 
-            the last positional argument is actually "separators".
-            as in, the separators argument for multisplit.
+        This test suite reimplements str.split and str.rsplit
+        using multisplit, and confirms that the two functions
+        produce identical output.
+        """
+        def _multisplit_to_split(s, sep, maxsplit, reverse):
+            separate = sep != None
+            if separate:
+                strip = False
+            else:
+                sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
+                strip = big.PROGRESSIVE
+            result = list(big.multisplit(s, sep,
+                maxsplit=maxsplit, reverse=reverse,
+                separate=separate, strip=strip))
+            if not separate:
+                # ''.split() == '   '.split() == []
+                if result and (not result[-1]):
+                    result.pop()
+            return result
+
+        def str_split(s, sep=None, maxsplit=-1):
+            return _multisplit_to_split(s, sep, maxsplit, False)
+
+        def str_rsplit(s, sep=None, maxsplit=-1):
+            return _multisplit_to_split(s, sep, maxsplit, True)
+
+        def test(s, sep=None, maxsplit=-1):
+            # automatically test with (str, bytes) x (sep=sep, sep=None)
+            for as_bytes in (False, True):
+                if as_bytes:
+                    s = s.encode('ascii')
+                    if sep is not None:
+                        sep = sep.encode('ascii')
+                for sep_none in (False, True):
+                    sep2 = None if sep_none else sep
+                    a = s.split(sep2, maxsplit)
+                    b = str_split(s, sep2, maxsplit)
+                    self.assertEqual(a, b, f"reimplemented str_split fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
+
+                    a = s.rsplit(sep2, maxsplit)
+                    b = str_rsplit(s, sep2, maxsplit)
+                    self.assertEqual(a, b, f"reimplemented str_rsplit fails: {s!r}.rsplit({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
+
+
+        for maxsplit in range(-1, 10):
+            test('a b   c       d \t\t\n e', None, maxsplit)
+            test('   a b c   ', ' ', maxsplit)
+
+        for base_s in (
+            "",
+            "a",
+            "a b c",
+            "a b  c d   e",
+            ):
+            for leading in range(10):
+                for trailing in range(10):
+                    s = (" " * leading) + base_s + (" " * trailing)
+                    s_with_commas = s.replace(' ', ',')
+                    for maxsplit in range(-1, 8):
+                        test(s, None, maxsplit)
+                        test(s, " ", maxsplit)
+                        test(s_with_commas, ',', maxsplit)
+
+        self.assertEqual(str_split(''), [])
+        test('')
+
+        # test greedy behavior.
+        # str.split isn't greedy, but multisplit is.
+        # (well, str.split *might* be? there's no way to call it
+        # that demonstrates whether or not it's greedy.)
+        # anyway, ensure multisplit's greedy behavior doesn't
+        # mess up our emulation of str.split.
+        test('a\rb\nc\r\nd')
+
+        test('a b c ', ' ')
+
+    def test_reimplemented_str_splitlines(self):
+        """
+        The fifth of *six* multisplit test suites.
+        (multisplit has the biggest test suite in all of big.)
+
+        This test suite reimplements str.splitlines
+        using multisplit, and confirms that the two functions
+        produce identical output.
+        """
+        def str_splitlines(s, keepends=False):
+            newlines = big.ascii_newlines if isinstance(s, bytes) else big.newlines
+            l = list(big.multisplit(s, newlines,
+                keep=keepends, separate=True, strip=False))
+            if l and not l[-1]:
+                # yes, "".splitlines() returns an empty list
+                l.pop()
+            return l
+
+        def test(s):
+            # automatically test with (str, bytes) x (keepends=False,keepends=True,)
+            for as_bytes in (False, True):
+                if as_bytes:
+                    s = s.encode('ascii')
+                for keepends in (False, True):
+                    a = s.splitlines(keepends)
+                    b = str_splitlines(s, keepends)
+                    self.assertEqual(a, b, f"reimplemented str_splitlines fails: {s!r}.splitlines({keepends}) == {a}, multisplit gave us {b}")
+
+        test('')
+        test('One line')
+        test('One line\n')
+        test('Two lines\nTwo lines')
+        test('Two lines\nTwo lines\n')
+        test('Two lines\nTwo lines\n\n\n')
+
+    def test_reimplemented_str_partition(self):
+        """
+        The sixth of *six* multisplit test suites.
+        (multisplit has the biggest test suite in all of big.)
+
+        This test suite reimplements str.partition and str.rpartition
+        using multisplit, and confirms that the two functions
+        produce identical output.
+        """
+        def _partition_to_multisplit(s, sep, reverse):
+            if not sep:
+                raise ValueError("empty separator")
+            l = tuple(big.multisplit(s, (sep,),
+                keep=big.ALTERNATING, maxsplit=1, reverse=reverse, separate=True))
+            if len(l) == 1:
+                empty = b'' if isinstance(s, bytes) else ''
+                if reverse:
+                    l = (empty, empty) + l
+                else:
+                    l = l + (empty, empty)
+            return l
+
+        def str_partition(s, sep):
+            return _partition_to_multisplit(s, sep, False)
+
+        def str_rpartition(s, sep):
+            return _partition_to_multisplit(s, sep, True)
+
+        def test(s, sep):
+            # automatically test with (str, bytes)
+            for as_bytes in (False, True):
+                if as_bytes:
+                    s = s.encode('ascii')
+                    if sep is not None:
+                        sep = sep.encode('ascii')
+
+                a = s.partition(sep)
+                b = str_partition(s, sep)
+                self.assertEqual(a, b, f"reimplemented str_partition fails: {s!r}.partition({sep!r}) == {a}, multisplit gave us {b}")
+
+                a = s.rpartition(sep)
+                b = str_rpartition(s, sep)
+                self.assertEqual(a, b, f"reimplemented str_rpartition fails: {s!r}.rpartition({sep!r}) == {a}, multisplit gave us {b}")
+
+        test('', ' ')
+        test(' ', ' ')
+
+        s = "  a b b c d d e  "
+        test(s, " ")
+        test(s, "b ")
+        test(s, " b ")
+        test(s, " b")
+        test(s, " c ")
+        test(s, " d")
+        test(s, " d ")
+        test(s, "d ")
+        test(s, "e")
+        test(s, "honk")
+        test(s, "squonk")
+
+        with self.assertRaises(ValueError):
+            " a b c ".partition('')
+        with self.assertRaises(ValueError):
+            str_partition(" a b c ", '')
+
+        with self.assertRaises(ValueError):
+            " a b c ".rpartition('')
+        with self.assertRaises(ValueError):
+            str_rpartition(" a b c ", '')
+
+
+    def test_multisplit_exhaustively(self):
+        """
+        The sixth of *six* multisplit test suites.
+        (multisplit has the biggest test suite in all of big.)
+
+        This is the big one.  The final boss.
+        It's gigantic, exhaustive, and... slow.
+
+        The test calls multisplit_tester with a deconstructed string,
+        pre-split so that separators and non-separators are always in
+        their own strings.
+
+        multisplit_tester calls multisplit with *every* possible
+        combination of arguments,
+        independently computes what the return value should be,
+        and confirms that multisplit got it right.
+        """
+
+        def toy_multisplit_original(s, separators): # pragma: no cover
+            """
+            A toy version of multisplit.
+
+            s is a str (not bytes).
+            separators is an iterable of str (not None, not an iterable of bytes).
+
+            Returns a list where every element is a string
+            that either
+                * is an element in the "separators" list, or
+                * does not contain any substring that appears as an
+                  element in separators.
+            """
+
+            segments = []
+            word = []
+
+            def flush_word():
+                if word:
+                    segments.append(''.join(word))
+                    word.clear()
+            while s:
+                longest_separator = 0
+                for sep in separators:
+                    if s.startswith(sep) and (len(sep) > longest_separator):
+                        longest_separator = len(sep)
+                if longest_separator:
+                    flush_word()
+                    segments.append(s[:longest_separator])
+                    s = s[longest_separator:]
+                    longest_separator = 0
+                    continue
+                word.append(s[:1])
+                s = s[1:]
+            flush_word()
+
+            return segments
+
+
+        def toy_multisplit(s, separators):
+            """
+            A toy version of multisplit.
+
+            s is a str or bytes.
+            separators is a str, or an iterable of str,
+            or bytes, or an iterable of bytes.
+
+            Returns a list where every element is a string
+            that either
+                * is an element in the "separators" iterable, or
+                * does not contain any substring that appears as an
+                  element in the separators iterable.
+
+            This is my second revision of toy_multisplit,
+            adding support for bytes, and speeding things
+            up a great deal in the general case.
+
+            (toy_multisplit is usually faster than
+            toy_multisplit_original, and it's *way* faster
+            when there are a lot of separators, or exactly
+            one separator.  it's occasionally a little
+            slower than toy_multisplit_original when
+            there are only a handful of separators.)
+            """
+            if not isinstance(separators, (list, tuple)):
+                separators = [separators[i:i+1] for i in range(len(separators))]
+            assert separators
+            if isinstance(s, bytes):
+                empty = b''
+            else:
+                empty = ''
+            assert empty not in separators
+
+            # toy_multisplit used to be slower than toy_multisplit_original
+            # when there was only one separator.  but no longer!
+            # (why bother? it kind of stuck in my craw.)
+            if len(separators) == 1:
+                segments = []
+                sep = separators[0]
+                length = len(sep)
+                while s:
+                    index = s.find(sep)
+                    if index == -1:
+                        segments.append(s)
+                        break
+                    if index:
+                        segments.append(s[:index])
+                    index2 = index + length
+                    segments.append(sep)
+                    s = s[index2:]
+                return segments
+
+            longest_separator = max([len(sep) for sep in separators])
+
+            # easier to do it this way:
+            # add entries for every length, including 0
+            # then pop the last entry off
+            separators_by_length = []
+            for i in range(longest_separator, -1, -1):
+                separators_by_length.append((i, set()))
+
+            for sep in separators:
+                separators_by_length[longest_separator - len(sep)][1].add(sep)
+
+            separators_by_length.pop()
+
+            segments = []
+            word = []
+
+            def flush_word():
+                if word:
+                    segments.append(empty.join(word))
+                    word.clear()
+            while s:
+                for length, separators_set in separators_by_length:
+                    substring = s[:length]
+                    # print(f"substring={substring!r} separators_set={separators_set!r}")
+                    if substring in separators_set:
+                        flush_word()
+                        segments.append(substring)
+                        s = s[length:]
+                        break
+                else:
+                    word.append(s[:1])
+                    s = s[1:]
+            flush_word()
+
+            return segments
+
+        # quickly test toy_multisplit
+
+        want_prints = False
+        # want_prints = True
+
+        if want_prints: # pragma: no cover
+            import time
+            if hasattr(time, 'perf_counter_ns'):
+                time_perf_counter_ns = time.perf_counter_ns
+            else:
+                def time_perf_counter_ns():
+                    return int(time.perf_counter() * 1000000000)
+
+        def t(s, seps, expected):
+            if want_prints: # pragma: no cover
+                start = time_perf_counter_ns()
+            result = toy_multisplit_original(s, seps)
+            if want_prints: # pragma: no cover
+                end = time_perf_counter_ns()
+                original_time = str(end - start)
+                print(f'toy_multisplit_original(s={s!r}, seps={seps!r}) -> {result!r}')
+            assert result == expected, f"toy_multisplit_original:\n  result={result!r}\n!=\nexpected={expected!r}"
+
+            if want_prints: # pragma: no cover
+                start = time_perf_counter_ns()
+            result = toy_multisplit(s, seps)
+            if want_prints: # pragma: no cover
+                end = time_perf_counter_ns()
+                str_time = str(end - start)
+                print(f'toy_multisplit(s={s!r}, seps={seps!r}) -> {result!r}')
+            assert result == expected, f"toy_multisplit:\n  result={result!r}\n!=\nexpected={expected!r}"
+
+            s = s.encode('ascii')
+            if seps == big.whitespace:
+                seps = big.ascii_whitespace
+            elif isinstance(seps, str):
+                seps = seps.encode('ascii')
+            else:
+                seps = [b.encode('ascii') for b in seps]
+            expected = [b.encode('ascii') for b in expected]
+
+            if want_prints: # pragma: no cover
+                start = time_perf_counter_ns()
+            result = toy_multisplit(s, seps)
+            if want_prints: # pragma: no cover
+                end = time_perf_counter_ns()
+                bytes_time = str(end - start)
+                print(f'toy_multisplit(s={s!r}, seps={seps!r}) -> {result!r}')
+            assert result == expected, f"toy_multisplit:\n  result={result!r}\n!=\nexpected={expected!r}"
+
+            if want_prints: # pragma: no cover
+                max_length = max([len(original_time), len(str_time), len(bytes_time)])
+                print(f"original time: {original_time:>{max_length}}ns")
+                print(f"     str time: {str_time:>{max_length}}ns")
+                print(f"   bytes time: {bytes_time:>{max_length}}ns")
+                print()
+                print()
+
+        t('aXbXcXd', 'X', list('aXbXcXd'))
+        t(' a b c ', ' ', list(' a b c '))
+        t('XXaXbYcXdX', 'XY', list('XXaXbYcXdX'))
+        t('XYabcXbdefYghiXjkl', 'XY', ['X', 'Y', 'abc', 'X', 'bdef', 'Y', 'ghi', 'X', 'jkl'])
+        t('XYabcXbdefYghiXjkXYZl', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['XY', 'abc', 'X', 'bdef', 'Y', 'ghi', 'X', 'jk', 'XYZ', 'l'])
+        t('XYabcXbdefYZghiXjkXYZl', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['XY', 'abc', 'X', 'bdef', 'Y', 'Z', 'ghi', 'X', 'jk', 'XYZ', 'l'])
+
+        t('  \t abc de  fgh \n\tijk    lm  ', big.whitespace,
+            [' ', ' ', '\t', ' ', 'abc', ' ', 'de', ' ', ' ', 'fgh', ' ', '\n', '\t', 'ijk', ' ', ' ', ' ', ' ', 'lm', ' ', ' '])
+
+
+
+
+        def multisplit_tester(s, separators=None):
+            """
+            s is the test string you want split.
+            (must be str; multisplit_tester will convert it
+            to bytes too, don't worry.)
+
+            separators is the list of separators.
 
             tests Every. Possible. Permutation. of inputs to multisplit(),
             based on the segments you pass in.  this includes
                 * as strings and encoded to bytes (ascii)
-                * with and without the left separators
-                * with and without the right separators
+                * with and without the left separator(s)
+                * with and without the right separator(s)
                 * with every combination of every value of
                     * keep
                     * maxsplit (all values that produce different results, plus a couple extra Just In Case)
@@ -796,13 +1209,16 @@ class BigTextTests(unittest.TestCase):
                 print("test exhaustively")
                 print("_" * 69)
 
-            segments = list(segments)
-            separators = segments.pop()
+            # Don't worry, we'll pass the separators argument
+            # in to multisplit *exactly* how you passed it in
+            # to multisplit_tester.
+            separators_as_passed_in = separators
+            separators = separators if (separators is not None) else big.whitespace
 
-            if separators is not None:
-                separators_set = set(separators)
-            else:
-                separators_set = set(big.whitespace)
+            # split s by hand into alternating separator and non-separator strings.
+            segments = toy_multisplit(s, separators)
+
+            separators_set = set(separators)
             assert '' not in separators_set
 
             # strip off the leading and trailing separators.
@@ -885,10 +1301,10 @@ class BigTextTests(unittest.TestCase):
                     trailing = big.text._cheap_encode_iterable_of_strings(trailing)
                     originals = [leading, splits, trailing]
                     empty = b''
-                    if separators is None:
+                    if separators_as_passed_in is None:
                         separators_set = set(big.ascii_whitespace)
                     else:
-                        separators = big.text._cheap_encode_iterable_of_strings(separators)
+                        separators_as_passed_in = separators = big.text._cheap_encode_iterable_of_strings(separators)
                         separators_set = set(separators)
                     non_sep_marker = b"&NONSEP&"
                 else:
@@ -1009,15 +1425,35 @@ class BigTextTests(unittest.TestCase):
                                 if want_prints: # pragma: no cover
                                     print(f"    trailing: expected={expected}")
 
-                                # expected now looks like this:
-                                #   * it has an odd number of items
-                                #   * even numbered items are nonsep
-                                #   * odd numbered items are sep
-                                assert len(expected) % 2 == 1, f"expected={expected} doesn't have an odd # of elements!"
-                                for i in range(0, len(expected), 2):
-                                    assert expected[i] not in separators_set
-                                for i in range(1, len(expected), 2):
-                                    assert not big.multistrip(expected[i], separators_set), f"expected[{i}]={expected[i]!r} not in separators_set={separators_set} !"
+                                # expected can be a whole weird mix of things at this point.
+                                # let's sanity-check it, that every element either
+                                #     * contains *only* separators, or
+                                #     * doesn't contain *any* separators.
+                                #
+                                # we do that by using toy_multisplit to split every segment.
+                                # every segment should either contain only separators
+                                # (but maybe more than one), or no separators.
+                                # which means when toy_multisplit splits it, either we get back
+                                #    * one element which contains no separators, or
+                                #    * one element which is in separators, or
+                                #    * multiple elements which are all in separators.
+                                #
+                                # if we only get one element back, we can't do any further
+                                # testing, because either it's in separators or it isn't,
+                                # we can't tell anything further.
+                                #
+                                # if we get back multiple elements, they must all be in
+                                # separators.
+                                for e in expected:
+                                    if not e:
+                                        self.assertIn(e, ('', b''))
+                                        continue
+                                    _segments = toy_multisplit(e, list(separators_set))
+                                    if len(_segments) == 1:
+                                        self.assertEqual(_segments[0], e)
+                                        continue
+                                    for _segment in _segments:
+                                        self.assertIn(_segment, separators_set)
 
                                 # how many splits can we have?
                                 # Technically the maximum number of splits possible
@@ -1127,7 +1563,7 @@ class BigTextTests(unittest.TestCase):
                                                 if want_prints: # pragma: no cover
                                                     print(f"    now expected={expected}")
 
-                                            result = list(big.multisplit(input_string, separators,
+                                            result = list(big.multisplit(input_string, separators_as_passed_in,
                                                 keep=keep,
                                                 maxsplit=maxsplit,
                                                 reverse=reverse,
@@ -1144,107 +1580,31 @@ class BigTextTests(unittest.TestCase):
                                             self.assertEqual(result, expected, f"as_bytes={as_bytes} use_leading={use_leading} use_trailing={use_trailing} multisplit(input_string={input_string}, separators={printable_separators(separators)}, keep={keep}, separate={separate}, strip={strip}, reverse={reverse}, maxsplit={maxsplit})")
 
 
-        test_string = [
-            ' ',
-            'a',
-            ' ',
-            'b',
-            ' ',
-            'c',
-            ' ',
-            ]
+        test_string = ' a b c '
 
         multisplit_tester(
-            *test_string,
-            (' ',),
+            test_string,
+            ' ',
             )
 
         multisplit_tester(
-            *test_string,
+            test_string,
             None,
             )
 
 
         multisplit_tester(
-            ' ',
-            '\t',
-            ' ',
-            '\n',
-            ' ',
-
-            'a',
-
-            ' ',
-            '\t',
-            ' ',
-            '\n',
-
-            'b',
-
-            '\t',
-            ' ',
-            '\n',
-
-            'c',
-
-            ' ',
-            ' ',
-            '\n',
-
+            ' \t \n a \t \nb\t \nc  \n',
             big.whitespace,
             )
 
 
         multisplit_tester(
-            'x',
-            'y',
-            'x',
-            'y',
-
-            'a',
-
-            'x',
-            'y',
-            'x',
-            'y',
-            'x',
-
-            'b',
-
-            'y',
-
-            'c',
-
-            'x',
-            'y',
-            'x',
-            'y',
-            'x',
-            'y',
-
-            'd',
-
-            'y',
-            'x',
-
-            'e',
-
-            'y',
-            'y',
-            'y',
-            'y',
-
-            'f',
-
-            'x',
-            'x',
-            'x',
-            'x',
-            'x',
-            'x',
-
-            ('x', 'y'),
+            'xyxyaxyxyxbycxyxyxydyxeyyyyfxxxxxx',
+            'xy',
             )
+
+
 
     def test_multipartition(self):
         def test_multipartition(s, separator, count, expected, *, reverse=False):
@@ -1312,172 +1672,11 @@ class BigTextTests(unittest.TestCase):
 
         # I don't bother to test the str / subclass of str / etc stuff
         # with multipartition, because it literally uses multisplit
-        # to do the splitting.  so multisplit handles it.
+        # to do the splitting.  so the multisplit tests cover it.
 
         with self.assertRaises(ValueError):
             big.multipartition("a x x b y y c", (" x ", " y "), -1)
 
-    def test_reimplemented_str_split(self):
-        def _multisplit_to_split(s, sep, maxsplit, reverse):
-            separate = sep != None
-            if separate:
-                strip = False
-            else:
-                sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
-                strip = big.PROGRESSIVE
-            result = list(big.multisplit(s, sep,
-                maxsplit=maxsplit, reverse=reverse,
-                separate=separate, strip=strip))
-            if not separate:
-                # ''.split() == '   '.split() == []
-                if result and (not result[-1]):
-                    result.pop()
-            return result
-
-        def str_split(s, sep=None, maxsplit=-1):
-            return _multisplit_to_split(s, sep, maxsplit, False)
-
-        def str_rsplit(s, sep=None, maxsplit=-1):
-            return _multisplit_to_split(s, sep, maxsplit, True)
-
-        def test(s, sep=None, maxsplit=-1):
-            # automatically test with (str, bytes) x (sep=sep, sep=None)
-            for as_bytes in (False, True):
-                if as_bytes:
-                    s = s.encode('ascii')
-                    if sep is not None:
-                        sep = sep.encode('ascii')
-                for sep_none in (False, True):
-                    sep2 = None if sep_none else sep
-                    a = s.split(sep2, maxsplit)
-                    b = str_split(s, sep2, maxsplit)
-                    self.assertEqual(a, b, f"reimplemented str_split fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
-
-                    a = s.rsplit(sep2, maxsplit)
-                    b = str_rsplit(s, sep2, maxsplit)
-                    self.assertEqual(a, b, f"reimplemented str_rsplit fails: {s!r}.rsplit({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
-
-
-        for maxsplit in range(-1, 10):
-            test('a b   c       d \t\t\n e', None, maxsplit)
-            test('   a b c   ', ' ', maxsplit)
-
-        for base_s in (
-            "",
-            "a",
-            "a b c",
-            "a b  c d   e",
-            ):
-            for leading in range(10):
-                for trailing in range(10):
-                    s = (" " * leading) + base_s + (" " * trailing)
-                    s_with_commas = s.replace(' ', ',')
-                    for maxsplit in range(-1, 8):
-                        test(s, None, maxsplit)
-                        test(s, " ", maxsplit)
-                        test(s_with_commas, ',', maxsplit)
-
-        self.assertEqual(str_split(''), [])
-        test('')
-
-        # test greedy behavior.
-        # str.split isn't greedy, but multisplit is.
-        # (well, str.split *might* be? there's no way to call it
-        # that demonstrates whether or not it's greedy.)
-        # anyway, ensure multisplit's greedy behavior doesn't
-        # mess up our emulation of str.split.
-        test('a\rb\nc\r\nd')
-
-        test('a b c ', ' ')
-
-    def test_reimplemented_str_splitlines(self):
-        def str_splitlines(s, keepends=False):
-            newlines = big.ascii_newlines if isinstance(s, bytes) else big.newlines
-            l = list(big.multisplit(s, newlines,
-                keep=keepends, separate=True, strip=False))
-            if l and not l[-1]:
-                # yes, "".splitlines() returns an empty list
-                l.pop()
-            return l
-
-        def test(s):
-            # automatically test with (str, bytes) x (keepends=False,keepends=True,)
-            for as_bytes in (False, True):
-                if as_bytes:
-                    s = s.encode('ascii')
-                for keepends in (False, True):
-                    a = s.splitlines(keepends)
-                    b = str_splitlines(s, keepends)
-                    self.assertEqual(a, b, f"reimplemented str_splitlines fails: {s!r}.splitlines({keepends}) == {a}, multisplit gave us {b}")
-
-        test('')
-        test('One line')
-        test('One line\n')
-        test('Two lines\nTwo lines')
-        test('Two lines\nTwo lines\n')
-        test('Two lines\nTwo lines\n\n\n')
-
-    def test_reimplemented_str_partition(self):
-        def _partition_to_multisplit(s, sep, reverse):
-            if not sep:
-                raise ValueError("empty separator")
-            l = tuple(big.multisplit(s, (sep,),
-                keep=big.ALTERNATING, maxsplit=1, reverse=reverse, separate=True))
-            if len(l) == 1:
-                empty = b'' if isinstance(s, bytes) else ''
-                if reverse:
-                    l = (empty, empty) + l
-                else:
-                    l = l + (empty, empty)
-            return l
-
-        def str_partition(s, sep):
-            return _partition_to_multisplit(s, sep, False)
-
-        def str_rpartition(s, sep):
-            return _partition_to_multisplit(s, sep, True)
-
-        def test(s, sep):
-            # automatically test with (str, bytes)
-            for as_bytes in (False, True):
-                if as_bytes:
-                    s = s.encode('ascii')
-                    if sep is not None:
-                        sep = sep.encode('ascii')
-
-                a = s.partition(sep)
-                b = str_partition(s, sep)
-                self.assertEqual(a, b, f"reimplemented str_partition fails: {s!r}.partition({sep!r}) == {a}, multisplit gave us {b}")
-
-                a = s.rpartition(sep)
-                b = str_rpartition(s, sep)
-                self.assertEqual(a, b, f"reimplemented str_rpartition fails: {s!r}.rpartition({sep!r}) == {a}, multisplit gave us {b}")
-
-        test('', ' ')
-        test(' ', ' ')
-
-        s = "  a b b c d d e  "
-        test(s, " ")
-        test(s, "b ")
-        test(s, " b ")
-        test(s, " b")
-        test(s, " c ")
-        test(s, " d")
-        test(s, " d ")
-        test(s, "d ")
-        test(s, "e")
-        test(s, "honk")
-        test(s, "squonk")
-
-        with self.assertRaises(ValueError):
-            " a b c ".partition('')
-        with self.assertRaises(ValueError):
-            str_partition(" a b c ", '')
-
-        with self.assertRaises(ValueError):
-            " a b c ".rpartition('')
-        with self.assertRaises(ValueError):
-            str_rpartition(" a b c ", '')
 
 
     def test_wrap_words(self):
@@ -2500,6 +2699,9 @@ outdent
         # confirm that flowery has a default of True
         self.assertEqual(big.int_to_words(12345678), big.int_to_words(12345678, flowery=True))
 
+        # confirm that ordinal has a default of False
+        self.assertEqual(big.int_to_words(12345678), big.int_to_words(12345678, ordinal=False))
+
         with self.assertRaises(ValueError):
             big.int_to_words(3.14159)
         with self.assertRaises(ValueError):
@@ -2508,6 +2710,7 @@ outdent
             big.int_to_words({1:2, 3:4})
 
         def test(i, normal, flowery):
+            # independently compute the ordinal version
             def cardinal_to_ordinal(s):
                 for old, new in (
                     ("zero", "zeroth"),
