@@ -61,7 +61,7 @@ import big.all as big
 
 That will make every symbol defined in **big** accessible from the `big`
 object. For example, if you want to use
-[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`,](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 you can access it with just `big.multisplit`.
 
 You can also use **big.all** with `import *`:
@@ -90,7 +90,7 @@ I'm proudest of:
 * [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
 * [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 
-And here are five little functions/classes that I use all the time:
+And here are five little functions/classes I use all the time:
 
 * [`gently_title`](#gently_titles--apostrophesnone-double_quotesnone)
 * [`Log`](#log-clocknone)
@@ -231,7 +231,7 @@ And here are five little functions/classes that I use all the time:
 
 [`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reverseFalse-separateTrue)
 
-[`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 
 [`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
 
@@ -291,7 +291,7 @@ And here are five little functions/classes that I use all the time:
 
 [`State()`](#state)
 
-[`StateMachine(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`](#statemachinestate--on_enteron_enter-on_exiton_exit-state_classnone)
+[`StateManager(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
@@ -1604,7 +1604,7 @@ in the **big** source tree.
 
 Class decorator.  Adds a convenient state accessor attribute to your class.
 
-When you have a state machine class containing a `StateMachine`
+When you have a state machine class containing a [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 object, it can be wordy and inconvenient to access the state through
 the state machine attribute:
 
@@ -1786,7 +1786,7 @@ of any type except `types.NoneType`.
 
 </dd></dl>
 
-#### `StateMachine(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`
+#### `StateManager(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`
 
 <dl><dd>
 
@@ -1861,9 +1861,12 @@ to look up an attribute on state objects; by default
 `on_enter` is the string `'on_enter'`, but it can be any legal
 Python identifier string, or any false value.
 
-If `on_enter` is a valid identifier string, and this `StateMachine`
+If `on_enter` is a valid identifier string, and this
+[`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 object transitions to a state object *O*, and *O* has an attribute
-with this name, `StateMachine` will call that attribute (with no
+with this name,
+[`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+will call that attribute (with no
 arguments) immediately after transitioning to that state.
 Passing in a false value for `on_enter` disables this behavior.
 
@@ -2194,7 +2197,7 @@ If `s` is `str` or `bytes`, and `separators` is `None`, `lines`
 will split `s` at line boundaries and yield those lines, including
 empty lines.  If `separators` is not `None`, it must be an iterable
 of strings of the same type as `s`; `lines` will split `s` using
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse).
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse).
 
 When iterated over, yields 2-tuples:
 
@@ -2759,7 +2762,7 @@ A list of all newline characters recognized by Python.
 Includes many Unicode newline characters, like `'\u2029'`
 (a paragraph separator).  Useful as a list of separator
 strings for
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 et al; `newlines` is specifically used by the
 [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 iterator constructor.
@@ -3030,7 +3033,7 @@ Includes many Unicode whitespace strings, like `'\xa0'`
 (a non-breaking space).  Useful as a list of separator
 strings for the **big** "multi-" family of functions,
 e.g. 
-[`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 
 **big** also defines `utf8_whitespace`, which is `whitespace`
 with all strings encoded to UTF-8 (as bytes),
@@ -3226,29 +3229,29 @@ string in *exactly* one of those two modes, you probably can't use
 So what *can* you use?  There's `re.strip`, but that can be
 hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
 Now there's a new answer:
-[`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 
-[`multisplit`'s](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 goal is to be the be-all end-all string splitting function.
 It's designed to replace *every* mode of operation provided by
 `str.split`, `str.rstrip`, and `str.splitlines`, and it
 can even replace `str.partition` and `str.rpartition`.
 (**big** uses
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to implement
 [`multipartition`.)](#multipartitions-separators-count1--reverseFalse-separateTrue)
 [`multisplit`] can do it all!
 
-The downside of [`multisplit`'s'](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+The downside of [`multisplit`'s'](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 awesome flexibility is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 *five keyword-only parameters* after all.  However, they're
 designed to be reasonably memorable, and their default values
 are designed to be easy to remember.  The best way to cope with
-[`multisplit`'s'](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`'s'](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 complexitiy is to use it as a building block for your own
 text splitting functions.  For example **big** uses
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to implement
 [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 [`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
@@ -3258,21 +3261,21 @@ and several others functions.
 ### Using `multisplit`
 
 To use
-[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`,](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 pass in the string you want to split, the separators you
 want to split on, and tweak its behavior with its five
 keyword arguments.  It returns an iterator that yields
 string segments from the original string in your preferred
 format.
 
-The cornerstone of [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+The cornerstone of [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 is the `separators` argument.
 This is an iterable of strings, of the same type (`str` or `bytes`)
 as the string you want to split (`s`).  `multisplit` will split
 the string at *each* non-overlapping instance of any string
 specified in `separators`.
 
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 also let you fine-tune how it splits, through five keyword-only
 parameters:
 
@@ -3298,7 +3301,7 @@ with `str.split`.  But this is its special "don't do anything"
 magic value.  All the *other* keyword-only parameters default
 to `False`.)
 
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 which also take this same `separators` arguments.  There are also
@@ -3310,7 +3313,7 @@ consistency's sakes, the parameter name always has the word
 ### Demonstrations of each `multisplit` keyword-only parameter
 
 To give you a sense of how the five keyword-only parameters changes the behavior of
-[`multisplit`,](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`,](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 here's a breakdown of each of these parameters with examples.
 
 #### `maxsplit`
@@ -3559,7 +3562,7 @@ one uses `maxsplit`.
 ### Reimplementing library functions using `multisplit`
 
 Here are some examples of how you could use
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to replace some common Python string splitting methods.  These exactly duplicate the
 behavior of the originals.
 
@@ -3621,7 +3624,7 @@ functions are so much faster!
 ### Why do you sometimes get empty strings when you split?
 
 Sometimes when you split using
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse),
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse),
 you'll get empty strings in the return value.  This might be unexpected,
 violating the [Principle Of Least Astonishment.](https://en.wikipedia.org/wiki/Principle_of_least_astonishment)
 But there are excellent reasons for this behavior.
@@ -3696,9 +3699,9 @@ recreate the original string.
 ```
 
 Naturally,
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 lets you duplicate this behavior.  When you want
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to behave just like `str.split` does with an explicit separator
 string, just pass in `keep=False`, `separate=True`, and `strip=False`.
 That is, if `a` and `b` are strings,
@@ -3714,7 +3717,7 @@ always produces the same output as
 ```
 
 For example, here's
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 splitting the strings we've been playing with, using these parameters:
 
 ```Python
@@ -3790,7 +3793,7 @@ That tuple at the end, just containing two empty strings:
 It's *so strange.*  How can that be right?
 
 It's the same as `str.split`.
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 *must* split the string into two pieces *every* time it finds the separator
 in the original string.  So it *must* emit the empty non-separator string.
 And since that zero-length string isn't (cannot!) be followed by a separator,
@@ -3855,7 +3858,7 @@ But not when you split by an explicit separator:
 ['']
 ```
 
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 is consistent here.  If you split an empty string, it always returns an empty string,
 as long as the separators are valid:
 
@@ -3877,7 +3880,7 @@ returns an empty list:
 This is really the same as "splitting an empty string", because when `str.split`
 splits on whitespace, the first thing it does is strip leading whitespace.
 
-If you [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+If you [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 a string that only contains whitespace, and you split on whitespace characters,
 it returns two empty strings:
 
@@ -3890,7 +3893,7 @@ This is because the string conceptually starts with a zero-length string,
 then has a run of whitespace characters, then ends with another zero-length
 string.  So those two empty strings are the leading and trailing zero-length
 strings, separated by whitespace.  If you tell
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to also strip the string, you'll get back a single empty string:
 
 ```Python
@@ -3899,7 +3902,7 @@ to also strip the string, you'll get back a single empty string:
 ```
 
 And
-[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 behaves consistently even when you use different separators:
 
 ```Python
@@ -4643,29 +4646,44 @@ in the **big** test suite.
 
 *under development, not released yet*
 
-* Changed `split_text_with_code` implementation to use `StateManager`.
+* Changed
+  [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+  implementation to use `StateManager`.
   (No API or semantic changes, just an change to the internal implementation.)
-* When you call 'multisplit' with a type mismatch
+* When you call
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+  with a type mismatch
   between 's' and 'separators', the exception it raises
   now includes the value of 's' and 'separators'.
 * Added more tests for `big.state` to exercise all the string arguments
   of `accessor` and `dispatch`.
-* The exhaustive `multisplit` tester now lets you
+* The exhaustive
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+  tester now lets you
   specify test cases as cohesive strings, rather
   than forcing you to split the string manually.
-* The exhaustive `multisplit` tester is better at
+* The exhaustive
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+  tester is better at
   internally verifying that it's doing the right
   thing.  (There are some internal sanity checks,
   and those are more accurate now.)
-* Originally the 'multisplit' parameter 'separators'
+* Whoops!  The name of the main class in [`big.state`](#bigstate) is
+  [`StateManager`.](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+  I accidentally wrote `StateMachine` instead, a bunch of times, in the docs.
+* Originally the
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+  parameter 'separators'
   was required.  I changed it to optional a while ago,
   with a default of `None`.  (If you pass in `None`
-  it uses `big.whitespace` or `big.ascii_whitespace`,
+  it uses [`big.whitespace`](#whitespace) or [`big.ascii_whitespace`](#whitespace),
   depending on the type of `s`.)  But the documentation
   didn't reflect this change until... now.
-* Improved the prose in the **multi- function
-  family deep dive**.  Hopefully now it does
+* Improved the prose in
+  [**The `multi-` family of string functions** deep-dive.](#The-multi--family-of-string-functions)
+  Hopefully now it does
   a better job of selling `multisplit` to the reader.
+* The usual smattering of small doc fixes and improvements.
 
 
 #### 0.10
@@ -4674,7 +4692,7 @@ in the **big** test suite.
 *released 2023/09/04*
 
 * Added the new [`big.state`](#bigstate) module, with its exciting
-  [`StateMachine`](#statemachinestate--on_enteron_enter-on_exiton_exit-state_classnone)
+  [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
   class!
 * [`int_to_words`](#int_to_wordsi--flowerytrue-ordinalfalse)
   now supports the new `ordinal` keyword-only parameter, to produce
@@ -4805,7 +4823,7 @@ Extremely minor release.  No new features or bug fixes.
   [`re_rpartition`.](#re_rpartitiontext-pattern-count1--flags0)
   I realized it had the same "reverse mode" problem that
   I fixed in
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   back in version **0.6.10**: the regular expression should really
   search the string in "reverse mode", from right to left.
   The difference is whether the regular
@@ -4862,15 +4880,15 @@ Extremely minor release.  No new features or bug fixes.
 *released 2023/03/13*
 
 * Tweaked the implementation of
-  [`multisplit`.](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   Internally, it does the
   string splitting using `re.split`, which returns a `list`.  It used
   to iterate over the list and yield each element.  But that meant keeping
   the entire list around in memory until `multisplit` exited.  Now,
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   reverses the list, pops off the final element, and yields
   that.  This means
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   drops all references to the split strings
   as it iterates over the string, which may help in low-memory situations.
 * Minor doc fixes.
@@ -4918,7 +4936,7 @@ Extremely minor release.  No new features or bug fixes.
 *released 2023/03/09*
 
 * Retooled
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   and
   [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
   argument verification code.  Both functions now consistently check all
@@ -4931,12 +4949,12 @@ Extremely minor release.  No new features or bug fixes.
 *released 2023/03/09*
 
 * Fixed a minor crashing bug in
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse):
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse):
   if you passed in a *list* of separators (or `separators`
   was of any non-hashable type), and `reverse` was true,
   `multisplit` would crash.  It used `separators` as a key
   into a dict, which meant `separators` had to be hashable.
-* [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)
+* [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   now verifies that the `s` passed in is either `str` or `bytes`.
 * Updated all copyright date notices to 2023.
 * Lots of doc fixes.
@@ -5043,7 +5061,7 @@ Extremely minor release.  No new features or bug fixes.
 *released 2022/10/26*
 
 * All code changes had to do with
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse):
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse):
     * Fixed a subtle bug.  When splitting with a separator that can overlap
       itself, like `' x '`, `multisplit` will prefer the *leftmost* instance.
       But when `reverse=True`, it must prefer the *rightmost* instance.
@@ -5106,7 +5124,7 @@ Extremely minor release.  No new features or bug fixes.
 *released 2022/10/14*
 
 * Fixed a bug in
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse).
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse).
   I thought when using `keep=AS_PAIRS` that it shouldn't ever emit a 2-tuple
   containing just empty strings--but on further reflection I've realized that
   that's correct.  This behavior is now tested and documented, along with
@@ -5159,7 +5177,7 @@ Extremely minor release.  No new features or bug fixes.
 A **big** upgrade!
 
 * Completely retooled and upgraded
-  [`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse),
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse),
   and added
   [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
   and
@@ -5169,11 +5187,11 @@ A **big** upgrade!
   (Thanks to Eric Smith for suggesting
   [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)
   Well, sort of.)
-  * `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)`
+  * `[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)`
     now supports five (!) keyword-only parameters, allowing the caller
     to tune its behavior to an amazing degree.
   * Also, the original implementation of
-    `[`multisplit`](#multisplits-separators--keepFalse-maxsplit-1-reverseFalse-separateFalse-stripFalse)`
+    `[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)`
     got its semantics a bit wrong; it was inconsistent and maybe a little buggy.
   * [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
     is like `str.strip` but accepts an iterable of
