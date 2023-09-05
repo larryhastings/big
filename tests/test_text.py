@@ -1030,16 +1030,30 @@ class BigTextTests(unittest.TestCase):
                 * does not contain any substring that appears as an
                   element in the separators iterable.
 
+            In other words, if
+                a = toy_multisplit(s, seps)
+                b = [x for x in multisplit(s, seps, keep=ALTERNATING, separate=True) if x]
+            then "a == b" would be True.  (But, we can't really test
+            it this way, because )
+
             This is my second revision of toy_multisplit,
             adding support for bytes, and speeding things
             up a great deal in the general case.
 
-            (toy_multisplit is usually faster than
+            toy_multisplit is usually faster than
             toy_multisplit_original, and it's *way* faster
             when there are a lot of separators, or exactly
             one separator.  it's occasionally a little
             slower than toy_multisplit_original when
-            there are only a handful of separators.)
+            there are only a handful of separators.
+
+            And, actually, toy_multisplit is a lot faster
+            than the real multisplit!  I guess that's the price
+            you pay for general-purpose code.  (Though it
+            does make me think... a couple of specialized
+            versions of multisplit we dispatch to for the
+            most common use cases might speed things up
+            quite a bit!)
             """
             if not isinstance(separators, (list, tuple)):
                 separators = [separators[i:i+1] for i in range(len(separators))]
@@ -1157,10 +1171,20 @@ class BigTextTests(unittest.TestCase):
             assert result == expected, f"toy_multisplit:\n  result={result!r}\n!=\nexpected={expected!r}"
 
             if want_prints: # pragma: no cover
+                start = time_perf_counter_ns()
+            result = [x for x in big.multisplit(s, seps, keep=big.ALTERNATING, separate=True) if x]
+            if want_prints: # pragma: no cover
+                end = time_perf_counter_ns()
+                multisplit_time = str(end - start)
+                print(f'multisplit(s={s!r}, seps={seps!r}, keep=ALTERNATING, separate=True) -> {result!r}')
+            assert result == expected, f"multisplit:\n  result={result!r}\n!=\nexpected={expected!r}"
+
+            if want_prints: # pragma: no cover
                 max_length = max([len(original_time), len(str_time), len(bytes_time)])
-                print(f"original time: {original_time:>{max_length}}ns")
-                print(f"     str time: {str_time:>{max_length}}ns")
-                print(f"   bytes time: {bytes_time:>{max_length}}ns")
+                print(f"  original time: {original_time:>{max_length}}ns")
+                print(f"       str time: {str_time:>{max_length}}ns")
+                print(f"     bytes time: {bytes_time:>{max_length}}ns")
+                print(f"multisplit time: {multisplit_time:>{max_length}}ns")
                 print()
                 print()
 
@@ -1173,8 +1197,6 @@ class BigTextTests(unittest.TestCase):
 
         t('  \t abc de  fgh \n\tijk    lm  ', big.whitespace,
             [' ', ' ', '\t', ' ', 'abc', ' ', 'de', ' ', ' ', 'fgh', ' ', '\n', '\t', 'ijk', ' ', ' ', ' ', ' ', 'lm', ' ', ' '])
-
-
 
 
         def multisplit_tester(s, separators=None):
