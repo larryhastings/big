@@ -1124,9 +1124,11 @@ class BigTextTests(unittest.TestCase):
                 segments.append(empty.join(word))
                 word.clear()
 
+            longest_separator_length = separators_by_length[0][0]
             while s:
+                substring = s
                 for length, separators_set in separators_by_length:
-                    substring = s[:length]
+                    substring = substring[:length]
                     # print(f"substring={substring!r} separators_set={separators_set!r}")
                     if substring in separators_set:
                         flush_word()
