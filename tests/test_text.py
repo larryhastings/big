@@ -1002,15 +1002,17 @@ class BigTextTests(unittest.TestCase):
                 word.clear()
 
             while s:
-                longest_separator = 0
+                longest_separator_length = 0
+                longest_separator = None
                 for sep in separators:
-                    if s.startswith(sep) and (len(sep) > longest_separator):
-                        longest_separator = len(sep)
+                    length = len(sep)
+                    if s.startswith(sep) and (length > longest_separator_length):
+                        longest_separator = sep
+                        longest_separator_length = length
                 if longest_separator:
                     flush_word()
-                    segments.append(s[:longest_separator])
-                    s = s[longest_separator:]
-                    longest_separator = 0
+                    segments.append(longest_separator)
+                    s = s[longest_separator_length:]
                     continue
                 word.append(s[:1])
                 s = s[1:]
@@ -1123,7 +1125,10 @@ class BigTextTests(unittest.TestCase):
 
             return segments
 
-        # quickly test toy_multisplit
+        #
+        # you know what's a good idea?  testing!
+        # let's quickly test toy_multisplit to make sure *it* works.
+        #
 
         want_prints = False
         # want_prints = True
@@ -1202,7 +1207,6 @@ class BigTextTests(unittest.TestCase):
 
         t('  \t abc de  fgh \n\tijk    lm  ', big.whitespace,
             ['', ' ', '', ' ', '', '\t', '', ' ', 'abc', ' ', 'de', ' ', '', ' ', 'fgh', ' ', '', '\n', '', '\t', 'ijk', ' ', '', ' ', '', ' ', '', ' ', 'lm', ' ', '', ' ', ''])
-
 
 
         def multisplit_tester(s, separators=None):
