@@ -1145,7 +1145,7 @@ class BigTextTests(unittest.TestCase):
         #
         # you know what's a good idea?  testing!
         # let's run a quick test suite to ensure
-        # toy_multisplit *itself works correctly.
+        # toy_multisplit *itself* works correctly.
         #
 
         want_prints = False
@@ -1222,6 +1222,7 @@ class BigTextTests(unittest.TestCase):
         t('XYabcXbdefYghiXjkl', 'XY', ['', 'X', '', 'Y', 'abc', 'X', 'bdef', 'Y', 'ghi', 'X', 'jkl'])
         t('XYabcXbdefYghiXjkXYZl', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['', 'XY', 'abc', 'X', 'bdef', 'Y', 'ghi', 'X', 'jk', 'XYZ', 'l'])
         t('XYabcXbdefYZghiXjkXYZlY', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['', 'XY', 'abc', 'X', 'bdef', 'Y', '', 'Z', 'ghi', 'X', 'jk', 'XYZ', 'l', 'Y', ''])
+        t('qXYZXYXXYXYZabcXb', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['q', 'XYZ', '', 'XY', '', 'X', '', 'XY', '', 'XYZ', 'abc', 'X', 'b'])
 
         t('  \t abc de  fgh \n\tijk    lm  ', big.whitespace,
             ['', ' ', '', ' ', '', '\t', '', ' ', 'abc', ' ', 'de', ' ', '', ' ', 'fgh', ' ', '', '\n', '', '\t', 'ijk', ' ', '', ' ', '', ' ', '', ' ', 'lm', ' ', '', ' ', ''])
