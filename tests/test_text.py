@@ -1062,7 +1062,7 @@ class BigTextTests(unittest.TestCase):
             # assert empty not in separators
 
             # toy_multisplit used to be slower than toy_multisplit_original
-            # when there was only one separator.  but no longer!
+            # when there was only one separator.  but no longer!  it's special-cased!
             # (why bother? it kind of stuck in my craw.)
             if len(separators) == 1:
                 segments = []
@@ -1082,22 +1082,37 @@ class BigTextTests(unittest.TestCase):
                     segments.append(s)
                 return segments
 
+            # separators_by_length is a list of tuples:
+            #    (length, bucket_of_separators_of_that_length)
+            #
+            # we add a bucket for every length, including 0.
+            # (makes the algorithm easier.)
             longest_separator = max([len(sep) for sep in separators])
-
-            # easier to do it this way:
-            # add entries for every length, including 0
-            # then pop the last entry off
             separators_by_length = []
             for i in range(longest_separator, -1, -1):
                 separators_by_length.append((i, set()))
 
+            # store each separator in the correct bucket,
+            # for separators of that length.
             for sep in separators:
                 separators_by_length[longest_separator - len(sep)][1].add(sep)
 
-            # assert separators_by_length[-1][0] == 0, f"{separators_by_length[-1][0]=}, it should be 0"
-            goofy = separators_by_length[-1][-1]
-            # assert not separators_by_length[-1][-1], f"{separators_by_length[-1][-1]=}, it should be empty"
-            separators_by_length.pop()
+            # strip out empty buckets.
+            # there may not be any separators in every length bucket.
+            # for example, if your separators are
+            #     ['X', 'Y', 'ABC', 'XYZ', ]
+            # then you don't have any separators of length 2.
+            # (also, we should never have any separators of length 0).
+            s2 = [t for t in separators_by_length if t[1]]
+            separators_by_length = s2
+
+            # confirm: we shouldn't have any separators of length 0.
+            # separators_by_length is sorted, with buckets containing
+            # longer separators appearing earlier.  so the bucket with
+            # the shortest separators is last.  the length of those
+            # separators should be > 0.
+
+            # assert separators_by_length[-1][0]
 
             segments = []
             word = []
@@ -1127,7 +1142,8 @@ class BigTextTests(unittest.TestCase):
 
         #
         # you know what's a good idea?  testing!
-        # let's quickly test toy_multisplit to make sure *it* works.
+        # let's run a quick test suite to ensure
+        # toy_multisplit *itself works correctly.
         #
 
         want_prints = False
