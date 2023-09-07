@@ -2544,10 +2544,10 @@ or an iterable of `str` or `bytes`, matching `s`.
 
 If `separators` is `None` and `s` is `str`,
 `multisplit` will use [`big.whitespace`](#whitespace)
-as the list of separators.
+as `separators`.
 If `separators` is `None` and `s` is `bytes`,
 `multisplit` will use [`big.ascii_whitespace`](#whitespace)
-as the list of separators.
+as `separators`.
 
 Returns an iterator yielding the strings split from `s`.  If `keep`
 is true (or `ALTERNATING`), and `strip` is false, joining these strings
@@ -2579,8 +2579,8 @@ true (apart from `ALTERNATING` and `AS_PAIRS`)
 </dt><dd>
 
 Append the separators to the end of the split strings.
-You can recreate the original string by passing the
-list returned in to "".join .
+You can recreate the original string by using `"".join`
+to join the strings yielded by `multisplit`.
 
 </dd><dt>
 
@@ -2594,8 +2594,8 @@ will contain exactly one separator, and non-separator strings
 may be empty; if "separate" is false, separator strings will
 contain one or more separators, and non-separator strings
 will never be empty, unless "s" was empty.
-You can recreate the original string by passing the
-list returned in to "".join .
+You can recreate the original string by using `"".join`
+to join the strings yielded by `multisplit`.
 
 </dd><dt>
 
