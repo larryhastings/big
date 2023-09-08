@@ -517,6 +517,7 @@ whitespace = (
     '\x0b'  , #    11 0x000b - vertical tab
     '\x0c'  , #    12 0x000c - form feed
     '\r'    , #    13 0x000d - carriage return
+    '\r\n'  , # bonus! the classic DOS newline sequence!
     '\x1c'  , #    28 0x001c - file separator
     '\x1d'  , #    29 0x001d - group separator
     '\x1e'  , #    30 0x001e - record separator
@@ -541,8 +542,6 @@ whitespace = (
     '\u202f', #  8239 0x202f - narrow no-break space
     '\u205f', #  8287 0x205f - medium mathematical space
     '\u3000', # 12288 0x3000 - ideographic space
-
-    '\r\n'  , # bonus! the classic DOS newline sequence!
     )
 
 # this omits the DOS newline sequence '\r\n'
@@ -555,14 +554,13 @@ newlines = (
     '\x0b'  , #   11 0x000b - vertical tab
     '\x0c'  , #   12 0x000c - form feed
     '\r'    , #   13 0x000d - carriage return
+    '\r\n'  , # the classic DOS newline sequence
     '\x1c'  , #   28 0x001c - file separator
     '\x1d'  , #   29 0x001d - group separator
     '\x1e'  , #   30 0x001e - record separator
     '\x85'  , #  133 0x0085 - next line
     '\u2028', # 8232 0x2028 - line separator
     '\u2029', # 8233 0x2029 - paragraph separator
-
-    '\r\n'  , # the classic DOS newline sequence
 
     # what about '\n\r'?
     # sorry, Acorn and RISC OS users, you'll have to add this yourselves.
@@ -592,11 +590,45 @@ def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
 
 # use these with multisplit if your bytes strings are encoded as ascii.
 _export_name('ascii_whitespace')
-ascii_whitespace = _cheap_encode_iterable_of_strings(whitespace, "ascii")
+ascii_whitespace = list(_cheap_encode_iterable_of_strings(whitespace, "ascii"))
+#
+# And now for some surprising behavior in Python:
+#
+# >>> '\x1c'.isspace()
+# True
+# >>> b'\x1c'.isspace()
+# False
+#
+# ASCII characters 28, 29, 30, and 31 are respectively the
+# "file", "group", "record", and "unit" separator characters.
+# The Python Unicode (aka "str") object considers these
+# characters to be whitespace; the Python bytes object does *not*.
+#
+# I think Python got this wrong.  But for now big will do what
+# Python does, as that seems less surprising .  In big.whitespace
+# and big.utf8_whitespace, those characters will be considered
+# whitespace.  In big.ascii_whitespace ASCII they won't.
+#
+# p.s. this is a longstanding bug; it was also true in
+# Python 2, a discrepancy between the 'str' and 'unicode' objects.
+#
+# p.p.s. https://github.com/python/cpython/issues/62436
+#
+for b in (b'\x1c', b'\x1d', b'\x1e', b'\x1f'):
+    ascii_whitespace.remove(b)
+ascii_whitespace = tuple(ascii_whitespace)
 _export_name('ascii_whitespace_without_dos')
 ascii_whitespace_without_dos = tuple(s for s in ascii_whitespace if s != b'\r\n')
+
+# Similarly, what Python considers a newline character
+# differs between Unicode and ASCII.  Easier to just
+# hard-code it here.
 _export_name('ascii_newlines')
-ascii_newlines   = _cheap_encode_iterable_of_strings(newlines,   "ascii")
+ascii_newlines = (
+    b'\n'    , #   10 0x000a - newline
+    b'\r'    , #   13 0x000d - carriage return
+    b'\r\n'  , # the classic DOS newline sequence
+    )
 _export_name('ascii_newlines_without_dos')
 ascii_newlines_without_dos = tuple(s for s in ascii_newlines if s != b'\r\n')
 

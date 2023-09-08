@@ -4646,6 +4646,13 @@ in the **big** test suite.
 
 *under development, not released yet*
 
+* Minor but significant-feeling change: It turns out that Python's Unicode (`str`) and ASCII
+  (`bytes`) objects disagree on which characters are whitespace, and also which characters
+  represent a newline.  **big** used to assume they were the same, for Unicode code points
+  less than 128--but they aren't.  **big** now reproduces Python's bug here, and now **big**
+  and Python agree on which ASCII characters are whitespace and newline characters.  This
+  meant removing entries from `big.ascii_whitespace`, `big.ascii_newlines`, etc.  (No new
+  characters were added.)
 * Changed
   [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
   implementation to use `StateManager`.

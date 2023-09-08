@@ -162,17 +162,27 @@ class BigTextTests(unittest.TestCase):
         self.assertEqual(set(big.whitespace), set(python_whitespace))
         self.assertEqual(set(big.newlines), set(python_newlines))
 
-        # now test the utf-8 and ascii variants!
+        # again, but this time for bytes objects in ASCII
+        python_ascii_whitespace_without_dos = []
+        python_ascii_newlines_without_dos = []
+        for i in range(128):
+            c = chr(i).encode('ascii')
+            s = b"a" + c + b"b"
+            if len(s.split()) == 2:
+                python_ascii_whitespace_without_dos.append(c)
+                if len(s.splitlines()) == 2:
+                    python_ascii_newlines_without_dos.append(c)
 
-        python_ascii_whitespace = big.text._cheap_encode_iterable_of_strings(python_whitespace, 'ascii')
+        python_ascii_whitespace = list(python_ascii_whitespace_without_dos)
+        python_ascii_whitespace.append(b'\r\n')
+        python_ascii_newlines = list(python_ascii_newlines_without_dos)
+        python_ascii_newlines.append(b'\r\n')
         self.assertEqual(set(big.ascii_whitespace), set(python_ascii_whitespace))
-        python_ascii_whitespace_without_dos = big.text._cheap_encode_iterable_of_strings(python_whitespace_without_dos, 'ascii')
         self.assertEqual(set(big.ascii_whitespace_without_dos), set(python_ascii_whitespace_without_dos))
-        python_ascii_newlines = big.text._cheap_encode_iterable_of_strings(python_newlines, 'ascii')
         self.assertEqual(set(big.ascii_newlines), set(python_ascii_newlines))
-        python_ascii_newlines_without_dos = big.text._cheap_encode_iterable_of_strings(python_newlines_without_dos, 'ascii')
         self.assertEqual(set(big.ascii_newlines_without_dos), set(python_ascii_newlines_without_dos))
 
+        # now test the utf-8 variants!
         python_utf8_whitespace = big.text._cheap_encode_iterable_of_strings(python_whitespace, 'utf8')
         self.assertEqual(set(big.utf8_whitespace), set(python_utf8_whitespace))
         python_utf8_whitespace_without_dos = big.text._cheap_encode_iterable_of_strings(python_whitespace_without_dos, 'utf8')
@@ -238,7 +248,7 @@ class BigTextTests(unittest.TestCase):
 
             # Python 3.7 fixed a long-standing bug with zero-width matching.
             # See https://github.com/python/cpython/issues/44519
-            assert sys.version_info.major >= 3
+            self.assertTrue(sys.version_info.major >= 3)
             if (sys.version_info.major == 3) and (sys.version_info.minor <= 6):  # pragma: no cover
                 # wrong, but consistent
                 result = ('bar', 'oo', '')
@@ -452,7 +462,7 @@ class BigTextTests(unittest.TestCase):
                     elif original_separators == big.newlines:
                         separators = big.ascii_newlines
                     else:
-                        assert isinstance(original_separators, str)
+                        self.assertTrue(isinstance(original_separators, str))
                         separators = original_separators.encode('ascii')
                 elif round == 3:
                     left = BytesSubclass(left)
@@ -1142,6 +1152,236 @@ class BigTextTests(unittest.TestCase):
 
             return segments
 
+        def toy_multisplit(s, separators):
+            """
+            A toy version of multisplit.
+
+            s is a str or bytes.
+            separators is a str or iterable of str,
+              or bytes or iterable of bytes.
+
+            Returns a list equivalent to
+                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True)
+
+            This is my second revision of toy_multisplit,
+            a needless (but fun to write) optimized improvement
+            over the original, toy_multisplit_original.
+
+            toy_multisplit is *usually* faster than
+            toy_multisplit_original, and it's *way* faster
+            when there are lots of separators--or exactly
+            one separator.  it's only a bit slower than
+            toy_multisplit_original when there are only
+            a handful of separators, and even then it's
+            only sometimes, and it's not a lot slower.
+
+            And it turns out: toy_multisplit is a lot faster
+            than the real multisplit!  I guess that's the price
+            you pay for regular expressions, and general-purpose
+            code.  (Though it does make me think... a couple
+            of specialized versions of multisplit we dispatch
+            to for the most common use cases might speed things
+            up quite a bit!)
+            """
+            if not isinstance(separators, (list, tuple)):
+                separators = [separators[i:i+1] for i in range(len(separators))]
+            # assert separators
+            if isinstance(s, bytes):
+                empty = b''
+            else:
+                empty = ''
+            # assert empty not in separators
+
+            # toy_multisplit used to be slower than toy_multisplit_original
+            # when there was only one separator.  but no longer!  it's special-cased!
+            # (why bother? it kind of stuck in my craw.)
+            if len(separators) == 1:
+                segments = []
+                sep = separators[0]
+                length = len(sep)
+                while s:
+                    index = s.find(sep)
+                    if index == -1:
+                        segments.append(s)
+                        s = None
+                        break
+                    segments.append(s[:index])
+                    segments.append(sep)
+                    index2 = index + length
+                    s = s[index2:]
+                if s is not None:
+                    segments.append(s)
+                return segments
+
+            # separators_by_length is a list of tuples:
+            #    (length, bucket_of_separators_of_that_length)
+            #
+            # we add a bucket for every length, including 0.
+            # (makes the algorithm easier.)
+            longest_separator = max([len(sep) for sep in separators])
+            separators_by_length = []
+            for i in range(longest_separator, -1, -1):
+                separators_by_length.append((i, set()))
+
+            # store each separator in the correct bucket,
+            # for separators of that length.
+            for sep in separators:
+                separators_by_length[longest_separator - len(sep)][1].add(sep)
+
+            # strip out empty buckets.
+            # there may not be any separators in every length bucket.
+            # for example, if your separators are
+            #     ['X', 'Y', 'ABC', 'XYZ', ]
+            # then you don't have any separators of length 2.
+            # (also, we should never have any separators of length 0).
+            s2 = [t for t in separators_by_length if t[1]]
+            separators_by_length = s2
+
+            # confirm: we shouldn't have any separators of length 0.
+            # separators_by_length is sorted, with buckets containing
+            # longer separators appearing earlier.  so the bucket with
+            # the shortest separators is last.  the length of those
+            # separators should be > 0.
+
+            # assert separators_by_length[-1][0]
+
+            segments = []
+            word = []
+
+            def flush_word():
+                if not word:
+                    segments.append(empty)
+                    return
+                segments.append(empty.join(word))
+                word.clear()
+
+            longest_separator_length = separators_by_length[0][0]
+            while s:
+                substring = s
+                for length, separators_set in separators_by_length:
+                    substring = substring[:length]
+                    # print(f"substring={substring!r} separators_set={separators_set!r}")
+                    if substring in separators_set:
+                        flush_word()
+                        segments.append(substring)
+                        s = s[length:]
+                        break
+                else:
+                    # slice works on byte strings, s[0] on a bytes string is an int.
+                    word.append(s[:1])
+                    s = s[1:]
+            flush_word()
+
+            return segments
+
+        def toy_reverse_multisplit(s, separators):
+            """
+            A toy version of multisplit, in reverse mode.
+
+            s is a str or bytes.
+            separators is a str or iterable of str,
+              or bytes or iterable of bytes.
+
+            Returns a list equivalent to
+                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True, reverse=True))
+
+            Forward splitting and reverse splitting *usually*
+            produce the same results--but not always!
+            See the docs:
+                https://github.com/larryhastings/big#reverse
+            """
+            if not isinstance(separators, (list, tuple)):
+                separators = [separators[i:i+1] for i in range(len(separators))]
+            # assert separators
+            if isinstance(s, bytes):
+                empty = b''
+            else:
+                empty = ''
+            # assert empty not in separators
+
+            # toy_multisplit used to be slower than toy_multisplit_original
+            # when there was only one separator.  but no longer!  it's special-cased!
+            # (why bother? it kind of stuck in my craw.)
+            if len(separators) == 1:
+                segments = []
+                sep = separators[0]
+                length = len(sep)
+                while s:
+                    index = s.rfind(sep)
+                    if index == -1:
+                        segments.append(s)
+                        s = None
+                        break
+                    segments.append(s[index + length:])
+                    segments.append(sep)
+                    s = s[:index]
+                if s is not None:
+                    segments.append(s)
+                segments.reverse()
+                return segments
+
+            # separators_by_length is a list of tuples:
+            #    (length, bucket_of_separators_of_that_length)
+            #
+            # we add a bucket for every length, including 0.
+            # (makes the algorithm easier.)
+            longest_separator = max([len(sep) for sep in separators])
+            separators_by_length = []
+            for i in range(longest_separator, -1, -1):
+                separators_by_length.append((-i, set()))
+
+            # store each separator in the correct bucket,
+            # for separators of that length.
+            for sep in separators:
+                separators_by_length[longest_separator - len(sep)][1].add(sep)
+
+            # strip out empty buckets.
+            # there may not be any separators in every length bucket.
+            # for example, if your separators are
+            #     ['X', 'Y', 'ABC', 'XYZ', ]
+            # then you don't have any separators of length 2.
+            # (also, we should never have any separators of length 0).
+            s2 = [t for t in separators_by_length if t[1]]
+            separators_by_length = s2
+
+            # confirm: we shouldn't have any separators of length 0.
+            # separators_by_length is sorted, with buckets containing
+            # longer separators appearing earlier.  so the bucket with
+            # the shortest separators is last.  the length of those
+            # separators should be > 0.
+
+            # assert separators_by_length[-1][0]
+
+            segments = []
+            word = []
+
+            def flush_word():
+                if not word:
+                    segments.append(empty)
+                    return
+                word.reverse()
+                segments.append(empty.join(word))
+                word.clear()
+
+            longest_separator_length = separators_by_length[0][0]
+            while s:
+                substring = s
+                for negative_length, separators_set in separators_by_length:
+                    substring = substring[negative_length:]
+                    # print(f"substring={substring!r} separators_set={separators_set!r}")
+                    if substring in separators_set:
+                        flush_word()
+                        segments.append(substring)
+                        s = s[:negative_length]
+                        break
+                else:
+                    word.append(s[-1:])
+                    s = s[:-1]
+            flush_word()
+
+            segments.reverse()
+            return segments
+
         #
         # you know what's a good idea?  testing!
         # let's run a quick test suite to ensure
@@ -1159,7 +1399,8 @@ class BigTextTests(unittest.TestCase):
                 def time_perf_counter_ns():
                     return int(time.perf_counter() * 1000000000)
 
-        def t(s, seps, expected):
+        def t(s, seps, expected, reverse_expected=None):
+            reverse_expected = reverse_expected or expected
             for which in ('str', 'bytes'):
                 if want_prints: # pragma: no cover
                     times = {}
@@ -1167,6 +1408,8 @@ class BigTextTests(unittest.TestCase):
                     print(f"       s={s!r}")
                     print(f"    seps={seps!r}")
                     print(f"  result={expected!r}")
+                    if reverse_expected != expected:
+                        print(f"  reverse result={reverse_expected!r}")
                     start = time_perf_counter_ns()
                 result = toy_multisplit_original(s, seps)
                 if want_prints: # pragma: no cover
@@ -1174,7 +1417,7 @@ class BigTextTests(unittest.TestCase):
                     delta = str(end - start)
                     times[f'toy multisplit original ({which})'] = delta
                     # print(f'  toy_multisplit_original(s={s!r}, seps={seps!r}) -> {result!r}')
-                assert result == expected, f"toy_multisplit_original:\n  result={result!r}\n!=\nexpected={expected!r}"
+                self.assertEqual(result, expected, f"toy_multisplit_original:\n  result={result!r}\n!=\nexpected={expected!r}")
 
                 if want_prints: # pragma: no cover
                     start = time_perf_counter_ns()
@@ -1184,7 +1427,7 @@ class BigTextTests(unittest.TestCase):
                     delta = str(end - start)
                     times[f'toy multisplit ({which})'] = delta
                     # print(f'  toy_multisplit(s={s!r}, seps={seps!r}) -> {result!r}')
-                assert result == expected, f"toy_multisplit:\n  result={result!r}\n!=\nexpected={expected!r}"
+                self.assertEqual(result, expected, f"toy_multisplit:\n  result={result!r}\n!=\nexpected={expected!r}")
 
                 if want_prints: # pragma: no cover
                     start = time_perf_counter_ns()
@@ -1194,7 +1437,27 @@ class BigTextTests(unittest.TestCase):
                     delta = str(end - start)
                     times[f'multisplit ({which})'] = delta
                     # print(f'multisplit(s={s!r}, seps={seps!r}, keep=ALTERNATING, separate=True) -> {result!r}')
-                assert result == expected, f"multisplit:\n  result={result!r}\n!=\nexpected={expected!r}"
+                self.assertEqual(result, expected, f"multisplit:\n  result={result!r}\n!=\nexpected={expected!r}")
+
+                if want_prints: # pragma: no cover
+                    start = time_perf_counter_ns()
+                result = toy_reverse_multisplit(s, seps)
+                if want_prints: # pragma: no cover
+                    end = time_perf_counter_ns()
+                    delta = str(end - start)
+                    times[f'toy reverse multisplit ({which})'] = delta
+                    # print(f'  toy_multisplit(s={s!r}, seps={seps!r}) -> {result!r}')
+                self.assertEqual(result, reverse_expected, f"toy_reverse_multisplit:\n  result={result!r}\n!=\nreverse_expected={reverse_expected!r}")
+
+                if want_prints: # pragma: no cover
+                    start = time_perf_counter_ns()
+                result = list(big.multisplit(s, seps, keep=big.ALTERNATING, separate=True, reverse=True))
+                if want_prints: # pragma: no cover
+                    end = time_perf_counter_ns()
+                    delta = str(end - start)
+                    times[f'reverse multisplit ({which})'] = delta
+                    # print(f'multisplit(s={s!r}, seps={seps!r}, keep=ALTERNATING, separate=True, reverse=True) -> {result!r}')
+                self.assertEqual(result, reverse_expected, f"multisplit:\n  result={result!r}\n!=\reverse_expected={reverse_expected!r}")
 
                 if want_prints: # pragma: no cover
                     max_name_length = max(len(key) for key in times)
@@ -1214,6 +1477,7 @@ class BigTextTests(unittest.TestCase):
                 else:
                     seps = [b.encode('ascii') for b in seps]
                 expected = [b.encode('ascii') for b in expected]
+                reverse_expected = [b.encode('ascii') for b in reverse_expected]
 
 
         t('aXbXcXd', 'X', list('aXbXcXd'))
@@ -1223,6 +1487,8 @@ class BigTextTests(unittest.TestCase):
         t('XYabcXbdefYghiXjkXYZl', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['', 'XY', 'abc', 'X', 'bdef', 'Y', 'ghi', 'X', 'jk', 'XYZ', 'l'])
         t('XYabcXbdefYZghiXjkXYZlY', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['', 'XY', 'abc', 'X', 'bdef', 'Y', '', 'Z', 'ghi', 'X', 'jk', 'XYZ', 'l', 'Y', ''])
         t('qXYZXYXXYXYZabcXb', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['q', 'XYZ', '', 'XY', '', 'X', '', 'XY', '', 'XYZ', 'abc', 'X', 'b'])
+
+        t('xa0bx', ('a0', '0b'), ['x', 'a0', 'bx'], reverse_expected=['xa', '0b', 'x'] )
 
         t('  \t abc de  fgh \n\tijk    lm  ', big.whitespace,
             ['', ' ', '', ' ', '', '\t', '', ' ', 'abc', ' ', 'de', ' ', '', ' ', 'fgh', ' ', '', '\n', '', '\t', 'ijk', ' ', '', ' ', '', ' ', '', ' ', 'lm', ' ', '', ' ', ''])
@@ -1260,271 +1526,290 @@ class BigTextTests(unittest.TestCase):
                 print("test exhaustively")
                 print("_" * 69)
 
-            # Don't worry, we'll pass the separators argument
-            # in to multisplit *exactly* how you passed it in
-            # to multisplit_tester.
-            separators_as_passed_in = separators
-            separators = separators if (separators is not None) else big.whitespace
+            original_separators = separators
+            original_s = s
+
+            separators = original_separators if (original_separators is not None) else big.whitespace
 
             # split s by hand into alternating separator and non-separator strings.
             #
             # note that toy_multisplit may return empty strings, as it's identical
             # to multisplit(keep=ALTERNATING, separate=True).  we don't want those.
             # so, throw 'em away.
-            segments = [x for x in toy_multisplit(s, separators) if x]
-
-            separators_set = set(separators)
-            assert '' not in separators_set
-
-            # strip off the leading and trailing separators.
-
-            # leading looks like this:
-            #   [ '', separator, separator, separator, ... ]
-            # yes, that is always an empty string, you'll see why
-            # in a moment.
-
-            leading = ['']
-            while True:
-                if segments[0] not in separators_set:
-                    break
-                leading.append(segments.pop(0))
-
-            # trailing contains just the trailing (right)
-            # separators, as individual strings.
-            # trailing just looks like this:
-            #   [ separator, separator, ... ]
-
-            trailing = []
-            while True:
-                if want_prints: # pragma: no cover
-                    print(f"splitting segments: segments[-1]={segments[-1]} separators_set={separators_set} not in? {segments[-1] not in separators_set}")
-                if segments[-1] not in separators_set:
-                    break
-                trailing.append(segments.pop())
-            trailing.reverse()
-
-            # splits is a list of lists.  each sublist, or "split",
-            # inside splits, looks like this:
-            #   [ non-separator-string, separator, separator, ... ]
-            # (yes, leading and an individual split list look identical, that's why.)
-            # every split in splits is has at least one separator
-            # EXCEPT the last one which only has the non-sep string.
             #
-            # this is only an intermediate form, we'll massage this
-            # into a more useful form in a minute.
-            splits = []
-            split = []
-            def flush():
-                nonlocal split
-                if split:
-                    splits.append(split)
-                    split = []
+            # split both forwards and backwards, in case there are overlapping separators.
+            forwards_segments = [x for x in toy_multisplit(s, separators) if x]
+            reverse_segments = [x for x in toy_reverse_multisplit(s, separators) if x]
 
-            for segment in segments:
-                if segment in separators_set:
-                    assert split
+            for reverse in (False, True):
+                segments = reverse_segments if reverse else forwards_segments
+                segments = segments.copy()
+
+                # Don't worry, we'll pass the separators argument
+                # in to multisplit *exactly* how you passed it in
+                # to multisplit_tester.
+                separators = original_separators if (original_separators is not None) else big.whitespace
+                separators_as_passed_in = original_separators
+
+                separators_set = set(separators)
+                self.assertNotIn('', separators_set)
+
+                # strip off the leading and trailing separators.
+
+                # leading looks like this:
+                #   [ '', separator, separator, separator, ... ]
+                # yes, that is always an empty string, you'll see why
+                # in a moment.
+
+                leading = ['']
+                while True:
+                    if segments[0] not in separators_set:
+                        break
+                    leading.append(segments.pop(0))
+
+                # trailing contains just the trailing (right)
+                # separators, as individual strings.
+                # trailing just looks like this:
+                #   [ separator, separator, ... ]
+
+                trailing = []
+                while True:
+                    if want_prints: # pragma: no cover
+                        print(f"splitting segments: segments[-1]={segments[-1]} separators_set={separators_set} not in? {segments[-1] not in separators_set}")
+                    if segments[-1] not in separators_set:
+                        break
+                    trailing.append(segments.pop())
+                trailing.reverse()
+
+                # splits is a list of lists.  each sublist, or "split",
+                # inside splits, looks like this:
+                #   [ non-separator-string, separator, separator, ... ]
+                # (yes, leading and an individual split list look identical, that's why.)
+                # every split in splits is has at least one separator
+                # EXCEPT the last one which only has the non-sep string.
+                #
+                # this is only an intermediate form, we'll massage this
+                # into a more useful form in a minute.
+                splits = []
+                split = []
+                def flush():
+                    nonlocal split
+                    if split:
+                        splits.append(split)
+                        split = []
+
+                for segment in segments:
+                    if segment in separators_set:
+                        self.assertTrue(split)
+                        split.append(segment)
+                        continue
+                    self.assertTrue((not split) or (split[-1] in separators_set), f"split={split} last element should be in separators_set={separators_set}")
+                    flush()
                     split.append(segment)
-                    continue
-                assert (not split) or (split[-1] in separators_set), f"split={split} split[-1]={split[-1]} separators_set={separators_set}"
                 flush()
-                split.append(segment)
-            flush()
 
-            if want_prints: # pragma: no cover
-                print(f"leading={leading}")
-                print(f"splits={splits}")
-                print(f"trailing={trailing}")
-            assert splits[-1][-1] not in separators_set, f"splits[-1][-1]={splits[-1][-1]} is in separators_set={separators_set}!"
-
-            # leading and trailing must both have at least
-            # one sep string.
-            assert (len(leading) >= 2) and trailing
-
-            # note one invariant: if you join leading, splits, and trailing
-            # together into one big string, it is our original input string.
-            # that will never change.
-
-            originals = leading, splits, trailing
-
-            for as_bytes in (False, True):
                 if want_prints: # pragma: no cover
-                    print(f"[loop 0] as_bytes={as_bytes}")
-                if as_bytes:
-                    leading, splits, trailing = copy.deepcopy(originals)
-                    leading = big.text._cheap_encode_iterable_of_strings(leading)
-                    splits = [big.text._cheap_encode_iterable_of_strings(split) for split in splits]
-                    trailing = big.text._cheap_encode_iterable_of_strings(trailing)
-                    originals = [leading, splits, trailing]
-                    empty = b''
-                    if separators_as_passed_in is None:
-                        separators_set = set(big.ascii_whitespace)
-                    else:
-                        separators_as_passed_in = separators = big.text._cheap_encode_iterable_of_strings(separators)
-                        separators_set = set(separators)
-                    non_sep_marker = b"&NONSEP&"
-                else:
-                    empty = ''
-                    non_sep_marker = "&NONSEP&"
+                    print(f"leading={leading}")
+                    print(f"splits={splits}")
+                    print(f"trailing={trailing}")
+                self.assertNotIn(splits[-1][-1], separators_set, f"splits[-1][-1]={splits[-1][-1]} is in separators_set={separators_set}!")
 
-                for use_leading in (False, True):
-                    for use_trailing in (False, True):
-                        # we're going to hack up these lists,
-                        # so start with copies.
+                # leading and trailing must both have at least
+                # one sep string.
+                self.assertTrue((len(leading) >= 2) and trailing)
+
+                # note one invariant: if you join leading, splits, and trailing
+                # together into one big string, it is our original input string.
+                # that will never change.
+                #
+                # in fact... let's test it!
+                t = leading.copy()
+                for o in splits:
+                    t.extend(o)
+                t.extend(trailing)
+                reconstituted_s = "".join(t)
+                self.assertEqual(reconstituted_s, original_s)
+
+                originals = leading, splits, trailing
+
+                for as_bytes in (False, True):
+                    if want_prints: # pragma: no cover
+                        print(f"[loop 0] as_bytes={as_bytes}")
+                    if as_bytes:
                         leading, splits, trailing = copy.deepcopy(originals)
+                        leading = big.text._cheap_encode_iterable_of_strings(leading)
+                        splits = [big.text._cheap_encode_iterable_of_strings(split) for split in splits]
+                        trailing = big.text._cheap_encode_iterable_of_strings(trailing)
+                        originals = [leading, splits, trailing]
+                        empty = b''
+                        if separators_as_passed_in is None:
+                            separators_set = set(big.ascii_whitespace)
+                        else:
+                            separators_as_passed_in = separators = big.text._cheap_encode_iterable_of_strings(separators)
+                            separators_set = set(separators)
+                        non_sep_marker = b"&NONSEP&"
+                    else:
+                        empty = ''
+                        non_sep_marker = "&NONSEP&"
 
-                        if want_prints: # pragma: no cover
-                            print(f"[loop 1,2] use_leading={use_leading} use_trailing={use_trailing}")
-                            print(f"         leading={leading} split={split} trailing={trailing}")
-
-                        input_strings = []
-                        if use_leading:
-                            input_strings.extend(leading)
-                        for split in splits:
-                            input_strings.extend(split)
-                        if use_trailing:
-                            input_strings.extend(trailing)
-
-                        input_string = empty.join(input_strings)
-
-                        for separate in (False, True):
+                    for use_leading in (False, True):
+                        for use_trailing in (False, True):
+                            # we're going to hack up these lists,
+                            # so start with copies.
                             leading, splits, trailing = copy.deepcopy(originals)
-                            # now we're going to change leading / splits / trailing
-                            # so that they collectively alternate
-                            #    nonsep, sep
 
                             if want_prints: # pragma: no cover
-                                print(f"[loop 3] separate={separate}")
-                                print(f"    leading={leading} splits={splits} trailing={trailing}")
+                                print(f"[loop 1,2] use_leading={use_leading} use_trailing={use_trailing}")
+                                print(f"         leading={leading} split={split} trailing={trailing}")
 
-                            if not separate:
-                                # blob the separators together
-                                l2 = [empty]
-                                if want_prints: # pragma: no cover
-                                    print(f"    blob together empty={empty} leading={leading}")
-                                l2.append(empty.join(leading))
-                                leading = l2
-                                if want_prints: # pragma: no cover
-                                    print(f"    blobbed leading={leading}")
+                            input_strings = []
+                            if use_leading:
+                                input_strings.extend(leading)
+                            for split in splits:
+                                input_strings.extend(split)
+                            if use_trailing:
+                                input_strings.extend(trailing)
 
-                                for split in splits:
-                                    if len(split) > 1:
-                                        joined = empty.join(split[1:])
-                                        del split[1:]
-                                        split.append(joined)
+                            input_string = empty.join(input_strings)
 
-                                trailing = [empty.join(trailing), empty]
-                            else:
-                                # turn leading, splits, and trailing
-                                # into suitable form for testing with "separate".
-                                #   * every list is a list of alternating sep and nonsep.
-                                #   * splits now has empty strings between sep and nonsep.
-                                assert len(leading) >= 2
-                                separate_leading = list(leading[:2])
-                                for s in leading[2:]:
-                                    separate_leading.append(empty)
-                                    separate_leading.append(s)
-                                leading = separate_leading
-                                if want_prints: # pragma: no cover
-                                    print(f"    leading={leading}")
-
-                                separate_splits = []
-                                for split in splits:
-                                    if len(split) == 1:
-                                        assert split == splits[-1]
-                                        separate_splits.append(split)
-                                        break
-                                    assert len(split) >= 2
-                                    separate_splits.append(list(split[:2]))
-                                    for s in split[2:]:
-                                        separate_splits.append([empty, s])
-                                splits = separate_splits
-                                if want_prints: # pragma: no cover
-                                    print(f"    splits={splits}")
-
-                                separate_trailing = []
-                                for s in trailing:
-                                    if s: # skip the trailing empty
-                                        separate_trailing.append(s)
-                                        separate_trailing.append(empty)
-                                trailing = separate_trailing
-                                if want_prints: # pragma: no cover
-                                    print(f"    trailing={trailing}")
-
-                            # time to check!  every list or sublist
-                            # should now have an even length,
-                            # EXCEPT splits[-1] which is length 1.
-                            assert len(leading) % 2 == 0
-                            for split in splits[:-1]:
-                                assert len(split) % 2 == 0
-                            assert len(splits[-1]) == 1
-                            assert len(trailing) % 2 == 0
-
-                            for strip in (False, big.LEFT, big.RIGHT, True):
-                                expected = []
-                                if want_prints: # pragma: no cover
-                                    print(f"[loop 4] strip={strip}")
-                                    print(f"         leading={leading} splits={splits} trailing={trailing}")
-
-                                if use_leading and (strip in (False, big.RIGHT)):
-                                    expected.extend(leading)
-                                if want_prints: # pragma: no cover
-                                    print(f"     leading: expected={expected}")
-
-                                for split in splits:
-                                    expected.extend(split)
-                                if want_prints: # pragma: no cover
-                                    print(f"      splits: expected={expected}")
-
-                                if use_trailing and (strip in (False, big.LEFT)):
-                                    expected.extend(trailing)
-                                if want_prints: # pragma: no cover
-                                    print(f"    trailing: expected={expected}")
-
-                                # expected can be a whole weird mix of things at this point.
-                                # let's sanity-check it, that every element either
-                                #     * contains *only* separators, or
-                                #     * doesn't contain *any* separators.
-                                #
-                                # we do that by using toy_multisplit to split every segment.
-                                # every segment should either contain only separators
-                                # (but maybe more than one), or no separators.
-                                # which means when toy_multisplit splits it, either we get back
-                                #    * one element which contains no separators, or
-                                #    * one element which is in separators, or
-                                #    * multiple elements which are all in separators.
-                                #
-                                # if we only get one element back, we can't do any further
-                                # testing, because either it's in separators or it isn't,
-                                # we can't tell anything further.
-                                #
-                                # if we get back multiple elements, they must all be in
-                                # separators.
-                                for e in expected:
-                                    if not e:
-                                        self.assertIn(e, ('', b''))
-                                        continue
-                                    _segments = [x for x in toy_multisplit(e, list(separators_set)) if x]
-                                    if len(_segments) == 1:
-                                        self.assertEqual(_segments[0], e)
-                                        continue
-                                    for _segment in _segments:
-                                        self.assertIn(_segment, separators_set)
-
-                                # how many splits can we have?
-                                # Technically the maximum number of splits possible
-                                # is
-                                #    (len(expected) // 2) - 1
-                                # 'a b c d e' would split by whitespace into 9 elements,
-                                # only using four splits.
-                                # Anyway we test a couple supernumerary maxsplit values.
-                                max_maxsplit = (len(expected) // 2) + 1
-
-                                expected_original = expected
+                            for separate in (False, True):
+                                leading, splits, trailing = copy.deepcopy(originals)
+                                # now we're going to change leading / splits / trailing
+                                # so that they collectively alternate
+                                #    nonsep, sep
 
                                 if want_prints: # pragma: no cover
-                                    print(f"    expected_original={expected_original}")
+                                    print(f"[loop 3] separate={separate}")
+                                    print(f"    leading={leading} splits={splits} trailing={trailing}")
 
-                                for reverse in (False, True):
+                                if not separate:
+                                    # blob the separators together
+                                    l2 = [empty]
+                                    if want_prints: # pragma: no cover
+                                        print(f"    blob together empty={empty} leading={leading}")
+                                    l2.append(empty.join(leading))
+                                    leading = l2
+                                    if want_prints: # pragma: no cover
+                                        print(f"    blobbed leading={leading}")
+
+                                    for split in splits:
+                                        if len(split) > 1:
+                                            joined = empty.join(split[1:])
+                                            del split[1:]
+                                            split.append(joined)
+
+                                    trailing = [empty.join(trailing), empty]
+                                else:
+                                    # turn leading, splits, and trailing
+                                    # into suitable form for testing with "separate".
+                                    #   * every list is a list of alternating sep and nonsep.
+                                    #   * splits now has empty strings between sep and nonsep.
+                                    self.assertTrue(len(leading) >= 2)
+                                    separate_leading = list(leading[:2])
+                                    for s in leading[2:]:
+                                        separate_leading.append(empty)
+                                        separate_leading.append(s)
+                                    leading = separate_leading
+                                    if want_prints: # pragma: no cover
+                                        print(f"    leading={leading}")
+
+                                    separate_splits = []
+                                    for split in splits:
+                                        if len(split) == 1:
+                                            self.assertEqual(split, splits[-1])
+                                            separate_splits.append(split)
+                                            break
+                                        self.assertTrue(len(split) >= 2)
+                                        separate_splits.append(list(split[:2]))
+                                        for s in split[2:]:
+                                            separate_splits.append([empty, s])
+                                    splits = separate_splits
+                                    if want_prints: # pragma: no cover
+                                        print(f"    splits={splits}")
+
+                                    separate_trailing = []
+                                    for s in trailing:
+                                        if s: # skip the trailing empty
+                                            separate_trailing.append(s)
+                                            separate_trailing.append(empty)
+                                    trailing = separate_trailing
+                                    if want_prints: # pragma: no cover
+                                        print(f"    trailing={trailing}")
+
+                                # time to check!  every list or sublist
+                                # should now have an even length,
+                                # EXCEPT splits[-1] which is length 1.
+                                self.assertEqual(len(leading) % 2, 0)
+                                for split in splits[:-1]:
+                                    self.assertEqual(len(split) % 2, 0)
+                                self.assertEqual(len(splits[-1]), 1)
+                                self.assertEqual(len(trailing) % 2, 0)
+
+                                for strip in (False, big.LEFT, big.RIGHT, True):
+                                    expected = []
+                                    if want_prints: # pragma: no cover
+                                        print(f"[loop 4] strip={strip}")
+                                        print(f"         leading={leading} splits={splits} trailing={trailing}")
+
+                                    if use_leading and (strip in (False, big.RIGHT)):
+                                        expected.extend(leading)
+                                    if want_prints: # pragma: no cover
+                                        print(f"     leading: expected={expected}")
+
+                                    for split in splits:
+                                        expected.extend(split)
+                                    if want_prints: # pragma: no cover
+                                        print(f"      splits: expected={expected}")
+
+                                    if use_trailing and (strip in (False, big.LEFT)):
+                                        expected.extend(trailing)
+                                    if want_prints: # pragma: no cover
+                                        print(f"    trailing: expected={expected}")
+
+                                    # expected can be a whole weird mix of things at this point.
+                                    # let's sanity-check it, that every element either
+                                    #     * contains *only* separators, or
+                                    #     * doesn't contain *any* separators.
+                                    #
+                                    # we do that by using toy_multisplit to split every segment.
+                                    # every segment should either contain only separators
+                                    # (but maybe more than one), or no separators.
+                                    # which means when toy_multisplit splits it, either we get back
+                                    #    * one element which contains no separators, or
+                                    #    * one element which is in separators, or
+                                    #    * multiple elements which are all in separators.
+                                    #
+                                    # if we only get one element back, we can't do any further
+                                    # testing, because either it's in separators or it isn't,
+                                    # we can't tell anything further.
+                                    #
+                                    # if we get back multiple elements, they must all be in
+                                    # separators.
+                                    for e in expected:
+                                        if not e:
+                                            self.assertIn(e, ('', b''))
+                                            continue
+                                        _segments = [x for x in toy_multisplit(e, list(separators_set)) if x]
+                                        if len(_segments) == 1:
+                                            self.assertEqual(_segments[0], e)
+                                            continue
+                                        for _segment in _segments:
+                                            self.assertIn(_segment, separators_set)
+
+                                    # how many splits can we have?
+                                    # Technically the maximum number of splits possible
+                                    # is
+                                    #    (len(expected) // 2) - 1
+                                    # 'a b c d e' would split by whitespace into 9 elements,
+                                    # only using four splits.
+                                    # Anyway we test a couple supernumerary maxsplit values.
+                                    max_maxsplit = (len(expected) // 2) + 1
+
+                                    expected_original = expected
+
+                                    if want_prints: # pragma: no cover
+                                        print(f"    expected_original={expected_original}")
+
                                     for maxsplit in range(-1, max_maxsplit):
                                         expected = list(expected_original)
                                         if want_prints: # pragma: no cover
@@ -1634,7 +1919,6 @@ class BigTextTests(unittest.TestCase):
                                                 print()
                                             self.assertEqual(result, expected, f"as_bytes={as_bytes} use_leading={use_leading} use_trailing={use_trailing} multisplit(input_string={input_string}, separators={printable_separators(separators)}, keep={keep}, separate={separate}, strip={strip}, reverse={reverse}, maxsplit={maxsplit})")
 
-
         test_string = ' a b c '
 
         multisplit_tester(
@@ -1659,6 +1943,10 @@ class BigTextTests(unittest.TestCase):
             'xy',
             )
 
+        multisplit_tester(
+            'oaaXbbo',
+            ('aX', 'Xb', 'o'),
+            )
 
 
     def test_multipartition(self):
