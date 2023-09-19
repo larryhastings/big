@@ -277,6 +277,8 @@ And here are five little functions/classes I use all the time:
 
 [`Regulator.wake()`](#regulatorwake)
 
+[Release history](#release-history)
+
 [`reversed_re_finditer(pattern, string, flags=0)`](#reversed_re_finditerpattern-string-flags0)
 
 [`safe_mkdir(path)`](#safe_mkdirpath)
@@ -2196,6 +2198,8 @@ with a backslash?  (You usually can inside single or double quotes.)
 
 #### `encode_strings(o, *, encoding='ascii')`
 
+<dl><dd>
+
 Accepts a container object `o` containing
 `str` objects; returns an equivalent object
 with the strings encoded to `bytes`.
@@ -2211,7 +2215,7 @@ If `o` is a `str`, raises `TypeError`.
 If `o` is a container and contains an object that
 isn't a
 `str`, `dict`, `list`, or `tuple`, raises `TypeError`.
-
+</dd></dl>
 
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
 
@@ -5342,7 +5346,7 @@ in the **big** test suite.
 #### 0.11
 <dl><dd>
 
-*2023/09/19*
+*released 2023/09/19*
 
 * Breaking change: renamed almost all the old `whitespace` and `newlines` tuples.
   Worse yet, one symbol has the same name but a *different value:* `ascii_whitespace`!
