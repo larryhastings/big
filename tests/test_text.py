@@ -29,6 +29,7 @@ bigtestlib.preload_local_big()
 
 import big.all as big
 import copy
+import itertools
 import math
 import re
 import sys
@@ -65,6 +66,8 @@ def to_bytes(o): # pragma: no cover
         return [to_bytes(x) for x in o]
     if isinstance(o, tuple):
         return tuple(to_bytes(x) for x in o)
+    if isinstance(o, set):
+        return set(to_bytes(x) for x in o)
     if isinstance(o, re_Pattern):
         flags = o.flags
         if flags & re.UNICODE:
@@ -72,29 +75,51 @@ def to_bytes(o): # pragma: no cover
         o = re.compile(to_bytes(o.pattern), flags=flags)
     return o
 
+#
+# known_separators & printable_separators lets error messages
+# print a symbolic name for a set of separators, instead of
+# printing the actual value of the separators... which can be
+# pretty freakin' unreadable.
+#
+known_separators = []
 
-known_separators = [
-    (big.whitespace, "big.whitespace"),
-    (big.whitespace_without_dos, "big.whitespace_without_dos"),
-    (big.newlines,   "big.newlines"),
-    (big.newlines_without_dos,   "big.newlines_without_dos"),
+for symbol in """
 
-    (big.ascii_whitespace, "big.ascii_whitespace"),
-    (big.ascii_whitespace_without_dos, "big.ascii_whitespace_without_dos"),
-    (big.ascii_newlines,   "big.ascii_newlines"),
-    (big.ascii_newlines_without_dos,   "big.ascii_newlines_without_dos"),
+    big.str_whitespace
+    big.str_whitespace_without_crlf
+    big.str_linebreaks
+    big.str_linebreaks_without_crlf
 
-    (big.utf8_whitespace, "big.utf8_whitespace"),
-    (big.utf8_whitespace_without_dos, "big.utf8_whitespace_without_dos"),
-    (big.utf8_newlines,   "big.utf8_newlines"),
-    (big.utf8_newlines_without_dos,   "big.utf8_newlines_without_dos"),
-]
+    big.unicode_whitespace
+    big.unicode_whitespace_without_crlf
+    big.unicode_linebreaks
+    big.unicode_linebreaks_without_crlf
+
+    big.ascii_whitespace
+    big.ascii_whitespace_without_crlf
+    big.ascii_linebreaks
+    big.ascii_linebreaks_without_crlf
+
+    # deprecated
+
+    big.utf8_whitespace
+    big.utf8_whitespace_without_dos
+    big.utf8_newlines
+    big.utf8_newlines_without_dos
+
+""".strip().split('\n'):
+    symbol = symbol.strip()
+    if (not symbol) or symbol.startswith('#'):
+        continue
+    value = eval(symbol)
+    known_separators.append((value, symbol))
 
 def printable_separators(separators):
     for known, name in known_separators:
         if separators == known:
             return f"{name}"
     return separators
+
 
 class StrSubclass(str):
     def __repr__(self): # pragma: no cover
@@ -127,72 +152,118 @@ def finditer_group0(i):
 
 class BigTextTests(unittest.TestCase):
 
-    def test_whitespace_and_newlines(self):
-        # ensure that big.whitespace and big.newlines
+    def test_whitespace_and_linebreaks(self):
+        # ensure that big.whitespace and big.linebreaks
         # correctly matches the list of characters that
-        # Python considers whitespace / newlines.
+        # Python considers whitespace / line breaks.
 
+        # the default versions should match the Python str versions
+        self.assertEqual(big.whitespace, big.str_whitespace)
+        self.assertEqual(big.linebreaks, big.str_linebreaks)
+
+        # interrogate Python, to find out what *it*
+        # thinks are whitespace characters.
+        #
         # Python whitespace only considers individual
         # whitespace charcters, and doesn't include the
-        # DOS end-of-line sequence '\r\n'.  so what we're
-        # going to produce in the below list is technically
+        # DOS end-of-line sequence '\r\n'.  so technically
+        # what we're producing below is what big calls
         # the "without DOS" versions.
-        python_whitespace_without_dos = []
-        python_newlines_without_dos = []
+        observed_str_whitespace_without_crlf = set()
+        observed_str_linebreaks_without_crlf = set()
 
-        # technically we don't need to check the surrogate pair characters.
-        # but it's faster to leave them in.
-        unicode_code_points = 2**16 + 2**20
-
-        for i in range(unicode_code_points):
+        # skip over the surrogate pair code points, they don't represent glyphs.
+        for i in itertools.chain(range(0, 0xd7ff), range(0xdfff, 2**16 + 2**20)):
             c = chr(i)
             s = f"a{c}b"
             if len(s.split()) == 2:
-                python_whitespace_without_dos.append(c)
+                observed_str_whitespace_without_crlf.add(c)
+                # all line-breaking characters are whitespace.
+                # therefore, don't bother with the linebreaks test
+                # unless this character passes the whitespace text.
                 if len(s.splitlines()) == 2:
-                    python_newlines_without_dos.append(c)
+                    observed_str_linebreaks_without_crlf.add(c)
 
-        self.assertEqual(set(big.whitespace_without_dos), set(python_whitespace_without_dos))
-        self.assertEqual(set(big.newlines_without_dos), set(python_newlines_without_dos))
+        crlf = set(('\r\n',))
+        observed_str_whitespace = observed_str_whitespace_without_crlf | crlf
+        observed_str_linebreaks = observed_str_linebreaks_without_crlf | crlf
 
-        python_whitespace = list(python_whitespace_without_dos)
-        python_whitespace.append("\r\n")
-        python_newlines = list(python_newlines_without_dos)
-        python_newlines.append("\r\n")
-        self.assertEqual(set(big.whitespace), set(python_whitespace))
-        self.assertEqual(set(big.newlines), set(python_newlines))
+        self.assertEqual(set(big.str_whitespace), observed_str_whitespace)
+        self.assertEqual(set(big.str_whitespace_without_crlf), observed_str_whitespace_without_crlf)
+        self.assertEqual(set(big.str_linebreaks), observed_str_linebreaks)
+        self.assertEqual(set(big.str_linebreaks_without_crlf), observed_str_linebreaks_without_crlf)
 
-        # again, but this time for bytes objects in ASCII
-        python_ascii_whitespace_without_dos = []
-        python_ascii_newlines_without_dos = []
+        self.assertEqual(set(big.whitespace), set(observed_str_whitespace))
+        self.assertEqual(set(big.whitespace_without_crlf), set(observed_str_whitespace_without_crlf))
+        self.assertEqual(set(big.linebreaks), set(observed_str_linebreaks))
+        self.assertEqual(set(big.linebreaks_without_crlf), set(observed_str_linebreaks_without_crlf))
+
+        # corrected--to match the Unicode standard, that is.  (unlike PYTHON!)
+        ascii_record_separators = set('\x1c\x1d\x1e\x1f')
+        corrected_str_whitespace_without_crlf = set(observed_str_whitespace_without_crlf) - ascii_record_separators
+        corrected_str_whitespace = corrected_str_whitespace_without_crlf | crlf
+
+        corrected_str_linebreaks_without_crlf = set(observed_str_linebreaks_without_crlf) - ascii_record_separators
+        corrected_str_linebreaks = corrected_str_linebreaks_without_crlf | crlf
+
+        self.assertEqual(set(big.unicode_whitespace), corrected_str_whitespace)
+        self.assertEqual(set(big.unicode_whitespace_without_crlf), corrected_str_whitespace_without_crlf)
+        self.assertEqual(set(big.unicode_linebreaks), corrected_str_linebreaks)
+        self.assertEqual(set(big.unicode_linebreaks_without_crlf), corrected_str_linebreaks_without_crlf)
+
+        # now do this all over again, but for bytes objects in ASCII.
+        #
+        # this is a different list than you'd get if you simply converted
+        # observed_whitespace encoded to ASCII.  Python str thinks code points
+        # '\x1c' through '\x1f' are whitespace... but Python bytes does not!
+        # (Python also thinks '\x1c' through '\x1e' are line-breaks.)
+        observed_bytes_whitespace_without_crlf = set()
+        observed_bytes_linebreaks_without_crlf = set()
         for i in range(128):
             c = chr(i).encode('ascii')
-            s = b"a" + c + b"b"
+            s = b'a' + c + b'b'
             if len(s.split()) == 2:
-                python_ascii_whitespace_without_dos.append(c)
+                observed_bytes_whitespace_without_crlf.add(c)
                 if len(s.splitlines()) == 2:
-                    python_ascii_newlines_without_dos.append(c)
+                    observed_bytes_linebreaks_without_crlf.add(c)
 
-        python_ascii_whitespace = list(python_ascii_whitespace_without_dos)
-        python_ascii_whitespace.append(b'\r\n')
-        python_ascii_newlines = list(python_ascii_newlines_without_dos)
-        python_ascii_newlines.append(b'\r\n')
-        self.assertEqual(set(big.ascii_whitespace), set(python_ascii_whitespace))
-        self.assertEqual(set(big.ascii_whitespace_without_dos), set(python_ascii_whitespace_without_dos))
-        self.assertEqual(set(big.ascii_newlines), set(python_ascii_newlines))
-        self.assertEqual(set(big.ascii_newlines_without_dos), set(python_ascii_newlines_without_dos))
+        bytes_crlf = set((b'\r\n',))
+        observed_bytes_whitespace = observed_bytes_whitespace_without_crlf | bytes_crlf
+        observed_bytes_linebreaks = observed_bytes_linebreaks_without_crlf | bytes_crlf
+        self.assertEqual(set(big.bytes_whitespace), observed_bytes_whitespace)
+        self.assertEqual(set(big.bytes_whitespace_without_crlf), observed_bytes_whitespace_without_crlf)
+        self.assertEqual(set(big.bytes_linebreaks), observed_bytes_linebreaks)
+        self.assertEqual(set(big.bytes_linebreaks_without_crlf), observed_bytes_linebreaks_without_crlf)
 
-        # now test the utf-8 variants!
-        python_utf8_whitespace = big.text._cheap_encode_iterable_of_strings(python_whitespace, 'utf8')
-        self.assertEqual(set(big.utf8_whitespace), set(python_utf8_whitespace))
-        python_utf8_whitespace_without_dos = big.text._cheap_encode_iterable_of_strings(python_whitespace_without_dos, 'utf8')
-        self.assertEqual(set(big.utf8_whitespace_without_dos), set(python_utf8_whitespace_without_dos))
-        python_utf8_newlines = big.text._cheap_encode_iterable_of_strings(python_newlines, 'utf8')
-        self.assertEqual(set(big.utf8_newlines), set(python_utf8_newlines))
-        python_utf8_newlines_without_dos = big.text._cheap_encode_iterable_of_strings(python_newlines_without_dos, 'utf8')
-        self.assertEqual(set(big.utf8_newlines_without_dos), set(python_utf8_newlines_without_dos))
+        def decode_byteses(o):
+            return set(b.decode('ascii') for b in o)
+        self.assertEqual(set(big.ascii_whitespace), decode_byteses(observed_bytes_whitespace))
+        self.assertEqual(set(big.ascii_whitespace_without_crlf), decode_byteses(observed_bytes_whitespace_without_crlf))
+        form_feed_and_vertical_tab = set('\f\v')
+        self.assertEqual(set(big.ascii_linebreaks), decode_byteses(observed_bytes_linebreaks) | form_feed_and_vertical_tab)
+        self.assertEqual(set(big.ascii_linebreaks_without_crlf), decode_byteses(observed_bytes_linebreaks_without_crlf) | form_feed_and_vertical_tab)
 
-        # now test the cached reversed builtin separators!
+        # now test the deprecated utf-8 variants!
+        # they should match... python str, sigh.
+        # (principle of least surprise.)
+        utf8_whitespace = big.encode_strings(big.str_whitespace, 'utf-8')
+        self.assertEqual(set(big.utf8_whitespace), set(utf8_whitespace))
+        utf8_whitespace_without_dos = big.encode_strings(big.str_whitespace_without_crlf, 'utf-8')
+        self.assertEqual(set(big.utf8_whitespace_without_dos), set(utf8_whitespace_without_dos))
+        utf8_newlines = big.encode_strings(big.str_linebreaks, 'utf-8')
+        self.assertEqual(set(big.utf8_newlines), set(utf8_newlines))
+        utf8_newlines_without_dos = big.encode_strings(big.str_linebreaks_without_crlf, 'utf-8')
+        self.assertEqual(set(big.utf8_newlines_without_dos), set(utf8_newlines_without_dos))
+
+        # test that the compatibility layer for the old "newlines" names is correct
+        self.assertEqual(big.newlines, big.str_linebreaks)
+        self.assertEqual(big.newlines_without_dos, big.str_linebreaks_without_crlf)
+        self.assertEqual(big.ascii_newlines, big.bytes_linebreaks)
+        self.assertEqual(big.ascii_newlines_without_dos, big.bytes_linebreaks_without_crlf)
+        self.assertEqual(big.utf8_newlines, big.encode_strings(big.linebreaks, 'utf-8'))
+        self.assertEqual(big.utf8_newlines_without_dos, big.encode_strings(big.linebreaks_without_crlf, 'utf-8'))
+
+        # and for my final trick: test the cached reversed builtin separators!
         for forwards, backwards in big.text._reversed_builtin_separators.items():
             self.assertEqual(set(backwards), set(big.text._multisplit_reversed(forwards)), f"failed on {printable_separators(forwards)}")
 
@@ -458,9 +529,9 @@ class BigTextTests(unittest.TestCase):
                     s = original_s.encode('ascii')
                     right = original_right.encode('ascii')
                     if original_separators == big.whitespace:
-                        separators = big.ascii_whitespace
-                    elif original_separators == big.newlines:
-                        separators = big.ascii_newlines
+                        separators = big.bytes_whitespace
+                    elif original_separators == big.linebreaks:
+                        separators = big.bytes_linebreaks
                     else:
                         self.assertTrue(isinstance(original_separators, str))
                         separators = original_separators.encode('ascii')
@@ -498,7 +569,7 @@ class BigTextTests(unittest.TestCase):
 
         test_multistrip(" \t \n ", "abcde", " \n \t ", " \t\n")
         test_multistrip(" \t \n ", "abcde", " \n \t ", big.whitespace)
-        test_multistrip("\r\n\n\r", "abcde", "\n\r\r\n", big.newlines)
+        test_multistrip("\r\n\n\r", "abcde", "\n\r\r\n", big.linebreaks)
         test_multistrip("\r\n\n\r", "abcde", "\n\r\r\n", big.whitespace)
         test_multistrip("xXXxxxXx", "iiiiiii", "yyYYYyyyyy", "xyXY")
 
@@ -747,9 +818,9 @@ class BigTextTests(unittest.TestCase):
                     # encode!
                     s = s.encode('ascii')
                     if separators == big.whitespace:
-                        separators = big.ascii_whitespace
-                    elif separators == big.newlines:
-                        separators = big.ascii_newlines
+                        separators = big.bytes_whitespace
+                    elif separators == big.linebreaks:
+                        separators = big.bytes_linebreaks
                     else:
                         separators = to_bytes(separators)
                     expected = to_bytes(expected)
@@ -764,15 +835,15 @@ class BigTextTests(unittest.TestCase):
             simple_test_multisplit(spaces + "a  b  c" + spaces, big.whitespace, ['a', 'b', 'c'], strip=True)
 
 
-        simple_test_multisplit("first line!\nsecond line.\nthird line.", big.newlines,
+        simple_test_multisplit("first line!\nsecond line.\nthird line.", big.linebreaks,
             ["first line!", "second line.", "third line."])
-        simple_test_multisplit("first line!\nsecond line.\nthird line.\n", big.newlines,
+        simple_test_multisplit("first line!\nsecond line.\nthird line.\n", big.linebreaks,
             ["first line!\n", "second line.\n", "third line."], keep=True, strip=True)
-        simple_test_multisplit("first line!\nsecond line.\nthird line.\n", big.newlines,
+        simple_test_multisplit("first line!\nsecond line.\nthird line.\n", big.linebreaks,
             ["first line!\n", "second line.\n", "third line.\n", ""], keep=True, strip=False)
-        simple_test_multisplit("first line!\n\nsecond line.\n\n\nthird line.", big.newlines,
+        simple_test_multisplit("first line!\n\nsecond line.\n\n\nthird line.", big.linebreaks,
             ["first line!", '', "second line.", '', '', "third line."], separate=True)
-        simple_test_multisplit("first line!\n\nsecond line.\n\n\nthird line.", big.newlines,
+        simple_test_multisplit("first line!\n\nsecond line.\n\n\nthird line.", big.linebreaks,
             ["first line!\n", '\n', "second line.\n", '\n', '\n', "third line."], keep=True, separate=True)
 
 
@@ -796,7 +867,7 @@ class BigTextTests(unittest.TestCase):
             if separate:
                 strip = False
             else:
-                sep = big.ascii_whitespace if isinstance(s, bytes) else big.whitespace
+                sep = big.bytes_whitespace if isinstance(s, bytes) else big.whitespace
                 strip = big.PROGRESSIVE
             result = list(big.multisplit(s, sep,
                 maxsplit=maxsplit, reverse=reverse,
@@ -873,8 +944,8 @@ class BigTextTests(unittest.TestCase):
         produce identical output.
         """
         def str_splitlines(s, keepends=False):
-            newlines = big.ascii_newlines if isinstance(s, bytes) else big.newlines
-            l = list(big.multisplit(s, newlines,
+            linebreaks = big.bytes_linebreaks if isinstance(s, bytes) else big.linebreaks
+            l = list(big.multisplit(s, linebreaks,
                 keep=keepends, separate=True, strip=False))
             if l and not l[-1]:
                 # yes, "".splitlines() returns an empty list
@@ -995,7 +1066,7 @@ class BigTextTests(unittest.TestCase):
             separators is an iterable of str or bytes.
 
             Returns a list equivalent to
-                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True)
+                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
             """
 
             segments = []
@@ -1030,7 +1101,6 @@ class BigTextTests(unittest.TestCase):
 
             return segments
 
-
         def toy_multisplit(s, separators):
             """
             A toy version of multisplit.
@@ -1040,7 +1110,7 @@ class BigTextTests(unittest.TestCase):
               or bytes or iterable of bytes.
 
             Returns a list equivalent to
-                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True)
+                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
 
             This is my second revision of toy_multisplit,
             a needless (but fun to write) optimized improvement
@@ -1146,128 +1216,8 @@ class BigTextTests(unittest.TestCase):
                         s = s[length:]
                         break
                 else:
-                    word.append(s[:1])
-                    s = s[1:]
-            flush_word()
-
-            return segments
-
-        def toy_multisplit(s, separators):
-            """
-            A toy version of multisplit.
-
-            s is a str or bytes.
-            separators is a str or iterable of str,
-              or bytes or iterable of bytes.
-
-            Returns a list equivalent to
-                list(big.multisplit(s, separators, keep=ALTERNATING, separate=True)
-
-            This is my second revision of toy_multisplit,
-            a needless (but fun to write) optimized improvement
-            over the original, toy_multisplit_original.
-
-            toy_multisplit is *usually* faster than
-            toy_multisplit_original, and it's *way* faster
-            when there are lots of separators--or exactly
-            one separator.  it's only a bit slower than
-            toy_multisplit_original when there are only
-            a handful of separators, and even then it's
-            only sometimes, and it's not a lot slower.
-
-            And it turns out: toy_multisplit is a lot faster
-            than the real multisplit!  I guess that's the price
-            you pay for regular expressions, and general-purpose
-            code.  (Though it does make me think... a couple
-            of specialized versions of multisplit we dispatch
-            to for the most common use cases might speed things
-            up quite a bit!)
-            """
-            if not isinstance(separators, (list, tuple)):
-                separators = [separators[i:i+1] for i in range(len(separators))]
-            # assert separators
-            if isinstance(s, bytes):
-                empty = b''
-            else:
-                empty = ''
-            # assert empty not in separators
-
-            # toy_multisplit used to be slower than toy_multisplit_original
-            # when there was only one separator.  but no longer!  it's special-cased!
-            # (why bother? it kind of stuck in my craw.)
-            if len(separators) == 1:
-                segments = []
-                sep = separators[0]
-                length = len(sep)
-                while s:
-                    index = s.find(sep)
-                    if index == -1:
-                        segments.append(s)
-                        s = None
-                        break
-                    segments.append(s[:index])
-                    segments.append(sep)
-                    index2 = index + length
-                    s = s[index2:]
-                if s is not None:
-                    segments.append(s)
-                return segments
-
-            # separators_by_length is a list of tuples:
-            #    (length, bucket_of_separators_of_that_length)
-            #
-            # we add a bucket for every length, including 0.
-            # (makes the algorithm easier.)
-            longest_separator = max([len(sep) for sep in separators])
-            separators_by_length = []
-            for i in range(longest_separator, -1, -1):
-                separators_by_length.append((i, set()))
-
-            # store each separator in the correct bucket,
-            # for separators of that length.
-            for sep in separators:
-                separators_by_length[longest_separator - len(sep)][1].add(sep)
-
-            # strip out empty buckets.
-            # there may not be any separators in every length bucket.
-            # for example, if your separators are
-            #     ['X', 'Y', 'ABC', 'XYZ', ]
-            # then you don't have any separators of length 2.
-            # (also, we should never have any separators of length 0).
-            s2 = [t for t in separators_by_length if t[1]]
-            separators_by_length = s2
-
-            # confirm: we shouldn't have any separators of length 0.
-            # separators_by_length is sorted, with buckets containing
-            # longer separators appearing earlier.  so the bucket with
-            # the shortest separators is last.  the length of those
-            # separators should be > 0.
-
-            # assert separators_by_length[-1][0]
-
-            segments = []
-            word = []
-
-            def flush_word():
-                if not word:
-                    segments.append(empty)
-                    return
-                segments.append(empty.join(word))
-                word.clear()
-
-            longest_separator_length = separators_by_length[0][0]
-            while s:
-                substring = s
-                for length, separators_set in separators_by_length:
-                    substring = substring[:length]
-                    # print(f"substring={substring!r} separators_set={separators_set!r}")
-                    if substring in separators_set:
-                        flush_word()
-                        segments.append(substring)
-                        s = s[length:]
-                        break
-                else:
-                    # slice works on byte strings, s[0] on a bytes string is an int.
+                    # slice on a bytes object gives you back a bytes object.
+                    # s[0] on a bytes object gives you back an int.
                     word.append(s[:1])
                     s = s[1:]
             flush_word()
@@ -1375,6 +1325,8 @@ class BigTextTests(unittest.TestCase):
                         s = s[:negative_length]
                         break
                 else:
+                    # slice on a bytes object gives you back a bytes object.
+                    # s[0] on a bytes object gives you back an int.
                     word.append(s[-1:])
                     s = s[:-1]
             flush_word()
@@ -1473,7 +1425,7 @@ class BigTextTests(unittest.TestCase):
 
                 s = s.encode('ascii')
                 if seps == big.whitespace:
-                    seps = big.ascii_whitespace
+                    seps = big.bytes_whitespace
                 else:
                     seps = [b.encode('ascii') for b in seps]
                 expected = [b.encode('ascii') for b in expected]
@@ -1488,10 +1440,11 @@ class BigTextTests(unittest.TestCase):
         t('XYabcXbdefYZghiXjkXYZlY', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['', 'XY', 'abc', 'X', 'bdef', 'Y', '', 'Z', 'ghi', 'X', 'jk', 'XYZ', 'l', 'Y', ''])
         t('qXYZXYXXYXYZabcXb', ('XY', 'X', 'XYZ', 'Y', 'Z'), ['q', 'XYZ', '', 'XY', '', 'X', '', 'XY', '', 'XYZ', 'abc', 'X', 'b'])
 
-        t('xa0bx', ('a0', '0b'), ['x', 'a0', 'bx'], reverse_expected=['xa', '0b', 'x'] )
-
         t('  \t abc de  fgh \n\tijk    lm  ', big.whitespace,
             ['', ' ', '', ' ', '', '\t', '', ' ', 'abc', ' ', 'de', ' ', '', ' ', 'fgh', ' ', '', '\n', '', '\t', 'ijk', ' ', '', ' ', '', ' ', '', ' ', 'lm', ' ', '', ' ', ''])
+
+        # overlapping separators
+        t('xa0bx', ('a0', '0b'), ['x', 'a0', 'bx'], reverse_expected=['xa', '0b', 'x'] )
 
 
         def multisplit_tester(s, separators=None):
@@ -1499,6 +1452,10 @@ class BigTextTests(unittest.TestCase):
             s is the test string you want split.
             (must be str; multisplit_tester will convert it
             to bytes too, don't worry.)
+            I *think* s has to start and end with one or more
+            separators... sorry, it's been a minute since
+            I wrote it, and I forgot to document that fact
+            (if true).
 
             separators is the list of separators.
 
@@ -1548,10 +1505,11 @@ class BigTextTests(unittest.TestCase):
                 # Don't worry, we'll pass the separators argument
                 # in to multisplit *exactly* how you passed it in
                 # to multisplit_tester.
-                separators = original_separators if (original_separators is not None) else big.whitespace
+                default_separators = big.bytes_whitespace if isinstance(original_s, bytes) else big.whitespace
+                separators = original_separators if (original_separators is not None) else default_separators
                 separators_as_passed_in = original_separators
 
-                separators_set = set(separators)
+                separators_set = set(big.text._iterate_over_bytes(separators))
                 self.assertNotIn('', separators_set)
 
                 # strip off the leading and trailing separators.
@@ -1637,16 +1595,20 @@ class BigTextTests(unittest.TestCase):
                         print(f"[loop 0] as_bytes={as_bytes}")
                     if as_bytes:
                         leading, splits, trailing = copy.deepcopy(originals)
-                        leading = big.text._cheap_encode_iterable_of_strings(leading)
-                        splits = [big.text._cheap_encode_iterable_of_strings(split) for split in splits]
-                        trailing = big.text._cheap_encode_iterable_of_strings(trailing)
+                        leading = big.encode_strings(leading)
+                        splits = [big.encode_strings(split) for split in splits]
+                        trailing = big.encode_strings(trailing)
                         originals = [leading, splits, trailing]
                         empty = b''
                         if separators_as_passed_in is None:
-                            separators_set = set(big.ascii_whitespace)
+                            separators_set = set(big.bytes_whitespace)
                         else:
-                            separators_as_passed_in = separators = big.text._cheap_encode_iterable_of_strings(separators)
-                            separators_set = set(separators)
+                            if isinstance(separators, str):
+                                separators = separators_as_passed_in = separators.encode('ascii')
+                                separators_set = set(big.text._iterate_over_bytes(separators))
+                            else:
+                                separators = separators_as_passed_in = big.encode_strings(separators)
+                                separators_set = set(separators)
                         non_sep_marker = b"&NONSEP&"
                     else:
                         empty = ''
@@ -1934,7 +1896,7 @@ class BigTextTests(unittest.TestCase):
 
         multisplit_tester(
             ' \t \n a \t \nb\t \nc  \n',
-            big.whitespace,
+            big.ascii_whitespace,
             )
 
 
@@ -1943,8 +1905,9 @@ class BigTextTests(unittest.TestCase):
             'xy',
             )
 
+        # test overlapping
         multisplit_tester(
-            'oaaXbbo',
+            'oqaxaaXbbqXbo',
             ('aX', 'Xb', 'o'),
             )
 
@@ -1956,12 +1919,12 @@ class BigTextTests(unittest.TestCase):
                     # encode!
                     s = s.encode('ascii')
                     # if separator == big.whitespace:
-                    #     separator = big.ascii_whitespace
+                    #     separator = big.bytes_whitespace
                     if isinstance(separator, str):
                         separator = separator.encode('ascii')
                     else:
-                        separator = big.text._cheap_encode_iterable_of_strings(separator)
-                    expected = big.text._cheap_encode_iterable_of_strings(expected)
+                        separator = big.encode_strings(separator)
+                    expected = big.encode_strings(expected)
 
                 # print()
                 if isinstance(separator, (str, bytes)):
@@ -2001,7 +1964,7 @@ class BigTextTests(unittest.TestCase):
         test_multipartition("a:b:c:d", "x", 2, ("", "", "", "", "a:b:c:d"), reverse=True)
         test_multipartition("a:b:c:d", "x", 3, ("", "", "", "", "", "", "a:b:c:d"), reverse=True)
 
-        # test overlapping separator behavior
+        # test overlapping separators
         test_multipartition("a x x b", " x ", 1, ("a", " x ", "x b"))
         test_multipartition("a x x b", " x ", 1, ("a x", " x ", "b"), reverse=True)
 
@@ -3843,6 +3806,33 @@ outdent
             '1000000000000000000000000000000000000000000000000000000000000000000000000000',
             '1000000000000000000000000000000000000000000000000000000000000000000000000000',
             )
+
+    def test_encode_strings(self):
+        sentinel = object()
+        def test(o, expected, *, encoding=sentinel):
+            if encoding == sentinel:
+                got = big.encode_strings(o)
+            else:
+                got = big.encode_strings(o, encoding)
+            self.assertEqual(got, expected)
+
+        test(['a', 'b', 'c'], [b'a', b'b', b'c'])
+        test(('x', 'y', 'z'), (b'x', b'y', b'z'))
+        test({'ab': 'cd', 'ef': 'gh'}, {b'ab': b'cd', b'ef': b'gh'})
+
+        class SubclassOfList(list):
+            pass
+
+        test(SubclassOfList(('ab', 'cd')), SubclassOfList((b'ab', b'cd')))
+
+        test(('x', 'y', 'z', "\N{PILE OF POO}"), (b'x', b'y', b'z', b'\xf0\x9f\x92\xa9'), encoding='utf-8')
+
+        with self.assertRaises(TypeError):
+            big.encode_strings('abcde')
+
+        with self.assertRaises(TypeError):
+            big.encode_strings('ijklm', encoding="utf-8")
+
 
 def run_tests():
     bigtestlib.run(name="big.text", module=__name__)

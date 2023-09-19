@@ -5,16 +5,16 @@
 [![# test badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# coverage badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml) [![# python versions badge](https://img.shields.io/pypi/pyversions/big.svg?logo=python&logoColor=FBE072)](https://pypi.org/project/big/)
 
 
-**big** is a Python package of useful little bits of
-Python code I always want to have handy.  It's a central
-place for code that's useful but not big enough to go in
-its own module.
+**big** is a Python package of small functions and classes
+that aren't big enough to get a package of their own.
+It's zillions of useful little bits of
+Python code I always want to have handy.
 
-Finally!  For years, I've copied-and-pasted all my little
+For years, I've copied-and-pasted all my little
 helper functions between projects--we've all done it.
 But now I've finally taken the time to consolidate all those
-useful little functions into one *big* package, so they're always
-at hand, ready to use.
+useful little functions into one *big* package--no more
+copy-and-paste, I just install one package and I'm ready to go.
 And, since it's a public package, you can use 'em too!
 
 Not only that, but I've taken my time and re-thought and
@@ -26,7 +26,7 @@ functionality.
 we've all hacked together a million times--only with all the
 API gotchas fixed, and thoroughly tested with 100% coverage.
 It's the code you *would* have written... if only you had the time.
-And it's a real pleasure to use!
+It's a real pleasure to use!
 
 
 **big** requires Python 3.6 or newer.  Its only dependency
@@ -107,13 +107,13 @@ And here are five little functions/classes I use all the time:
 
 [`accessor(attribute='state', state_manager='state_manager')`](#accessorattributestate-state_managerstate_manager)
 
-[`ascii_newlines`](#newlines)
+[`ascii_linebreaks`](#ascii_linebreaks)
 
-[`ascii_newlines_without_dos`](#newlines)
+[`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf)
 
-[`ascii_whitespace`](#whitespace)
+[`ascii_whitespace`](#ascii_whitespace)
 
-[`ascii_whitespace_without_dos`](#whitespace)
+[`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
 
 [`big.all`](#`bigall`)
 
@@ -141,6 +141,14 @@ And here are five little functions/classes I use all the time:
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
+[`bytes_linebreaks`](#bytes_linebreaks)
+
+[`bytes_linebreaks_without_crlf`](#bytes_linebreaks_without_crlf)
+
+[`bytes_whitespace`](#bytes_whitespace)
+
+[`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf)
+
 [`CycleError()`](#cycleerror)
 
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
@@ -152,6 +160,8 @@ And here are five little functions/classes I use all the time:
 [`Delimiter(open, close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
 
 [`dispatch(state_manager='state_manager', *, prefix='', suffix='')`](#dispatchstate_managerstate_manager--prefix-suffix)
+
+[`encode_strings(o, *, encoding='ascii')`](#encode_stringso--encodingascii)
 
 [`Event(scheduler, event, time, priority, sequence)`](#eventscheduler-event-time-priority-sequence)
 
@@ -197,6 +207,10 @@ And here are five little functions/classes I use all the time:
 
 [`int_to_words(i, *, flowery=True, ordinal=False)`](#int_to_wordsi--flowerytrue-ordinalfalse)
 
+[`linebreaks`](#linebreaks)
+
+[`linebreaks_without_crlf`](#linebreaks_without_crlf)
+
 [`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
 [`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
@@ -234,10 +248,6 @@ And here are five little functions/classes I use all the time:
 [`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 
 [`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
-
-[`newlines`](#newlines)
-
-[`newlines_without_dos`](#newlines)
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
 
@@ -293,6 +303,14 @@ And here are five little functions/classes I use all the time:
 
 [`StateManager(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 
+[`str_linebreaks`](#str_linebreaks)
+
+[`str_linebreaks_without_crlf`](#str_linebreaks_without_crlf)
+
+[`str_whitespace`](#str_whitespace)
+
+[`str_whitespace_without_crlf`](#str_whitespace_without_crlf)
+
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
 [`timestamp_human(t=None, want_microseconds=None)`](#timestamp_humantnone-want_microsecondsnone)
@@ -341,17 +359,17 @@ And here are five little functions/classes I use all the time:
 
 [`UnboundInnerClass`](#unboundinnerclasscls)
 
-[`utf8_newlines`](#newlines)
+[`unicode_linebreaks`](#unicode_linebreaks)
 
-[`utf8_newlines_without_dos`](#newlines)
+[`unicode_linebreaks_without_crlf`](#unicode_linebreaks_without_crlf)
 
-[`utf8_whitespace`](#whitespace)
+[`unicode_whitespace`](#unicode_whitespace)
 
-[`utf8_whitespace_without_dos`](#whitespace)
+[`unicode_whitespace_without_crlf`](#unicode_whitespace_without_crlf)
 
 [`whitespace`](#whitespace)
 
-[`whitespace_without_dos`](#whitespace)
+[`whitespace_without_crlf`](#whitespace_without_crlf)
 
 [`wrap_words(words, margin=79, *, two_spaces=True)`](#wrap_wordswords-margin79--two_spacestrue)
 
@@ -362,6 +380,8 @@ And here are five little functions/classes I use all the time:
 <dl><dd>
 
 [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
+
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
 
 [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 
@@ -1028,12 +1048,12 @@ next item, examine it, and then push it back.  If any objects have
 been pushed onto the iterator, they are yielded first, before attempting
 to yield from the wrapped iterator.
 
-Pass in any `iterable` to the constructor.  Passing in an `iterable`
-of `None` means the `PushbackIterator` is created in an exhausted state.
+The constructor accepts one argument, an `iterable`, with a default of `None`.
+If `iterable` is `None`, the `PushbackIterator` is created in an exhausted state.
 
 When the wrapped `iterable` is exhausted (or if you passed in `None`
-to the constructor) you can still call push to add new items, at which
-point the `PushBackIterator` can be iterated over again.
+to the constructor) you can still call the `push` method to add items,
+at which point the `PushBackIterator` can be iterated over again.
 
 In addition to the following methods, `PushbackIterator` supports
 the iterator protocol and testing for truth.  A `PushbackIterator`
@@ -2034,6 +2054,128 @@ Subclasses of `str` and `bytes` will also work; anywhere you
 should pass in a `str`, you can also pass in a subclass of
 `str`, and likewise for `bytes`.
 
+#### `ascii_linebreaks`
+
+<dl><dd>
+
+A tuple of `str` objects, representing every line-breaking whitespace
+whitespace character defined by ASCII.
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.
+If you don't want to include this string, use [`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf) instead.
+See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `ascii_linebreaks_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`ascii_linebreaks`](#ascii_linebreaks) without `'\r\n'`.
+
+</dd></dl>
+
+#### `ascii_whitespace`
+<dl><dd>
+
+A tuple of `str` objects, representing every whitespace
+whitespace character defined by ASCII.
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.
+If you don't want to include this string, use [`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf) instead.
+See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `ascii_whitespace_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`ascii_whitespace`](#ascii_whitespace) without `'\r\n'`.
+
+</dd></dl>
+
+#### `bytes_linebreaks`
+
+<dl><dd>
+
+A tuple of `bytes` objects, representing every line-breaking whitespace
+whitespace character recognized by the Python `bytes` object.
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `b'\r\n'`.
+If you don't want to include this string, use [`bytes_linebreaks_without_crlf`](#bytes_linebreaks_without_crlf) instead.
+See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `bytes_linebreaks_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`bytes_linebreaks`](#bytes_linebreaks) without `'\r\n'`.
+
+</dd></dl>
+
+#### `bytes_whitespace`
+<dl><dd>
+
+A tuple of `bytes` objects, representing every line-breaking whitespace
+whitespace character recognized by the Python `bytes` object.
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `b'\r\n'`.
+If you don't want to include this string, use [`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf) instead.
+See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `bytes_whitespace_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`bytes_whitespace`](#bytes_whitespace) without `'\r\n'`.
+
+</dd></dl>
+
 #### `Delimiter(open, close, *, backslash=False, nested=True)`
 
 <dl><dd>
@@ -2052,18 +2194,37 @@ with a backslash?  (You usually can inside single or double quotes.)
 (Delimiters don't usually need to be nested inside single and double quotes.)
 </dd></dl>
 
+#### `encode_strings(o, *, encoding='ascii')`
+
+Accepts a container object `o` containing
+`str` objects; returns an equivalent object
+with the strings encoded to `bytes`.
+
+`o` must be either `dict`, `list`, or `tuple`,
+or a subclass of one of those.
+
+Encodes every `str` inside using the encoding
+specified in the `encoding` parameter, default
+is `'ascii'`.  Handles nested containers.
+
+If `o` is a `str`, raises `TypeError`.
+If `o` is a container and contains an object that
+isn't a
+`str`, `dict`, `list`, or `tuple`, raises `TypeError`.
+
+
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
 
 <dl><dd>
 
-Uppercase the first character of every word in `s`.
-Leave the other letters alone.  `s` should be `str` or `bytes`.
+Uppercases the first character of every word in `s`,
+leaving the other letters alone.  `s` should be `str` or `bytes`.
 
 (For the purposes of this algorithm, words are
 any contiguous run of non-whitespace characters.)
 
 This function will also capitalize the letter after an apostrophe
-if the apostrophe
+if the apostrophe:
 
   * is immediately after whitespace, or
   * is immediately after a left parenthesis character (`'('`), or
@@ -2075,7 +2236,7 @@ if the apostrophe
 In this last case, the O or D will also be capitalized.
 
 Finally, this function will capitalize the letter
-after a quote mark if the quote mark
+after a quote mark if the quote mark:
 
 * is after whitespace, or
 * is the first letter of a string.
@@ -2180,6 +2341,39 @@ string `'first'`.
 Numbers >= `10**66` (one thousand vigintillion)
 are only converted using `str(i)`.  Sorry!
 </dd></dl>
+
+
+#### `linebreaks`
+
+<dl><dd>
+
+A tuple of `str` objects, representing every line-breaking
+whitespace character recognized by the Python `str` object.
+Identical to [`str_linebreaks`.](#str_linebreaks)
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.  See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+
+#### `linebreaks_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
+
+</dd></dl>
+
 
 #### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
 
@@ -2754,35 +2948,6 @@ For more information, see the deep-dive on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 </dd></dl>
 
-#### `newlines`
-
-<dl><dd>
-
-A list of all newline characters recognized by Python.
-Includes many Unicode newline characters, like `'\u2029'`
-(a paragraph separator).  Useful as a list of separator
-strings for
-[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-et al; `newlines` is specifically used by the
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-iterator constructor.
-
-**big** also defines `utf8_newlines`, which is `newlines`
-with all strings encoded to UTF-8 (as bytes),
-and `ascii_newlines`, with all strings converted into
-bytes and all characters with code points greater than
-128 discarded.
-
-Note that `newlines` contains `'\r\n'`, the DOS sequence
-of characters representing a newline.  This lets **big**
-text-processing functions recognize this sequence as a
-*single* newline marker, rather than as two *separate*
-newline characters.  If you don't want this behavior,
-you can use `newlines_without_dos` instead.
-(**big** also provides `utf8_newlines_without_dos` and
-`ascii_newlines_without_dos`.)
-</dd></dl>
-
 
 #### `normalize_whitespace(s, separators=None, replacement=None)`
 
@@ -3024,31 +3189,152 @@ For more information, see the deep-dive on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
 
+#### `str_linebreaks`
+
+<dl><dd>
+
+A tuple of `str` objects, representing every line-breaking
+whitespace character recognized by the Python `str` object.
+Identical to [`linebreaks`.](#linebreaks)
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.  See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `str_linebreaks_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`str_linebreaks`](#str_linebreaks) without `'\r\n'`.
+
+</dd></dl>
+
+#### `str_whitespace`
+
+<dl><dd>
+
+A tuple of `str` objects, representing every whitespace
+character recognized by the Python `str` object.
+Identical to [`whitespace`.](#whitespace)
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.  See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `str_whitespace_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`str_whitespace`](#str_whitespace) without `'\r\n'`.
+
+</dd></dl>
+
+#### `unicode_linebreaks`
+
+<dl><dd>
+
+A tuple of `str` objects, representing every line-breaking
+whitespace character defined by Unicode.
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.  See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `unicode_linebreaks_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`unicode_linebreaks`](#unicode_linebreaks) without `'\r\n'`.
+
+</dd></dl>
+
+#### `unicode_whitespace`
+
+<dl><dd>
+
+A tuple of `str` objects, representing every whitespace
+whitespace character defined by Unicode.
+
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+
+Also contains `'\r\n'`.  See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `unicode_whitespace_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`unicode_whitespace`](#unicode_whitespace) without `'\r\n'`.
+
+</dd></dl>
+
 #### `whitespace`
 
 <dl><dd>
 
-A list of all whitespace characters recognized by Python.
-Includes many Unicode whitespace strings, like `'\xa0'`
-(a non-breaking space).  Useful as a list of separator
-strings for the **big** "multi-" family of functions,
-e.g. 
-[`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+A tuple of `str` objects, representing every whitespace
+character recognized by the Python `str` object.
+Identical to [`str_whitespace`.](#str_whitespace)
 
-**big** also defines `utf8_whitespace`, which is `whitespace`
-with all strings encoded to UTF-8 (as bytes),
-and `ascii_whitespace`, with all strings converted into
-bytes and all characters with code points greater than
-128 discarded.
+Useful as a `separator` argument for **big** functions that accept one,
+e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
+or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
-Note that `whitespace` contains `'\r\n'`, the DOS sequence
-of characters representing a newline.  This lets **big**
-text-processing functions recognize this sequence as a
-*single* whitespace marker, rather than as two *separate*
-whitespace characters.  If you don't want this behavior,
-you can use `whitespace_without_dos` instead;
-**big** also provides `utf8_whitespace_without_dos` and
-`ascii_whitespace_without_dos`.
+Also contains `'\r\n'`.  See the deep-dive section on
+[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+for more.
+
+For more information, please see the
+[**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+deep-dive.
+
+</dd></dl>
+
+#### `whitespace_without_crlf`
+
+<dl><dd>
+
+Equivalent to [`whitespace`](#whitespace) without `'\r\n'`.
+
 </dd></dl>
 
 #### `wrap_words(words, margin=79, *, two_spaces=True)`
@@ -3590,8 +3876,8 @@ def str_rsplit(s, sep=None, maxsplit=-1):
     return _multisplit_to_split(s, sep, maxsplit, True)
 
 def str_splitlines(s, keepends=False):
-    newlines = big.ascii_newlines if isinstance(s, bytes) else big.newlines
-    l = list(big.multisplit(s, newlines,
+    linebreaks = big.ascii_linebreaks if isinstance(s, bytes) else big.linebreaks
+    l = list(big.multisplit(s, linebreaks,
         keep=keepends, separate=True, strip=False))
     if l and not l[-1]:
     	# yes, ''.splitlines() returns an empty list
@@ -3921,6 +4207,418 @@ And I should know--`multisplit` is implemented using `re.split`!
 </p></li></ol>
 
 </dd></dl>
+
+## Whitespace and line-breaking characters in Python and big
+
+<dl><dd>
+
+### Overview
+
+Several functions in **big** take a `separators`
+argument, an iterable of separator strings.
+Examples of these functions include
+[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+and
+[`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+Although you can use any iterable of strings
+you like, most often you'll be separating on some
+form of whitespace.  But what, exactly, *is*
+whitespace?  There's more to this topic than you
+might suspect.
+
+The good news is, you can almost certainly ignore all the
+complexity.  These days the only whitespace characters you're
+likely to encounter are spaces, tabs, newlines, and maybe
+carriage returns.  Python and **big** handle all those easily.
+
+With respect to **big** and these `separators` arguments,
+**big** provides four values designed for use as `separators`.
+All four of these are tuples containing whitespace characters:
+
+* When working with `str` objects, you'll want to use either
+  [`big.whitespace`](#whitespace) or [`big.linebreaks`.](#linebreaks)
+  `big.whitespace` contains all the whitespace characters,
+  `big.linebreaks` contains just the line-breaking
+  whitespace characters.
+* **big** also has equivalents for working with `bytes`
+  objects: [`big.bytes_whitespace`](#bytes_whitespace)
+  and [`big.bytes_linebreaks`,](#bytes_linebreaks)
+  respectively.
+
+Apart from exceptionally rare occasions, these are all you'll ever need.
+And if that's all you need, you can stop reading this
+section now.
+
+But what about those exceptionally rare occasions?
+You'll be pleased to know **big** handles them too.
+The rest of this section is
+a deep dive into these rare occasions.
+
+
+### Python
+
+Here's the list of all characters recognized by
+Python `str` objects as whitespace characters:
+
+    # char    decimal   hex      name
+    ##########################################
+    '\t'    , #     9 - 0x0009 - tab
+    '\n'    , #    10 - 0x000a - newline
+    '\v'    , #    11 - 0x000b - vertical tab
+    '\f'    , #    12 - 0x000c - form feed
+    '\r'    , #    13 - 0x000d - carriage return
+    '\x1c'  , #    28 - 0x001c - file separator
+    '\x1d'  , #    29 - 0x001d - group separator
+    '\x1e'  , #    30 - 0x001e - record separator
+    '\x1f'  , #    31 - 0x001f - unit separator
+    ' '     , #    32 - 0x0020 - space
+    '\x85'  , #   133 - 0x0085 - next line
+    '\xa0'  , #   160 - 0x00a0 - non-breaking space
+    '\u1680', #  5760 - 0x1680 - ogham space mark
+    '\u2000', #  8192 - 0x2000 - en quad
+    '\u2001', #  8193 - 0x2001 - em quad
+    '\u2002', #  8194 - 0x2002 - en space
+    '\u2003', #  8195 - 0x2003 - em space
+    '\u2004', #  8196 - 0x2004 - three-per-em space
+    '\u2005', #  8197 - 0x2005 - four-per-em space
+    '\u2006', #  8198 - 0x2006 - six-per-em space
+    '\u2007', #  8199 - 0x2007 - figure space
+    '\u2008', #  8200 - 0x2008 - punctuation space
+    '\u2009', #  8201 - 0x2009 - thin space
+    '\u200a', #  8202 - 0x200a - hair space
+    '\u2028', #  8232 - 0x2028 - line separator
+    '\u2029', #  8233 - 0x2029 - paragraph separator
+    '\u202f', #  8239 - 0x202f - narrow no-break space
+    '\u205f', #  8287 - 0x205f - medium mathematical space
+    '\u3000', # 12288 - 0x3000 - ideographic space
+
+This list was derived by iterating over every character
+defined in Unicode, and testing to see if the `split()`
+method on a Python `str` object splits at that character.
+
+The first surprise: this *isn't* the same as the list of
+[all characters defined by Unicode as whitespace.](https://en.wikipedia.org/wiki/Whitespace_character#Unicode)
+It's *almost* the same list, except Python adds four extra
+characters: `'\x1c'`,  `'\x1d'`,  `'\x1e'`, and `'\x1f'`,
+which respectively are called "file separator", "group separator",
+"record separator", and "unit separator".
+I'll refer to these as "the four ASCII separator characters".
+
+These characters were defined as part of [the original ASCII
+standard,](https://en.wikipedia.org/wiki/ASCII) way back in 1963.
+As their names suggest, they were intended to be used as separator
+characters for data, the same way
+[Ctrl-Z was used to indicate end-of-file in the CPM and earliest
+FAT filesystems.](https://en.wikipedia.org/wiki/End-of-file#EOF_character)
+But the four ASCII separator characters were rarely used
+even back in the day.  Today they're practically unheard of.
+
+As a rule, printing these characters to the screen generally
+doesn't do anything--they don't move the cursor, and the
+screen doesn't change.
+So their behavior is a bit mysterious.  A lot of people (including
+early Python programmers it seems!) thought that meant they're
+whitespace.  This seems like an odd conclusion to me.  After all,
+all the other whitespace characters move the cursor, either right
+or down or both; these don't move the cursor at all.
+
+[The Unicode standard](https://www.unicode.org/Public/14.0.0/)
+is unambiguous: these characters are *not whitespace.*  And yet Python's
+"Unicode object" behaves as if they are.  So I'd say this is a bug;
+Python's Unicode object should implement what the Unicode standard says.
+Like many bugs, this one has lingered for a long time.  The behavior
+is present in Python 2, there's
+[a ten-year-old issue on the Python issue tracker about this,](https://github.com/python/cpython/issues/62436)
+ and it's not making progress.
+
+The second surprise has to do with `bytes` objects.
+Of course, `bytes` objects represent binary data, and don't
+necessarily represent characters.  Even if they do, they don't
+have any encoding associated with them.  However, for
+convenience--and backwards-compatibility with Python 2--Python's
+`bytes` objects support several method calls that treat the data
+as if it were "ASCII-compatible".
+
+The surprise: These methods on Python `bytes` objects recognize
+a *different* set of whitespace characters.  Here's the list of
+all bytes recognized by Python `bytes` objects as whitespace:
+
+    # char  decimal  hex    name
+    #######################################
+    '\t'    , #  9 - 0x09 - tab
+    '\n'    , # 10 - 0x0a - newline
+    '\v'    , # 11 - 0x0b - vertical tab
+    '\f'    , # 12 - 0x0c - form feed
+    '\r'    , # 13 - 0x0d - carriage return
+    ' '     , # 32 - 0x20 - space
+
+This list was derived by iterating over every possible
+byte value, and testing to see if the `split()` method
+on a Python `bytes` object splits at that byte.
+
+The good news is, this list is the same as ASCII's list,
+and it agrees with Unicode.
+In fact this list is quite familiar to C programmers;
+it's the same whitespace characters recognized by the
+standard C function
+[`isspace()` (in `ctypes.h`).](https://www.oreilly.com/library/view/c-in-a/0596006977/re129.html)
+Python has used this function to decide which characters
+are and aren't whitespace in 8-bit strings since its very
+beginning.
+
+Notice that this list *doesn't* contain the
+four ASCII separator characters.  That these two
+types in Python don't agree only enhances the mystery.
+
+### Line-breaking characters
+
+The situation is slightly worse with line-breaking
+characters. Line-breaking characters are a subset of
+whitespace characters; they're whitespace characters that
+always move the cursor down.  And, as with whitespace
+generally, Python `str` objects don't agree with Unicode
+about what is and is not a line-breaking character,
+and Python `bytes` objects don't agree with either of those.
+
+Here's the list of all Unicode characters recognized by
+Python `str` objects as line-breaking characters:
+
+    # char    decimal   hex      name
+    ##########################################
+    '\n'    , #   10 0x000a - newline
+    '\v'    , #   11 0x000b - vertical tab
+    '\f'    , #   12 0x000c - form feed
+    '\r'    , #   13 0x000d - carriage return
+    '\x1c'  , #   28 0x001c - file separator
+    '\x1d'  , #   29 0x001d - group separator
+    '\x1e'  , #   30 0x001e - record separator
+    '\x85'  , #  133 0x0085 - next line
+    '\u2028', # 8232 0x2028 - line separator
+    '\u2029', # 8233 0x2029 - paragraph separator
+
+This list was derived by iterating over every character
+defined in Unicode, and testing to see if the `splitlines()`
+method on a Python `str` object splits at that character.
+
+Again, this is different from [the list of characters
+defined as line-breaking whitespace in Unicode.](https://en.wikipedia.org/wiki/Newline#Unicode)
+And again it's because Python defines some of the four ASCII separator
+characters as line-breaking characters.  In this case
+it's only the first three; Python doesn't consider
+the fourth, "unit separator", as a line-breaking character.
+(I don't know why Python draws this distinction...
+but then again, I don't know why it considers the
+first three to be line-breaking.  It's *all* a mystery to me.)
+
+Here's the list of all characters recognized by
+Python `bytes` objects as line-breaking characters:
+
+    # char  decimal hex      name
+    #######################################
+    '\n'    , #  10 0x000a - newline
+    '\r'    , #  13 0x000d - carriage return
+
+This list was derived by iterating over every possible
+byte, and testing to see if the `splitlines()`
+method on a Python `bytes` object splits at that byte.
+
+It's here we find our final unpleasant surprise:
+the methods on Python `bytes` objects *don't* consider
+`'\v'` (vertical tab)
+and
+`'\f'` (form feed)
+to be line-break characters.  I assert this is also a bug.
+These are well understood to be line-breaking characters;
+"vertical tab" is like a "tab", except it moves the cursor
+down instead of to the right.  And "form feed" moves the
+cursor to the top left of the next "page", which requires
+advancing at least one line.
+
+### How **big** handles this situation
+
+To be crystal clear: the odds that any of this will cause
+a problem for you are *extremely* low.  In order for it
+to make a difference:
+
+* you'd have to encounter text using one of these six characters
+  where Python disagrees with Unicode and ASCII, and
+* you'd have to process the input based on some definition
+  of whitespace, and
+* it would have to produce different results than you might
+  have other wise expected, *and*
+* this difference in results would have to be important.
+
+It seems extremely unlikely that all of these will be true for you.
+
+In case this *does* affect you, **big** has
+a complete set of predefined whitespace tuples that will
+handle any of these situations.
+**big** defines a total of *ten* tuples, sorted into
+five categories.
+
+In every category there are two values: one that contains
+`whitespace`, the other contains `linebreaks`.  The
+`whitespace` tuple contains all the possible values of
+whitespace--characters that move the cursor either
+horizontally, or vertically, or both, but don't
+print anything visible to the screen.  The `linebreaks`
+tuple contains the subset of whitespace characters that
+move the cursor vertically.
+
+The most important two values start with `str_`:
+[`str_whitespace`](#str_whitespace)
+and
+[`str_linebreaks`.](#str_linebreaks)
+These contain all the whitespace characters
+recognized by the Python `str` object.
+
+Next are two values that start with `unicode_`:
+[`unicode_whitespace`](#unicode_whitespace)
+and
+[`unicode_linebreaks`.](#unicode_linebreaks)
+These contain all the whitespace characters
+defined in the Unicode standard.
+
+Third, two values that start with `ascii_`:
+[`ascii_whitespace`](#ascii_whitespace)
+and
+[`ascii_linebreaks`.](#ascii_linebreaks)
+These contain all the whitespace characters
+defined in ASCII.
+
+Fourth, two values that start with `bytes_`:
+[`bytes_whitespace`](#bytes_whitespace)
+and
+[`bytes_linebreaks`.](#bytes_linebreaks)
+These contain all the whitespace characters
+recognized by the Python `bytes` object.
+
+Finally we have the two tuples that lack a prefix:
+[`whitespace`](#whitespace)
+and
+[`linebreaks`.](#linebreaks)
+These are the tuples you should use most of the time,
+and several **big** functions use them as default values.
+These are identical to `str_whitespace` and
+`str_linebreaks` respectively.
+
+(**big** actually defines an *additional* ten tuples,
+as discussed in the very next section.)
+
+### The Unix, Mac, and DOS line-break conventions
+
+Historically, different platforms used different
+ASCII characters--or sequences of ASCII characters--to
+represent "go to the next line" in text files.  Here are the
+most popular conventions:
+
+    \n    - UNIX, Amiga
+    \r    - Mac OS (before OS X), many 8-bit computers
+    \r\n  - Windows, DOS
+
+(There are a couple more conventions, and a lot more history,
+in the [Wikipedia article on newlines.)](https://en.wikipedia.org/wiki/Newline#Representation)
+
+Handling these differing conventions was a stumbling block
+for a long time--both for computer programs, and in the
+daily lives of computer users.  Python went through several
+iterations on how to handle this, eventually settling on
+the ["universal newlines"](https://peps.python.org/pep-0278/)
+support added in Python 2.3.
+These days the world seems to be converging on the UNIX
+standard `'\n'`; Windows supports it, and it's the default
+on every other modern platform.
+So in practice you probably don't have end-of-line conversion
+problems, either.
+
+But just in case, **big** has one more trick.  All of
+the tuples defined in the previous section--from `whitespace`
+to `ascii_linebreaks`--also contain this string:
+
+    '\r\n'
+
+(The two `bytes_` tuples contain the `bytes` equivalent,
+`b'\r\n`.)
+
+This addition means that, when you use one of these tuples
+with one of the **big** functions that take separators,
+it'll split on `\r\n` as if it was one character.  This
+means that **big** itself should automatically handle
+the DOS and Windows end-of-line character sequence, in
+case one happens to creep into your data.
+
+If you don't want this behavior, just add the suffix
+`_without_crlf` to the end of any of the ten tuples,
+e.g. `whitespace_without_crlf`, `bytes_linebreaks_without_crlf`.
+
+### Whitespace and line-breaking characters for other platforms
+
+What if you need to split text by whitespace, or by lines,
+but that text is in `bytes` format with an unusual encoding?
+**big** makes that easy too.  If one of the builtin tuples
+won't work for you, you can can make your own tuple from scratch,
+or modify an existing tuple to meet your needs.
+
+For example, let's say you need to split a document by
+whitespace, and the document is encoded in [code page 850,
+aka "latin-1".](https://en.wikipedia.org/wiki/Code_page_850)
+Normally the easiest thing would be to decode it a `str` object
+using the `'latin-1'` text codec, then operate on it normally.
+But you might have reasons why you don't want to decode it--maybe
+the document is damaged and doesn't decode properly, and it's
+easier to work with the encoded bytes than to fix it.  If you
+want to process the text with a **big** function that accepts a
+`separator` argument, you could make your own custom tuple
+of "latin-1" whitespace characters.  "latin-1" has the same
+whitespace characters as ASCII, but adds one more, value 255,
+which is not line-breaking.  So it's easy to make the appropriate
+tuples yourself:
+
+    latin_1_whitespace = big.bytes_whitespace + (b'\xff',)
+    latin_1_linebreaks = big.bytes_linebreaks
+
+What if you want to process a `bytes` object containing
+UTF-8?  That's easy too.  Just convert one of the existing
+tuples containing `str` objects using
+[`big.encode_strings`.](#encode_stringso--encodingascii)
+For example, to split a UTF-8 encoded bytes object `b` using
+the Unicode line-breaking characters, you could call:
+
+    multisplit(b, encode_strings(unicode_linebreaks, encoding='utf-8'))
+
+Note that this technique probably won't work correctly for most other
+multibyte encodings, for example [UTF-16.](https://en.wikipedia.org/wiki/UTF-16)
+For these encodings, you should decode to `str` before processing.
+
+Why?  It's because `multisplit` could find matches in multibyte
+sequences *straddling* characters.  Consider this example:
+
+```Python
+>>> haystack = '\u0101\u0102'
+>>> needle = '\u0201'
+>>> needle in haystack
+False
+>>> 
+>>> encoded_haystack = haystack.encode('utf-16-le')
+>>> encoded_needle = needle.encode('utf-16-le')
+>>> encoded_needle in encoded_haystack
+True
+```
+
+The character `'\u0201'` doesn't appear in the original string,
+but the *encoded* version appears in the *encoded* string,
+as the *second* byte of the *first* character and the *first*
+byte of the *second* character:
+
+```Python
+>>> encoded_haystack
+b'\x01\x01\x02\x01'
+>>> encoded_needle
+b'\x01\x02'
+```
+
+</dd></dl>
+
 
 ## `lines` and lines modifier functions
 
@@ -4641,18 +5339,59 @@ in the **big** test suite.
 ## Release history
 
 
-#### 0.10.1
+#### 0.11
 <dl><dd>
 
-*under development, not released yet*
+*2023/09/19*
 
-* Minor but significant-feeling change: It turns out that Python's Unicode (`str`) and ASCII
-  (`bytes`) objects disagree on which characters are whitespace, and also which characters
-  represent a newline.  **big** used to assume they were the same, for Unicode code points
-  less than 128--but they aren't.  **big** now reproduces Python's bug here, and now **big**
-  and Python agree on which ASCII characters are whitespace and newline characters.  This
-  meant removing entries from `big.ascii_whitespace`, `big.ascii_newlines`, etc.  (No new
-  characters were added.)
+* Breaking change: renamed almost all the old `whitespace` and `newlines` tuples.
+  Worse yet, one symbol has the same name but a *different value:* `ascii_whitespace`!
+  I've also changed the suffix `_without_dos` to the more accurate and intuitive
+  `_without_crlf`, and similarly changed `newlines` to `linebreaks`.
+  Sorry for all the confusion.  This resulted from a lot of research into whitespace
+  and newline characters, in Python, Unicode, and ASCII; please see the new deep-dive
+  [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
+  to see what all the fuss is about.  Here's a summary of all the
+  changes to the whitespace tuples:
+
+        RENAMED TUPLES (old name -> new name)
+          ascii_newlines               -> bytes_linebreaks
+          ascii_whitespace             -> bytes_whitespace
+          newlines                     -> linebreaks
+
+          ascii_newlines_without_dos   -> bytes_linebreaks_without_crlf
+          ascii_whitespace_without_dos -> bytes_whitespace_without_crlf
+          newlines_without_dos         -> linebreaks_without_crlf
+          whitespace_without_dos       -> whitespace_without_crlf
+
+        REMOVED TUPLES
+          utf8_newlines
+          utf8_whitespace
+
+          utf8_newlines_without_dos
+          utf8_whitespace_without_dos
+
+        UNCHANGED TUPLES (same name, same meaning)
+          whitespace
+
+        NEW TUPLES
+          ascii_linebreaks
+          ascii_whitespace
+          str_linebreaks
+          str_whitespace
+          unicode_linebreaks
+          unicode_whitespace
+
+          ascii_linebreaks_without_crlf
+          ascii_whitespace_without_crlf
+          str_linebreaks_without_crlf
+          str_whitespace_without_crlf
+          unicode_linebreaks_without_crlf
+          unicode_whitespace_without_crlf
+
+* New function in the [`big.text`](#bigtext) module: [`encode_strings`,](#encode_stringso--encodingascii)
+  which takes a container object containing `str` objects and returns an equivalent object
+  containing encoded versions of those strings as `bytes`.
 * Changed
   [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
   implementation to use `StateManager`.
@@ -4661,7 +5400,7 @@ in the **big** test suite.
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   with a type mismatch
   between 's' and 'separators', the exception it raises
-  now includes the value of 's' and 'separators'.
+  now includes the values of 's' and 'separators'.
 * Added more tests for `big.state` to exercise all the string arguments
   of `accessor` and `dispatch`.
 * The exhaustive
@@ -4677,21 +5416,23 @@ in the **big** test suite.
   and those are more accurate now.)
 * Whoops!  The name of the main class in [`big.state`](#bigstate) is
   [`StateManager`.](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
-  I accidentally wrote `StateMachine` instead, a bunch of times, in the docs.
+  I accidentally wrote `StateMachine` instead in the docs... several times.
 * Originally the
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   parameter 'separators'
   was required.  I changed it to optional a while ago,
   with a default of `None`.  (If you pass in `None`
-  it uses [`big.whitespace`](#whitespace) or [`big.ascii_whitespace`](#whitespace),
+  it uses [`big.str_whitespace`](#str_whitespace) or [`big.bytes_whitespace`](#bytes_whitespace),
   depending on the type of `s`.)  But the documentation
   didn't reflect this change until... now.
 * Improved the prose in
   [**The `multi-` family of string functions** deep-dive.](#The-multi--family-of-string-functions)
-  Hopefully now it does
-  a better job of selling `multisplit` to the reader.
+  Hopefully now it does a better job of selling `multisplit` to the reader.
 * The usual smattering of small doc fixes and improvements.
 
+My thanks again to Eric V. Smith for his willingness to consider and discuss these
+issues.  Eric is now officially a contributor to **big,** increasing the project's
+[bus factor](https://en.wikipedia.org/wiki/Bus_factor) to two.  Thanks, Eric!
 
 #### 0.10
 <dl><dd>
@@ -5278,5 +6019,3 @@ A **big** upgrade!
 
 * Initial release.
 </dd></dl>
-
-

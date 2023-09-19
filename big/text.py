@@ -508,139 +508,202 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     return extension + tuple(result)
 
 
-# a list of all unicode whitespace characters known to Python
-# (note: we check this list is correct and complete in a unit test)
-_export_name('whitespace')
-whitespace = (
-    '\t'    , #     9 0x0009 - tab
-    '\n'    , #    10 0x000a - newline
-    '\x0b'  , #    11 0x000b - vertical tab
-    '\x0c'  , #    12 0x000c - form feed
-    '\r'    , #    13 0x000d - carriage return
+@_export
+def _recursive_encode_strings(o, encoding):
+    if isinstance(o, str):
+        return o.encode(encoding)
+
+    a = []
+    if isinstance(o, dict):
+        for k, v in o.items():
+            k = _recursive_encode_strings(k, encoding)
+            v = _recursive_encode_strings(v, encoding)
+            a.append((k, v))
+    else:
+        for element in o:
+            a.append(_recursive_encode_strings(element, encoding))
+    return type(o)(a)
+
+@_export
+def encode_strings(o, encoding='ascii'):
+    """
+    Accepts a container object 'o' containing
+    str objects; returns an equivalent object
+    with the strings encoded to bytes.
+
+    'o' must be either dict, list, or tuple,
+    or a subclass.
+
+    Encodes every string inside using the encoding
+    specified in the 'encoding' parameter, default
+    is 'ascii'.  Handles nested containers.
+
+    If 'o' contains an object that is not a
+    str, dict, list, or tuple, raises TypeError.
+    """
+    if isinstance(o, str):
+        raise TypeError('encode_strings only accepts tuple, list, or dict')
+    return _recursive_encode_strings(o, encoding)
+
+
+# Tuples enumerating all the whitespace and newline characters,
+# for use with big functions taking "separators" arguments
+# (e.g. lines, multisplit).  For an explanation of what they
+# represent, please see the "Whitespace and line-breaking
+# characters in Python and big" deep-dive in the big documentation.
+
+_export_name('str_whitespace')
+str_whitespace = (
+    # char    decimal   hex      identity
+    ##########################################
+    '\t'    , #     9 - 0x0009 - tab
+    '\n'    , #    10 - 0x000a - newline
+    '\v'    , #    11 - 0x000b - vertical tab
+    '\f'    , #    12 - 0x000c - form feed
+    '\r'    , #    13 - 0x000d - carriage return
     '\r\n'  , # bonus! the classic DOS newline sequence!
-    '\x1c'  , #    28 0x001c - file separator
-    '\x1d'  , #    29 0x001d - group separator
-    '\x1e'  , #    30 0x001e - record separator
-    '\x1f'  , #    31 0x001f - unit separator
-    ' '     , #    32 0x0020 - space
-    '\x85'  , #   133 0x0085 - next line
-    '\xa0'  , #   160 0x00a0 - non-breaking space
-    '\u1680', #  5760 0x1680 - ogham space mark
-    '\u2000', #  8192 0x2000 - en quad
-    '\u2001', #  8193 0x2001 - em quad
-    '\u2002', #  8194 0x2002 - en space
-    '\u2003', #  8195 0x2003 - em space
-    '\u2004', #  8196 0x2004 - three-per-em space
-    '\u2005', #  8197 0x2005 - four-per-em space
-    '\u2006', #  8198 0x2006 - six-per-em space
-    '\u2007', #  8199 0x2007 - figure space
-    '\u2008', #  8200 0x2008 - punctuation space
-    '\u2009', #  8201 0x2009 - thin space
-    '\u200a', #  8202 0x200a - hair space
-    '\u2028', #  8232 0x2028 - line separator
-    '\u2029', #  8233 0x2029 - paragraph separator
-    '\u202f', #  8239 0x202f - narrow no-break space
-    '\u205f', #  8287 0x205f - medium mathematical space
-    '\u3000', # 12288 0x3000 - ideographic space
+    '\x1c'  , #    28 - 0x001c - file separator
+    '\x1d'  , #    29 - 0x001d - group separator
+    '\x1e'  , #    30 - 0x001e - record separator
+    '\x1f'  , #    31 - 0x001f - unit separator
+    ' '     , #    32 - 0x0020 - space
+    '\x85'  , #   133 - 0x0085 - next line
+    '\xa0'  , #   160 - 0x00a0 - non-breaking space
+    '\u1680', #  5760 - 0x1680 - ogham space mark
+    '\u2000', #  8192 - 0x2000 - en quad
+    '\u2001', #  8193 - 0x2001 - em quad
+    '\u2002', #  8194 - 0x2002 - en space
+    '\u2003', #  8195 - 0x2003 - em space
+    '\u2004', #  8196 - 0x2004 - three-per-em space
+    '\u2005', #  8197 - 0x2005 - four-per-em space
+    '\u2006', #  8198 - 0x2006 - six-per-em space
+    '\u2007', #  8199 - 0x2007 - figure space
+    '\u2008', #  8200 - 0x2008 - punctuation space
+    '\u2009', #  8201 - 0x2009 - thin space
+    '\u200a', #  8202 - 0x200a - hair space
+    '\u2028', #  8232 - 0x2028 - line separator
+    '\u2029', #  8233 - 0x2029 - paragraph separator
+    '\u202f', #  8239 - 0x202f - narrow no-break space
+    '\u205f', #  8287 - 0x205f - medium mathematical space
+    '\u3000', # 12288 - 0x3000 - ideographic space
     )
+_export_name('str_whitespace_without_crlf')
+str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
 
-# this omits the DOS newline sequence '\r\n'
-_export_name('whitespace_without_dos')
-whitespace_without_dos = tuple(s for s in whitespace if s != '\r\n')
+_export_name('whitespace')
+whitespace = str_whitespace
+_export_name('whitespace_without_crlf')
+whitespace_without_crlf = str_whitespace_without_crlf
 
-_export_name('newlines')
-newlines = (
-    '\n'    , #   10 0x000a - newline
-    '\x0b'  , #   11 0x000b - vertical tab
-    '\x0c'  , #   12 0x000c - form feed
-    '\r'    , #   13 0x000d - carriage return
-    '\r\n'  , # the classic DOS newline sequence
-    '\x1c'  , #   28 0x001c - file separator
-    '\x1d'  , #   29 0x001d - group separator
-    '\x1e'  , #   30 0x001e - record separator
-    '\x85'  , #  133 0x0085 - next line
-    '\u2028', # 8232 0x2028 - line separator
-    '\u2029', # 8233 0x2029 - paragraph separator
+_export_name('unicode_whitespace')
+unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
+_export_name('unicode_whitespace_without_crlf')
+unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
+
+_export_name('ascii_whitespace')
+ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
+_export_name('ascii_whitespace_without_crlf')
+ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
+
+_export_name('bytes_whitespace')
+bytes_whitespace = encode_strings(ascii_whitespace)
+_export_name('bytes_whitespace_without_crlf')
+bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
+
+
+_export_name('str_linebreaks')
+str_linebreaks = (
+    # char    decimal   hex      identity
+    ##########################################
+    '\n'    , #   10 - 0x000a - newline
+    '\v'    , #   11 - 0x000b - vertical tab
+    '\f'    , #   12 - 0x000c - form feed
+    '\r'    , #   13 - 0x000d - carriage return
+    '\r\n'  , # bonus! the classic DOS newline sequence!
+    '\x1c'  , #   28 - 0x001c - file separator
+    '\x1d'  , #   29 - 0x001d - group separator
+    '\x1e'  , #   30 - 0x001e - record separator
+    '\x85'  , #  133 - 0x0085 - next line
+    '\u2028', # 8232 - 0x2028 - line separator
+    '\u2029', # 8233 - 0x2029 - paragraph separator
 
     # what about '\n\r'?
     # sorry, Acorn and RISC OS users, you'll have to add this yourselves.
-    # I'm worried it would cause bugs with a malformed DOS newline.
+    # I'm worried it would cause bugs with a malformed DOS string,
+    # or maybe when operating in reverse mode.
+    #
+    # Also: welcome, Acorn and RISC OS users!
+    # What are you doing here?  You can't run Python 3.6+!
     )
+_export_name('str_linebreaks_without_crlf')
+str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
 
-# this omits the DOS convention '\r\n'
-_export_name('newlines_without_dos')
-newlines_without_dos = tuple(s for s in newlines if s != '\r\n')
+_export_name('linebreaks')
+linebreaks = str_linebreaks
+_export_name('linebreaks_without_crlf')
+linebreaks_without_crlf = str_linebreaks_without_crlf
 
-def _cheap_encode_iterable_of_strings(iterable, encoding='ascii'):
-    a = []
-    # all I'm really doing with the try/accept
-    # block is stopping the loop for the ascii
-    # encoding once we hit characters > 127.
-    # since we're sorted, by the time we hit it,
-    # we'll have already handled all the ascii
-    # characters (if we're encoding for ascii).
-    try:
-        for c in iterable:
-            a.append(c.encode(encoding))
-    except UnicodeEncodeError:
-        pass
-    if isinstance(iterable, (list, tuple)):
-        return type(iterable)(a)
-    return a
+_export_name('unicode_linebreaks')
+unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
+_export_name('unicode_linebreaks_without_crlf')
+unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
 
-# use these with multisplit if your bytes strings are encoded as ascii.
-_export_name('ascii_whitespace')
-ascii_whitespace = list(_cheap_encode_iterable_of_strings(whitespace, "ascii"))
-#
-# And now for some surprising behavior in Python:
-#
-# >>> '\x1c'.isspace()
-# True
-# >>> b'\x1c'.isspace()
-# False
-#
-# ASCII characters 28, 29, 30, and 31 are respectively the
-# "file", "group", "record", and "unit" separator characters.
-# The Python Unicode (aka "str") object considers these
-# characters to be whitespace; the Python bytes object does *not*.
-#
-# I think Python got this wrong.  But for now big will do what
-# Python does, as that seems less surprising .  In big.whitespace
-# and big.utf8_whitespace, those characters will be considered
-# whitespace.  In big.ascii_whitespace ASCII they won't.
-#
-# p.s. this is a longstanding bug; it was also true in
-# Python 2, a discrepancy between the 'str' and 'unicode' objects.
-#
-# p.p.s. https://github.com/python/cpython/issues/62436
-#
-for b in (b'\x1c', b'\x1d', b'\x1e', b'\x1f'):
-    ascii_whitespace.remove(b)
-ascii_whitespace = tuple(ascii_whitespace)
-_export_name('ascii_whitespace_without_dos')
-ascii_whitespace_without_dos = tuple(s for s in ascii_whitespace if s != b'\r\n')
+_export_name('ascii_linebreaks')
+ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
+_export_name('ascii_linebreaks_without_crlf')
+ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
 
-# Similarly, what Python considers a newline character
-# differs between Unicode and ASCII.  Easier to just
-# hard-code it here.
-_export_name('ascii_newlines')
-ascii_newlines = (
+_export_name('bytes_linebreaks')
+bytes_linebreaks = (
     b'\n'    , #   10 0x000a - newline
     b'\r'    , #   13 0x000d - carriage return
     b'\r\n'  , # the classic DOS newline sequence
     )
-_export_name('ascii_newlines_without_dos')
-ascii_newlines_without_dos = tuple(s for s in ascii_newlines if s != b'\r\n')
+_export_name('bytes_linebreaks_without_crlf')
+bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
 
-# use these with multisplit if your bytes strings are encoded as utf-8.
+
+# Before 10.1, big used the word "newlines" instead of "linebreaks"
+# in the names of these tuples.  I realized in September 2023 that
+# "linebreaks" was a better name; Unicode uses the term "line breaks"
+# for these characters.
+#
+# Similarly, "_without_crlf" used to be "_without_dos".  As much
+# as we might dream about a world without DOS, _without_crlf is
+# far more accurate.
+#
+# Here's some backwards-compatibility for you.
+# I promise to keep the old names around until September 2024.
+_export_name('whitespace_without_dos')
+whitespace_without_dos = str_whitespace_without_crlf
+
+_export_name('ascii_whitespace_without_dos')
+ascii_whitespace_without_dos = bytes_whitespace_without_crlf
+
+_export_name('newlines')
+newlines = str_linebreaks
+_export_name('newlines_without_dos')
+newlines_without_dos = str_linebreaks_without_crlf
+
+_export_name('ascii_newlines')
+ascii_newlines = bytes_linebreaks
+_export_name('ascii_newlines_without_dos')
+ascii_newlines_without_dos = bytes_linebreaks_without_crlf
+
+# These old tuples are deprecated, because it's easy to make
+# them yourself (and a million other variants) with encode_strings().
+# They'll be removed when I remove the backwards-compatibility
+# names above.
 _export_name('utf8_whitespace')
-utf8_whitespace = _cheap_encode_iterable_of_strings(whitespace, "utf-8")
+utf8_whitespace = encode_strings(str_whitespace, "utf-8")
 _export_name('utf8_whitespace_without_dos')
-utf8_whitespace_without_dos = tuple(s for s in utf8_whitespace if s != b'\r\n')
+utf8_whitespace_without_dos = tuple(b for b in utf8_whitespace if b != b'\r\n')
+
 _export_name('utf8_newlines')
-utf8_newlines   = _cheap_encode_iterable_of_strings(newlines,   "utf-8")
+utf8_newlines   = encode_strings(str_linebreaks, "utf-8")
 _export_name('utf8_newlines_without_dos')
-utf8_newlines_without_dos =  tuple(s for s in utf8_newlines if s != b'\r\n')
+utf8_newlines_without_dos =  tuple(b for b in utf8_newlines if b != b'\r\n')
+
 
 # reverse an iterable thing.
 # o must be str, bytes, list, tuple, set, or frozenset.
@@ -667,27 +730,34 @@ def _multisplit_reversed(o, name='s'):
 
 # _reversed_builtin_separators precalculates the reversed versions
 # of the builtin separators.  we use the reversed versions when
-# reverse=True.  this is a minor speed optimization, but also it
-# helps a lot with the lrucache for _separators_to_re.
+# reverse=True.  this is a minor speed optimization, particularly
+# as it helps with the lrucache for _separators_to_re.
 #
 # we test that these cached versions are correct in tests/test_text.py.
 #
 _reversed_utf8_whitespace_without_dos = _multisplit_reversed(utf8_whitespace_without_dos)
-_reversed_utf8_newlines_without_dos =   _multisplit_reversed(utf8_newlines_without_dos)
+_reversed_utf8_newlines_without_dos = _multisplit_reversed(utf8_newlines_without_dos)
 
 _reversed_builtin_separators = {
-    whitespace: whitespace_without_dos + ('\n\r',),
-    whitespace_without_dos: whitespace_without_dos,
+    str_whitespace: str_whitespace_without_crlf + ('\n\r',),
+    str_whitespace_without_crlf: str_whitespace_without_crlf,
 
-    newlines: newlines_without_dos + ("\n\r",),
-    newlines_without_dos: newlines_without_dos,
+    unicode_whitespace: unicode_whitespace_without_crlf + ('\n\r',),
+    unicode_whitespace_without_crlf: unicode_whitespace_without_crlf,
 
-    ascii_whitespace: ascii_whitespace_without_dos + (b"\n\r",),
-    ascii_whitespace_without_dos: ascii_whitespace_without_dos,
+    ascii_whitespace: ascii_whitespace_without_crlf + ("\n\r",),
+    ascii_whitespace_without_crlf: ascii_whitespace_without_crlf,
 
-    ascii_newlines: ascii_newlines_without_dos + (b"\n\r",),
-    ascii_newlines_without_dos: ascii_newlines_without_dos,
+    str_linebreaks: str_linebreaks_without_crlf + ("\n\r",),
+    str_linebreaks_without_crlf: str_linebreaks_without_crlf,
 
+    unicode_linebreaks: unicode_linebreaks_without_crlf + ("\n\r",),
+    unicode_linebreaks_without_crlf: unicode_linebreaks_without_crlf,
+
+    bytes_linebreaks: bytes_linebreaks_without_crlf + (b"\n\r",),
+    bytes_linebreaks_without_crlf: bytes_linebreaks_without_crlf,
+
+    # deprecated
     utf8_whitespace: _reversed_utf8_whitespace_without_dos + (b"\n\r",),
     utf8_whitespace_without_dos: _reversed_utf8_whitespace_without_dos,
 
@@ -1012,7 +1082,7 @@ def multisplit(s, separators=None, *,
         s_type = str
 
     if separators is None:
-        separators = ascii_whitespace if is_bytes else whitespace
+        separators = bytes_whitespace if is_bytes else whitespace
         check_separators = False
     elif not separators:
         raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
@@ -1231,11 +1301,14 @@ def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
 
-# I think that, for our purposes,
+# I declare that, for our purposes,
 #     ` (the "back-tick" character U+0060)
 # is *not* an apostrophe.  it's a diacritical
 # used to modify a letter, rather than a
 # separator used to separate letters.
+# It's been (ab)used as an apostrophe historically,
+# but that's because ASCII had a limited number of
+# punctuation characters.
 apostrophes = unicode_apostrophes = "'‘’‚‛"
 _export_name('apostrophes')
 double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
@@ -1437,12 +1510,12 @@ def normalize_whitespace(s, separators=None, replacement=None):
     if isinstance(s, bytes):
         empty = b''
         default_replacement = b' '
-        default_separators = ascii_whitespace_without_dos
+        default_separators = bytes_whitespace_without_crlf
         s_type = bytes
     else:
         empty = ''
         default_replacement = ' '
-        default_separators = whitespace_without_dos
+        default_separators = whitespace_without_crlf
         s_type = str
 
     if separators is None:
@@ -1485,7 +1558,7 @@ def normalize_whitespace(s, separators=None, replacement=None):
     #
     # (it'd *usually* work, sure.
     # but "usually" isn't good enough for big!)
-    if (   (separators is whitespace_without_dos)
+    if (   (separators is whitespace_without_crlf)
         or (separators is whitespace)
         ):
         if not s.strip():
@@ -1971,7 +2044,7 @@ class lines:
         is_str = isinstance(s, str)
         if is_bytes or is_str:
             if not separators:
-                separators = newlines if is_str else ascii_newlines
+                separators = linebreaks if is_str else bytes_linebreaks
             i = multisplit(s, separators, keep=False, separate=True, strip=False)
         else:
             i = iter(s)

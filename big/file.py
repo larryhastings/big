@@ -70,7 +70,7 @@ def fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)
 
     Returns a list of lines in the file containing text.  The lines are either
     strings or bytes objects, depending on the type of text.  The lines
-    have their newlines stripped but preserve all other whitespace.
+    have their line-breaks stripped but preserve all other whitespace.
 
     If enumerate is true, returns a list of tuples of (line_number, line).
     The first line of the file is line number 1.
@@ -134,7 +134,7 @@ def grep(path, pattern, *, encoding=None, enumerate=False, flags=0):
 
     Returns a list of lines in the file matching the pattern.  The lines
     are either strings or bytes objects, depending on the type of pattern.
-    The lines have their newlines stripped but preserve all other whitespace.
+    The lines have their line-breaks stripped but preserve all other whitespace.
 
     If enumerate is true, returns a list of tuples of (line_number, line).
     The first line of the file is line number 1.
