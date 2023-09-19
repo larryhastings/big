@@ -96,7 +96,7 @@ And here are five little functions/classes I use all the time:
 * [`Log`](#log-clocknone)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
-* [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+* [`touch`](#touchpath)
 
 
 # Index
