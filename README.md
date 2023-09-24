@@ -28,11 +28,43 @@ API gotchas fixed, and thoroughly tested with 100% coverage.
 It's the code you *would* have written... if only you had the time.
 It's a real pleasure to use!
 
-
 **big** requires Python 3.6 or newer.  Its only dependency
 is `python-dateutil`, and that's optional.  
 
 *Think big!*
+
+## Why use big?
+
+It's true that much of the code in **big** is short,
+and one might reasonably have the reaction
+"that's so short, it's easier to write it from scratch
+every time I need it than remember where it is and how
+to call it".  I still see value in these short functions
+in **big** because:
+
+1. everything in **big** is tested,
+2. every interface in **big** has been thoughtfully
+   considered and designed.
+
+For example, consider
+[`StateManager`.](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+If you remove the comments and documentation, it's actually pretty
+short--easily less than a hundred lines.  I myself have written
+state machines from scratch using a similar approach many times.
+They're easy to write.  So why bother using `StateManager`?
+Why not roll your own each time?
+
+Because `StateManager` not only supports all the features you need--consider
+[`accessor`](#accessorattributestate-state_managerstate_manager)
+and
+[`dispatch`](#dispatchstate_managerstate_manager--prefix-suffix)--its
+API is carefully designed to help prevent bugs and logical errors.
+In considering the prececessor of `StateManager` for inclusion in **big**,
+I realized that if an "observer" initiated a state transition, it would produce
+a blurry mess of observer callbacks and entered and exited states,
+executed in a confusing order.  So `StateManager` in **big** simply
+prevents you from executing state transitions in observers.
+
 
 ## Using big
 
