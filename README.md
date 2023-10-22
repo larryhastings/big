@@ -3539,8 +3539,8 @@ value `None`.
 
 <dl><dd>
 
-This family of string functions was inspired by Python's `str.strip`,
-`str.rstrip`, and `str.splitlines` methods.  These string splitting
+This family of string functions was inspired by Python's `str.split`,
+`str.rsplit`, and `str.splitlines` methods.  These string splitting
 methods are well-designed and often do what you want.  But they're
 surprisingly narrow and opinionated.  What if your use case doesn't
 map neatly to one of these functions?  `str.strip` supports two
@@ -3548,7 +3548,7 @@ map neatly to one of these functions?  `str.strip` supports two
 string in *exactly* one of those two modes, you probably can't use
 `str.strip` to solve your problem.
 
-So what *can* you use?  There's `re.strip`, but that can be
+So what *can* you use?  There's `re.split`, but that can be
 hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
 Now there's a new answer:
 [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
@@ -3556,7 +3556,7 @@ Now there's a new answer:
 [`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 goal is to be the be-all end-all string splitting function.
 It's designed to replace *every* mode of operation provided by
-`str.split`, `str.rstrip`, and `str.splitlines`, and it
+`str.split`, `str.rsplit`, and `str.splitlines`, and it
 can even replace `str.partition` and `str.rpartition`.
 (**big** uses
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
@@ -3564,14 +3564,14 @@ to implement
 [`multipartition`.)](#multipartitions-separators-count1--reverseFalse-separateTrue)
 [`multisplit`] can do it all!
 
-The downside of [`multisplit`'s'](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+The downside of [`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 awesome flexibility is that, since it *is* so
 sophisticated and tunable, it can be hard to use.  It takes
 *five keyword-only parameters* after all.  However, they're
 designed to be reasonably memorable, and their default values
 are designed to be easy to remember.  The best way to cope with
-[`multisplit`'s'](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-complexitiy is to use it as a building block for your own
+[`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+complexity is to use it as a building block for your own
 text splitting functions.  For example **big** uses
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to implement
@@ -3598,23 +3598,23 @@ the string at *each* non-overlapping instance of any string
 specified in `separators`.
 
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-also let you fine-tune how it splits, through five keyword-only
+also lets you fine-tune how it splits, through five keyword-only
 parameters:
 
 * `keep` lets you include the separator strings in the output,
   in a number of different formats.
 * `separate` lets you specify whether adjacent separator strings
-  should be grouped together (like `str.strip` operating on
-  whitespace) or regarded as separate (like `str.strip` when
+  should be grouped together (like `str.split` operating on
+  whitespace) or regarded as separate (like `str.split` when
   you pass in an explicit `sep` separator).
 * `strip` lets you strip separator strings from the beginning,
   end, or both ends of the string you're splitting.  It also
   supports a special *progressive* mode that duplicates the
-  behavior of `str.strip` when you use `None` as the separator.
+  behavior of `str.split` when you use `None` as the separator.
 * `maxsplit` lets you specify the maximum number of times to
-  split the string, exactly like the `maxsplit` argument to `str.strip`.
+  split the string, exactly like the `maxsplit` argument to `str.split`.
 * `reverse` lets you apply `maxsplit` to the end of the string
-  and splitting backwards, exactly like `str.rstrip`.
+  and splitting backwards, exactly like `str.rsplit`.
 
 To make it slightly easier to remember, all these keyword-only
 parameters default to a false value.  (Well, technically,
