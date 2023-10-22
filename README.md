@@ -3543,10 +3543,10 @@ This family of string functions was inspired by Python's `str.split`,
 `str.rsplit`, and `str.splitlines` methods.  These string splitting
 methods are well-designed and often do what you want.  But they're
 surprisingly narrow and opinionated.  What if your use case doesn't
-map neatly to one of these functions?  `str.strip` supports two
+map neatly to one of these functions?  `str.split` supports two
 *very specific* modes of operation--unless you want to split your
 string in *exactly* one of those two modes, you probably can't use
-`str.strip` to solve your problem.
+`str.split` to solve your problem.
 
 So what *can* you use?  There's `re.split`, but that can be
 hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
