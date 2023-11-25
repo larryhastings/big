@@ -59,7 +59,7 @@ Because `StateManager` not only supports all the features you need--consider
 and
 [`dispatch`](#dispatchstate_managerstate_manager--prefix-suffix)--its
 API is carefully designed to help prevent bugs and logical errors.
-In considering the prececessor of `StateManager` for inclusion in **big**,
+In considering the predecessor of `StateManager` for inclusion in **big**,
 I realized that if an "observer" initiated a state transition, it would produce
 a blurry mess of observer callbacks and entered and exited states,
 executed in a confusing order.  So `StateManager` in **big** simply
@@ -469,7 +469,7 @@ Compare this to functions:
   the *function* becomes a *method.*  When you call
   the *method,* *I* is automatically passed in as the
   first argument.
-* If you put a *class* inside a class, and access
+* If you put a *class* inside a class,
   and access it through an instance of that class,
   the *class* becomes a *bound inner class.*  When
   you call the *bound inner class,* *I* is automatically
