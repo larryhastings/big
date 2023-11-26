@@ -1520,7 +1520,7 @@ diagrams of your state machine.
 
 However, most of the time, this level of sophistication is
 unnecessary.  There are lots of use cases for small scale,
-*simple* state machines, where theis complex data-driven approach
+*simple* state machines, where this complex data-driven approach
 only gets in the way.  I prefer writing my state machines
 with active objects--where states are implemented as classes,
 events are implemented as method calls on those classes,
@@ -1561,7 +1561,7 @@ Here are my recommended best practices for working with
 `StateManager` for medium-sized and larger state machines:
 
 * Your state machine should be implemented as a *class.*
-    * You should store `StateManager` as an an attribute of that class,
+    * You should store `StateManager` as an attribute of that class,
       preferably called `state_manager`.  (Your state machine
       should have a "has-a" relationship with `StateManager`,
       not an "is-a" relationship where it inherits from `StateManager`.)
@@ -2076,7 +2076,7 @@ If `isinstance` returns `True`, the function assumes all arguments are
 `bytes` objects.  Otherwise the function assumes all arguments
 are `str` objects.
 
-As a rule, no further further testing, casting, or catching exceptions
+As a rule, no further testing, casting, or catching exceptions
 is done.
 
 Functions that take multiple string-like parameters require all
@@ -2093,7 +2093,7 @@ should pass in a `str`, you can also pass in a subclass of
 <dl><dd>
 
 A tuple of `str` objects, representing every line-breaking whitespace
-whitespace character defined by ASCII.
+character defined by ASCII.
 
 Useful as a `separator` argument for **big** functions that accept one,
 e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
@@ -2123,7 +2123,7 @@ Equivalent to [`ascii_linebreaks`](#ascii_linebreaks) without `'\r\n'`.
 <dl><dd>
 
 A tuple of `str` objects, representing every whitespace
-whitespace character defined by ASCII.
+character defined by ASCII.
 
 Useful as a `separator` argument for **big** functions that accept one,
 e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
@@ -2154,7 +2154,7 @@ Equivalent to [`ascii_whitespace`](#ascii_whitespace) without `'\r\n'`.
 <dl><dd>
 
 A tuple of `bytes` objects, representing every line-breaking whitespace
-whitespace character recognized by the Python `bytes` object.
+character recognized by the Python `bytes` object.
 
 Useful as a `separator` argument for **big** functions that accept one,
 e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
@@ -2184,7 +2184,7 @@ Equivalent to [`bytes_linebreaks`](#bytes_linebreaks) without `'\r\n'`.
 <dl><dd>
 
 A tuple of `bytes` objects, representing every line-breaking whitespace
-whitespace character recognized by the Python `bytes` object.
+character recognized by the Python `bytes` object.
 
 Useful as a `separator` argument for **big** functions that accept one,
 e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
@@ -3318,8 +3318,8 @@ Equivalent to [`unicode_linebreaks`](#unicode_linebreaks) without `'\r\n'`.
 
 <dl><dd>
 
-A tuple of `str` objects, representing every whitespace
-whitespace character defined by Unicode.
+A tuple of `str` objects, representing every whitespace 
+character defined by Unicode.
 
 Useful as a `separator` argument for **big** functions that accept one,
 e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
