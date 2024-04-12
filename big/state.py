@@ -232,7 +232,10 @@ class StateManager:
             if on_exit is not None:
                 on_exit()
         if self.observers:
-            for o in tuple(self.observers):
+            if self.observers != self._observers_copy:
+                self._observers_copy = list(self.observers)
+                self._observers_tuple = tuple(self.observers)
+            for o in self._observers_tuple:
                 o(self)
 
         self.__state = state
@@ -274,6 +277,8 @@ class StateManager:
         self.on_exit = on_exit
 
         self.observers = []
+        self._observers_copy = []
+        self._observers_tuple = ()
         self.state = state
 
     def __repr__(self):

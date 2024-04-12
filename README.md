@@ -1259,22 +1259,24 @@ Resets the log to its initial state.
 A replacement for Python's `sched.scheduler` object,
 adding full threading support and a modern Python interface.
 
-Python's `sched.scheduler` object was a clever idea for the
-time.  It abstracted away the concept of time from its interface,
-allowing it to be adapted to new schemes of measuring time--including
-mock time used for testing.  Very nice!
+Python's `sched.scheduler` object was added way back in 1991,
+and it was full of clever ideas.  It abstracted away the
+concept of time from its interface, allowing it to be adapted
+to new schemes of measuring time--including mock time, making
+testing easy and repeatable.  Very nice!
 
-But unfortunately, `sched.scheduler` was designed in 1991--long
-before multithreading was common, years before threading support
-was added to Python.  Sadly its API isn't flexible enough to
-correctly handle some scenarios:
+Unfortunately, `sched.scheduler` predates multithreading
+becoming common, much less multicore computers.  It certainly
+predates threading support in Python.  And its API isn't
+flexible enough to correctly handle some common scenarios in
+multithreaded programs:
 
-* If one thread has called `sched.scheduler.run`,
+* If one thread is blocking on `sched.scheduler.run`,
   and the next scheduled event will occur at time **T**,
   and a second thread schedules a new event which
   occurs at a time < **T**, `sched.scheduler.run` won't
   return any events to the first thread until time **T**.
-* If one thread has called `sched.scheduler.run`,
+* If one thread is blocking on `sched.scheduler.run`,
   and the next scheduled event will occur at time **T**,
   and a second thread cancels all events,
   `sched.scheduler.run` won't exit until time **T**.
@@ -1282,15 +1284,15 @@ correctly handle some scenarios:
 Also, `sched.scheduler` is thirty years behind the times in
 Python API design--its design predates many common modern
 Python conventions.  Its events are callbacks, which it
-calls directly.  `Scheduler` fixes this: its events are
-objects, and you iterate over the `Scheduler` object to receive
-events as they become due.
+calls directly.  `Scheduler` fixes this: *its* events are
+*objects,* and you iterate over the `Scheduler` object to
+see events as they occur.
 
-`Scheduler` also benefits from thirty years of improvements
-to `sched.scheduler`.  In particular, **big** reimplements the
-relevant parts of the `sched.scheduler` test suite, to ensure that
-`Scheduler` never repeats the historical problems discovered
-over the lifetime of `sched.scheduler`.
+`Scheduler` also benefits from thirty years of experience
+with `sched.scheduler`.  In particular, **big** reimplements the
+relevant parts of the `sched.scheduler` test suite, ensuring
+`Scheduler` will never trip over the problems discovered
+by `sched.scheduler` over its lifetime.
 
 #### `Event(scheduler, event, time, priority, sequence)`
 
@@ -1513,28 +1515,28 @@ a passive object (e.g. an `Enum`), and require you to explicitly
 describe every possible state transition.
 
 This approach is great for massive, super-complex state
-machines--you need a sophisticated library to manage such
-complex state machines.  This approach also permits these
-libraries to offer clever features like automatically generating
-diagrams of your state machine.  
+machines--you need the features of a sophisticated library
+to manage all that complexity.  It also enables clever
+features like automatically generating diagrams of your
+state machine, which is great!
 
-However, most of the time, this level of sophistication is
+But most of the time this level of sophistication is
 unnecessary.  There are lots of use cases for small scale,
-*simple* state machines, where this complex data-driven approach
-only gets in the way.  I prefer writing my state machines
-with active objects--where states are implemented as classes,
-events are implemented as method calls on those classes,
-and you transition to a new state by simply overwriting a
-`state` attribute with a new instance of one of these classes.
+*simple* state machines, where this data-driven approach
+and expansive, complex API only gets in the way.  I prefer
+writing my state machines with active objects--where states
+are implemented as classes, events are implemented as method
+calls on those classes, and you transition to a new state by
+simply overwriting a `state` attribute with a different state
+instance.
 
-`big.state` is designed to make it easy to write this style of
-state machine.  It has
+`big.state` makes this style of state machine easy.  It has
 a deliberately minimal, simple interface--the constructor for
 the main `StateManager` class only has four parameters,
 and it only exposes three attributes.  The module also has
 two decorators to make your life easier.  And that's it!
-With that small API surface area, you can effortlessly write
-large scale state machines.
+But even this small API surface area makes it effortless to
+write large scale state machines.
 
 (But you can also write tiny data-driven state machines too.
 Although `big.state` makes state machines with active states
@@ -1545,7 +1547,7 @@ kind of state machine you like!)
 `big.state` provides features like:
 
 * method calls that get called when entering and exiting a state,
-* observer objects that get called each time you transition
+* "observers", callables that get called each time you transition
   to a new state, and
 * safety mechanisms to catch bugs and prevent design mistakes.
 
@@ -1554,24 +1556,24 @@ kind of state machine you like!)
 
 The main class in `big.state` is `StateManager`.  This class
 maintains the current "state" of your state machine, and
-manages transitions to new states.  It takes one required
-parameter, which is the initial state.
+manages transitions to new states.  The constructor takes
+one required parameter, the initial state.
 
-Here are my recommended best practices for working with
-`StateManager` for medium-sized and larger state machines:
+Here are my recommendations for best practices when working
+with `StateManager` for medium-sized and larger state machines:
 
 * Your state machine should be implemented as a *class.*
     * You should store `StateManager` as an attribute of that class,
       preferably called `state_manager`.  (Your state machine
       should have a "has-a" relationship with `StateManager`,
       not an "is-a" relationship where it inherits from `StateManager`.)
-    * Decorating your state machine class with the
+    * You should decorate your state machine class with the
       [`accessor`](accessorattributestate-state_managerstate_manager)
-      decorator will save you a lot of boilerplate.
+      decorator--this will save you a lot of boilerplate.
       If your state machine is stored in `o`, decorating with
       `accessor` lets you can access the current state using
       `o.state` instead of `o.state_manager.state`.
-* Your states should be implemented as *classes.*
+* Every state should be implemented as a *class.*
     * You should have a base class for your state classes,
       containing whatever functionality they have in common.
     * You're encouraged to define these state classes *inside*
@@ -1580,16 +1582,19 @@ Here are my recommended best practices for working with
       so they automatically get references to the state machine
       they're a part of.
 * Events should be *method calls* made on your state machine object.
+    * Your state base class should have a method for every
+      event, decorated with [`pure_virtual'](pure_virtual).
     * As a rule, events should be dispatched from the state machine
       to a method call on the current state with the same name.
     * If all the code to handle a particular event lives in the
       states, use the
       [`dispatch`](#dispatchstate_managerstate_manager--prefix-suffix)
-      decorator to handle dispatching the call.  This will write
-      a new method for you, that calls the equivalent method on
-      the current state, passing in all the arguments it received.
-    * Your state base class should have a method for every
-      event, decorated with [`pure_virtual'](pure_virtual).
+      decorator to save you more boilerplate when calling the event
+      method.  Similarly to
+      [`accessor`,](accessorattributestate-state_managerstate_manager)
+      this creates a new method for you that calls the equivalent
+      method on the current state, passing in all the arguments
+      it received.
 
 #### Example code
 
@@ -1648,7 +1653,15 @@ for _ in range(3):
     print(sm.state)
 ```
 
-For another, more complete example of working with `StateManager`,
+This code demonstrates both 
+[`accessor`](accessorattributestate-state_managerstate_manager)
+and
+[`dispatch`.](#dispatchstate_managerstate_manager--prefix-suffix)
+`accessor` lets us reference the current state with `sm.state`
+instead of `sm.state_manager.state`, and `dispatch` lets us call
+`sm.toggle()` instead of `sm.state_manager.toggle()`.
+
+For a more complete example of working with `StateManager`,
 see the `test_vending_machine` test code in `tests/test_state.py`
 in the **big** source tree.
 
@@ -1658,7 +1671,8 @@ in the **big** source tree.
 
 Class decorator.  Adds a convenient state accessor attribute to your class.
 
-When you have a state machine class containing a [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+When you have a state machine class containing a
+[`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 object, it can be wordy and inconvenient to access the state through
 the state machine attribute:
 
@@ -1672,9 +1686,10 @@ the state machine attribute:
     sm.state_manager.state = NextState()
 ```
 
-The `accessor` class decorator creates a property for you, a
-short-cut that directly accesses the `state` attribute of
-your state manager.  Just decorate with `@accessor()`:
+The `accessor` class decorator creates a property for you--a
+shortcut that directly accesses the `state` attribute of
+your state manager.  Just decorate your state machine class
+with `@accessor()`:
 
 ```Python
     @accessor()
@@ -1711,7 +1726,7 @@ for the new accessor attribute, and the second parameter,
 
 For example, if your state manager is stored in an attribute called `sm`,
 and you want the short-cut to be called `st`, you'd decorate your
-class with
+state machine class with
 
 ```Python
 @accessor(attribute='st', state_manager='sm')
@@ -1775,9 +1790,11 @@ instance, then calls a method with the same name as the decorated
 function, passing in using `*args` and `**kwargs`.
 
 Note that, as a stylistic convention, you're encouraged to literally
-use a single ellipsis as the body of these functions, like in the
+use a single ellipsis as the body of these functions, as in the
 example above.  This is a visual cue to readers that the body of the
-function doesn't matter.
+function doesn't matter.  (In fact, the original `on_sunrise` method
+above is thrown away inside the decorator, and replaced with a customized
+method dispatch function.)
 
 The `state_manager` argument to the decorator should be the name of
 the attribute where the `StateManager` instance is stored in `self`.
@@ -1865,8 +1882,12 @@ The state the `StateManager` is transitioning to,
 if it's currently in the process of transitioning to a
 new state.  If the `StateManager` isn't currently
 transitioning to a new state, its `next` attribute is `None`.
-While the manager is currently transitioning to a new
-state, it's illegal to start a second transition.  (In
+And if the `StateManager` *is* currently
+transitioning to a new state, its `next` attribute will
+*not* be `None`.
+
+During the time the manager is currently transitioning to
+a new state, it's illegal to start a second transition.  (In
 other words: you can't assign to `state` while `next` is not
 `None`.)
 
@@ -1876,20 +1897,19 @@ other words: you can't assign to `state` while `next` is not
 `observers`
 </dt><dd>
 
-A list of callables that get called
-during every state transition.  It's initially empty;
-you should add and remove observers to the list
-as needed.
+A list of callables that get called during every state
+transition.  It's initially empty; you may add and remove
+observers to the list as needed.
 
 * The callables will be called with one positional argument,
   the state manager object.
 * Since observers are called during the state transition,
   they aren't permitted to initiate state transitions.
 * You're permitted to modify the list of observers
-  at any time.  If you modify the list of observers
-  during an observer call, `StateManager` will finish
-  the current observer callbacks using a copy of the
-  old list.
+  at any time--even from inside an observer callback.
+  Note that this won't modify the list of observers called
+  until the *next* state transition.
+  (`StateManager` uses a copy of the observer list.)
 
 </dd></dl>
 
@@ -5374,6 +5394,22 @@ in the **big** test suite.
 
 ## Release history
 
+#### next version
+<dl><dd>
+
+*not yet released*
+
+* Slight performance upgrade for `StateMachine`, when using
+ observers.  `StateMachine` always uses a copy of the observer
+ list (specifically, a tuple) when calling the observers; this
+ means it's safe to modify the observer list at any time.
+ `StateMachine` used to always make a fresh copy every time you
+ called an event; now it uses a cached copy, and only recomputes
+ the tuple when the observer list changes.
+
+ (Well... it's not safe to modify the observer list from two
+ threads simultaneously while also dispatching events.  As with
+ many libraries, the `StateMachine` API leaves locking up to you.)
 
 #### 0.11
 <dl><dd>
