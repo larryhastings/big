@@ -1659,7 +1659,7 @@ and
 [`dispatch`.](#dispatchstate_managerstate_manager--prefix-suffix)
 `accessor` lets us reference the current state with `sm.state`
 instead of `sm.state_manager.state`, and `dispatch` lets us call
-`sm.toggle()` instead of `sm.state_manager.toggle()`.
+`sm.toggle()` instead of `sm.state_manager.state.toggle()`.
 
 For a more complete example of working with `StateManager`,
 see the `test_vending_machine` test code in `tests/test_state.py`
