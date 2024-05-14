@@ -2705,7 +2705,7 @@ Note that this function does not text-wrap the text of the
 columns.  The text in the columns should already be broken
 into lines and separated by newline characters.  (Lines in
 that are longer than that column tuple's `max_width` are
-handled with the `overflow_strategy`, below.)
+handled with the `overflow_strategy`, described below.)
 
 `column_separator` is printed between every column.
 
@@ -3578,20 +3578,21 @@ reverse!
 
 Now there's a new answer:
 [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-The goal of [`multisplit`] is to be the be-all end-all string splitting function.
-It's designed to replace *every* mode of operation provided by
+The goal of `multisplit` is to be the be-all end-all string splitting function.
+It's designed to supercede *every* mode of operation provided by
 `str.split`, `str.rsplit`, and `str.splitlines`, and it
-can even replace `str.partition` and `str.rpartition`.
+can even replace `str.partition` and `str.rpartition` too.
 `multisplit` does it all!
 
 The downside of [`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-awesome flexibility is that it can be hard to use.  It takes
-*five* keyword-only parameters after all!  However, they're
-designed to be reasonably memorable, and their default values
-are designed to be easy to remember.  The best way to cope with
+awesome flexibility is that it can be hard to use... after all,
+it takes *five* keyword-only parameters.  However, these parameters
+and their defaults are designed to be easy to remember.
+
+The best way to cope with
 [`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 complexity is to use it as a building block for your own
-text splitting functions.  For example **big** uses
+text splitting functions.  For example, **big** uses
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to implement
 [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
@@ -3607,7 +3608,13 @@ pass in the string you want to split, the separators you
 want to split on, and tweak its behavior with its five
 keyword arguments.  It returns an iterator that yields
 string segments from the original string in your preferred
-format.
+format.  The separator list is optional; if you don't
+pass one in, it defaults to an iterable of whitespace separators
+(either
+[`big.whitespace`](#whitespace)
+or
+[`big.ascii_whitespace`,](#whitespace)
+as appropriate).
 
 The cornerstone of [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 is the `separators` argument.
@@ -3685,7 +3692,7 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 ```
 
 `maxsplit` has interactions with `reverse` and `strip`.  For more
-information, see the documentation regarding those parameters, below.
+information, see the documentation regarding those parameters below.
 
 </dd></dl>
 
@@ -3696,6 +3703,9 @@ information, see the documentation regarding those parameters, below.
 `keep` indicates whether or not `multisplit` should preserve the separator
 strings in the strings it yields.  It supports four values: false, true,
 and the special values `ALTERNATING` and `AS_PAIRS`.
+
+When `keep` is false, `multisplit` throws away the separator strings;
+they won't appear in the output.
 
 ```Python
     >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # "keep" defaults to False
@@ -3724,19 +3734,20 @@ and entries with an odd-numbered index (1, 3, 5, ...) are always separator strin
     ['apple', 'X', 'banana', 'Y', 'cookie']
 ```
 
-Note that `ALTERNATING` always emits an odd number of strings; the first and last
-strings are always non-separator strings.  Like `str.split`, if the string you're
-splitting starts or ends with a separator string, `multisplit` will emit an empty
-string there:
+Note that `ALTERNATING` always emits an odd number of strings, and the first and
+last strings yielded are always non-separator strings.  Like `str.split`,
+if the string you're splitting starts or ends with a separator string,
+`multisplit` will emit an empty string at the beginning or end, to preserve
+the "always begin and end with non-separator string" invariant:
 
 ```Python
     >>> list(big.multisplit('1a1z1', ('1',), keep=big.ALTERNATING))
     ['', '1', 'a', '1', 'z', '1', '']
 ```
 
-Finally, when `keep` is `AS_PAIRS`,  `multisplit` keeps the separators as separate
-strings.  But instead of yielding strings, it yields 2-tuples of strings.  Every
-2-tuple contains a non-separator string followed by a separator string.
+Finally, when `keep` is `AS_PAIRS`, `multisplit` keeps the separators as separate
+strings.  But it doesn't yield bare strings; instead, it yields 2-tuples of strings.
+Every 2-tuple contains a non-separator string followed by a separator string.
 
 If the original string starts with a separator, the first 2-tuple will contain
 an empty non-separator string and the separator:
@@ -4153,12 +4164,12 @@ That tuple at the end, just containing two empty strings:
 
 It's *so strange.*  How can that be right?
 
-It's the same as `str.split`.
+In short, it's similar to the `str.split` situation.
+When called with `keep=AS_PAIRS`,
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-*must* split the string into two pieces *every* time it finds the separator
-in the original string.  So it *must* emit the empty non-separator string.
-And since that zero-length string isn't (cannot!) be followed by a separator,
-when using `keep=AS_PAIRS` the final separator string is *also* empty.
+guarantees that the final tuple will contain an empty separator string.
+If the string you're splitting ends with a separator, it *must* emit
+the empty non-separator string, followed by the empty separator string.
 
 Think of it this way: with the tuple of empty strings there, you can easily
 convert one `keep` format into any another.  (Provided that you know
