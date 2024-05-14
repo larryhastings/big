@@ -3568,26 +3568,25 @@ map neatly to one of these functions?  `str.split` supports two
 string in *exactly* one of those two modes, you probably can't use
 `str.split` to solve your problem.
 
-So what *can* you use?  There's `re.split`, but that can be
-hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
+So what *can* you use?  There's
+[`re.split`,](https://docs.python.org/3/library/re.html#re.split)
+but that can be  hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
+Regular expressions can be so hard to get right, and the
+semantics of `re.split` are subtly different from the usual
+string splitting functions.  Not to mention, it doesn't support
+reverse!
+
 Now there's a new answer:
 [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-
-[`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-goal is to be the be-all end-all string splitting function.
+The goal of [`multisplit`] is to be the be-all end-all string splitting function.
 It's designed to replace *every* mode of operation provided by
 `str.split`, `str.rsplit`, and `str.splitlines`, and it
 can even replace `str.partition` and `str.rpartition`.
-(**big** uses
-[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-to implement
-[`multipartition`.)](#multipartitions-separators-count1--reverseFalse-separateTrue)
-[`multisplit`] can do it all!
+`multisplit` does it all!
 
 The downside of [`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-awesome flexibility is that, since it *is* so
-sophisticated and tunable, it can be hard to use.  It takes
-*five keyword-only parameters* after all.  However, they're
+awesome flexibility is that it can be hard to use.  It takes
+*five* keyword-only parameters after all!  However, they're
 designed to be reasonably memorable, and their default values
 are designed to be easy to remember.  The best way to cope with
 [`multisplit`'s](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
@@ -3598,7 +3597,7 @@ to implement
 [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 [`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
 [`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-and several others functions.
+and several other functions.
 
 ### Using `multisplit`
 
@@ -3618,7 +3617,7 @@ the string at *each* non-overlapping instance of any string
 specified in `separators`.
 
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-also lets you fine-tune how it splits, through five keyword-only
+lets you fine-tune its behavior via five keyword-only
 parameters:
 
 * `keep` lets you include the separator strings in the output,
@@ -3626,20 +3625,22 @@ parameters:
 * `separate` lets you specify whether adjacent separator strings
   should be grouped together (like `str.split` operating on
   whitespace) or regarded as separate (like `str.split` when
-  you pass in an explicit `sep` separator).
+  you pass in an explicit separator).
 * `strip` lets you strip separator strings from the beginning,
   end, or both ends of the string you're splitting.  It also
   supports a special *progressive* mode that duplicates the
   behavior of `str.split` when you use `None` as the separator.
 * `maxsplit` lets you specify the maximum number of times to
   split the string, exactly like the `maxsplit` argument to `str.split`.
-* `reverse` lets you apply `maxsplit` to the end of the string
-  and splitting backwards, exactly like `str.rsplit`.
+* `reverse` makes `multisplit` behave like `str.rsplit`,
+  starting at the end of the string and working backwards.
+  (This only changes the behavior of `multisplit` if you use
+  `maxsplit`, or if your string contains overlapping separators.)
 
 To make it slightly easier to remember, all these keyword-only
 parameters default to a false value.  (Well, technically,
 `maxsplit` defaults to the special value `-1`, for compatibility
-with `str.split`.  But this is its special "don't do anything"
+with `str.split`.  But that's its special "don't do anything"
 magic value.  All the *other* keyword-only parameters default
 to `False`.)
 
@@ -3659,6 +3660,8 @@ To give you a sense of how the five keyword-only parameters changes the behavior
 here's a breakdown of each of these parameters with examples.
 
 #### `maxsplit`
+
+<dl><dd>
 
 `maxsplit` specifies the maximum number of times the string should be split.
 It behaves the same as the `maxsplit` parameter to `str.split`.
@@ -3684,7 +3687,11 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 `maxsplit` has interactions with `reverse` and `strip`.  For more
 information, see the documentation regarding those parameters, below.
 
+</dd></dl>
+
 #### `keep`
+
+<dl><dd>
 
 `keep` indicates whether or not `multisplit` should preserve the separator
 strings in the strings it yields.  It supports four values: false, true,
@@ -3771,8 +3778,11 @@ This odd-looking behavior is discussed at length in the section below, titled
 The behavior of `keep` can be affected by the value of `separate`.
 For more information, see the next section, on `separate`.
 
+</dd></dl>
 
 #### `separate`
+
+<dl><dd>
 
 `separate` indicates whether multisplit should consider adjacent
 separator strings in `s` as one separator or as multiple separators
@@ -3801,7 +3811,11 @@ adjacent separators:
     [('apple', 'X'), ('', 'Y'), ('banana', 'Y'), ('', 'X'), ('', 'Y'), ('cookie', '')]
 ```
 
+</dd></dl>
+
 #### `strip`
+
+<dl><dd>
 
 `strip` indicates whether multisplit should strip separators from
 the beginning and/or end of `s`.  It supports five values:
@@ -3854,7 +3868,11 @@ the right side of the string.  Note in this example how the trailing separator
     ['apple', 'banana', 'cookie']
 ```
 
+</dd></dl>
+
 #### `reverse`
+
+<dl><dd>
 
 `reverse` specifies where `multisplit` starts parsing the string--from
 the beginning, or the end--and in what direction it moves when parsing
@@ -3900,6 +3918,7 @@ one uses `maxsplit`.
     >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'), reverse=True))
     ['appleX', 'bananaX', 'cookie']
 ```
+</dd></dl>
 
 ### Reimplementing library functions using `multisplit`
 
@@ -5399,17 +5418,23 @@ in the **big** test suite.
 
 *not yet released*
 
-* Slight performance upgrade for `StateMachine`, when using
- observers.  `StateMachine` always uses a copy of the observer
+* Slight performance upgrade for `StateMachine` observers.
+ `StateMachine` always uses a copy of the observer
  list (specifically, a tuple) when calling the observers; this
  means it's safe to modify the observer list at any time.
  `StateMachine` used to always make a fresh copy every time you
  called an event; now it uses a cached copy, and only recomputes
  the tuple when the observer list changes.
 
- (Well... it's not safe to modify the observer list from two
- threads simultaneously while also dispatching events.  As with
- many libraries, the `StateMachine` API leaves locking up to you.)
+ (Note that it's not thread-safe to modify the observer list
+ from one thread while also dispatching events in another.
+ Your program won't crash, but the list of observers called
+ may be unpredictable based on which thread wins or loses the
+ race.  But this has always been true.  As with many libraries,
+ the `StateMachine` API leaves locking up to you.)
+
+* The usual doc fixes, including a lot of touchups
+  in `tests/test_text.py`.
 
 #### 0.11
 <dl><dd>

@@ -855,7 +855,7 @@ class BigTextTests(unittest.TestCase):
 
     def test_reimplemented_str_split(self):
         """
-        The fourth of *six* multisplit test suites.
+        The third of *six* multisplit test suites.
         (multisplit has the biggest test suite in all of big.)
 
         This test suite reimplements str.split and str.rsplit
@@ -936,7 +936,7 @@ class BigTextTests(unittest.TestCase):
 
     def test_reimplemented_str_splitlines(self):
         """
-        The fifth of *six* multisplit test suites.
+        The fourth of *six* multisplit test suites.
         (multisplit has the biggest test suite in all of big.)
 
         This test suite reimplements str.splitlines
@@ -971,7 +971,7 @@ class BigTextTests(unittest.TestCase):
 
     def test_reimplemented_str_partition(self):
         """
-        The sixth of *six* multisplit test suites.
+        The fifth of *six* multisplit test suites.
         (multisplit has the biggest test suite in all of big.)
 
         This test suite reimplements str.partition and str.rpartition
@@ -1046,21 +1046,47 @@ class BigTextTests(unittest.TestCase):
         (multisplit has the biggest test suite in all of big.)
 
         This is the big one.  The final boss.
-        It's gigantic, exhaustive, and... slow.
+        It's gigantic, exhaustive, and (comparatively) slow.
 
-        The test calls multisplit_tester with a deconstructed string,
-        pre-split so that separators and non-separators are always in
-        their own strings.
+        First, the test has its own toy reimplementation of multisplit,
+        toy_multisplit(). toy_multisplit() doesn't support any options;
+        it's equivalent to
+            list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
+        (Though it does support inputs as either str or bytes.)
+        This test suite has a mini test suite for toy_multisplit();
+        it feeds each test into multisplit() and toy_multisplit(),
+        and confirms that they produce the same output.
 
-        multisplit_tester calls multisplit with *every* possible
-        combination of arguments,
-        independently computes what the return value should be,
-        and confirms that multisplit got it right.
+        There's also a toy_reverse_multisplit() that's equivalent to
+            list(big.multisplit(s, separators, keep=ALTERNATING, separate=True, reverse=True))
+        which is similarly tested.
+
+        But this was just the prologue, just some yak shaving--
+        the *real* testing in this test suite uses multisplit_tester().
+        multisplit_tester() accepts a string to split and a set of separators.
+        It splits the string using toy_multisplit and toy_reverse_multisplit,
+        then calls multisplit with that string to split and those separators,
+        using *every* possible combination of test inputs:
+                * as strings and encoded to bytes (ascii)
+                * with and without the leading left separator(s)
+                * with and without the trailing right separator(s)
+                * with every combination of every value of
+                    * keep
+                    * maxsplit (all values that produce different results, plus a couple extra Just In Case)
+                    * reverse
+                    * separate
+                    * strip
+
+        multisplit_tester() then independently computes what the output
+        *should* be, given those inputs, and confirms that multisplit()
+        returned the correct output.
         """
 
         def toy_multisplit_original(s, separators): # pragma: no cover
             """
-            A toy version of multisplit.
+            The original toy version of multisplit.
+            This function is no longer called; I left it
+            here for posterity, 'cause I just like looking at it.
 
             s is str or bytes.
             separators is an iterable of str or bytes.
@@ -1142,7 +1168,9 @@ class BigTextTests(unittest.TestCase):
             # assert empty not in separators
 
             # toy_multisplit used to be slower than toy_multisplit_original
-            # when there was only one separator.  but no longer!  it's special-cased!
+            # when there was only one separator...
+            #
+            # but no longer!  it's special-cased!
             # (why bother? it kind of stuck in my craw.)
             if len(separators) == 1:
                 segments = []
@@ -1462,8 +1490,8 @@ class BigTextTests(unittest.TestCase):
             tests Every. Possible. Permutation. of inputs to multisplit(),
             based on the segments you pass in.  this includes
                 * as strings and encoded to bytes (ascii)
-                * with and without the left separator(s)
-                * with and without the right separator(s)
+                * with and without the leading left separator(s)
+                * with and without the trailing right separator(s)
                 * with every combination of every value of
                     * keep
                     * maxsplit (all values that produce different results, plus a couple extra Just In Case)
@@ -1471,7 +1499,7 @@ class BigTextTests(unittest.TestCase):
                     * separate
                     * strip
 
-            p.s it's a little slow!  but it's doing a lot.
+            p.s it's a little slow!  but gee whiz it's doing a lot.
             """
 
             want_prints = False
