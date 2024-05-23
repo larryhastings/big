@@ -1327,15 +1327,25 @@ class BigTextTests(unittest.TestCase):
                     s = s.encode('ascii')
                     if sep is not None:
                         sep = sep.encode('ascii')
-                for sep_none in (False, True):
-                    sep2 = None if sep_none else sep
+
+                for sep2 in (sep, None):
                     a = s.split(sep2, maxsplit)
                     b = str_split(s, sep2, maxsplit)
                     self.assertEqual(a, b, f"reimplemented str_split fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
 
+                    if (maxsplit == -1) and sep2:
+                        b = [x for x in toy_multisplit(s, sep2) if x != sep2]
+                        self.assertEqual(a, b, f"toy_multisplit fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, toy_multisplit gave us {b}")
+                        b = [x for x in toy_multisplit_original(s, sep2) if x != sep2]
+                        self.assertEqual(a, b, f"toy_multisplit_original fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, toy_multisplit_original gave us {b}")
+
                     a = s.rsplit(sep2, maxsplit)
                     b = str_rsplit(s, sep2, maxsplit)
                     self.assertEqual(a, b, f"reimplemented str_rsplit fails: {s!r}.rsplit({sep2!r}, {maxsplit}) == {a}, str_split version gave us {b}")
+
+                    if (maxsplit == -1) and sep2:
+                        b = [x for x in toy_multisplit_original(s, sep2) if x != sep2]
+                        self.assertEqual(a, b, f"toy_multisplit_original fails: {s!r}.split({sep2!r}, {maxsplit}) == {a}, toy_multisplit_original gave us {b}")
 
 
         for maxsplit in range(-1, 10):
@@ -1397,6 +1407,19 @@ class BigTextTests(unittest.TestCase):
                     a = s.splitlines(keepends)
                     b = str_splitlines(s, keepends)
                     self.assertEqual(a, b, f"reimplemented str_splitlines fails: {s!r}.splitlines({keepends}) == {a}, multisplit gave us {b}")
+
+                    if s and (not keepends):
+                        def toy_splitlines(s, fn):
+                            linebreaks = big.bytes_linebreaks if isinstance(s, bytes) else big.linebreaks
+                            l = [x for x in fn(s, linebreaks) if x not in linebreaks]
+                            if l and not l[-1]:
+                                # yes, "".splitlines() returns an empty list
+                                l.pop()
+                            return l
+                        b = toy_splitlines(s, toy_multisplit)
+                        self.assertEqual(a, b, f"toy_multisplit fails: {s!r}.splitlines({keepends}) == {a}, toy_multisplit gave us {b}")
+                        b = toy_splitlines(s, toy_multisplit_original)
+                        self.assertEqual(a, b, f"toy_multisplit_original fails: {s!r}.splitlines({keepends}) == {a}, toy_multisplit_original gave us {b}")
 
         test('')
         test('One line')
