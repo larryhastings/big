@@ -5451,19 +5451,19 @@ in the **big** test suite.
   needless reversing.
 
 * Slight performance upgrade for `StateMachine` observers.
- `StateMachine` always uses a copy of the observer
- list (specifically, a tuple) when calling the observers; this
- means it's safe to modify the observer list at any time.
- `StateMachine` used to always make a fresh copy every time you
- called an event; now it uses a cached copy, and only recomputes
- the tuple when the observer list changes.
+  `StateMachine` always uses a copy of the observer
+  list (specifically, a tuple) when calling the observers; this
+  means it's safe to modify the observer list at any time.
+  `StateMachine` used to always make a fresh copy every time you
+  called an event; now it uses a cached copy, and only recomputes
+  the tuple when the observer list changes.
 
- (Note that it's not thread-safe to modify the observer list
- from one thread while also dispatching events in another.
- Your program won't crash, but the list of observers called
- may be unpredictable based on which thread wins or loses the
- race.  But this has always been true.  As with many libraries,
- the `StateMachine` API leaves locking up to you.)
+  (Note that it's not thread-safe to modify the observer list
+  from one thread while also dispatching events in another.
+  Your program won't crash, but the list of observers called
+  may be unpredictable based on which thread wins or loses the
+  race.  But this has always been true.  As with many libraries,
+  the `StateMachine` API leaves locking up to you.)
 
 * The usual doc fixes, including a lot of touchups
   in `tests/test_text.py`.
