@@ -5429,6 +5429,27 @@ in the **big** test suite.
 
 *not yet released*
 
+* Minor but free speedup for several functions in `big.text`,
+  most importantly
+  [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+  These functions used to locally define a new iterator
+  function, then call it and return the iterator.  I promoted
+  those local functions to module level, which means we no
+  longer rebind them each time the function is called.  As a
+  very rough guess, this often makes `multisplit` 10% faster,
+  and never slower.
+
+  In the case of
+  [`merge_columns`,](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+  we were binding functions inside a loop (!!) inside a function.
+  These local functions are still bound inside `merge_columns`,
+  but I moved them outside the loop.
+
+* Another minor speedup for `multisplit`: when `reverse=True`,
+  we used to reverse the results *three times!*  We now explicitly
+  observe and manage the reverse state of the result and avoid
+  needless reversing.
+
 * Slight performance upgrade for `StateMachine` observers.
  `StateMachine` always uses a copy of the observer
  list (specifically, a tuple) when calling the observers; this

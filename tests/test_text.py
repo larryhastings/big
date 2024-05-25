@@ -946,7 +946,7 @@ class BigTextTests(unittest.TestCase):
     def test_multisplit(self):
         """
         The first of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This test suite tests basic functionality and type safety.
         """
@@ -1106,7 +1106,7 @@ class BigTextTests(unittest.TestCase):
     def test_reimplemented_multisplit(self):
         """
         The second of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This tests that multisplit, toy_multisplit,
         toy_multisplit_reverse, and toy_multisplit_original
@@ -1225,7 +1225,7 @@ class BigTextTests(unittest.TestCase):
     def test_advanced_multisplit(self):
         """
         The third of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This test suite tests some funny boundary cases.
         """
@@ -1292,7 +1292,7 @@ class BigTextTests(unittest.TestCase):
     def test_reimplemented_str_split(self):
         """
         The fourth of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This test suite reimplements str.split and str.rsplit
         using multisplit, and confirms that the reimplentations
@@ -1383,7 +1383,7 @@ class BigTextTests(unittest.TestCase):
     def test_reimplemented_str_splitlines(self):
         """
         The fifth of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This test suite reimplements str.splitlines
         using multisplit, and confirms that the original and
@@ -1422,16 +1422,19 @@ class BigTextTests(unittest.TestCase):
                         self.assertEqual(a, b, f"toy_multisplit_original fails: {s!r}.splitlines({keepends}) == {a}, toy_multisplit_original gave us {b}")
 
         test('')
+        test('\n')
         test('One line')
         test('One line\n')
         test('Two lines\nTwo lines')
         test('Two lines\nTwo lines\n')
         test('Two lines\nTwo lines\n\n\n')
+        test('\nTwo lines\nTwo lines\n\n\n')
+        test('\nTwo lines\n\nTwo lines')
 
     def test_reimplemented_str_partition(self):
         """
         The sixth of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This test suite reimplements str.partition and str.rpartition
         using multisplit, and confirms that the originals and the
@@ -1512,15 +1515,15 @@ class BigTextTests(unittest.TestCase):
     def test_multisplit_exhaustively(self):
         """
         The seventh of *seven* multisplit test suites.
-        (multisplit has the biggest test suite in all of big.)
+        (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
         This is the big one.  The final boss.
         It's gigantic, exhaustive, and (comparatively) slow.
 
         multisplit_tester() accepts a string to split and a set of separators.
         It splits the string using toy_multisplit and toy_multisplit_reverse,
-        then calls multisplit with that those same two arguments, adding
-        a *bewildering* combination of test inputs:
+        then calls multisplit using those same two arguments, adding a
+        *bewildering* combination of test inputs:
                 * as strings and encoded to bytes (ascii)
                 * with and without the leading left separator(s)
                 * with and without the trailing right separator(s)
@@ -1530,8 +1533,9 @@ class BigTextTests(unittest.TestCase):
                     * reverse
                     * separate
                     * strip
-        (This tests *every* combination of keyword arguments that will
-        produce distinct output.)
+
+        This tests *every* combination of keyword arguments that will
+        produce distinct output.
 
         multisplit_tester() then independently computes what the output
         *should* be, given those inputs, and confirms that multisplit()
@@ -1551,7 +1555,7 @@ class BigTextTests(unittest.TestCase):
 
             separators is the list of separators.
 
-            tests Every. Possible. Permutation. of inputs to multisplit(),
+            tests Every. Possible. Unique. Permutation. of inputs to multisplit(),
             based on the segments you pass in.  this includes
                 * as strings and encoded to bytes (ascii)
                 * with and without the leading left separator(s)
@@ -2000,6 +2004,11 @@ class BigTextTests(unittest.TestCase):
         # test overlapping
         multisplit_tester(
             'oqaxaaXbbqXbo',
+            ('aX', 'Xb', 'o'),
+            )
+
+        multisplit_tester(
+            'oqaXaaXbbqXbo',
             ('aX', 'Xb', 'o'),
             )
 
