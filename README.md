@@ -5446,6 +5446,8 @@ in the **big** test suite.
 
   * test lines( [ ('a', '\n'), ('b', '\n'), ('c', '') ])
   * test LineInfo.end specifically
+  * add a test that exercises appending to LineInfo.leading,
+    using a mutant line modifier that puts stuff in it
 
 * New feature: `LineInfo` objects yielded by `lines`
   now contain `end`, which is the end-of-line character

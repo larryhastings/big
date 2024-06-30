@@ -3026,26 +3026,26 @@ outdent
         test(lines, expected)
 
         lines = (
-            "left margin\n"
-            "\tfour\n"
-            "  \t    eight\n"
-            "  \t\tfigure eight is double four\n"
-            "    figure four is half of eight\n"
+            b"left margin\n"
+            b"\tfour\n"
+            b"  \t    eight\n"
+            b"  \t\tfigure eight is double four\n"
+            b"    figure four is half of eight\n"
             )
 
         expected = [
-            (LineInfo(line='left margin', line_number=1, column_number=1, indent=0, leading=''),
-                'left margin'),
-            (LineInfo(line='\tfour', line_number=2, column_number=5, indent=1, leading='\t'),
-                'four'),
-            (LineInfo(line='  \t    eight', line_number=3, column_number=9, indent=2, leading='  \t    '),
-                'eight'),
-            (LineInfo(line='  \t\tfigure eight is double four', line_number=4, column_number=9, indent=2, leading='  \t\t'),
-                'figure eight is double four'),
-            (LineInfo(line='    figure four is half of eight', line_number=5, column_number=5, indent=1, leading='    '),
-                'figure four is half of eight'),
-            (LineInfo(line='', line_number=6, column_number=1, indent=1, leading='', end=''),
-                '')]
+            (LineInfo(line=b'left margin', line_number=1, column_number=1, indent=0, leading=b''),
+                b'left margin'),
+            (LineInfo(line=b'\tfour', line_number=2, column_number=5, indent=1, leading=b'\t'),
+                b'four'),
+            (LineInfo(line=b'  \t    eight', line_number=3, column_number=9, indent=2, leading=b'  \t    '),
+                b'eight'),
+            (LineInfo(line=b'  \t\tfigure eight is double four', line_number=4, column_number=9, indent=2, leading=b'  \t\t'),
+                b'figure eight is double four'),
+            (LineInfo(line=b'    figure four is half of eight', line_number=5, column_number=5, indent=1, leading=b'    '),
+                b'figure four is half of eight'),
+            (LineInfo(line=b'', line_number=6, column_number=1, indent=1, leading=b'', end=b''),
+                b'')]
 
         test(lines, expected, tab_width=4)
 
@@ -3088,11 +3088,11 @@ outdent
 
         ## error handling
         with self.assertRaises(TypeError):
-            big.lines("", line_number=math.pi)
+            next(big.lines("", line_number=math.pi))
         with self.assertRaises(TypeError):
-            big.lines("", column_number=math.pi)
+            next(big.lines("", column_number=math.pi))
         with self.assertRaises(TypeError):
-            big.lines("", tab_width=math.pi)
+            next(big.lines("", tab_width=math.pi))
 
         with self.assertRaises(TypeError):
             big.LineInfo(math.pi, 1, 1)
@@ -3100,6 +3100,13 @@ outdent
             big.LineInfo('', math.pi, 1)
         with self.assertRaises(TypeError):
             big.LineInfo('', 1, math.pi)
+        with self.assertRaises(TypeError):
+            next(big.LineInfo('', 1, 1, end=math.pi))
+
+        with self.assertRaises(TypeError):
+            next(big.lines([ (1, 2)]))
+        with self.assertRaises(ValueError):
+            next(big.lines([ ('a', 'b', 'c')]))
 
         with self.assertRaises(ValueError):
             list(big.lines_filter_comment_lines("", []))

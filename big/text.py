@@ -38,7 +38,7 @@ import sys
 
 try:
     from types import NoneType
-except ImportError:
+except ImportError: # pragma: no cover
     NoneType = type(None)
 
 try:
@@ -2122,7 +2122,7 @@ class lines:
                 self.s_is_bytes = isinstance(line, bytes)
 
             if not is_tuples:
-                end = self.is_tuples = self.s_is_bytes if b'' else ''
+                end = self.is_tuples = b'' if self.s_is_bytes else ''
         else:
             is_tuples = self.is_tuples
             if is_tuples:
@@ -2415,6 +2415,9 @@ def lines_strip_indent(li):
     """
     indent = 0
     leadings = []
+    empty = None
+    first_time = True
+
     for info, line in li:
         lstripped = line.lstrip()
         original_leading = line[:len(line) - len(lstripped)]
@@ -2422,17 +2425,23 @@ def lines_strip_indent(li):
             # this line is only whitespace.
             # flush these through, assuming they have the same indent.
             existing_leading = getattr(info, 'leading', '')
-            if existing_leading:
+            # TODO this shouldn't be nocover, but, we don't have
+            # any good way of testing this right now
+            if existing_leading: # pragma: no cover
                 original_leading = existing_leading + original_leading
             info.leading = original_leading
             info.indent = indent
             yield (info, lstripped)
             continue
 
+        if first_time:
+            first_time = False
+            space = b' ' if isinstance(line, bytes) else ' '
+
         leading = original_leading.expandtabs(li.tab_width)
         len_leading = len(leading)
         # print(f"{leadings=} {line=} {leading=} {len_leading=}")
-        if leading.rstrip(' '):
+        if leading.rstrip(space):
             raise ValueError(f"lines_strip_indent can't handle leading whitespace character {leading[0]!r}")
         if not leading:
             # this line doesn't start with whitespace; text is at column 0.
@@ -2473,7 +2482,9 @@ def lines_strip_indent(li):
             leadings.append(len_leading)
             indent += 1
         existing_leading = getattr(info, 'leading', '')
-        if existing_leading:
+        # TODO this shouldn't be nocover, but, we don't have
+        # any good way of testing this right now
+        if existing_leading: # pragma: no cover
             original_leading = existing_leading + original_leading
         info.leading = original_leading
         info.indent = indent
