@@ -37,6 +37,11 @@ import struct
 import sys
 
 try:
+    from types import NoneType
+except ImportError:
+    NoneType = type(None)
+
+try:
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
@@ -1324,6 +1329,7 @@ _export_name('utf8_apostrophes')
 utf8_double_quotes = double_quotes.encode('utf-8')
 _export_name('utf8_double_quotes')
 
+_sentinel = object()
 
 _invalid_state = "_invalid_state"
 _in_word = "_in_word"
@@ -1962,21 +1968,24 @@ class LineInfo:
     or modify existing attributes as needed from
     inside a "lines modifier" function.
     """
-    def __init__(self, line, line_number, column_number, **kwargs):
+    def __init__(self, line, line_number, column_number, end=None, **kwargs):
         if not isinstance(line, (str, bytes)):
             raise TypeError("line must be str or bytes")
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
         if not isinstance(column_number, int):
             raise TypeError("column_number must be int")
+        if not isinstance(end, (str, bytes, NoneType)):
+            raise TypeError("end must be str, bytes, or None")
         self.line = line
         self.line_number = line_number
         self.column_number = column_number
+        self.end = end
         self.__dict__.update(kwargs)
 
     def __repr__(self):
         names = list(self.__dict__)
-        priority_names = ['line', 'line_number', 'column_number']
+        priority_names = ['line', 'line_number', 'column_number', 'end']
         fields = []
         for name in priority_names:
             names.remove(name)
@@ -2040,12 +2049,17 @@ class lines:
         if not isinstance(tab_width, int):
             raise TypeError("tab_width must be int")
 
+        # self.end_is_yielded does double duty.
+        # if we're splitting the string ourself, we're going to use multisplit
+        #   with keep=AS_PAIRS, so we're going to get the end yielded to us in a 2-tuple.
+        # if we're not splitting the string ourselves, we need to
+
         is_bytes = isinstance(s, bytes)
         is_str = isinstance(s, str)
         if is_bytes or is_str:
             if not separators:
                 separators = linebreaks if is_str else bytes_linebreaks
-            i = multisplit(s, separators, keep=False, separate=True, strip=False)
+            i = multisplit(s, separators, keep=AS_PAIRS, separate=True, strip=False)
         else:
             i = iter(s)
             is_bytes = None
@@ -2058,6 +2072,7 @@ class lines:
         self.s_is_bytes = is_bytes
 
         self.i = i
+        self.first_time = True
 
         self.__dict__.update(kwargs)
 
@@ -2065,10 +2080,37 @@ class lines:
         return self
 
     def __next__(self):
-        line = next(self.i)
-        if self.s_is_bytes is None:
-            self.s_is_bytes = isinstance(line, bytes)
-        return_value = (LineInfo(line, self.line_number, self.column_number), line)
+        value = next(self.i)
+
+        # slightly wacky:
+        #
+        # self.is_tuples is True if our iterator yields iterables of 2 objects, line and end.
+        # if self.is_tuples is false, it contains the appropriate empty string, '' or b'', to put in LineInfo.end.
+
+        if self.first_time:
+            self.first_time = False
+            is_tuples = self.is_tuples = isinstance(value, (tuple, list))
+            if is_tuples:
+                if not len(value) == 2:
+                    raise ValueError("s passed into lines must be either str, bytes, an iterable of str or bytes, or an iterable of pairs of str or bytes")
+                line, end = value
+            else:
+                line = value
+
+            if self.s_is_bytes is None:
+                self.s_is_bytes = isinstance(line, bytes)
+
+            if not is_tuples:
+                end = self.is_tuples = self.s_is_bytes if b'' else ''
+        else:
+            is_tuples = self.is_tuples
+            if is_tuples:
+                line, end = value
+            else:
+                line = value
+                end = is_tuples
+
+        return_value = (LineInfo(line, self.line_number, self.column_number, end), line)
         self.line_number += 1
         return return_value
 
@@ -2357,44 +2399,63 @@ def lines_strip_indent(li):
     for info, line in li:
         lstripped = line.lstrip()
         original_leading = line[:len(line) - len(lstripped)]
+        if not lstripped:
+            # this line is only whitespace.
+            # flush these through, assuming they have the same indent.
+            existing_leading = getattr(info, 'leading', '')
+            if existing_leading:
+                original_leading = existing_leading + original_leading
+            info.leading = original_leading
+            info.indent = indent
+            yield (info, lstripped)
+            continue
+
         leading = original_leading.expandtabs(li.tab_width)
         len_leading = len(leading)
         # print(f"{leadings=} {line=} {leading=} {len_leading=}")
         if leading.rstrip(' '):
             raise ValueError(f"lines_strip_indent can't handle leading whitespace character {leading[0]!r}")
         if not leading:
+            # this line doesn't start with whitespace; text is at column 0.
+            # outdent to zero.
             indent = 0
             leadings.clear()
             new_indent = False
+        # in all the remaining else cases, the line starts with whitespace.   and...
         elif not leadings:
+            # this is the first indent.
             new_indent = True
         elif leadings[-1] == len_leading:
+            # indent is unchanged.
             new_indent = False
         elif len_leading > leadings[-1]:
+            # we are indented further than the previously observed indent.
             new_indent = True
         else:
-            # not equal, not greater than... must be less than!
-            new_indent = False
+            # we're outdenting.
+            # ensure that this line's indent is one we've seen before.
             assert leadings
             leadings.pop()
             indent -= 1
             while leadings:
-                if leadings[-1] == len_leading:
-                    break
-                if leadings[-1] > len_leading:
-                    new_indent = None
+                l = leadings[-1]
+                if l >= len_leading:
+                    if l > len_leading:
+                        leadings.clear()
                     break
                 leadings.pop()
                 indent -= 1
             if not leadings:
-                new_indent = None
+                raise IndentationError(f"line {info.line_number} column {len_leading + info.column_number}: unindent does not match any outer indentation level")
+            new_indent = False
 
         # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
             leadings.append(len_leading)
             indent += 1
-        elif new_indent is None:
-            raise IndentationError(f"line {info.line_number} column {len_leading + info.column_number}: unindent does not match any outer indentation level")
+        existing_leading = getattr(info, 'leading', '')
+        if existing_leading:
+            original_leading = existing_leading + original_leading
         info.leading = original_leading
         info.indent = indent
         if len_leading:

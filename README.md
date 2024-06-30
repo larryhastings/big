@@ -4806,7 +4806,18 @@ if you need functionality
 Note that if you write your own lines modifier function,
 and it removes text from the beginning the line, you must
 update `column_number` in the `LineInfo` object manually--it
-doesn't happen automatically.
+doesn't happen automatically.  Note that you should always
+*add to* `column_number`, don't just set it.  (A previous
+lines modifier might have already incremented it.)  That's
+best practice for any field in `LineInfo`; you should amend
+it, rather than set it outright.
+
+Speaking of best practices for lines modifier functions,
+it's also considered good hygiene to modify the `LineInfo`
+object that was yielded to you.  Don't create a new one
+and yield that instead.  Previous lines modifier iterators
+may have added fields to the `LineInfo` that you need to
+preserve.
 
 </dd></dl>
 
@@ -5429,20 +5440,42 @@ in the **big** test suite.
 
 *not yet released*
 
-* Slight performance upgrade for `StateMachine` observers.
- `StateMachine` always uses a copy of the observer
- list (specifically, a tuple) when calling the observers; this
- means it's safe to modify the observer list at any time.
- `StateMachine` used to always make a fresh copy every time you
- called an event; now it uses a cached copy, and only recomputes
- the tuple when the observer list changes.
+* TODO: test new functionality
 
- (Note that it's not thread-safe to modify the observer list
- from one thread while also dispatching events in another.
- Your program won't crash, but the list of observers called
- may be unpredictable based on which thread wins or loses the
- race.  But this has always been true.  As with many libraries,
- the `StateMachine` API leaves locking up to you.)
+  * test lines( [ ('a', '\n'), ('b', '\n'), ('c', '') ])
+  * test LineInfo.end specifically
+
+* New feature: `LineInfo` objects yielded by `lines`
+  now contain `end`, which is the end-of-line character
+  that ended the current line.  The last line yielded will
+  always have an empty string for `end`; if the last character
+  of the text split by `lines` was an end-of-line character,
+  the last `line` yielded will be empty, and `info.end` will
+  also be empty.
+
+* Bugfix: `lines_strip_indent` previously required
+  whitespace-only lines to obey the indenting rules.
+  My intention was always for `lines_strip_indent` to
+  behave like Python, and that includes not really caring
+  about the intra-line-whitespace for whitespace-only
+  lines.  Now `lines_strip_indent` behaves like Python
+  itself: a whitespace-only line behaves as if it has
+  the same indent as the previous line.
+
+* Slight performance upgrade for `StateMachine` observers.
+  `StateMachine` always uses a copy of the observer
+  list (specifically, a tuple) when calling the observers; this
+  means it's safe to modify the observer list at any time.
+  `StateMachine` used to always make a fresh copy every time you
+  called an event; now it uses a cached copy, and only recomputes
+  the tuple when the observer list changes.
+
+  (Note that it's not thread-safe to modify the observer list
+  from one thread while also dispatching events in another.
+  Your program won't crash, but the list of observers called
+  may be unpredictable based on which thread wins or loses the
+  race.  But this has always been true.  As with many libraries,
+  the `StateMachine` API leaves locking up to you.)
 
 * The usual doc fixes, including a lot of touchups
   in `tests/test_text.py`.
