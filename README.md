@@ -2464,6 +2464,8 @@ default:
 * `column_number` - the column this line starts on,
   starting at the `column_number` passed in, and adjusted when
   characters are removed from the beginning of `line`
+* `end` - the end-of-line string stripped from the end of
+  this line, if there was one
 
 The `tab_width` keyword-only parameter is an integer, representing
 how many spaces wide a tab character should be.  It isn't used by
