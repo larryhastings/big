@@ -170,6 +170,239 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     result.append(s)
     return tuple(result) + extension
 
+
+# internal iterator function
+def reversed_re_finditer(pattern, string):
+    # matches are found by re.search *going forwards.*
+    # but what we need here is the *reverse* matches.
+    #
+    # consider this call:
+    #    re_rpartition('abcdefgh', '(abcdef|efg|ab|b|c|d)', count=4)
+    #
+    # re.finditer with that string and pattern yields one match:
+    #    'abcdef'
+    # but reverse searching, e.g. with
+    # regex.finditer(flags=regex.REVERSE), yields four matches:
+    #    'efg', 'd', 'c', 'ab'
+    #
+    # so what we do is: we ask re.finditer for all the forward
+    # matches.  then, for every match it found, we check every
+    # overlapping character to see if there's a different match
+    # there that we might prefer.  if we prefer one of those,
+    # we yield that--but we keep around the other matches,
+    # because one of those (or a truncated version of it) might
+    # also work.
+
+
+    # matches and overlapping_matches are lists of 3-tuples of:
+    #    (end_pos, -start_pos, match)
+    # if we sort the list, the last element will be the correct
+    # last match in "reverse" order.  see
+    #    https://en.wikipedia.org/wiki/Schwartzian_transform
+    #
+    # matches contains the list of matches we got directly from
+    # re.finditer(), reversed.  since this was found using re in
+    # "forward" order, we need to check every match in this list
+    # for potential overlapping matches.
+    matches = [(match.end(), -match.start(), match) for match in pattern.finditer(string)]
+    if not matches:
+        # print(f"no matches at all! exiting immediately.")
+        return
+
+    # Does this pattern match zero-length strings?
+    zero_length_match = pattern.match(string, 0, 0)
+    if zero_length_match:
+        # This pattern matches zero-length strings.
+        # Since the rules are a little different for
+        # zero-length strings when in reverse mode,
+        # we need to doctor the match results a little.
+
+        # These seem to be the rules:
+        #
+        # In forwards mode, we consider two matches to overlap
+        # if they start at the same position, or if they have
+        # any characters in common.  There's an implicit
+        # zero-length string at the beginning and end of every
+        # string, so if the pattern matches against a zero-length
+        # string at the start or end, and there isn't another
+        # (longer) match that starts at that position, we'll
+        # yield these matches too.  Since only a zero-length
+        # match can start at position len(string), we'll always
+        # yield a zero-length match starting and ending at
+        # position length(string) if the pattern matches there.
+        #
+        # In reverse mode, we consider two matches to overlap
+        # if they end at the same position, or if they have any
+        # characters in common with any other match.  There's an
+        # implicit zero-length string at the beginning and end of
+        # every string, so if the pattern matches a zero-length
+        # string at the start or end, and there isn't another
+        # (longer) match that ends at that position, we'll yield
+        # these matches too.  Since only a zero-length match can
+        # end at position 0, we'll always yield a zero-length
+        # match starting and ending at position 0 if the pattern
+        # matches there.
+
+        # We need to ensure that, for every non-zero-length match,
+        # if the pattern matches a zero-length string starting at
+        # the same position, we have that zero-length match in
+        # matches too.
+        #
+        # So specifically we're going to do this:
+        #
+        # for every match m in matches:
+        #   if m has nonzero length,
+        #     and the pattern matches a zero-length string
+        #       starting at m,
+        #     ensure that the zero-length match is also in matches.
+        #   elif m has zero length,
+        #     if we've already ensured that a zero-length
+        #     match starting at m.start() is in matches,
+        #     discard m.
+
+        zeroes = set()
+        new_matches = []
+        append = new_matches.append
+        last_start = -1
+        for t in matches:
+            match = t[2]
+            start, end = match.span()
+
+            if start not in zeroes:
+                if (start == end):
+                    append(t)
+                    zeroes.add(start)
+                    continue
+
+                zero_match = pattern.match(string, start, start)
+                if zero_match:
+                    t_zero_length = (start, -start, zero_match)
+                    append(t_zero_length)
+                zeroes.add(start)
+            append(t)
+        # del zeroes
+        matches = new_matches
+
+    matches.sort()
+
+    # overlapping_matches is a list of the possibly-viable
+    # overlapping matches we found from checking a match
+    # we got from "matches".
+    overlapping_matches = []
+
+    result = []
+    match = None
+
+    # We truncate each match at the start
+    # of the previously yielded match.
+    #
+    # The initial value allows the initial match
+    # to extend all the way to the end of the string.
+    previous_match_start = len(string)
+
+    # cache some method lookups
+    pattern_match = pattern.match
+    append = overlapping_matches.append
+
+    while True:
+        if overlapping_matches:
+            # overlapping_matches contains the overlapping
+            # matches found *last* time around, before we
+            # yielded the most recent match.
+            #
+            # The thing is, some of these matches might overlap that match.
+            # But we only yield *non*-overlapping matches.  So we need to
+            # filter the matches in overlapping_matches accordingly.
+
+            truncated_matches = []
+            # (overlapping_matches will be set to truncated_matches in a few lines)
+            append = truncated_matches.append
+
+            for t in overlapping_matches:
+                end, negated_start, match = t
+                start = -negated_start
+                if start > previous_match_start:
+                    # This match starts *after* the previous match started.
+                    # All matches starting at this position are no longer
+                    # viable.  Throw away the match.
+                    continue
+                if end <= previous_match_start:
+                    # This match ends *before* the previous match started.
+                    # In other words, this match is still 100% viable.
+                    # Keep it, we don't need to change it at all.
+                    append(t)
+                    continue
+
+                # This match starts before the previous match started,
+                # but ends after the previous match start.
+                # In other words, it overlaps the previous match.
+                #
+                # So this match is itself no longer viable.  But!
+                # There might be a *different* match starting at this
+                # position in the string.  So we do a fresh re.match here,
+                # stopping at the start of the previously yielded match.
+                # (That's the third parameter, "endpos".)
+
+                match = pattern_match(string, start, previous_match_start)
+                if match:
+                    append((match.end(), -start, match))
+
+            overlapping_matches = truncated_matches
+
+        if (not overlapping_matches) and matches:
+            # We don't currently have any pre-screened
+            # overlapping matches we can use.
+            #
+            # But we *do* have a match (or matches) found in forwards mode.
+            # Grab the next one that's still viable.
+
+            scan_for_overlapping_matches = False
+            while matches:
+                t = matches.pop()
+                end, negated_start, match = t
+                start = -negated_start
+                if end <= previous_match_start:
+                    assert start <= previous_match_start
+                    append(t)
+                    start += 1
+                    scan_for_overlapping_matches = True
+                    break
+
+            if scan_for_overlapping_matches:
+                # We scan every** position inside the match for an
+                # overlapping match.  All the matches we find go in
+                # overlapping_matches, then we sort it and yield
+                # the last one.
+                #
+                # ** We don't actually need to check the *first* position,
+                #    "start", because we already know what we'll find:
+                #    the match that we got from re.finditer() and
+                #    scanned for overlaps.
+                #
+                # As mentioned, the match we got from finditer
+                # is viable here, so add it to the list.
+
+                end = min(end, previous_match_start)
+                for pos in range(start, end):
+                    match = pattern_match(string, pos, previous_match_start)
+                    if match:
+                        # print(f"  found {match=}")
+                        append((match.end(), -pos, match))
+
+        if not overlapping_matches:
+            # matches and overlapping matches are both empty.
+            # We've exhausted the matches.  Stop iterating.
+            return
+
+        # overlapping_matches is now guaranteed current and non-empty.
+        # We sort it so the rightmost match is last, and yield that.
+        overlapping_matches.sort()
+        match = overlapping_matches.pop()[2]
+        previous_match_start = match.start()
+        yield match
+
+_reversed_re_finditer = reversed_re_finditer
+
 @_export
 def reversed_re_finditer(pattern, string, flags=0):
     """
@@ -187,235 +420,7 @@ def reversed_re_finditer(pattern, string, flags=0):
     if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
 
-    def reversed_re_finditer(pattern, string):
-        # matches are found by re.search *going forwards.*
-        # but what we need here is the *reverse* matches.
-        #
-        # consider this call:
-        #    re_rpartition('abcdefgh', '(abcdef|efg|ab|b|c|d)', count=4)
-        #
-        # re.finditer with that string and pattern yields one match:
-        #    'abcdef'
-        # but reverse searching, e.g. with
-        # regex.finditer(flags=regex.REVERSE), yields four matches:
-        #    'efg', 'd', 'c', 'ab'
-        #
-        # so what we do is: we ask re.finditer for all the forward
-        # matches.  then, for every match it found, we check every
-        # overlapping character to see if there's a different match
-        # there that we might prefer.  if we prefer one of those,
-        # we yield that--but we keep around the other matches,
-        # because one of those (or a truncated version of it) might
-        # also work.
-
-
-        # matches and overlapping_matches are lists of 3-tuples of:
-        #    (end_pos, -start_pos, match)
-        # if we sort the list, the last element will be the correct
-        # last match in "reverse" order.  see
-        #    https://en.wikipedia.org/wiki/Schwartzian_transform
-        #
-        # matches contains the list of matches we got directly from
-        # re.finditer(), reversed.  since this was found using re in
-        # "forward" order, we need to check every match in this list
-        # for potential overlapping matches.
-        matches = [(match.end(), -match.start(), match) for match in pattern.finditer(string)]
-        if not matches:
-            # print(f"no matches at all! exiting immediately.")
-            return
-
-        # Does this pattern match zero-length strings?
-        zero_length_match = pattern.match(string, 0, 0)
-        if zero_length_match:
-            # This pattern matches zero-length strings.
-            # Since the rules are a little different for
-            # zero-length strings when in reverse mode,
-            # we need to doctor the match results a little.
-
-            # These seem to be the rules:
-            #
-            # In forwards mode, we consider two matches to overlap
-            # if they start at the same position, or if they have
-            # any characters in common.  There's an implicit
-            # zero-length string at the beginning and end of every
-            # string, so if the pattern matches against a zero-length
-            # string at the start or end, and there isn't another
-            # (longer) match that starts at that position, we'll
-            # yield these matches too.  Since only a zero-length
-            # match can start at position len(string), we'll always
-            # yield a zero-length match starting and ending at
-            # position length(string) if the pattern matches there.
-            #
-            # In reverse mode, we consider two matches to overlap
-            # if they end at the same position, or if they have any
-            # characters in common with any other match.  There's an
-            # implicit zero-length string at the beginning and end of
-            # every string, so if the pattern matches a zero-length
-            # string at the start or end, and there isn't another
-            # (longer) match that ends at that position, we'll yield
-            # these matches too.  Since only a zero-length match can
-            # end at position 0, we'll always yield a zero-length
-            # match starting and ending at position 0 if the pattern
-            # matches there.
-
-            # We need to ensure that, for every non-zero-length match,
-            # if the pattern matches a zero-length string starting at
-            # the same position, we have that zero-length match in
-            # matches too.
-            #
-            # So specifically we're going to do this:
-            #
-            # for every match m in matches:
-            #   if m has nonzero length,
-            #     and the pattern matches a zero-length string
-            #       starting at m,
-            #     ensure that the zero-length match is also in matches.
-            #   elif m has zero length,
-            #     if we've already ensured that a zero-length
-            #     match starting at m.start() is in matches,
-            #     discard m.
-
-            zeroes = set()
-            new_matches = []
-            append = new_matches.append
-            last_start = -1
-            for t in matches:
-                match = t[2]
-                start, end = match.span()
-
-                if start not in zeroes:
-                    if (start == end):
-                        append(t)
-                        zeroes.add(start)
-                        continue
-
-                    zero_match = pattern.match(string, start, start)
-                    if zero_match:
-                        t_zero_length = (start, -start, zero_match)
-                        append(t_zero_length)
-                    zeroes.add(start)
-                append(t)
-            # del zeroes
-            matches = new_matches
-
-        matches.sort()
-
-        # overlapping_matches is a list of the possibly-viable
-        # overlapping matches we found from checking a match
-        # we got from "matches".
-        overlapping_matches = []
-
-        result = []
-        match = None
-
-        # We truncate each match at the start
-        # of the previously yielded match.
-        #
-        # The initial value allows the initial match
-        # to extend all the way to the end of the string.
-        previous_match_start = len(string)
-
-        # cache some method lookups
-        pattern_match = pattern.match
-        append = overlapping_matches.append
-
-        while True:
-            if overlapping_matches:
-                # overlapping_matches contains the overlapping
-                # matches found *last* time around, before we
-                # yielded the most recent match.
-                #
-                # The thing is, some of these matches might overlap that match.
-                # But we only yield *non*-overlapping matches.  So we need to
-                # filter the matches in overlapping_matches accordingly.
-
-                truncated_matches = []
-                # (overlapping_matches will be set to truncated_matches in a few lines)
-                append = truncated_matches.append
-
-                for t in overlapping_matches:
-                    end, negated_start, match = t
-                    start = -negated_start
-                    if start > previous_match_start:
-                        # This match starts *after* the previous match started.
-                        # All matches starting at this position are no longer
-                        # viable.  Throw away the match.
-                        continue
-                    if end <= previous_match_start:
-                        # This match ends *before* the previous match started.
-                        # In other words, this match is still 100% viable.
-                        # Keep it, we don't need to change it at all.
-                        append(t)
-                        continue
-
-                    # This match starts before the previous match started,
-                    # but ends after the previous match start.
-                    # In other words, it overlaps the previous match.
-                    #
-                    # So this match is itself no longer viable.  But!
-                    # There might be a *different* match starting at this
-                    # position in the string.  So we do a fresh re.match here,
-                    # stopping at the start of the previously yielded match.
-                    # (That's the third parameter, "endpos".)
-
-                    match = pattern_match(string, start, previous_match_start)
-                    if match:
-                        append((match.end(), -start, match))
-
-                overlapping_matches = truncated_matches
-
-            if (not overlapping_matches) and matches:
-                # We don't currently have any pre-screened
-                # overlapping matches we can use.
-                #
-                # But we *do* have a match (or matches) found in forwards mode.
-                # Grab the next one that's still viable.
-
-                scan_for_overlapping_matches = False
-                while matches:
-                    t = matches.pop()
-                    end, negated_start, match = t
-                    start = -negated_start
-                    if end <= previous_match_start:
-                        assert start <= previous_match_start
-                        append(t)
-                        start += 1
-                        scan_for_overlapping_matches = True
-                        break
-
-                if scan_for_overlapping_matches:
-                    # We scan every** position inside the match for an
-                    # overlapping match.  All the matches we find go in
-                    # overlapping_matches, then we sort it and yield
-                    # the last one.
-                    #
-                    # ** We don't actually need to check the *first* position,
-                    #    "start", because we already know what we'll find:
-                    #    the match that we got from re.finditer() and
-                    #    scanned for overlaps.
-                    #
-                    # As mentioned, the match we got from finditer
-                    # is viable here, so add it to the list.
-
-                    end = min(end, previous_match_start)
-                    for pos in range(start, end):
-                        match = pattern_match(string, pos, previous_match_start)
-                        if match:
-                            # print(f"  found {match=}")
-                            append((match.end(), -pos, match))
-
-            if not overlapping_matches:
-                # matches and overlapping matches are both empty.
-                # We've exhausted the matches.  Stop iterating.
-                return
-
-            # overlapping_matches is now guaranteed current and non-empty.
-            # We sort it so the rightmost match is last, and yield that.
-            overlapping_matches.sort()
-            match = overlapping_matches.pop()[2]
-            previous_match_start = match.start()
-            yield match
-    return reversed_re_finditer(pattern, string)
+    return _reversed_re_finditer(pattern, string)
 
 
 @_export
@@ -912,8 +917,6 @@ def multistrip(s, separators, left=True, right=True):
     # separators is guaranteed to always a tuple at this point
     pattern = __separators_to_re(separators, is_bytes, separate=False, keep=False)
 
-    start = 0
-    end = len(s)
     if left:
         left_match = re.match(head + pattern, s)
         if left_match:
@@ -940,6 +943,131 @@ RIGHT = "RIGHT"
 _export_name(RIGHT)
 PROGRESSIVE = "PROGRESSIVE"
 _export_name(PROGRESSIVE)
+
+def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, is_bytes, separators_to_re_keep):
+    if maxsplit == None:
+        maxsplit = -1
+    elif maxsplit == 0:
+        if keep == ALTERNATING:
+            yield s
+        elif keep == AS_PAIRS:
+            yield (s, empty)
+        else:
+            yield s
+        return
+
+    # convert maxsplit for use with re.split.
+    #
+    # re.split interprets maxsplit slightly differently:
+    #   its maxsplit==0 means "allow all splits".
+    #   its maxsplit==1 means "only allow one split".
+    #
+    # (re.split doesn't have a way to express
+    #  "don't split" with its maxsplit parameter,
+    #  which is why we handled it already.)
+    re_split_maxsplit = 0 if maxsplit == -1 else maxsplit
+
+    if reverse:
+        # if reverse is true, when separators overlap,
+        # we need to prefer the rightmost one rather than
+        # the leftmost one.  how do we do *that*?
+        # Eric Smith had the brainstorm: reverse the string
+        # and the separators, split, and reverse the output
+        # and the strings in the output.
+        s = _multisplit_reversed(s, 's')
+        separators = tuple(separators)
+        s2 = _reversed_builtin_separators.get(separators, None)
+        if s2 != None:
+            separators = s2
+        else:
+            separators = _multisplit_reversed(separators, 'separators')
+
+    pattern = _separators_to_re(separators, is_bytes, keep=separators_to_re_keep, separate=separate)
+
+    l = re.split(pattern, s, re_split_maxsplit)
+
+    if strip == PROGRESSIVE:
+        # l alternates nonsep and sep strings.
+        # it's always an odd length, starting and ending with nonsep.
+        length = len(l)
+        assert length & 1
+
+        desired_length = 1 + (2*maxsplit)
+
+        # dang! this is complicated!
+        # maxsplit has to extend *past* the last nonsep
+        # for us to strip on the far side.
+        #  ' a b c   '.split(None, maxsplit=2) => ['a', 'b', 'c   ']
+        #  ' a b c   '.split(None, maxsplit=3) => ['a', 'b', 'c']
+        for i in range(length - 1, 0, -2):
+            nonsep = l[i]
+            if nonsep:
+                last_non_empty_nonsep = i
+                break
+        else:
+            last_non_empty_nonsep = 0
+
+        if desired_length > (last_non_empty_nonsep + 2):
+            # strip!
+            l = l[:last_non_empty_nonsep + 1]
+            desired_length = length = last_non_empty_nonsep
+
+        if not keep:
+            for i in range(len(l) - 2, 0, -2):
+                del l[i]
+
+    # we used to reverse the list three times in reverse mode!
+    # _multisplit_reversed returns a reversed list.
+    # then we'd reverse it to make it forwards-y.
+    # then we'd reverse it again to pop elements off.
+    # insane, right?
+    #
+    # now we observe and preserve the reversed-ness of the list
+    # as appropriate.
+
+    if reverse:
+        l = _multisplit_reversed(l, 'l')
+
+    if not keep:
+        if not reverse:
+            l.reverse()
+        while l:
+            yield l.pop()
+        return
+
+    # from here on out, we're 'keep'-ing the separator strings.
+    # (we're returning the separator strings in one form or another.)
+
+    if keep == ALTERNATING:
+        if not reverse:
+            l.reverse()
+        while l:
+            yield l.pop()
+        return
+
+    append_empty = (len(l) % 2) == 1
+    if reverse:
+        if append_empty:
+            l.insert(0, empty)
+    else:
+        if append_empty:
+            l.append(empty)
+        l.reverse()
+
+    previous = None
+    while l:
+        o = l.pop()
+        if previous is None:
+            previous = o
+            continue
+        if keep == AS_PAIRS:
+            yield (previous, o)
+        else:
+            yield previous + o
+        previous = None
+
+_multisplit = multisplit
+
 
 @_export
 def multisplit(s, separators=None, *,
@@ -1063,6 +1191,7 @@ def multisplit(s, separators=None, *,
     for both must be the same (str or bytes).  multisplit will
     only return str or bytes objects.
     """
+
     is_bytes = isinstance(s, bytes)
     separators_is_bytes = isinstance(separators, bytes)
     separators_is_str = isinstance(separators, str)
@@ -1117,120 +1246,10 @@ def multisplit(s, separators=None, *,
         s = multistrip(s, separators, left=left, right=right)
         if not s:
             # oops! all separators!
-            # this will make us exit early, just a few lines down from here.
+            # this will make us exit the iterator early.
             maxsplit = 0
 
-    def multisplit(s, separators, keep, maxsplit, reverse, separate, strip):
-        if maxsplit == None:
-            maxsplit = -1
-        elif maxsplit == 0:
-            if keep == ALTERNATING:
-                yield s
-            elif keep == AS_PAIRS:
-                yield (s, empty)
-            else:
-                yield s
-            return
-
-        # convert maxsplit for use with re.split.
-        #
-        # re.split interprets maxsplit slightly differently:
-        #   its maxsplit==0 means "allow all splits".
-        #   its maxsplit==1 means "only allow one split".
-        #
-        # (re.split doesn't have a way to express
-        #  "don't split" with its maxsplit parameter,
-        #  which is why we handled it already.)
-        re_split_maxsplit = 0 if maxsplit == -1 else maxsplit
-
-        if reverse:
-            # if reverse is true, when separators overlap,
-            # we need to prefer the rightmost one rather than
-            # the leftmost one.  how do we do *that*?
-            # Eric Smith had the brainstorm: reverse the string
-            # and the separators, split, and reverse the output
-            # and the strings in the output.
-            s = _multisplit_reversed(s, 's')
-            separators = tuple(separators)
-            s2 = _reversed_builtin_separators.get(separators, None)
-            if s2 != None:
-                separators = s2
-            else:
-                separators = _multisplit_reversed(separators, 'separators')
-
-        pattern = _separators_to_re(separators, is_bytes, keep=separators_to_re_keep, separate=separate)
-        # print("PATTERN", pattern, f"{separators_to_re_keep=} {separate=}")
-
-        l = re.split(pattern, s, re_split_maxsplit)
-        assert l
-        # print("S", repr(s), "L", l, f"{re_split_maxsplit=}")
-
-        if strip == PROGRESSIVE:
-            # l alternates nonsep and sep strings.
-            # it's always an odd length, starting and ending with nonsep.
-            length = len(l)
-            assert length & 1
-
-            desired_length = 1 + (2*maxsplit)
-
-            # dang! this is complicated!
-            # maxsplit has to extend *past* the last nonsep
-            # for us to strip on the far side.
-            #  ' a b c   '.split(None, maxsplit=2) => ['a', 'b', 'c   ']
-            #  ' a b c   '.split(None, maxsplit=3) => ['a', 'b', 'c']
-            for i in range(length - 1, 0, -2):
-                nonsep = l[i]
-                if nonsep:
-                    last_non_empty_nonsep = i
-                    break
-            else:
-                last_non_empty_nonsep = 0
-
-            if desired_length > (last_non_empty_nonsep + 2):
-                # strip!
-                l = l[:last_non_empty_nonsep + 1]
-                desired_length = length = last_non_empty_nonsep
-
-            if not keep:
-                for i in range(len(l) - 2, 0, -2):
-                    del l[i]
-
-        if reverse:
-            l = _multisplit_reversed(l, 'l')
-            l.reverse()
-
-        if not keep:
-            l.reverse()
-            while l:
-                yield l.pop()
-            return
-
-        # from here on out, we're 'keep'-ing the separator strings.
-        # (we're returning the separator strings in one form or another.)
-
-        if keep == ALTERNATING:
-            l.reverse()
-            while l:
-                yield l.pop()
-            return
-
-        if (len(l) % 2) == 1:
-            l.append(empty)
-
-        previous = None
-        l.reverse()
-        while l:
-            o = l.pop()
-            if previous is None:
-                previous = o
-                continue
-            if keep == AS_PAIRS:
-                yield (previous, o)
-            else:
-                yield previous + o
-            previous = None
-
-    return multisplit(s, separators, keep, maxsplit, reverse, separate, strip)
+    return _multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, is_bytes, separators_to_re_keep)
 
 
 @_export
@@ -1805,6 +1824,68 @@ _export_name('parse_delimiters_default_delimiters_bytes')
 _base_delimiter = Delimiter('a', 'b')
 _base_delimiter.open = _base_delimiter.close = None
 
+def parse_delimiters(s, delimiters, backslash_character, closers, empty):
+    open_to_delimiter = {d.open: d for d in delimiters}
+
+    text = []
+    append = text.append
+    def flush(open, close):
+        s = empty.join(text)
+        text.clear()
+        assert s or open or close
+        return s, open, close
+
+    # d stores the *current* delimiter
+    # d is not in stack.
+    d = _base_delimiter
+    stack = []
+    backslash = d.backslash
+    nested = d.nested
+    close = None
+    quoted = False
+
+    for i, c in enumerate(_iterate_over_bytes(s)):
+        if quoted:
+            append(c)
+            quoted = False
+            continue
+        if c == close:
+            yield flush(empty, c)
+            d = stack.pop()
+            backslash = d.backslash
+            nested = d.nested
+            close = d.close
+            continue
+        if nested:
+            if c in closers:
+                # this is a closing delimiter,
+                # but it doesn't match.
+                # (if it did, we'd have handled it
+                #  in "if c == close" above.)
+                raise ValueError(f"mismatched closing delimiter at s[{i}]: expected {close}, got {c}")
+            next_d = open_to_delimiter.get(c)
+            if next_d:
+                yield flush(c, empty)
+                stack.append(d)
+                d = next_d
+                backslash = d.backslash
+                nested = d.nested
+                close = d.close
+                continue
+        if backslash and (c == backslash_character):
+            quoted = True
+        append(c)
+
+    if len(stack):
+        stack.pop(0)
+        stack.append(d)
+        raise ValueError("s does not close all opened delimiters, needs " + " ".join(d.close for d in reversed(stack)))
+
+    if text:
+        yield flush(empty, empty)
+
+_parse_delimiters = parse_delimiters
+
 @_export
 def parse_delimiters(s, delimiters=None):
     """
@@ -1894,67 +1975,7 @@ def parse_delimiters(s, delimiters=None):
     if repeated:
         raise ValueError("these opening delimiters were used multiple times: " + " ".join(repeated))
 
-    def parse_delimiters(s, delimiters):
-        open_to_delimiter = {d.open: d for d in delimiters}
-
-        text = []
-        append = text.append
-        def flush(open, close):
-            s = empty.join(text)
-            text.clear()
-            assert s or open or close
-            return s, open, close
-
-        # d stores the *current* delimiter
-        # d is not in stack.
-        d = _base_delimiter
-        stack = []
-        backslash = d.backslash
-        nested = d.nested
-        close = None
-        quoted = False
-
-        for i, c in enumerate(_iterate_over_bytes(s)):
-            if quoted:
-                append(c)
-                quoted = False
-                continue
-            if c == close:
-                yield flush(empty, c)
-                d = stack.pop()
-                backslash = d.backslash
-                nested = d.nested
-                close = d.close
-                continue
-            if nested:
-                if c in closers:
-                    # this is a closing delimiter,
-                    # but it doesn't match.
-                    # (if it did, we'd have handled it
-                    #  in "if c == close" above.)
-                    raise ValueError(f"mismatched closing delimiter at s[{i}]: expected {close}, got {c}")
-                next_d = open_to_delimiter.get(c)
-                if next_d:
-                    yield flush(c, empty)
-                    stack.append(d)
-                    d = next_d
-                    backslash = d.backslash
-                    nested = d.nested
-                    close = d.close
-                    continue
-            if backslash and (c == backslash_character):
-                quoted = True
-            append(c)
-
-        if len(stack):
-            stack.pop(0)
-            stack.append(d)
-            raise ValueError("s does not close all opened delimiters, needs " + " ".join(d.close for d in reversed(stack)))
-
-        if text:
-            yield flush(empty, empty)
-
-    return parse_delimiters(s, delimiters)
+    return _parse_delimiters(s, delimiters, backslash_character, closers, empty)
 
 
 
@@ -2243,13 +2264,11 @@ def lines_grep(li, pattern, *, invert=False, flags=0):
             for t in li:
                 if not search(t[1]):
                     yield t
-            return
-        return lines_grep(li, search)
-
-    def lines_grep(li, search):
-        for t in li:
-            if search(t[1]):
-                yield t
+    else:
+        def lines_grep(li, search):
+            for t in li:
+                if search(t[1]):
+                    yield t
     return lines_grep(li, search)
 
 @_export
@@ -2967,6 +2986,28 @@ def merge_columns(*columns, column_separator=None,
 
     column_spacing = len(column_separator)
 
+    overflows = []
+    in_overflow = False
+    def add_overflow():
+        nonlocal in_overflow
+        in_overflow = False
+        if overflows:
+            last_overflow = overflows[-1]
+            if last_overflow[1] >= (overflow_start - 1):
+                overflows.pop()
+                overflows.append((last_overflow[0], overflow_end))
+                return
+        overflows.append((overflow_start, overflow_end))
+
+    overflow_start = overflow_end = None
+    def next_overflow():
+        nonlocal overflow_start
+        nonlocal overflow_end
+        if overflows:
+            overflow_start, overflow_end = overflows.pop()
+        else:
+            overflow_start = overflow_end = sys.maxsize
+
     for column_number, (s, min_width, max_width) in enumerate(_columns):
 
         # check types, let them raise exceptions as needed
@@ -2989,17 +3030,6 @@ def merge_columns(*columns, column_separator=None,
         overflows = []
         max_line_length = -1
         in_overflow = False
-
-        def add_overflow():
-            nonlocal in_overflow
-            in_overflow = False
-            if overflows:
-                last_overflow = overflows[-1]
-                if last_overflow[1] >= (overflow_start - 1):
-                    overflows.pop()
-                    overflows.append((last_overflow[0], overflow_end))
-                    return
-            overflows.append((overflow_start, overflow_end))
 
         for line_number, line in enumerate(lines):
             line = line.rstrip()
@@ -3036,13 +3066,6 @@ def merge_columns(*columns, column_separator=None,
         padded_lines = []
         overflows.reverse()
         overflow_start = overflow_end = None
-        def next_overflow():
-            nonlocal overflow_start
-            nonlocal overflow_end
-            if overflows:
-                overflow_start, overflow_end = overflows.pop()
-            else:
-                overflow_start = overflow_end = sys.maxsize
 
         in_overflow = False
         next_overflow()
