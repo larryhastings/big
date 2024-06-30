@@ -2824,8 +2824,8 @@ hummingbird
 "    c = d     \n"
 )),
             [
-            L('    a = b  ',    1, 1, final='    a = b'),
-            L('    c = d     ', 2, 1, final='    c = d'),
+            L('    a = b  ',    1, 1, final='    a = b', trailing='  '),
+            L('    c = d     ', 2, 1, final='    c = d', trailing='     '),
             L('',               3, 1, end=''),
             ])
 
@@ -2834,8 +2834,8 @@ hummingbird
 "    c = d     \n"
 )),
             [
-            L('    a = b  ',    1, 5, leading='    ', final='a = b'),
-            L('    c = d     ', 2, 5, leading='    ', final='c = d'),
+            L('    a = b  ',    1, 5, leading='    ', final='a = b', trailing='  '),
+            L('    c = d     ', 2, 5, leading='    ', final='c = d', trailing='     '),
             L('',               3, 1, end=''),
             ])
 
@@ -2915,8 +2915,8 @@ for x in range(5): # this is a comment
 "    c = d  \n" +
 "     \n")), '#')),
             [
-            L('    a = b ',  2, 5, leading='    ', final='a = b'),
-            L('    c = d  ', 7, 5, leading='    ', final='c = d'),
+            L('    a = b ',  2, 5, leading='    ', trailing=' ', final='a = b'),
+            L('    c = d  ', 7, 5, leading='    ', trailing='  ', final='c = d'),
             ])
 
 
@@ -3084,7 +3084,7 @@ outdent
     def test_lines_misc(self):
         ## repr
         li = big.LineInfo('', 1, 1, indent=0)
-        self.assertEqual(repr(li), "LineInfo(line='', line_number=1, column_number=1, end=None, indent=0)")
+        self.assertEqual(repr(li), "LineInfo(line_number=1, column_number=1)")
 
         ## error handling
         with self.assertRaises(TypeError):

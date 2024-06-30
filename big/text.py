@@ -1989,31 +1989,58 @@ class LineInfo:
     or modify existing attributes as needed from
     inside a "lines modifier" function.
     """
-    def __init__(self, line, line_number, column_number, end=None, **kwargs):
-        if not isinstance(line, (str, bytes)):
+    def __init__(self, line, line_number, column_number, *, leading=None, trailing=None, end=None, **kwargs):
+        is_str = isinstance(line, str)
+        is_bytes = isinstance(line, bytes)
+        if is_bytes:
+            empty = b''
+        elif is_str:
+            empty = ''
+        else:
             raise TypeError("line must be str or bytes")
+
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
         if not isinstance(column_number, int):
             raise TypeError("column_number must be int")
-        if not isinstance(end, (str, bytes, NoneType)):
-            raise TypeError("end must be str, bytes, or None")
+
+        line_type = type(line)
+
+        if leading == None:
+            leading = empty
+        elif not isinstance(leading, line_type):
+            raise TypeError("leading must be same type as line or None")
+
+        if trailing == None:
+            trailing = empty
+        elif not isinstance(trailing, line_type):
+            raise TypeError("trailing must be same type as line or None")
+
+        if end == None:
+            end = empty
+        elif not isinstance(end, line_type):
+            raise TypeError("end must be same type as line or None")
+
         self.line = line
         self.line_number = line_number
         self.column_number = column_number
+        self.leading = leading
+        self.trailing = trailing
         self.end = end
         self.__dict__.update(kwargs)
 
     def __repr__(self):
         names = list(self.__dict__)
-        priority_names = ['line', 'line_number', 'column_number', 'end']
+        priority_names = ['line', 'line_number', 'column_number', 'leading', 'trailing', 'end']
         fields = []
         for name in priority_names:
             names.remove(name)
         names.sort()
         names = priority_names + names
         for name in names:
-            fields.append(f"{name}={getattr(self, name)!r}")
+            value = getattr(self, name)
+            if value:
+                fields.append(f"{name}={value!r}")
         text = ", ".join(fields)
         return f"LineInfo({text})"
 
@@ -2131,7 +2158,7 @@ class lines:
                 line = value
                 end = is_tuples
 
-        return_value = (LineInfo(line, self.line_number, self.column_number, end), line)
+        return_value = (LineInfo(line, self.line_number, self.column_number, end=end), line)
         self.line_number += 1
         return return_value
 
@@ -2144,7 +2171,11 @@ def lines_rstrip(li):
     Composable with all the lines_ modifier functions in the big.text module.
     """
     for info, line in li:
-        yield (info, line.rstrip())
+        rstripped = line.rstrip()
+        if rstripped != line:
+            trailing = line[len(rstripped):]
+            info.trailing += trailing
+        yield (info, rstripped)
 
 @_export
 def lines_strip(li):
@@ -2159,16 +2190,33 @@ def lines_strip(li):
     Composable with all the lines_ modifier functions in the big.text module.
     """
     for info, line in li:
-        lstripped = line.lstrip()
-        if not lstripped:
-            line = lstripped
-        else:
-            original_leading = line[:len(line) - len(lstripped)]
-            if original_leading:
-                leading = original_leading.expandtabs(li.tab_width)
-                info.column_number += len(leading)
-                line = lstripped.rstrip()
-                info.leading = original_leading
+
+        # if not line, line is empty, we don't change anything.
+        leading = trailing = None
+
+        if line:
+            lstripped = line.lstrip()
+            if not lstripped:
+                # line was all whitespace.
+                leading = line
+                line = lstripped # aka empty
+            else:
+                if len(line) != len(lstripped):
+                    # we stripped leading whitespace, preserve it
+                    leading = line[:len(line) - len(lstripped)]
+
+                rstripped = lstripped.rstrip()
+                if len(lstripped) != len(rstripped):
+                    trailing = lstripped[len(rstripped):]
+                line = rstripped
+
+        if leading:
+            expanded = leading.expandtabs(li.tab_width)
+            info.column_number += len(expanded)
+            info.leading = leading + info.leading
+
+        if trailing:
+            info.trailing += trailing
 
         yield (info, line)
 
