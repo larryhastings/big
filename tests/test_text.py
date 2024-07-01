@@ -3082,11 +3082,12 @@ outdent
             test("first line\n  \u3000  second line\nthird line\n", [])
 
     def test_lines_misc(self):
-        ## repr
-        li = big.LineInfo('', 1, 1, indent=0)
-        self.assertEqual(repr(li), "LineInfo(line_number=1, column_number=1)")
-
         ## error handling
+        with self.assertRaises(TypeError):
+            next(big.lines([ (1, 2)]))
+        with self.assertRaises(ValueError):
+            next(big.lines([ ('a', 'b', 'c')]))
+
         with self.assertRaises(TypeError):
             next(big.lines("", line_number=math.pi))
         with self.assertRaises(TypeError):
@@ -3101,12 +3102,11 @@ outdent
         with self.assertRaises(TypeError):
             big.LineInfo('', 1, math.pi)
         with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, end=math.pi))
-
+            next(big.LineInfo('', 1, 1, leading=math.pi))
         with self.assertRaises(TypeError):
-            next(big.lines([ (1, 2)]))
-        with self.assertRaises(ValueError):
-            next(big.lines([ ('a', 'b', 'c')]))
+            next(big.LineInfo('', 1, 1, trailing=math.pi))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo('', 1, 1, end=math.pi))
 
         with self.assertRaises(ValueError):
             list(big.lines_filter_comment_lines("", []))
@@ -3121,6 +3121,10 @@ outdent
         info = big.LineInfo('', 1, 1, quark=35)
         self.assertTrue(hasattr(info, 'quark'))
         self.assertEqual(getattr(info, 'quark'), 35)
+
+        ## repr
+        li = big.LineInfo('', 1, 1, indent=0)
+        self.assertEqual(repr(li), "LineInfo(line_number=1, column_number=1)")
 
     def test_int_to_words(self):
         # confirm that flowery has a default of True
