@@ -2310,12 +2310,18 @@ def lines_grep(li, pattern, *, invert=False, flags=0):
     if invert:
         def lines_grep(li, search):
             for t in li:
-                if not search(t[1]):
+                info, line = t
+                match = search(line)
+                if not match:
+                    info.match = None
                     yield t
     else:
         def lines_grep(li, search):
             for t in li:
-                if search(t[1]):
+                info, line = t
+                match = search(line)
+                if match:
+                    info.match = match
                     yield t
     return lines_grep(li, search)
 

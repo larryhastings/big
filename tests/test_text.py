@@ -43,10 +43,16 @@ except ImportError: # pragma: no cover
     engine = None
 
 
+# Pattern and Match are Python 3.7+
 try:
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
+
+try:
+    from re import Match as re_Match
+except ImportError: # pragma: no cover
+    re_Match = type(re.match("x", "x"))
 
 try:
     import regex
@@ -2550,6 +2556,8 @@ class BigTextTests(unittest.TestCase):
 
     def test_parse_delimiters(self):
 
+        self.maxDiff = 2**32
+
         def test(s, expected, *, delimiters=None):
             empty = ''
             for i in range(2):
@@ -2654,7 +2662,17 @@ class BigTextTests(unittest.TestCase):
     def test_lines(self):
         self.maxDiff = 2**32
         def test(i, expected):
+            # print("I", i)
             got = list(i)
+            # print("GOT", got)
+            # print(f"{i == got=}")
+            # print(f"{got == expected=}")
+            # import pprint
+            # print("\n\n")
+            # pprint.pprint(got)
+            # print("\n\n")
+            # pprint.pprint(expected)
+            # print("\n\n")
             self.assertEqual(got, expected)
 
         def L(line, line_number, column_number=1, end='\n', final=None, **kwargs):
@@ -2741,7 +2759,29 @@ whoops, I meant, negatory.
             ]
             )
 
-        test(big.lines_grep(big.lines("""
+        _sentinel = object()
+        def test_and_remove_lineinfo_match(i, substring, *, invert=False):
+            l = []
+            for t in i:
+                info, line = t
+
+                match = getattr(info, "match", _sentinel)
+                self.assertNotEqual(match, _sentinel)
+
+                if invert:
+                    self.assertIsNone(match)
+                    self.assertNotIn(substring, line)
+                else:
+                    self.assertIsInstance(match, re_Match)
+                    self.assertIn(substring, line)
+
+                # now remove the match object for easier testing
+                del info.match
+                l.append(t)
+            return l
+
+
+        i = big.lines_grep(big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -2749,7 +2789,9 @@ they don't have to be fancy.
 simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
-"""[1:]), "eg+"),
+"""[1:]), "eg+")
+        got = test_and_remove_lineinfo_match(i, "eg")
+        test(got,
             [
                 L('i like eggs.', 3, 1),
                 L('simple scrambled eggs are just fine.', 5, 1),
@@ -2758,7 +2800,7 @@ whoops, I meant, negatory.
             ]
             )
 
-        test(big.lines_grep(big.lines("""
+        i = big.lines_grep(big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -2766,7 +2808,9 @@ they don't have to be fancy.
 simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
-"""[1:]), "eg+", invert=True),
+"""[1:]), "eg+", invert=True)
+        got = test_and_remove_lineinfo_match(i, "eg", invert=True)
+        test(got,
             [
                 L('hello yolks', 1, 1),
                 L('what do you have to say, champ?', 2, 1),

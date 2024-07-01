@@ -5458,6 +5458,11 @@ in the **big** test suite.
   the last `line` yielded will be empty, and `info.end` will
   also be empty.
 
+* `lines_grep` now adds a `match` attribute to the `LineInfo`
+  object, containing the return value from calling `re.search`.
+  (If you pass in `invert=True` to `lines_grep`, the `match`
+  attribute will always be `None`.)
+
 * Bugfix: `lines_strip_indent` previously required
   whitespace-only lines to obey the indenting rules.
   My intention was always for `lines_strip_indent` to
