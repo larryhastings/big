@@ -5445,9 +5445,10 @@ in the **big** test suite.
 * TODO: test new functionality
 
   * test lines( [ ('a', '\n'), ('b', '\n'), ('c', '') ])
-  * test LineInfo.end specifically
-  * add a test that exercises appending to LineInfo.leading,
-    using a mutant line modifier that puts stuff in it
+  * test LineInfo attrs leading, trailing, and end
+    * add a test that exercises appending to LineInfo.leading,
+      using line_strip with weird separators e.g. ('X', 'Y')
+    * similarly with LineInfo.trailing
 
 * New feature: `LineInfo` objects yielded by `lines`
   now contain `end`, which is the end-of-line character
