@@ -2909,13 +2909,13 @@ hummingbird
             ])
 
         test(big.lines_strip_comments(big.lines("""
-for x in range(5): # this is a comment
+for x in range(5): # this is my exciting comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
     print(no_comments_or_quotes_on_this_line)
 """[1:]), ("#", "//")),
             [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, comment='# this is a comment', final='for x in range(5):'),
+                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, comment='# this is my exciting comment', final='for x in range(5):'),
                 L(line='    print("# this is quoted", x)', line_number=2, column_number=1, comment=''),
                 L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, comment='# this "comment" is useless', final='    print("")'),
                 L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1, comment=''),

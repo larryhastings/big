@@ -1989,7 +1989,7 @@ class LineInfo:
     or modify existing attributes as needed from
     inside a "lines modifier" function.
     """
-    def __init__(self, line, line_number, column_number, *, leading=None, trailing=None, end=None, **kwargs):
+    def __init__(self, line, line_number, column_number, *, leading=None, trailing=None, comment=None, end=None, **kwargs):
         is_str = isinstance(line, str)
         is_bytes = isinstance(line, bytes)
         if is_bytes:
@@ -2016,6 +2016,11 @@ class LineInfo:
         elif not isinstance(trailing, line_type):
             raise TypeError("trailing must be same type as line or None")
 
+        if comment == None:
+            comment = empty
+        elif not isinstance(comment, line_type):
+            raise TypeError("comment must be same type as line or None")
+
         if end == None:
             end = empty
         elif not isinstance(end, line_type):
@@ -2026,12 +2031,25 @@ class LineInfo:
         self.column_number = column_number
         self.leading = leading
         self.trailing = trailing
+        self.comment = comment
         self.end = end
         self.__dict__.update(kwargs)
 
+    def extend_leading(self, s):
+        self.leading += s
+
+    def extend_trailing(self, s):
+        self.trailing = s + self.trailing
+
+    def extend_comment(self, s, empty=None):
+        self.comment = s + self.trailing + self.comment
+        if empty is None:
+            empty = s[0:0]
+        self.trailing = empty
+
     def __repr__(self):
         names = list(self.__dict__)
-        priority_names = ['line', 'line_number', 'column_number', 'leading', 'trailing', 'end']
+        priority_names = ['line', 'line_number', 'column_number', 'leading', 'trailing', 'comment', 'end']
         fields = []
         for name in priority_names:
             names.remove(name)
@@ -2120,7 +2138,7 @@ class lines:
         self.s_is_bytes = is_bytes
 
         self.i = i
-        self.first_time = True
+        self.is_pairs = None # sentinel initial value
 
         self.__dict__.update(kwargs)
 
@@ -2132,31 +2150,36 @@ class lines:
 
         # slightly wacky:
         #
-        # self.is_tuples is True if our iterator yields iterables of 2 objects, line and end.
-        # if self.is_tuples is false, it contains the appropriate empty string, '' or b'', to put in LineInfo.end.
+        # if self.is_pairs is True, our iterator yields iterables of 2 objects,
+        #     line and end.
+        # if self.is_pairs is a false value, it contains the appropriate empty
+        #     string, '' or b'', that should be used for LineInfo.end.
+        # if self.is_pairs is None, it's our first time iterating, we need
+        #     to analyze the value we got back from the iterator and determine
+        #     what we're working with.
 
-        if self.first_time:
-            self.first_time = False
-            is_tuples = self.is_tuples = isinstance(value, (tuple, list))
-            if is_tuples:
-                if not len(value) == 2:
-                    raise ValueError("s passed into lines must be either str, bytes, an iterable of str or bytes, or an iterable of pairs of str or bytes")
-                line, end = value
-            else:
-                line = value
-
-            if self.s_is_bytes is None:
-                self.s_is_bytes = isinstance(line, bytes)
-
-            if not is_tuples:
-                end = self.is_tuples = b'' if self.s_is_bytes else ''
+        is_pairs = self.is_pairs
+        if is_pairs:
+            line, end = value
         else:
-            is_tuples = self.is_tuples
-            if is_tuples:
-                line, end = value
-            else:
+            if is_pairs is not None:
                 line = value
-                end = is_tuples
+                end = is_pairs
+            else:
+                # first time: analyze value, set self.is_pairs etc.
+                is_pairs = self.is_pairs = isinstance(value, (tuple, list))
+                if is_pairs:
+                    if not len(value) == 2:
+                        raise ValueError("s passed into lines must be either str, bytes, an iterable of str or bytes, or an iterable of pairs of str or bytes")
+                    line, end = value
+                else:
+                    line = value
+
+                if self.s_is_bytes is None:
+                    self.s_is_bytes = isinstance(line, bytes)
+
+                if not is_pairs:
+                    end = self.is_pairs = b'' if self.s_is_bytes else ''
 
         return_value = (LineInfo(line, self.line_number, self.column_number, end=end), line)
         self.line_number += 1
@@ -2174,7 +2197,7 @@ def lines_rstrip(li):
         rstripped = line.rstrip()
         if rstripped != line:
             trailing = line[len(rstripped):]
-            info.trailing += trailing
+            info.extend_trailing(trailing)
         yield (info, rstripped)
 
 @_export
@@ -2213,10 +2236,10 @@ def lines_strip(li):
         if leading:
             expanded = leading.expandtabs(li.tab_width)
             info.column_number += len(expanded)
-            info.leading = leading + info.leading
+            info.extend_leading(leading)
 
         if trailing:
-            info.trailing += trailing
+            info.extend_trailing(trailing)
 
         yield (info, line)
 
@@ -2402,36 +2425,40 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
     re_comment = re.compile(comment_pattern)
     split = re_comment.split
 
-
     def lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes):
         for info, line in li:
             if quotes:
                 i = split_quoted_strings(line, quotes, backslash=backslash, triple_quotes=triple_quotes)
             else:
                 i = ((False, line),)
+
             segments = []
             append = segments.append
-            comment = []
+
+            comment_segments = None
+
             for is_quoted, segment in i:
-                if comment:
-                    comment.append(segment)
+                if comment_segments:
+                    comment_append(segment)
                     continue
                 if is_quoted:
                     append(segment)
                     continue
                 fields = split(segment, maxsplit=1)
-                leading = fields[0]
                 if len(fields) == 1:
-                    append(leading)
+                    append(segment)
                     continue
                 # found a comment marker in an unquoted segment!
+                leading = fields[0]
                 if rstrip:
                     leading = leading.rstrip()
                 append(leading)
-                comment = fields[1:]
+                comment_segments = fields[1:]
+                comment_append = comment_segments.append
 
-            info.comment = empty_join(comment)
-            line = empty_join(segments)
+            if comment_segments:
+                info.extend_comment(empty_join(comment_segments), empty)
+                line = empty_join(segments)
             yield (info, line)
     return lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes)
 
@@ -2535,12 +2562,7 @@ def lines_strip_indent(li):
         if new_indent:
             leadings.append(len_leading)
             indent += 1
-        existing_leading = getattr(info, 'leading', '')
-        # TODO this shouldn't be nocover, but, we don't have
-        # any good way of testing this right now
-        if existing_leading: # pragma: no cover
-            original_leading = existing_leading + original_leading
-        info.leading = original_leading
+        info.extend_leading(original_leading)
         info.indent = indent
         if len_leading:
             info.column_number += len_leading
