@@ -1519,7 +1519,8 @@ def normalize_whitespace(s, separators=None, replacement=None):
     replacement should be either a str or bytes object,
     also matching s, or None (the default).
     If replacement is None, normalize_whitespace will use
-    a replacement string consisting of a single space character.
+    a replacement string consisting of a single space character,
+    matching the type of s (str or bytes).
 
     Leading or trailing runs of separator characters will
     be replaced with the replacement string, e.g.:
@@ -1602,8 +1603,9 @@ def normalize_whitespace(s, separators=None, replacement=None):
     return cleaned
 
 
+
 @_export
-def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
+def old_split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
     """
     Splits s into quoted and unquoted segments.
 
@@ -1753,6 +1755,172 @@ def split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
     # in whatever condition it's in.
     if text:
         yield in_quote, empty_join(text)
+
+
+_sqs_quotes_str   = ( '"',  "'")
+_sqs_quotes_bytes = (b'"', b"'")
+
+_sqs_escape_str   =  '\\'
+_sqs_escape_bytes = b'\\'
+
+
+@_export
+def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, initial=None):
+    """
+    Splits s into quoted and unquoted segments.
+
+    Returns an iterator yielding 3-tuples:
+
+        (leading_quote, segment, trailing_quote)
+
+    where leading_quote and trailing_quote are either
+    empty strings or quote delimiters from quoted,
+    and segment is a substring of s.  Joining together
+    all strings yielded recreates s.
+
+    s can be either str or bytes.
+
+    quotes is an iterable of unique quote delimiters.
+    Quote delimiters may be any string of 1 or more characters.
+    They must be the same type as s, either str or bytes.
+    By default, quotes is ('"', "'").  (If s is bytes,
+    quotes defaults to (b'"', b"'").)
+
+    escape is a string of any length.  If escape is not
+    an empty string, the string will "escape" (quote)
+    quote delimiters inside a quoted string, like the
+    backslash ('\\') character inside strings in Python.
+    By default, escape is '\\'.  (If s is bytes, escape
+    defaults to b'\\'.)
+
+    initial is a string.  It sets the initial state of
+    the function.  The default is an empty string (str
+    or bytes, matching s); this means the parser starts
+    parsing the string in an unquoted state.  If you
+    want parsing to start as if it had already encountered
+    a quote delimiter--for example, if you were parsing
+    multiple lines individually, and you wanted to begin
+    a new line continuing the state from the previous line--
+    pass in the appropriate quote delimiter from quotes
+    into initial.  Note that when a non-empty string is
+    passed in to initial, the leading_quote in the first
+    3-tuple yielded by split_quoted_strings will be an
+    empty string:
+
+        list(split_quoted_string("a b c'", initial="'"))
+
+    evaluates to
+
+        ["", "a b c", "'"]
+
+    Note that this function is deliberately agnostic
+    about newlines.  If s contains newlines, this function
+    will happily yield them, inside or outside of quoted
+    substrings.  (If you want to disallow newlines inside
+    quoted strings, it's up to you to detect them, raise
+    an exception, etc.)
+    """
+
+    is_bytes = isinstance(s, bytes)
+    if is_bytes:
+        s_type = bytes
+        empty = b''
+        if quotes in (_sqs_quotes_str, None):
+            quotes = _sqs_quotes_bytes
+        else:
+            for q in quotes:
+                if not isinstance(q, s_type):
+                    raise TypeError("values in quotes must match s (str or bytes)")
+                if not q:
+                    raise ValueError("quotes cannot contain an empty string")
+        if escape in (_sqs_escape_str, None):
+            escape = _sqs_escape_bytes
+        elif not isinstance(escape, s_type):
+            raise TypeError("escape must match s (str or bytes)")
+    else:
+        s_type = str
+        empty = ""
+        if quotes in (_sqs_quotes_bytes, None):
+            quotes = _sqs_quotes_str
+        else:
+            for q in quotes:
+                if not isinstance(q, s_type):
+                    raise TypeError("values in quotes must match s (str or bytes)")
+                if not q:
+                    raise ValueError("quotes cannot contain an empty string")
+        if escape in (_sqs_escape_bytes, None):
+            escape = _sqs_escape_str
+        elif not isinstance(escape, s_type):
+            raise TypeError("escape must match s (str or bytes)")
+
+
+    if initial is None:
+        initial = empty
+    if not isinstance(initial, s_type):
+        raise TypeError("initial must match s (str or bytes)")
+
+    quotes_set = set(quotes)
+    if len(quotes_set) != len(quotes):
+        repeated = set()
+        seen = set()
+        for q in quotes:
+            if q in seen:
+                repeated.add(q)
+            seen.add(q)
+        repeated = list(repeated)
+        repeated.sort()
+        raise ValueError("quotes contains repeated quote markers: " + ", ".join(repr(q) for q in repeated))
+
+    if initial and (initial not in quotes_set):
+        raise ValueError("initial state is not in quotes")
+
+    # separators is a list, and it also contains the escaped quote marks (if any).
+    separators = list(quotes)
+    if escape:
+        for first_character in {q[0:] for q in quotes}:
+            separators.append(escape + first_character)
+        separators.append(escape + escape)
+
+    def split_quoted_strings(s, separators, quotes, empty, initial):
+        buffer = []
+
+        quote = initial
+        for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
+            literal, separator = pair
+
+            if literal:
+                buffer.append(literal)
+            if not quote:
+                # not currently quoted
+                if separator not in quotes:
+                    buffer.append(separator)
+                    continue
+                if buffer:
+                    yield (empty, empty.join(buffer), empty)
+                    buffer.clear()
+                quote = separator
+                continue
+            # in quote
+            if separator != quote:
+                buffer.append(separator)
+                continue
+            # separator == quote
+            text = empty.join(buffer)
+            if quote or text:
+                if initial:
+                    initial = None
+                    yield (empty, text, quote)
+                else:
+                    yield (quote, text, quote)
+            buffer.clear()
+            quote = empty
+
+        if buffer:
+            text = empty.join(buffer)
+            if text or quote:
+                yield (quote, text, empty)
+
+    return split_quoted_strings(s, separators, quotes_set, empty, initial)
 
 
 @_export
@@ -2186,22 +2354,32 @@ class lines:
         return return_value
 
 @_export
-def lines_rstrip(li):
+def lines_rstrip(li, separators=None):
     """
     A lines modifier function.  Strips trailing whitespace from the
     lines of a "lines iterator".
 
     Composable with all the lines_ modifier functions in the big.text module.
     """
+    if separators is None:
+        for info, line in li:
+            rstripped = line.rstrip()
+            if rstripped != line:
+                trailing = line[len(rstripped):]
+                info.extend_trailing(trailing)
+            yield (info, rstripped)
+        return
+
     for info, line in li:
-        rstripped = line.rstrip()
+        rstripped = multistrip(line, separators, left=False, right=True)
         if rstripped != line:
             trailing = line[len(rstripped):]
             info.extend_trailing(trailing)
         yield (info, rstripped)
 
+
 @_export
-def lines_strip(li):
+def lines_strip(li, separators=None):
     """
     A lines modifier function.  Strips leading and trailing whitespace
     from the lines of a "lines iterator".
@@ -2212,6 +2390,26 @@ def lines_strip(li):
 
     Composable with all the lines_ modifier functions in the big.text module.
     """
+    if separators is not None:
+
+        for info, line in li:
+            leading = trailing = None
+            if line:
+                stripped = multistrip(line, separators)
+                leading, line, trailing = line.partition(stripped)
+
+            if leading:
+                expanded = leading.expandtabs(li.tab_width)
+                info.column_number += len(expanded)
+                info.extend_leading(leading)
+
+            if trailing:
+                info.extend_trailing(trailing)
+
+            yield (info, line)
+
+        return
+
     for info, line in li:
 
         # if not line, line is empty, we don't change anything.
@@ -2366,7 +2564,7 @@ def lines_sort(li, *, reverse=False):
     yield from iter(lines)
 
 @_export
-def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True):
+def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), escape='\\', rstrip=True, multiline_quotes=None):
     """
     A lines modifier function.  Strips comments from the lines
     of a "lines iterator".  Comments are substrings that indicate
@@ -2423,44 +2621,46 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
 
     comment_pattern = __separators_to_re(comment_separators, separators_is_bytes=comment_separators_is_bytes, separate=True, keep=True)
     re_comment = re.compile(comment_pattern)
-    split = re_comment.split
+    comment_splitter = re_comment.split
 
-    def lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes):
+    def lines_strip_comments(li, comment_splitter, quotes, escape, rstrip, multiline_quotes):
         for info, line in li:
+            state = b'' if isinstance(line, bytes) else ''
             if quotes:
-                i = split_quoted_strings(line, quotes, backslash=backslash, triple_quotes=triple_quotes)
+                i = split_quoted_strings(line, quotes, escape=escape, initial=state)
             else:
-                i = ((False, line),)
+                i = iter( (('', line, ''),) )
 
             segments = []
             append = segments.append
 
             comment_segments = None
 
-            for is_quoted, segment in i:
-                if comment_segments:
-                    comment_append(segment)
-                    continue
-                if is_quoted:
+            for leading_quote, segment, trailing_quote in i:
+                if leading_quote:
+                    append(leading_quote)
                     append(segment)
+                    append(trailing_quote)
                     continue
-                fields = split(segment, maxsplit=1)
+                fields = comment_splitter(segment, maxsplit=1)
                 if len(fields) == 1:
                     append(segment)
                     continue
+
                 # found a comment marker in an unquoted segment!
                 leading = fields[0]
                 if rstrip:
                     leading = leading.rstrip()
                 append(leading)
                 comment_segments = fields[1:]
-                comment_append = comment_segments.append
+                for triplet in i:
+                    comment_segments.extend(triplet)
 
             if comment_segments:
                 info.extend_comment(empty_join(comment_segments), empty)
                 line = empty_join(segments)
             yield (info, line)
-    return lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes)
+    return lines_strip_comments(li, comment_splitter, quotes, escape, rstrip, multiline_quotes)
 
 @_export
 def lines_convert_tabs_to_spaces(li):
@@ -2499,20 +2699,22 @@ def lines_strip_indent(li):
     empty = None
     first_time = True
 
+    # a "blank line" is either empty or only has whitespace.
+    # blank lines get the indent of the *next* non-blank line,
+    # or 0 if there are no following non-blank lines.
+    # this is *regardless* of the actual whitespace on the line.
+    # all whitespace goes in to "leading", line is empty.
+    blank_lines = []
+
     for info, line in li:
         lstripped = line.lstrip()
         original_leading = line[:len(line) - len(lstripped)]
         if not lstripped:
-            # this line is only whitespace.
-            # flush these through, assuming they have the same indent.
-            existing_leading = getattr(info, 'leading', '')
-            # TODO this shouldn't be nocover, but, we don't have
-            # any good way of testing this right now
-            if existing_leading: # pragma: no cover
-                original_leading = existing_leading + original_leading
-            info.leading = original_leading
-            info.indent = indent
-            yield (info, lstripped)
+            info.extend_leading(line)
+            leading = line.expandtabs(li.tab_width)
+            info.column_number += len(leading)
+            blank_lines.append((info, lstripped))
+            # print(f"BL+ {info=} {lstripped=}")
             continue
 
         if first_time:
@@ -2562,6 +2764,14 @@ def lines_strip_indent(li):
         if new_indent:
             leadings.append(len_leading)
             indent += 1
+
+        if blank_lines:
+            # print(f"BL+ {blank_lines=}")
+            for pair in blank_lines:
+                pair[0].indent = indent # don't overwrite "info" or "line"! derp!
+                yield pair
+            blank_lines.clear()
+
         info.extend_leading(original_leading)
         info.indent = indent
         if len_leading:
@@ -2569,6 +2779,13 @@ def lines_strip_indent(li):
             line = lstripped
 
         yield (info, line)
+
+    # flush trailing blank lines
+    if blank_lines:
+        for pair in blank_lines:
+            info, line = pair
+            info.indent = 0
+            yield pair
 
 @_export
 def lines_filter_empty_lines(li):

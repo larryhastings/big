@@ -329,7 +329,7 @@ And here are five little functions/classes I use all the time:
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
-[`split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`](#split_quoted_stringss-quotes---triple_quotestrue-backslash)
+[`split_quoted_strings(s, quotes=('"', "'"), *, escape="\\", initial=None)`](#split_quoted_stringss-quotes---escape-initialnone)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
@@ -3195,32 +3195,69 @@ with `re.compile` using the `flags` you passed in.
 `string` should be the same type as `pattern` (or `pattern.pattern`).
 </dd></dl>
 
-#### `split_quoted_strings(s, quotes=('"', "'"), *, triple_quotes=True, backslash='\\')`
+#### `split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, initial=None)`
 
 <dl><dd>
 
 Splits `s` into quoted and unquoted segments.
 
+Returns an iterator yielding 3-tuples:
+
+```
+    (leading_quote, segment, trailing_quote)
+```
+
+where `leading_quote` and `trailing_quote` are either
+empty strings or quote delimiters from `quoted`,
+and `segment` is a substring of `s`.  Joining together
+all strings yielded recreates `s`.
+
 `s` can be either `str` or `bytes`.
 
-`quotes` is an iterable of quote separators, either `str` or `bytes`
-matching `s`.  Note that `split_quoted_strings`
-only supports quote *characters,* as in, each quote separator must be exactly
-one character long.
+`quotes` is an iterable of unique quote delimiters.
+Quote delimiters may be any string of 1 or more characters.
+They must be the same type as `s`, either `str` or `bytes`.
+By default, `quotes` is `('"', "'")`.  (If `s` is `bytes`,
+`quotes` defaults to `(b'"', b"'")`.)
 
-Returns an iterator yielding 2-tuples:
+`escape` is a string of any length.  If `escape` is not
+an empty string, the string will "escape" (quote)
+quote delimiters inside a quoted string, like the
+backslash ('\\') character inside strings in Python.
+By default, `escape` is `'\\'`.  (If `s` is `bytes`,
+`escape` defaults to `b'\\'`.)
+
+`initial` is a string.  It sets the initial state of
+the function.  The default is an empty string (`str`
+or `bytes`, matching `s`); this means the parser starts
+parsing the string in an unquoted state.  If you
+want parsing to start as if it had already encountered
+a quote delimiter--for example, if you were parsing
+multiple lines individually, and you wanted to begin
+a new line continuing the state from the previous line--
+pass in the appropriate quote delimiter from `quotes`
+into `initial`.  Note that when a non-empty string is
+passed in to `initial`, the `leading_quote` in the first
+3-tuple yielded by `split_quoted_strings` will be an
+empty string:
 
 ```
-(is_quoted, segment)
+    list(split_quoted_string("a b c'", initial="'"))
 ```
 
-where `segment` is a substring of `s`, and `is_quoted` is true if the segment is
-quoted.  Joining all the segments together recreates `s`.
+evaluates to
 
-If `triple_quotes` is true, supports "triple-quoted" strings like Python.
+```
+    ["", "a b c", "'"]
+```
 
-If `backslash` is a character, this character will quoting characters inside
-a quoted string, like the backslash character inside strings in Python.
+Note that this function is deliberately agnostic
+about newlines.  If `s` contains newlines, this function
+will happily yield them, inside or outside of quoted
+substrings.  (If you want to disallow newlines inside
+quoted strings, it's up to you to detect them, raise
+an exception, etc.)
+
 </dd></dl>
 
 #### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
@@ -5450,6 +5487,32 @@ in the **big** test suite.
       using line_strip with weird separators e.g. ('X', 'Y')
     * similarly with LineInfo.trailing
 
+* Breaking change: `split_quoted_string` has been completely
+  re-tooled and re-written.  It's a major upgrade.
+  * The `triple_quotes` parameter has been removed.
+  * `quotes` may now contain quote delimiters of any nonzero
+    length.
+    * By default `quotes` only contains `'`` (single-quote) 
+      and `"` (double-quote).  The previous version also
+      activated `"""` and `'''` by default; this was judged
+      to be too opinionated and Python-specific.
+  * The `backslash` parameter has been replaced by `escape`.
+    `escape` allows specifying the escape string, which
+    by default is '\\' (backslash).
+  * `split_quoted_string` also takes a new parameter,
+    `initial`, which sets the initial state of quoting.
+  * `split_quoted_string` is now documented as being completely
+    agnostic about newlines.  The previous version was, too;
+    even though it talked about triple-quoted strings vs
+    single-quoted strings, in reality it didn't care about
+    newlines inside either kind of string.  It's officially
+    up to you if you want to enforce "newlines aren't
+    permitted in single-quoted strings."
+
+  The old version is still available, exported under the
+  name `old_split_quoted_string`.  It will be available
+  for at least one year, until at least August 2025.
+
 * New feature: `LineInfo` objects yielded by `lines`
   now contain `end`, which is the end-of-line character
   that ended the current line.  The last line yielded will
@@ -5457,6 +5520,11 @@ in the **big** test suite.
   of the text split by `lines` was an end-of-line character,
   the last `line` yielded will be empty, and `info.end` will
   also be empty.
+
+* `lines_strip` and `lines_rstrip` now accept a new `separators`
+  argument; this is an iterable of separators, a la `multisplit`.
+  The default value of `None` preserves the existing behavior,
+  stripping whitespace.
 
 * `lines_grep` now adds a `match` attribute to the `LineInfo`
   object, containing the return value from calling `re.search`.

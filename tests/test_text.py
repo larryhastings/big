@@ -2515,44 +2515,113 @@ class BigTextTests(unittest.TestCase):
             big.normalize_whitespace(b"a b c d   e", separators=[])
 
     def test_split_quoted_strings(self):
-        def test(s, expected, **kwargs):
+        def test(s, expected, test_ascii=True, **kwargs):
             got = list(big.split_quoted_strings(s, **kwargs))
-            self.assertEqual(got, expected)
+            self.assertEqual(expected, got)
+
+            if not test_ascii:
+                return
+
+            # convert everybody to ascii
+            if 'quotes' in kwargs:
+                kwargs['quotes'] = [x.encode('ascii') for x in kwargs['quotes']]
+            if 'initial' in kwargs:
+                kwargs['initial'] = kwargs['initial'].encode('ascii')
+            if 'escape' in kwargs:
+                kwargs['escape']  = kwargs['escape'].encode('ascii')
 
             got = list(big.split_quoted_strings(s.encode('ascii'), **kwargs))
-            self.assertEqual(got, [(b, s.encode('ascii')) for b, s in expected])
+            expected = [(b.encode('ascii'), x.encode('ascii'), a.encode('ascii')) for b, x, a in expected]
+            self.assertEqual(expected, got)
 
         test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
             [
-                (False, 'hey there '),
-                (True, '"this is quoted"'),
-                (False, ' an empty quote: '),
-                (True, "''"),
-                (False, ' this is not quoted '),
-                (True, "'this is more quoted'"),
-                (False, ' '),
-                (True, '"here\'s quoting a quote mark: \\" wow!"'),
-                (False, ' this is working!'),
+                ('',  'hey there ',                             ''),
+                ('"', 'this is quoted',                         '"'),
+                ('',  ' an empty quote: ',                      ''),
+                ("'", "",                                       "'"),
+                ('',  ' this is not quoted ',                   ''),
+                ("'", "this is more quoted",                    "'"),
+                ('',  ' ',                                      ''),
+                ('"', 'here\'s quoting a quote mark: \\" wow!', '"'),
+                ('',  ' this is working!',                      ''),
             ])
 
-        test('''here is triple quoted: """i am triple quoted.""" wow!  again: """triple quoted here. "quotes in quotes" empty: "" done.""" phew!''',
+        test('''here is triple quoted: """i am triple quoted.""" wow!  again: """triple quoted here. "quotes in quotes" empty: "" quoted triple quote: \\""" done.""" phew!''',
             [
-                (False, 'here is triple quoted: '),
-                (True, '"""i am triple quoted."""'),
-                (False, ' wow!  again: '),
-                (True, '"""triple quoted here. "quotes in quotes" empty: "" done."""'),
-                (False, ' phew!'),
-            ])
-
-        test('''test turning off quoted strings.  """howdy doodles""" it kinda works anyway!''',
-            [
-                (False, 'test turning off quoted strings.  '),
-                (True, '""'),
-                (True, '"howdy doodles"'),
-                (True, '""'),
-                (False, ' it kinda works anyway!'),
+                ('',    'here is triple quoted: ',                                ''),
+                ('"""', 'i am triple quoted.',                                    '"""'),
+                ('',    ' wow!  again: ',                                         ''),
+                ('"""', 'triple quoted here. "quotes in quotes" empty: "" quoted triple quote: \\""" done.', '"""'),
+                ('',    ' phew!',                                                 ''),
             ],
-            triple_quotes=False)
+            quotes = ('"', "'", '"""',))
+
+        test('''test without multiline quotes.  """howdy doodles""" it kinda works anyway!''',
+            [
+                ('',  'test without multiline quotes.  ', ''),
+                ('"', '',                                   '"'),
+                ('"', 'howdy doodles',                      '"'),
+                ('"', '',                                   '"'),
+                ('',  ' it kinda works anyway!',            ''),
+            ],
+            )
+
+        test("a b c' x y z 'd e f'",
+            [
+                ("",  'a b c', "'"),
+                ("",  ' x y z ', ""),
+                ("'", 'd e f', "'"),
+            ],
+            initial="'"
+            )
+
+        # let's get weird!
+        test("abc\ndef\nghi",
+            [
+                ("",   'abc', ""),
+                ("\n", 'def', "\n"),
+                ("",   'ghi', ""),
+            ],
+            quotes=("\n")
+            )
+
+        test("abc'qxqqxx'qqq'def",
+            [
+                ("",   'abc',        ""),
+                ("'",  "qxqqxx'qqq", "'"),
+                ("",   'def',        ""),
+            ],
+            escape="xx"
+            )
+
+        test("abc'qxqqxx\\'qqq'def",
+            [
+                ("",   'abc',        ""),
+                ("'",  "qxqqxx\\",   "'"),
+                ("",   'qqq',        ""),
+                ("'",  'def',        ""),
+            ],
+            escape=""
+            )
+
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=(b'"', b"'", b"'''"),
+                )
+
+        with self.assertRaises(TypeError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                quotes=('"', "'", "'''"),
+                )
+
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=('"', "'", ""),
+                )
 
     def test_parse_delimiters(self):
 
@@ -2873,6 +2942,16 @@ hummingbird
             L('',               3, 1, end=''),
             ])
 
+        test(big.lines_rstrip(big.lines(
+"QXYXYQa = bXY\n"
+"XYQQXYXYc = dQQQQ\n"
+), separators=('Q', 'XY')),
+            [
+            L('QXYXYQa = bXY',     1, 1, final='QXYXYQa = b', trailing='XY'),
+            L('XYQQXYXYc = dQQQQ', 2, 1, final='XYQQXYXYc = d', trailing='QQQQ'),
+            L('',                  3, 1, end=''),
+            ])
+
         test(big.lines_strip(big.lines(
 "    a = b  \n"
 "    c = d     \n"
@@ -2881,6 +2960,16 @@ hummingbird
             L('    a = b  ',    1, 5, leading='    ', final='a = b', trailing='  '),
             L('    c = d     ', 2, 5, leading='    ', final='c = d', trailing='     '),
             L('',               3, 1, end=''),
+            ])
+
+        test(big.lines_strip(big.lines(
+"QXYXYQa = bXY\n"
+"XYQQXYXYc = dQQQQ\n"
+), separators=('Q', 'XY')),
+            [
+            L('QXYXYQa = bXY',     1, 7, leading='QXYXYQ',   final='a = b', trailing='XY'),
+            L('XYQQXYXYc = dQQQQ', 2, 9, leading='XYQQXYXY', final='c = d', trailing='QQQQ'),
+            L('',                  3, 1, end=''),
             ])
 
         test(big.lines_filter_empty_lines(big.lines("""
@@ -3060,10 +3149,10 @@ outdent
                 line_number=4, column_number=9, indent=1, leading='        '),
                 'eight is enough'),
             (LineInfo(line='    ',
-                line_number=5, column_number=1, indent=1, leading='    '),
+                line_number=5, column_number=5, indent=0, leading='    '),
                 ''),
             (LineInfo(line='',
-                line_number=6, column_number=1, indent=1, leading='', end=''),
+                line_number=6, column_number=1, indent=0, leading='', end=''),
                 '')
             ]
 
@@ -3088,7 +3177,7 @@ outdent
                 b'figure eight is double four'),
             (LineInfo(line=b'    figure four is half of eight', line_number=5, column_number=5, indent=1, leading=b'    '),
                 b'figure four is half of eight'),
-            (LineInfo(line=b'', line_number=6, column_number=1, indent=1, leading=b'', end=b''),
+            (LineInfo(line=b'', line_number=6, column_number=1, indent=0, leading=b'', end=b''),
                 b'')]
 
         test(lines, expected, tab_width=4)
