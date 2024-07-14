@@ -4833,9 +4833,24 @@ then it'd filter out empty lines first, and *then*
 only whitespace would still get yielded as empty lines,
 which is probably not what you want.  Ordering is important!
 
+It's probably clearer to constructed nested lines modifiers
+this way:
+
+```Python
+     with open("textfile.txt", "rt") as f:
+         li = lines(f.read())
+         li = big.lines_filter_empty_lines(li)
+         li = big.lines_rstrip(li)
+         for info, line in li:
+           ...
+```
+
+This is much easier to read, particularly when one or
+more lines modifiers take additional arguments.
+
 Of course, you can write your own lines modifier functions.
 Simply accept a lines iterator as an argument, iterate over
-it, and yield each line info and line, modifying them
+it, and yield each line info and line--modifying them
 (or not yielding them!) as you see fit.  You could
 even write your own lines iterator, a replacement for
 [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
@@ -5479,17 +5494,24 @@ in the **big** test suite.
 
 *not yet released*
 
-* TODO: test new functionality
-
-  * test lines( [ ('a', '\n'), ('b', '\n'), ('c', '') ])
-  * test LineInfo attrs leading, trailing, and end
-    * add a test that exercises appending to LineInfo.leading,
-      using line_strip with weird separators e.g. ('X', 'Y')
-    * similarly with LineInfo.trailing
-
 * Breaking change: `split_quoted_string` has been completely
-  re-tooled and re-written.  It's a major upgrade.
-  * The `triple_quotes` parameter has been removed.
+  re-tooled and re-written.  The new API is simpler, easier to
+  understand, and conceptually sharper.  It's a major upgrade!
+
+  The old version is still available, exported under the
+  name `old_split_quoted_string`.  It will be available
+  for at least one year, until at least August 2025.
+
+  Changes:
+  * `split_quoted_string` used to use a hand-coded parser,
+    manually analyzing each character in the input text.
+    Now it uses `multisplit` to only examine the interesting
+    characters.  `multisplit` has a large startup cost
+    the first time you use a particular set of iterators,
+    but this information is cached for subsequent calls.
+    Bottom line, the new version is slower for trivial
+    examples--where speed doesn't matter--but much faster
+    for larger workloads.
   * `quotes` may now contain quote delimiters of any nonzero
     length.
     * By default `quotes` only contains `'`` (single-quote) 
@@ -5501,44 +5523,87 @@ in the **big** test suite.
     by default is '\\' (backslash).
   * `split_quoted_string` also takes a new parameter,
     `initial`, which sets the initial state of quoting.
+  * The `triple_quotes` parameter has been removed.  (See
+    next bullet point.)
   * `split_quoted_string` is now documented as being completely
     agnostic about newlines.  The previous version was, too;
-    even though it talked about triple-quoted strings vs
-    single-quoted strings, in reality it didn't care about
-    newlines inside either kind of string.  It's officially
-    up to you if you want to enforce "newlines aren't
-    permitted in single-quoted strings."
+    even though the documentation discussed triple-quoted
+    strings vs single-quoted strings, in reality it didn't
+    care about newlines inside either kind of string.  With
+    the updated API, it's officially up to you whether or not
+    you want to enforce "newlines aren't permitted in
+    single-quoted strings."
 
-  The old version is still available, exported under the
-  name `old_split_quoted_string`.  It will be available
-  for at least one year, until at least August 2025.
+
+* Breaking change: the `LineInfo` constructor has added
+  a new `lines` positional parameter, in front of the
+  existing positional parameters.  This should be the
+  `lines` iterator yielding this `LineInfo` object.
+  It's stored in the `lines` attribute.
 
 * New feature: `LineInfo` objects yielded by `lines`
-  now contain `end`, which is the end-of-line character
-  that ended the current line.  The last line yielded will
-  always have an empty string for `end`; if the last character
-  of the text split by `lines` was an end-of-line character,
-  the last `line` yielded will be empty, and `info.end` will
-  also be empty.
+  previously had many optional fields, which might or might
+  not be added dynamicall.  Now all fields are pre-added.
+  (This is gentler to the CPython 3.13 runtime.)
+  `LineInfo` objects now always have these attributes:
+  * `lines`, which contains the base lines iterator.
+  * `line`, which contains the original unmodified line.
+  * `line_number`, which contains the line number of
+    this line.
+  * `column_number`, which contains the starting column
+    number of the first character of this line.
+  * `indent`, which contains the indent level of the
+    line if computed, and `None` otherwise.
+  * `leading`, which contains the string stripped from
+    the beginning of the line.
+  * `trailing`, which contains the string stripped from
+    the end of the line.
+  * `comment`, which contains the leftmost comment stripped
+    from the line.  (If both are set, `trailing` comes before
+    `comment`.)
+  * `end`, which is the end-of-line character
+    that ended the current line.  The last line yielded will
+    always have an empty string for `end`; if the last character
+    of the text split by `lines` was an end-of-line character,
+    the last `line` yielded will be empty, and `info.end` will
+    also be empty.
+  * `match`, which contains a `Match` object if this line
+    was matched with a regular expression, and `None` otherwise.
 
-* `lines_strip` and `lines_rstrip` now accept a new `separators`
-  argument; this is an iterable of separators, a la `multisplit`.
-  The default value of `None` preserves the existing behavior,
-  stripping whitespace.
+* There have been plenty of changes to line modifiers, too:
+  * `lines_strip_comments` has been renamed to `lines_strip_line_comments`.
+    It's also been fixed: now it raises `SyntaxError` if quoted
+    strings aren't closed.
+  * `lines_filter_comment_lines` has been renamed to
+    `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
+    now enforces that single-quoted strings can't span lines,
+    and multi-quoted strings must be closed before the end of
+    the last line.
+  * `lines_strip` and `lines_rstrip` now accept a new `separators`
+    argument; this is an iterable of separators, a la `multisplit`.
+    The default value of `None` preserves the existing behavior,
+    stripping whitespace.
+  * `lines_grep` now adds a `match` attribute to the `LineInfo`
+    object, containing the return value from calling `re.search`.
+    (If you pass in `invert=True` to `lines_grep`, the `match`
+    attribute will always be `None`.)
+  * Bugfix: `lines_strip_indent` previously required
+    whitespace-only lines to obey the indenting rules.
+    My intention was always for `lines_strip_indent` to
+    behave like Python, and that includes not really caring
+    about the intra-line-whitespace for whitespace-only
+    lines.  Now `lines_strip_indent` behaves more like Python:
+    a whitespace-only line behaves as if it has
+    the same indent as the previous line.  (Not that the
+    indent value of an empty line should matter; this is
+    mostly just there to present a consistent interface to
+    the user.)
 
-* `lines_grep` now adds a `match` attribute to the `LineInfo`
-  object, containing the return value from calling `re.search`.
-  (If you pass in `invert=True` to `lines_grep`, the `match`
-  attribute will always be `None`.)
-
-* Bugfix: `lines_strip_indent` previously required
-  whitespace-only lines to obey the indenting rules.
-  My intention was always for `lines_strip_indent` to
-  behave like Python, and that includes not really caring
-  about the intra-line-whitespace for whitespace-only
-  lines.  Now `lines_strip_indent` behaves like Python
-  itself: a whitespace-only line behaves as if it has
-  the same indent as the previous line.
+* API change for the `Delimiter` object used with `parse_delimiters`:
+  instead of a `backslash=True` attribute, it now takes an
+  `escape=c` attribute, where `c` is the escape character you
+  want to use with that set of delimiters.  All the predefined
+  `Delimiter` values have been updated to match.
 
 * Minor but free speedup for several functions in `big.text`,
   most importantly
