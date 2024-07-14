@@ -2224,20 +2224,28 @@ class LineInfo:
     def detab(self, s):
         return self.lines.detab(s)
 
-    def extend_leading(self, s, length=None):
+    def extend_leading(self, s, line):
+        assert line.startswith(s), f"{line=} doesn't start with {s=}"
         self.leading += s
-        if length == None:
-            detabbed = self.detab(s)
-            length = len(detabbed)
+        line = line[len(s):]
+        detabbed = self.detab(s)
+        length = len(detabbed)
         self.column_number += length
+        return line
 
-    def extend_trailing(self, s):
+    def extend_trailing(self, s, line):
+        assert line.endswith(s)
         self.trailing = s + self.trailing
+        line = line[:-len(s)]
+        return line
 
-    def extend_comment(self, s):
+    def extend_comment(self, s, line):
         empty = b"" if self._is_bytes else ""
+        assert line.endswith(s)
         self.comment = s + self.trailing + self.comment
         self.trailing = empty
+        line = line[:-len(s)]
+        return line
 
     def __repr__(self):
         names = list(self.__dict__)
@@ -2393,15 +2401,15 @@ def lines_rstrip(li, separators=None):
             rstripped = line.rstrip()
             if rstripped != line:
                 trailing = line[len(rstripped):]
-                info.extend_trailing(trailing)
-            yield (info, rstripped)
+                line = info.extend_trailing(trailing, line)
+            yield (info, line)
         return
 
     for info, line in li:
         rstripped = multistrip(line, separators, left=False, right=True)
         if rstripped != line:
             trailing = line[len(rstripped):]
-            info.extend_trailing(trailing)
+            line = info.extend_trailing(trailing, line)
         yield (info, rstripped)
 
 
@@ -2423,13 +2431,13 @@ def lines_strip(li, separators=None):
             leading = trailing = None
             if line:
                 stripped = multistrip(line, separators)
-                leading, line, trailing = line.partition(stripped)
+                leading, _, trailing = line.partition(stripped)
 
             if leading:
-                info.extend_leading(leading)
+                line = info.extend_leading(leading, line)
 
             if trailing:
-                info.extend_trailing(trailing)
+                line = info.extend_trailing(trailing, line)
 
             yield (info, line)
 
@@ -2445,7 +2453,6 @@ def lines_strip(li, separators=None):
             if not lstripped:
                 # line was all whitespace.
                 leading = line
-                line = lstripped # aka empty
             else:
                 if len(line) != len(lstripped):
                     # we stripped leading whitespace, preserve it
@@ -2454,13 +2461,12 @@ def lines_strip(li, separators=None):
                 rstripped = lstripped.rstrip()
                 if len(lstripped) != len(rstripped):
                     trailing = lstripped[len(rstripped):]
-                line = rstripped
 
         if leading:
-            info.extend_leading(leading)
+            line = info.extend_leading(leading, line)
 
         if trailing:
-            info.extend_trailing(trailing)
+            line = info.extend_trailing(trailing, line)
 
         yield (info, line)
 
@@ -2676,6 +2682,7 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip):
         state = None
         starting_pair_for_state = None
+
         for info, line in li:
             # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
 
@@ -2684,25 +2691,17 @@ def lines_strip_line_comments(li, line_comment_markers, *,
             else:
                 i = iter( (('', line, ''),) )
 
-            segments = []
-            append = segments.append
-
             line_comment_segments = None
 
             for leading_quote, segment, trailing_quote in i:
                 # print(f"-- {leading_quote=} {segment=} {trailing_quote=}")
                 if leading_quote:
-                    append(leading_quote)
-                    append(segment)
-                    append(trailing_quote)
                     continue
+
                 if state:
                     # we're still in a quote from a previous line.
-                    assert not leading_quote
-                    append(segment)
+                    # assert not leading_quote
                     if trailing_quote:
-                        append(trailing_quote)
-                        assert trailing_quote == state
                         state = None
                         starting_pair_for_state = None
                     else:
@@ -2710,9 +2709,9 @@ def lines_strip_line_comments(li, line_comment_markers, *,
                         # so this should be the entire line
                         assert segment == line
                     continue
+
                 fields = line_comment_splitter(segment, maxsplit=1)
                 if len(fields) == 1:
-                    append(segment)
                     continue
 
                 # found a comment marker in an unquoted segment!
@@ -2723,20 +2722,15 @@ def lines_strip_line_comments(li, line_comment_markers, *,
                 for triplet in i:
                     line_comment_segments.extend(triplet)
                 assert line_comment_segments
-                info.extend_comment(empty_join(line_comment_segments))
+                line = info.extend_comment(empty_join(line_comment_segments), line)
 
                 # do this *after* extend_comment,
                 # extend_comment also eats trailing
                 if rstrip:
                     stripped = leading.rstrip()
                     if stripped != leading:
-                        info.extend_trailing(leading[len(stripped):])
-                        leading = stripped
-                append(leading)
-
-            line = empty_join(segments)
-
-            yield (info, line)
+                        line = info.extend_trailing(leading[len(stripped):], line)
+                break
 
             if not line_comment_segments:
                 if leading_quote and not trailing_quote:
@@ -2744,6 +2738,9 @@ def lines_strip_line_comments(li, line_comment_markers, *,
                         raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
                     state = leading_quote
                     starting_pair_for_state = info, line
+
+            yield (info, line)
+
         if state:
             info, line = starting_pair_for_state
             raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
@@ -2811,21 +2808,19 @@ def lines_strip_indent(li):
                 empty = ''
 
         lstripped = line.lstrip()
-        original_leading = line[:len(line) - len(lstripped)]
         if not lstripped:
-            info.extend_leading(line)
-            blank_lines.append((info, empty))
+            line = info.extend_leading(line, line)
+            blank_lines.append((info, line))
             # print(f"BL+ {info=} {lstripped=}")
             continue
 
-        leading = li.detab(original_leading)
-        len_leading = len(leading)
-        # print(f"{leadings=} {line=} {leading=} {len_leading=}")
-        if leading.rstrip(space):
-            raise ValueError(f"lines_strip_indent can't handle leading whitespace character {leading[0]!r}")
-        if not leading:
+        line = info.extend_leading(line[:len(line) - len(lstripped)], line)
+        column_number = info.column_number
+
+        if column_number == info.lines.column_number:
             # this line doesn't start with whitespace; text is at column 0.
             # outdent to zero.
+            assert not info.leading
             indent = 0
             leadings.clear()
             new_indent = False
@@ -2833,10 +2828,10 @@ def lines_strip_indent(li):
         elif not leadings:
             # this is the first indent.
             new_indent = True
-        elif leadings[-1] == len_leading:
+        elif leadings[-1] == column_number:
             # indent is unchanged.
             new_indent = False
-        elif len_leading > leadings[-1]:
+        elif column_number > leadings[-1]:
             # we are indented further than the previously observed indent.
             new_indent = True
         else:
@@ -2847,19 +2842,19 @@ def lines_strip_indent(li):
             indent -= 1
             while leadings:
                 l = leadings[-1]
-                if l >= len_leading:
-                    if l > len_leading:
+                if l >= column_number:
+                    if l > column_number:
                         leadings.clear()
                     break
                 leadings.pop()
                 indent -= 1
             if not leadings:
-                raise IndentationError(f"line {info.line_number} column {len_leading + info.column_number}: unindent does not match any outer indentation level")
+                raise IndentationError(f"line {info.line_number} column {column_number}: unindent doesn't match any outer indentation level")
             new_indent = False
 
         # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
-            leadings.append(len_leading)
+            leadings.append(column_number)
             indent += 1
 
         if blank_lines:
@@ -2869,10 +2864,7 @@ def lines_strip_indent(li):
                 yield pair
             blank_lines.clear()
 
-        info.extend_leading(original_leading)
         info.indent = indent
-        line = lstripped
-
         yield (info, line)
 
     # flush trailing blank lines

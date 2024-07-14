@@ -3346,8 +3346,8 @@ outdent
         with self.assertRaises(IndentationError):
             test(lines, [], tab_width=4)
 
-        with self.assertRaises(ValueError):
-            test("first line\n  \u3000  second line\nthird line\n", [])
+        # with self.assertRaises(ValueError):
+        #     test("first line\n  \u3000  second line\nthird line\n", [])
 
     def test_lines_misc(self):
         ## error handling
