@@ -5498,9 +5498,10 @@ in the **big** test suite.
   re-tooled and re-written.  The new API is simpler, easier to
   understand, and conceptually sharper.  It's a major upgrade!
 
-  The old version is still available, exported under the
-  name `old_split_quoted_string`.  It will be available
-  for at least one year, until at least August 2025.
+  The old version is still available under a new
+  name: `old_split_quoted_string`.  It's deprecated, and will
+  be eventually removed, but not before August 2025
+  (one year from now).
 
   Changes:
   * `split_quoted_string` used to use a hand-coded parser,
@@ -5509,18 +5510,20 @@ in the **big** test suite.
     characters.  `multisplit` has a large startup cost
     the first time you use a particular set of iterators,
     but this information is cached for subsequent calls.
-    Bottom line, the new version is slower for trivial
-    examples--where speed doesn't matter--but much faster
-    for larger workloads.
+    Bottom line, the new version is  much faster
+    for larger workloads.  (It's slower for trivial
+    examples... where speed doesn't matter.)
   * `quotes` may now contain quote delimiters of any nonzero
     length.
     * By default `quotes` only contains `'`` (single-quote) 
       and `"` (double-quote).  The previous version also
       activated `"""` and `'''` by default; this was judged
       to be too opinionated and Python-specific.
-  * The `backslash` parameter has been replaced by `escape`.
+  * The `backslash` parameter has been replaced by a
+    new parameter, `escape`.
     `escape` allows specifying the escape string, which
-    by default is '\\' (backslash).
+    by default is '\\' (backslash).  If you specify a false
+    value, there will be no escape character in strings.
   * `split_quoted_string` also takes a new parameter,
     `initial`, which sets the initial state of quoting.
   * The `triple_quotes` parameter has been removed.  (See
@@ -5529,22 +5532,23 @@ in the **big** test suite.
     agnostic about newlines.  The previous version was, too;
     even though the documentation discussed triple-quoted
     strings vs single-quoted strings, in reality it didn't
-    care about newlines inside either kind of string.  With
-    the updated API, it's officially up to you whether or not
-    you want to enforce "newlines aren't permitted in
-    single-quoted strings."
+    ever care about newlines.  With the updated API, it's
+    officially up to you to enforce any rules here
+    (e.g. "newlines aren't permitted in
+    single-quoted strings.")
 
 
 * Breaking change: the `LineInfo` constructor has added
   a new `lines` positional parameter, in front of the
   existing positional parameters.  This should be the
-  `lines` iterator yielding this `LineInfo` object.
+  `lines` iterator that yielded this `LineInfo` object.
   It's stored in the `lines` attribute.
 
 * New feature: `LineInfo` objects yielded by `lines`
   previously had many optional fields, which might or might
-  not be added dynamicall.  Now all fields are pre-added.
-  (This is gentler to the CPython 3.13 runtime.)
+  not be added dynamically.  Now all fields are pre-added.
+  (This works better with assumptions inside the CPython 3.13
+  runtime.)
   `LineInfo` objects now always have these attributes:
   * `lines`, which contains the base lines iterator.
   * `line`, which contains the original unmodified line.
@@ -5555,24 +5559,30 @@ in the **big** test suite.
   * `indent`, which contains the indent level of the
     line if computed, and `None` otherwise.
   * `leading`, which contains the string stripped from
-    the beginning of the line.
+    the beginning of the line.  Initially this is the
+    empty string.
   * `trailing`, which contains the string stripped from
-    the end of the line.
-  * `comment`, which contains the leftmost comment stripped
-    from the line.  (If both are set, `trailing` comes before
-    `comment`.)
+    the end of the line.  Initially this is the
+    empty string.
   * `end`, which is the end-of-line character
-    that ended the current line.  The last line yielded will
-    always have an empty string for `end`; if the last character
-    of the text split by `lines` was an end-of-line character,
-    the last `line` yielded will be empty, and `info.end` will
-    also be empty.
+    that ended the current line.  For the last line yielded,
+    `info.end` will always be the empty string.  If the last
+    character of the text split by `lines` was an end-of-line
+    character, the last `line` yielded will be the empty string,
+    and `info.end` will also be the empty string.
   * `match`, which contains a `Match` object if this line
     was matched with a regular expression, and `None` otherwise.
 
+* `LineInfo` now has two new methods: `extend_leading`
+  and `extend_trailing`.  These methods
+  move a leading or trailing substring from the current `line`
+  to the relevant field in `LineInfo`, maintaining all the
+  guaranteed invariants, and updating all related `LineInfo`
+  fields (like `column_number`).
+
 * There have been plenty of changes to line modifiers, too:
   * `lines_strip_comments` has been renamed to `lines_strip_line_comments`.
-    It's also been fixed: now it raises `SyntaxError` if quoted
+    It's also been improved: now it raises `SyntaxError` if quoted
     strings aren't closed.
   * `lines_filter_comment_lines` has been renamed to
     `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
@@ -5580,13 +5590,14 @@ in the **big** test suite.
     and multi-quoted strings must be closed before the end of
     the last line.
   * `lines_strip` and `lines_rstrip` now accept a new `separators`
-    argument; this is an iterable of separators, a la `multisplit`.
+    argument; this is an iterable of separators, like the argument
+    to `multisplit`.
     The default value of `None` preserves the existing behavior,
     stripping whitespace.
   * `lines_grep` now adds a `match` attribute to the `LineInfo`
     object, containing the return value from calling `re.search`.
-    (If you pass in `invert=True` to `lines_grep`, the `match`
-    attribute will always be `None`.)
+    (If you pass in `invert=True` to `lines_grep`, `lines_grep`
+    will never write to the `match` attribute.)
   * Bugfix: `lines_strip_indent` previously required
     whitespace-only lines to obey the indenting rules.
     My intention was always for `lines_strip_indent` to

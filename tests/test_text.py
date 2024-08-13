@@ -33,6 +33,7 @@ import itertools
 import math
 import re
 import sys
+import types
 import unittest
 
 
@@ -80,6 +81,11 @@ def to_bytes(o): # pragma: no cover
             flags = flags - re.UNICODE
         o = re.compile(to_bytes(o.pattern), flags=flags)
     return o
+
+
+_iterate_over_bytes = big.text._iterate_over_bytes
+
+
 
 #
 # known_separators & printable_separators lets error messages
@@ -2354,6 +2360,276 @@ class BigTextTests(unittest.TestCase):
             '    -v|--verbose        Causes the program to produce more output.  Specifying it\n                        multiple times raises the volume of output.'
         )
 
+    def test_split_title_case(self):
+
+        def alternate_split_title_case(s, *, split_allcaps=True):
+            """
+            Alternate implementation of split_title_case,
+            used for testing.
+            """
+            if not s:
+                yield s
+                return
+
+            if isinstance(s, bytes):
+                empty_join = b''.join
+                i = _iterate_over_bytes(s)
+            else:
+                empty_join = ''.join
+                i = iter(s)
+
+            word = []
+            append = word.append
+            pop = word.pop
+            clear = word.clear
+
+            previous_was_lower = False
+            upper_counter = 0
+
+            for c in i:
+                is_upper = c.isupper()
+                is_lower = c.islower()
+                # print(f"{c=} {is_upper=} {is_lower=} {upper_counter=} {previous_was_lower=} {split_allcaps=}")
+                if is_upper:
+                    if previous_was_lower:
+                        if word:
+                            yield empty_join(word)
+                            clear()
+                        previous_was_lower = False
+                    if split_allcaps:
+                        upper_counter += 1
+                else:
+                    if is_lower:
+                        if upper_counter > 1:
+                            assert word
+                            popped = pop()
+                            if word:
+                                yield empty_join(word)
+                                clear()
+                            append(popped)
+                    upper_counter = 0
+                    previous_was_lower = is_lower
+                append(c)
+                continue
+            if word:
+                yield empty_join(word)
+                clear()
+
+        def test(s, **kw):
+            expected = list(alternate_split_title_case(s, **kw))
+            got = list(big.split_title_case(s, **kw))
+            self.assertEqual(expected, got)
+
+            b = s.encode('ascii')
+            bytes_expected = list(alternate_split_title_case(b, **kw))
+            bytes_got = list(big.split_title_case(b, **kw))
+            self.assertEqual(bytes_expected, bytes_got)
+
+        self.assertIsInstance(big.split_title_case('HowdyFolks'), types.GeneratorType)
+
+        test('')
+        test('     ')
+        test(' 333    ')
+        test('ThisIsATitleCaseString')
+        test('YoursTrulyJohnnyDollar_1975-03-15 - TheMysteriousMaynardMatter.MP3')
+
+        test('oneOfTheGoodOnes')
+        test('aRoadLessTraveled')
+
+        test("Can'tComplain")
+
+        test("NOTHINGInTheWORLD")
+        test("NOTHINGInTheWORLD", split_allcaps=False)
+
+        test("WhenIWasATeapot", split_allcaps=False)
+        test("WhenIWasATeapot", split_allcaps=True)
+
+    def test_combine_splits(self):
+
+        INT_MAX = 2**256
+
+        def original_combine_splits(s, *splits):
+            "Alternate implementation of combine_splits, used for testing."
+            # Measure the strings in the split arrays.
+            # (Ignore empty split arrays, and ignore empty splits.)
+            split_lengths = [ [ len(_) for _ in split  if _ ] for split in splits  if split ]
+
+            def combine_splits(s, split_lengths):
+                split_lengths_pop = split_lengths.pop
+
+                drops = []
+                drops_append = drops.append
+                drops_pop = drops.pop
+
+                while len(split_lengths) >= 2:
+                    # print(combined, s)
+                    # for _ in split_lengths:
+                    #     print("   ", _)
+                    smallest = INT_MAX
+                    smallest_index = None
+
+                    for i, lengths in enumerate(split_lengths):
+                        length = lengths[0]
+                        if smallest > length:
+                            smallest = length
+                            smallest_index = i
+
+                    assert smallest != INT_MAX
+
+                    yield s[:smallest]
+                    s = s[smallest:]
+
+                    for i, lengths in enumerate(split_lengths):
+                        length = lengths[0]
+                        if length == smallest:
+                            lengths.pop(0)
+                            if not lengths:
+                                drops_append(i)
+                        else:
+                            lengths[0] = length - smallest
+
+                    while drops:
+                        x = split_lengths_pop(drops_pop())
+                        assert not x
+
+                if split_lengths:
+                    start = end = 0
+                    for index in split_lengths[0]:
+                        end += index
+                        yield s[start:end]
+                        start += index
+                    s = s[end:]
+
+                if s:
+                    yield s
+
+            return combine_splits(s, split_lengths)
+
+
+        def sorting_combine_splits(s, *splits):
+            "Alternate implementation of combine_splits, used for testing."
+
+            index_0 = lambda x: x[0]
+
+            # In case an entry in the split arrays is a generator, convert it to a list.
+            split_lengths = [ list(split) for split in splits ]
+            # Measure the strings in the split arrays.
+            # (Remove empty split arrays, and ignore empty splits.)
+            split_lengths = [ [ len(_) for _ in split  if _ ] for split in splits  if split ]
+            split_lengths.sort(key=index_0)
+
+            def combine_splits(s, split_lengths, index_0):
+                split_lengths_pop = split_lengths.pop
+                # split_lengths_remove = split_lengths.remove
+
+                drops = []
+                drops_append = drops.append
+                drops_pop = drops.pop
+
+                if len(split_lengths) >= 2:
+                    while True:
+                        smallest = split_lengths[0]
+                        index = smallest[0]
+
+                        yield s[:index]
+                        s = s[index:]
+
+                        re_sort = False
+                        for i, lengths in enumerate(split_lengths):
+                            length = lengths[0]
+                            # print("  >>", length, lengths)
+                            if length == index:
+                                re_sort = True
+                                lengths.pop(0)
+                                if not lengths:
+                                    drops_append(i)
+                            else:
+                                lengths[0] = length - index
+
+                        while drops:
+                            x = split_lengths_pop(drops_pop())
+                            assert not x
+                        if len(split_lengths) < 2:
+                            break
+                        if re_sort:
+                            split_lengths.sort(key=index_0)
+
+                if split_lengths:
+                    start = end = 0
+                    for index in split_lengths[0]:
+                        end += index
+                        yield s[start:end]
+                        start += index
+                    s = s[end:]
+
+                if s:
+                    yield s
+
+            return combine_splits(s, split_lengths, index_0)
+
+        def test(s, *split_arrays):
+            # convert split_arrays into lists, just in case one is an iterator
+            # (we'll test an iterator by hand later)
+            split_arrays = [list(_) for _ in split_arrays]
+
+            original_result = list(original_combine_splits(s, *split_arrays))
+            sorting_result = list(sorting_combine_splits(s, *split_arrays))
+            self.assertEqual(original_result, sorting_result)
+            expected = original_result
+
+            got = list(big.combine_splits(s, *split_arrays))
+            self.assertEqual(expected, got)
+
+            bytes_s = s.encode('ascii')
+            bytes_split_arrays = [ [_.encode('ascii') for _ in l] for l in split_arrays ]
+            bytes_expected = [_.encode('ascii') for _ in expected]
+
+            bytes_got = list(big.combine_splits(bytes_s, *bytes_split_arrays))
+            self.assertEqual(bytes_expected, bytes_got)
+
+
+        self.assertIsInstance(big.combine_splits('abc', ['a', 'bc'], ['ab', 'c']), types.GeneratorType)
+
+
+        s  = 'abcdefghijklmnopq'
+        s1 = [ 'ab', 'cde', 'fghi', 'jklmnop', 'q' ]
+        s2 = [ 'abcde', 'fghi', 'jk', 'lmnopq' ]
+        s3 = [ 'abcdefghi', 'jklmn', 'opq' ]
+
+        # should split after B E I K N P
+        test(s, s1, s2, s3)
+
+        test(s + "rstuvwxyz", s1, s2, s3)
+
+        s = "aa bb cc dd ee"
+        test(s,
+            big.multisplit(s, keep=big.ALTERNATING),
+            ["aa b", "b cc d", "d ee"],
+            )
+
+
+        s = "aa bb cc dd ee ff"
+        test(s,
+            s.split(),
+            ["aa bb cc dd ee f", "f"],
+            )
+
+
+        with self.assertRaises(ValueError):
+            list(big.combine_splits("a b c d e",
+                ["a ", "b "],
+                ["a b c d ", "e f g ", "h "],
+                ))
+
+        with self.assertRaises(ValueError):
+            list(big.combine_splits("a b c d e",
+                ["a ", "b "],
+                ["a b c d ", "e f g ", "h "],
+                ["a b c ", "d e f ", "g h "],
+                ))
+
+
+
     def test_gently_title(self):
         def test(s, expected, test_ascii=True, apostrophes=None, double_quotes=None):
             result = big.gently_title(s, apostrophes=apostrophes, double_quotes=double_quotes)
@@ -3050,11 +3326,11 @@ for x in range(5): # this is my exciting comment
 """[1:])
         test(big.lines_strip_line_comments(lines, ("#", "//")),
             [
-                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing=" ", comment='# this is my exciting comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1, comment=''),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=" ", comment='# this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1, comment=''),
-                L(line='', line_number=5, column_number=1, comment='', end=''),
+                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing=' # this is my exciting comment', final='for x in range(5):'),
+                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
+                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
+                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
+                L(line='', line_number=5, column_number=1, end=''),
             ])
 
         # test multiline
@@ -3071,8 +3347,7 @@ for x in range(5): # this is my exciting comment
                 L(line_number=1, column_number=1,
                     line ='for x in range(5): # this is my exciting comment',
                     final='for x in range(5):',
-                    trailing=' ',
-                    comment='# this is my exciting comment',),
+                    trailing=' # this is my exciting comment',),
                 L(line_number=2, column_number=1,
                     line ="    print('''",
                     final="    print('''"),
@@ -3084,14 +3359,12 @@ for x in range(5): # this is my exciting comment
                     final="    does this line have a comment? # no!"),
                 L(line_number=5, column_number=1,
                     line="    ''') # but here's a comment",
-                    trailing=" ",
-                    comment="# but here's a comment",
+                    trailing=" # but here's a comment",
                     final="    ''')",
                     ),
                 L(line_number=6, column_number=1,
                     line='    print("just checking, # here too") # here is another comment',
-                    trailing=" ",
-                    comment='# here is another comment',
+                    trailing=" # here is another comment",
                     final='    print("just checking, # here too")'),
                 L(line_number=7, column_number=1,
                     line='',
@@ -3109,24 +3382,20 @@ for x in range(5): # this is a comment
             [
                 L(  line_number=1, column_number=1,
                     line='for x in range(5): # this is a comment',
-                    trailing=' ',
-                    comment='# this is a comment',
+                    trailing=' # this is a comment',
                     final='for x in range(5):'),
                 L(  line_number=2, column_number=1,
                     line='    print("# this is quoted", x)',
-                    comment='# this is quoted", x)',
+                    trailing='# this is quoted", x)',
                     final='    print("'),
                 L(  line_number=3, column_number=1,
                     line='    print("") # this "comment" is useless',
-                    trailing=' ',
-                    comment='# this "comment" is useless',
+                    trailing=' # this "comment" is useless',
                     final='    print("")'),
                 L(  line_number=4, column_number=1,
-                    line='    print(no_comments_or_quotes_on_this_line)',
-                    comment=''),
+                    line='    print(no_comments_or_quotes_on_this_line)'),
                 L(  line_number=5, column_number=1,
                     line='',
-                    comment='',
                     end=''),
             ])
 
@@ -3145,9 +3414,9 @@ for x in range(5): # this is a comment
         lines = big.lines(b"a\nb# ignored\n c")
         test(big.lines_strip_line_comments(lines, b'#'),
             [
-            L(b'a', 1, comment=b''),
-            L(b'b# ignored', 2, 1, comment=b'# ignored', final=b'b'),
-            L(b' c', 3, comment=b'', end=b''),
+            L(b'a', 1),
+            L(b'b# ignored', 2, 1, trailing=b'# ignored', final=b'b'),
+            L(b' c', 3, end=b''),
             ]
             )
 

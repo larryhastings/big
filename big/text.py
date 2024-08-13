@@ -26,6 +26,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import enum
 import functools
+import heapq
 import itertools
 from itertools import zip_longest
 from .itertools import PushbackIterator
@@ -1191,7 +1192,6 @@ def multisplit(s, separators=None, *,
     for both must be the same (str or bytes).  multisplit will
     only return str or bytes objects.
     """
-
     is_bytes = isinstance(s, bytes)
     separators_is_bytes = isinstance(separators, bytes)
     separators_is_str = isinstance(separators, str)
@@ -1347,6 +1347,202 @@ utf8_apostrophes = apostrophes.encode('utf-8')
 _export_name('utf8_apostrophes')
 utf8_double_quotes = double_quotes.encode('utf-8')
 _export_name('utf8_double_quotes')
+
+
+@_export
+def split_title_case(s, *, split_allcaps=True):
+    """
+    Splits s into words, assuming that
+    upper-case characters start new words.
+    Returns an iterator yielding the split words.
+
+    Example:
+        list(split_title_case('ThisIsATitleCaseString'))
+    is equal to
+        ['This', 'Is', 'A', 'Title', 'Case', 'String']
+
+    If split_allcaps is a true value (the default),
+    runs of multiple uppercase characters will also
+    be split before the last character.  This is
+    needed to handle splitting single-letter words.
+    Consider:
+        list(split_title_case('WhenIWasATeapot', split_allcaps=True))
+    returns
+        ['When', 'I', 'Was', 'A', 'Teapot']
+    but
+        list(split_title_case('WhenIWasATeapot', split_allcaps=False))
+    returns
+        ['When', 'IWas', 'ATeapot']
+
+    Note: uses the 'isupper' and 'islower' methods
+    to determine what are upper- and lower-case
+    characters.  This means it only recognizes the ASCII
+    upper- and lower-case letters for bytes strings.
+    """
+
+    if not s:
+        yield s
+        return
+
+    if isinstance(s, bytes):
+        empty_join = b''.join
+        i = _iterate_over_bytes(s)
+    else:
+        empty_join = ''.join
+        i = iter(s)
+
+    for c in i:
+        break
+    assert c
+
+    word = []
+    append = word.append
+    pop = word.pop
+    clear = word.clear
+
+    multiple_uppers = False
+
+    while True:
+        if c.islower():
+            append(c)
+            for c in i:
+                if c.isupper():
+                    yield empty_join(word)
+                    clear()
+                    break
+                if c.islower():
+                    append(c)
+                    continue
+                break
+            else:
+                break
+
+        elif c.isupper():
+            append(c)
+            multiple_uppers = False
+            for c in i:
+                if c.isupper():
+                    multiple_uppers = split_allcaps
+                    append(c)
+                    continue
+                if c.islower():
+                    if multiple_uppers:
+                        previous = pop()
+                        yield empty_join(word)
+                        clear()
+                        append(previous)
+                break
+            else:
+                break
+        else:
+            append(c)
+            for c in i:
+                break
+            else:
+                break
+
+    if word:
+        yield empty_join(word)
+
+
+@_export
+def combine_splits(s, *split_arrays):
+    """
+    Takes a string, and one or more "split arrays",
+    and applies all the splits to the string.  Returns
+    an iterator of the resulting string segments.
+
+    A "split array" is an array containing the original
+    string, but split into multiple pieces.  For example,
+    the string "a b c d e" could be split into the
+    split array ["a ", "b ", "c ", "d ", "e "]
+
+    For example,
+        combine_splits('abcde', ['abcd', 'e'], ['a', 'bcde'])
+    returns ['a', 'bcd', 'e'].
+
+    Note that the split arrays *must* contain all the
+    characters from s.  ''.join(split_array) must recreate s.
+    (So, don't use the string's .split method to split it,
+    use big's multisplit with keep=True or keep=ALTERNATING.)
+    """
+    # Convert every entry in split_arrays to a list.
+    # Measure the strings in the split arrays, ignoring empty splits.
+    split_lengths = [ [ len(_) for _ in split  if _ ] for split in split_arrays ]
+
+    # Throw away empty entries in split arrays.  (If one array was ['', '', ''], it would now be empty.)
+    split_lengths = [ split  for split in split_lengths  if split ]
+
+    heapq.heapify(split_lengths)
+
+    def combine_splits(s, split_lengths):
+        split_lengths_pop = split_lengths.pop
+        # split_lengths_remove = split_lengths.remove
+
+        pops = 0
+
+        heap_pop = heapq.heappop
+        heap_push = heapq.heappush
+
+        if len(split_lengths) >= 2:
+            while True:
+                smallest = split_lengths[0]
+                index = smallest[0]
+
+                snippet = s[:index]
+                if snippet == s:
+                    # check, did they try to split past the end?
+                    if index > len(s):
+                        raise ValueError("split array is longer than the original string")
+
+                yield snippet
+                s = s[index:]
+                if not s:
+                    return
+
+                # decrement the first value in every split array
+                # by index.
+                # (if every entry in a heapq is a list of integers, decrementing
+                # the first integer in every list by the same amount maintains
+                # the heap invariants.)
+                for lengths in split_lengths:
+                    length = lengths[0]
+
+                    new_value = length - index
+                    # assert new_value >= 0
+                    if not new_value:
+                        pops += 1
+
+                    # we write the zeros here, even though we're about to pop them off,
+                    # because otherwise we might break the heapq invariants.
+                    lengths[0] = new_value
+
+                while pops:
+                    pops -= 1
+                    splits = heap_pop(split_lengths)
+                    if len(splits) > 1:
+                        splits.pop(0)
+                        heap_push(split_lengths, splits)
+
+                if len(split_lengths) < 2:
+                    break
+
+        if split_lengths:
+            start = end = 0
+            length = len(s)
+            for index in split_lengths[0]:
+                end += index
+                if end > length:
+                    raise ValueError("split array is longer than the original string")
+                yield s[start:end]
+                start += index
+            s = s[end:]
+
+        if s:
+            yield s
+
+    return combine_splits(s, split_lengths)
+
 
 _sentinel = object()
 
@@ -1936,7 +2132,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
 @_export
 class Delimiter:
     """
-    Class representing a delimiter for parse_delimiters.
+    Class representing a delimiter for split_delimiters.
 
     open is the opening delimiter character, can be str or bytes, must be length 1.
     close is the closing delimiter character, must be the same type as open, and length 1.
@@ -1982,30 +2178,31 @@ _export_name('delimiter_single_quote')
 delimiter_double_quotes = Delimiter('"', '"', escape='\\', nested=False)
 _export_name('delimiter_double_quotes')
 
-parse_delimiters_default_delimiters = (
+split_delimiters_default_delimiters = (
     delimiter_parentheses,
     delimiter_square_brackets,
     delimiter_curly_braces,
     delimiter_single_quote,
     delimiter_double_quotes,
     )
-_export_name('parse_delimiters_default_delimiters')
+_export_name('split_delimiters_default_delimiters')
 
-parse_delimiters_default_delimiters_bytes = (
+
+split_delimiters_default_delimiters_bytes = (
     b'()',
     b'[]',
     b'{}',
     Delimiter(b"'", b"'", escape=b'\\', nested=False),
     Delimiter(b'"', b'"', escape=b'\\', nested=False),
     )
-_export_name('parse_delimiters_default_delimiters_bytes')
+_export_name('split_delimiters_default_delimiters_bytes')
 
 
 # break the rules
 _base_delimiter = Delimiter('a', 'b')
 _base_delimiter.open = _base_delimiter.close = None
 
-def parse_delimiters(s, delimiters, closers, empty):
+def split_delimiters(s, delimiters, closers, empty):
     open_to_delimiter = {d.open: d for d in delimiters}
 
     text = []
@@ -2065,10 +2262,10 @@ def parse_delimiters(s, delimiters, closers, empty):
     if text:
         yield flush(empty, empty)
 
-_parse_delimiters = parse_delimiters
+_split_delimiters = split_delimiters
 
 @_export
-def parse_delimiters(s, delimiters=None):
+def split_delimiters(s, delimiters=None):
     """
     Parses a string containing nesting delimiters.
     Raises an exception if mismatched delimiters are detected.
@@ -2081,7 +2278,7 @@ def parse_delimiters(s, delimiters=None):
     should be exactly two characters long; these will be used
     as the open and close arguments for a new Delimiter object.
 
-    If delimiters is None, parse_delimiters uses a default
+    If delimiters is None, split_delimiters uses a default
     value matching these pairs of delimiters:
         () [] {} "" ''
     The quote mark delimiters enable escape sequences
@@ -2106,13 +2303,13 @@ def parse_delimiters(s, delimiters=None):
     if isinstance(s, bytes):
         s_type = bytes
         if delimiters is None:
-            delimiters = parse_delimiters_default_delimiters_bytes
+            delimiters = split_delimiters_default_delimiters_bytes
         disallowed_delimiters = b'\\'
         empty = b''
     else:
         s_type = str
         if delimiters is None:
-            delimiters = parse_delimiters_default_delimiters
+            delimiters = split_delimiters_default_delimiters
         disallowed_delimiters = '\\'
         empty = ''
 
@@ -2157,7 +2354,18 @@ def parse_delimiters(s, delimiters=None):
     if repeated:
         raise ValueError("these opening delimiters were used multiple times: " + " ".join(repeated))
 
-    return _parse_delimiters(s, delimiters, closers, empty)
+    return _split_delimiters(s, delimiters, closers, empty)
+
+
+# backwards compatibility for old names, will stick around until at least September 2025
+parse_delimiters_default_delimiters = split_delimiters_default_delimiters
+_export_name('parse_delimiters_default_delimiters')
+
+parse_delimiters_default_delimiters_bytes = split_delimiters_default_delimiters_bytes
+_export_name('parse_delimiters_default_delimiters_bytes')
+
+parse_delimiters = split_delimiters
+_export_name('parse_delimiters')
 
 
 
@@ -2171,7 +2379,7 @@ class LineInfo:
     or modify existing attributes as needed from
     inside a "lines modifier" function.
     """
-    def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, comment=None, end=None, **kwargs):
+    def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, **kwargs):
         is_str = isinstance(line, str)
         is_bytes = isinstance(line, bytes)
         if is_bytes:
@@ -2198,11 +2406,6 @@ class LineInfo:
         elif not isinstance(trailing, line_type):
             raise TypeError("trailing must be same type as line or None")
 
-        if comment == None:
-            comment = empty
-        elif not isinstance(comment, line_type):
-            raise TypeError("comment must be same type as line or None")
-
         if end == None:
             end = empty
         elif not isinstance(end, line_type):
@@ -2215,7 +2418,6 @@ class LineInfo:
         self.indent = None
         self.leading = leading
         self.trailing = trailing
-        self.comment = comment
         self.end = end
         self.match = None
         self._is_bytes = is_bytes
@@ -2225,7 +2427,7 @@ class LineInfo:
         return self.lines.detab(s)
 
     def extend_leading(self, s, line):
-        assert line.startswith(s), f"{line=} doesn't start with {s=}"
+        assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
         self.leading += s
         line = line[len(s):]
         detabbed = self.detab(s)
@@ -2239,17 +2441,9 @@ class LineInfo:
         line = line[:-len(s)]
         return line
 
-    def extend_comment(self, s, line):
-        empty = b"" if self._is_bytes else ""
-        assert line.endswith(s)
-        self.comment = s + self.trailing + self.comment
-        self.trailing = empty
-        line = line[:-len(s)]
-        return line
-
     def __repr__(self):
         names = list(self.__dict__)
-        priority_names = ['line', 'lines', 'line_number', 'column_number', 'leading', 'trailing', 'comment', 'end']
+        priority_names = ['line', 'lines', 'line_number', 'column_number', 'leading', 'trailing', 'end']
         fields = []
         for name in priority_names:
             names.remove(name)
@@ -2535,24 +2729,33 @@ def lines_containing(li, s, *, invert=False):
             yield t
 
 @_export
-def lines_grep(li, pattern, *, invert=False, flags=0):
+def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     """
     A lines modifier function.  Only yields lines
     that match the regular expression pattern.
     (Filters out lines that don't match pattern.)
+    Stores the resulting re.Match object in info.match.
 
     pattern can be str, bytes, or an re.Pattern object.
     If pattern is not an re.Pattern object, it's compiled
     with re.compile(pattern, flags=flags).
 
-    If invert is true, returns the opposite--
-    filters out lines that match pattern.
+    If invert is true, lines_grep only yields lines that
+    *don't* match pattern, and sets info.match to None.
+
+    The match parameter specifies the LineInfo attribute name to
+    write to.  By default it writes to info.match; you can specify
+    any valid identifier, and it will instead write the re.Match
+    object (or None) to the identifier you specify.
 
     Composable with all the lines_ functions from the big.text module.
 
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
+    if not match.isidentifier():
+        raise ValueError('match must be a valid identifier')
+
     if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
     search = pattern.search
@@ -2561,30 +2764,27 @@ def lines_grep(li, pattern, *, invert=False, flags=0):
         def lines_grep(li, search):
             for t in li:
                 info, line = t
-                match = search(line)
-                if not match:
-                    info.match = None
+                m = search(line)
+                if not m:
+                    setattr(info, match, None)
                     yield t
     else:
         def lines_grep(li, search):
             for t in li:
                 info, line = t
-                match = search(line)
-                if match:
-                    info.match = match
+                m = search(line)
+                if m:
+                    setattr(info, match, m)
                     yield t
     return lines_grep(li, search)
 
 @_export
 def lines_sort(li, *, reverse=False):
     """
-    A lines modifier function.  Sorts all
-    input lines before yielding them.
+    A lines modifier function.  Sorts all input lines before yielding them.
 
-    Lines are sorted lexicographically,
-    from lowest to highest.
-    If reverse is true, lines are sorted
-    from highest to lowest.
+    Lines are sorted lexicographically, from lowest to highest.
+    If reverse is true, lines are sorted from highest to lowest.
 
     Composable with all the lines_ modifier functions in the big.text module.
     """
@@ -2722,10 +2922,8 @@ def lines_strip_line_comments(li, line_comment_markers, *,
                 for triplet in i:
                     line_comment_segments.extend(triplet)
                 assert line_comment_segments
-                line = info.extend_comment(empty_join(line_comment_segments), line)
+                line = info.extend_trailing(empty_join(line_comment_segments), line)
 
-                # do this *after* extend_comment,
-                # extend_comment also eats trailing
                 if rstrip:
                     stripped = leading.rstrip()
                     if stripped != leading:
