@@ -2893,6 +2893,16 @@ class BigTextTests(unittest.TestCase):
             escape=""
             )
 
+
+        test("abcd' efg 'hgi",
+            [
+                ("",   'abcd',  "'"),
+                ("",   " efg ", ""),
+                ("'",  'hgi',   ""),
+            ],
+            initial="'"
+            )
+
         with self.assertRaises(TypeError):
             test("a b c' x y z 'd e f'",
                 [],
@@ -2909,6 +2919,24 @@ class BigTextTests(unittest.TestCase):
             test("a b c' x y z 'd e f'",
                 [],
                 quotes=('"', "'", ""),
+                )
+
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                initial='"""'
+                )
+
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                initial='Q'
+                )
+
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                initial=b"'"
                 )
 
     def test_parse_delimiters(self):

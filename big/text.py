@@ -1801,7 +1801,7 @@ def normalize_whitespace(s, separators=None, replacement=None):
 
 
 @_export
-def old_split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None):
+def old_split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=None): # pragma: no cover
     """
     Splits s into quoted and unquoted segments.
 
@@ -1960,6 +1960,56 @@ _sqs_escape_str   =  '\\'
 _sqs_escape_bytes = b'\\'
 
 
+def split_quoted_strings(s, separators, quotes, empty, initial):
+    buffer = []
+
+    quote = initial
+    # print(f"    >> {initial=}")
+    for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
+        # print(f"    >> {pair}  -- {quote=}")
+        literal, separator = pair
+
+        if literal:
+            buffer.append(literal)
+        if not quote:
+            # not currently quoted
+            if separator not in quotes:
+                buffer.append(separator)
+                continue
+            if buffer:
+                yield (empty, empty.join(buffer), empty)
+                buffer.clear()
+            quote = separator
+            continue
+        # in quote
+        if separator != quote:
+            buffer.append(separator)
+            continue
+        # separator == quote
+        text = empty.join(buffer)
+        if quote or text:
+            if initial:
+                initial = None
+                # print(f"    <<1 empty, {text=}, {quote=}")
+                yield (empty, text, quote)
+            else:
+                # print(f"    <<2 {quote=}, {text=}, {quote=}")
+                yield (quote, text, quote)
+        buffer.clear()
+        quote = empty
+
+    if buffer:
+        text = empty.join(buffer)
+        if text or quote:
+            if initial:
+                initial = None
+                quote = empty
+            # print(f"    <<3 {quote=}, {text=}, empty")
+            yield (quote, text, empty)
+
+_split_quoted_strings = split_quoted_strings
+
+
 @_export
 def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, initial=None):
     """
@@ -1970,7 +2020,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
         (leading_quote, segment, trailing_quote)
 
     where leading_quote and trailing_quote are either
-    empty strings or quote delimiters from quoted,
+    empty strings or quote delimiters from quotes,
     and segment is a substring of s.  Joining together
     all strings yielded recreates s.
 
@@ -1998,23 +2048,28 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
     multiple lines individually, and you wanted to begin
     a new line continuing the state from the previous line--
     pass in the appropriate quote delimiter from quotes
-    into initial.  Note that when a non-empty string is
-    passed in to initial, the leading_quote in the first
-    3-tuple yielded by split_quoted_strings will be an
-    empty string:
+    into initial.  When a non-empty string is passed in
+    to initial, the leading_quote in the first 3-tuple
+    yielded by split_quoted_strings will be an empty string.
+    For example:
 
         list(split_quoted_string("a b c'", initial="'"))
 
     evaluates to
 
-        ["", "a b c", "'"]
+        [("", "a b c", "'"),]
 
-    Note that this function is deliberately agnostic
-    about newlines.  If s contains newlines, this function
-    will happily yield them, inside or outside of quoted
-    substrings.  (If you want to disallow newlines inside
-    quoted strings, it's up to you to detect them, raise
-    an exception, etc.)
+    Note:
+    * split_quoted_strings is deliberately agnostic
+      about newlines.  If s contains newlines, this
+      function will happily yield them, inside or
+      outside of quoted substrings.  (If you want to
+      disallow newlines inside quoted strings, it's up
+      to you to detect them and react accordingly.)
+    * split_quoted_strings does not raise an error
+      if s ends with an unterminated string.  In that
+      case, the last tuple yielded will have a non-empty
+      leading_quote and an empty trailing_quote.
     """
 
     # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {initial=})")
@@ -2049,13 +2104,17 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
         if escape in (_sqs_escape_bytes, None):
             escape = _sqs_escape_str
         elif not isinstance(escape, s_type):
-            raise TypeError("escape must match s (str or bytes)")
+            raise TypeError("escape must match s (str or bytes), not {escape!r}")
 
 
-    if initial is None:
+    if initial in (None, empty):
         initial = empty
-    if not isinstance(initial, s_type):
-        raise TypeError("initial must match s (str or bytes)")
+    else:
+        if not isinstance(initial, s_type):
+            raise TypeError("initial must match s (str or bytes), not {initial!r}")
+        if initial not in quotes:
+            raise ValueError(f"initial must be be one of the delimiters listed in the quotes argument, not {initial!r}")
+
 
     quotes_set = set(quotes)
     if len(quotes_set) != len(quotes):
@@ -2079,54 +2138,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
             separators.append(escape + first_character)
         separators.append(escape + escape)
 
-    def split_quoted_strings(s, separators, quotes, empty, initial):
-        buffer = []
-
-        quote = initial
-        # print(f"    >> {initial=}")
-        for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
-            # print(f"    >> {pair}  -- {quote=}")
-            literal, separator = pair
-
-            if literal:
-                buffer.append(literal)
-            if not quote:
-                # not currently quoted
-                if separator not in quotes:
-                    buffer.append(separator)
-                    continue
-                if buffer:
-                    yield (empty, empty.join(buffer), empty)
-                    buffer.clear()
-                quote = separator
-                continue
-            # in quote
-            if separator != quote:
-                buffer.append(separator)
-                continue
-            # separator == quote
-            text = empty.join(buffer)
-            if quote or text:
-                if initial:
-                    initial = None
-                    # print(f"    <<1 empty, {text=}, {quote=}")
-                    yield (empty, text, quote)
-                else:
-                    # print(f"    <<2 {quote=}, {text=}, {quote=}")
-                    yield (quote, text, quote)
-            buffer.clear()
-            quote = empty
-
-        if buffer:
-            text = empty.join(buffer)
-            if text or quote:
-                if initial:
-                    initial = None
-                    quote = empty
-                # print(f"    <<3 {quote=}, {text=}, empty")
-                yield (quote, text, empty)
-
-    return split_quoted_strings(s, separators, quotes_set, empty, initial)
+    return _split_quoted_strings(s, separators, quotes_set, empty, initial)
 
 
 @_export
