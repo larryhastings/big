@@ -1961,6 +1961,13 @@ _sqs_escape_bytes = b'\\'
 
 
 def split_quoted_strings(s, separators, quotes, empty, initial):
+    """
+    This is the generator function implementing the split_quoted_strings
+    iterator.  The public split_quoted_strings analyzes its arguments,
+    ensuring that they're valid (or raising an exception if they're not).
+    If the inputs are valid, it calls this generator and returns the
+    resulting iterator.
+    """
     buffer = []
 
     quote = initial
@@ -2115,7 +2122,6 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
         if initial not in quotes:
             raise ValueError(f"initial must be be one of the delimiters listed in the quotes argument, not {initial!r}")
 
-
     quotes_set = set(quotes)
     if len(quotes_set) != len(quotes):
         repeated = set()
@@ -2127,9 +2133,6 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
         repeated = list(repeated)
         repeated.sort()
         raise ValueError("quotes contains repeated quote markers: " + ", ".join(repr(q) for q in repeated))
-
-    if initial and (initial not in quotes_set):
-        raise ValueError("initial state is not in quotes")
 
     # separators is a list, and it also contains the escaped quote marks (if any).
     separators = list(quotes)
@@ -2439,7 +2442,12 @@ class LineInfo:
         return self.lines.detab(s)
 
     def extend_leading(self, s, line):
-        assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
+        if isinstance(s, int):
+            assert -len(line) <= s < len(line)
+            s = line[:s]
+        else:
+            assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
+            pass
         self.leading += s
         line = line[len(s):]
         detabbed = self.detab(s)
@@ -2448,7 +2456,12 @@ class LineInfo:
         return line
 
     def extend_trailing(self, s, line):
-        assert line.endswith(s)
+        if isinstance(s, int):
+            assert -len(line) <= s < len(line)
+            s = line[-s:]
+        else:
+            assert line.endswith(s), f"line {line!r} doesn't end with s {s!r}"
+            pass
         self.trailing = s + self.trailing
         line = line[:-len(s)]
         return line
@@ -2606,16 +2619,14 @@ def lines_rstrip(li, separators=None):
         for info, line in li:
             rstripped = line.rstrip()
             if rstripped != line:
-                trailing = line[len(rstripped):]
-                line = info.extend_trailing(trailing, line)
+                line = info.extend_trailing(-len(rstripped), line)
             yield (info, line)
         return
 
     for info, line in li:
         rstripped = multistrip(line, separators, left=False, right=True)
         if rstripped != line:
-            trailing = line[len(rstripped):]
-            line = info.extend_trailing(trailing, line)
+            line = info.extend_trailing(-len(rstripped), line)
         yield (info, rstripped)
 
 
@@ -2773,7 +2784,7 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     search = pattern.search
 
     if invert:
-        def lines_grep(li, search):
+        def lines_grep(li, search, match):
             for t in li:
                 info, line = t
                 m = search(line)
@@ -2781,14 +2792,14 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
                     setattr(info, match, None)
                     yield t
     else:
-        def lines_grep(li, search):
+        def lines_grep(li, search, match):
             for t in li:
                 info, line = t
                 m = search(line)
                 if m:
                     setattr(info, match, m)
                     yield t
-    return lines_grep(li, search)
+    return lines_grep(li, search, match)
 
 @_export
 def lines_sort(li, *, reverse=False):
@@ -2977,16 +2988,16 @@ def lines_strip_indent(li):
     """
     A lines modifier function.  Automatically measures and strips indents.
 
-    Sets a new field on the associated LineInfo object for every line:
-      * indent - an integer indicating how many indents it's observed
-    Also updates LineInfo.column_number and LineInfo.leading as needed.
+    May modify the following attributes of the LineInfo object:
+    column_number, leading, and indent.  indent will contain the
+    ordinal number of the current indent; if the text has indented
+    three times, indent will be 3.
 
-    Uses an intentionally simple algorithm.
-    Only understands tab and space characters as indent characters.
-    Internally detabs to spaces first for consistency, using the
-    tab_width passed in to lines.
+    Uses an intentionally simple algorithm.  Only understands tab and
+    space characters as indent characters.  Internally detabs to spaces
+    for consistency, using the tab_width passed in to lines.
 
-    You can only dedent out to a previous indent.
+    Text can only dedent out to a previous indent.
     Raises IndentationError if there's an illegal dedent.
 
     Blank lines and empty lines have the indent level of the
@@ -3024,7 +3035,7 @@ def lines_strip_indent(li):
             # print(f"BL+ {info=} {lstripped=}")
             continue
 
-        line = info.extend_leading(line[:len(line) - len(lstripped)], line)
+        line = info.extend_leading(len(line) - len(lstripped), line)
         column_number = info.column_number
 
         if column_number == info.lines.column_number:
@@ -3091,10 +3102,9 @@ def lines_filter_empty_lines(li):
     of a "lines iterator".
 
     Preserves the line numbers.  If lines 0 through 2 are empty,
-    line 3 is "a", line 4 is empty, and line 5 is "b",
-    will yield:
-        (3, "a")
-        (5, "b")
+    line 3 is "a", line 4 is empty, and line 5 is "b", this will yield:
+        (line_number=3, "a")
+        (line_number=5, "b")
 
     Composable with all the lines_ modifier functions in the big.text module.
     """

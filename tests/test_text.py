@@ -2807,7 +2807,8 @@ class BigTextTests(unittest.TestCase):
 
             self.assertEqual(expected, got)
 
-            if not test_ascii:
+            # if all arguments are str, let's convert to bytes and run another
+            if not (isinstance(s, str) and all(isinstance(value, str) for value in kwargs.values())):
                 return
 
             # convert everybody to ascii
@@ -2893,7 +2894,6 @@ class BigTextTests(unittest.TestCase):
             escape=""
             )
 
-
         test("abcd' efg 'hgi",
             [
                 ("",   'abcd',  "'"),
@@ -2903,22 +2903,78 @@ class BigTextTests(unittest.TestCase):
             initial="'"
             )
 
+        # test auto-converting _sqs_quotes_str
+        test(b"abcd",
+            [
+                (b"",  b'abcd',  b""),
+            ],
+            quotes=big.text._sqs_quotes_str
+            )
+
+        # test auto-converting _sqs_quotes_bytes
+        test("abcd",
+            [
+                ("",  'abcd',  ""),
+            ],
+            quotes=big.text._sqs_quotes_bytes
+            )
+
+        # test auto-converting _sqs_escape_str
+        test(b"abcd",
+            [
+                (b"",  b'abcd',  b""),
+            ],
+            escape=big.text._sqs_escape_str
+            )
+
+        # test auto-converting _sqs_escape_bytes
+        test("abcd",
+            [
+                ("",  'abcd',  ""),
+            ],
+            escape=big.text._sqs_escape_bytes
+            )
+
+        # type mismatch, s is str and quotes are bytes
         with self.assertRaises(TypeError):
             test("a b c' x y z 'd e f'",
                 [],
                 quotes=(b'"', b"'", b"'''"),
                 )
 
+        # type mismatch, s is bytes and quotes are str
         with self.assertRaises(TypeError):
             test(b"a b c' x y z 'd e f'",
                 [],
                 quotes=('"', "'", "'''"),
                 )
 
+        # type mismatch, s is str and escape is bytes
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                escape=b'x'
+                )
+
+        # type mismatch, s is bytes and escape is str
+        with self.assertRaises(TypeError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                escape='x'
+                )
+
+        # value error, empty quotes str
         with self.assertRaises(ValueError):
             test("a b c' x y z 'd e f'",
                 [],
                 quotes=('"', "'", ""),
+                )
+
+        # value error, empty quotes bytes
+        with self.assertRaises(ValueError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                quotes=(b'"', b"'", b""),
                 )
 
         with self.assertRaises(ValueError):
@@ -2938,6 +2994,21 @@ class BigTextTests(unittest.TestCase):
                 [],
                 initial=b"'"
                 )
+
+        # repeated markers
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=('"', "'", '"'),
+                )
+
+        # initial state is not a quote marker
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                initial="Z"
+                )
+
 
     def test_parse_delimiters(self):
 
@@ -3168,23 +3239,23 @@ whoops, I meant, negatory.
             )
 
         _sentinel = object()
-        def test_and_remove_lineinfo_match(i, substring, *, invert=False):
+        def test_and_remove_lineinfo_match(i, substring, *, invert=False, match='match'):
             l = []
             for t in i:
                 info, line = t
 
-                match = getattr(info, "match", _sentinel)
-                self.assertNotEqual(match, _sentinel)
+                m = getattr(info, match, _sentinel)
+                self.assertNotEqual(m, _sentinel)
 
                 if invert:
-                    self.assertIsNone(match)
+                    self.assertIsNone(m)
                     self.assertNotIn(substring, line)
                 else:
-                    self.assertIsInstance(match, re_Match)
+                    self.assertIsInstance(m, re_Match)
                     self.assertIn(substring, line)
 
                 # now remove the match object for easier testing
-                info.match = None
+                setattr(info, match, None)
                 l.append(t)
             return l
 
@@ -3218,16 +3289,29 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        i = big.lines_grep(lines, "eg+", invert=True)
-        got = test_and_remove_lineinfo_match(i, "eg", invert=True)
+        i = big.lines_grep(lines, "eg+", invert=True, match='quixote')
+        got = test_and_remove_lineinfo_match(i, "eg", invert=True, match='quixote')
         test(got,
             [
-                L('hello yolks', 1, 1),
-                L('what do you have to say, champ?', 2, 1),
-                L("they don't have to be fancy.", 4, 1),
-                L('', 8, 1, end=''),
+                L('hello yolks', 1, 1, quixote=None),
+                L('what do you have to say, champ?', 2, 1, quixote=None),
+                L("they don't have to be fancy.", 4, 1, quixote=None),
+                L('', 8, 1, end='', quixote=None),
             ]
             )
+
+        with self.assertRaises(ValueError):
+            lines = big.lines("""
+hello yolks
+what do you have to say, champ?
+i like eggs.
+they don't have to be fancy.
+simple scrambled eggs are just fine.
+neggatory!
+whoops, I meant, negatory.
+"""[1:])
+            i = big.lines_grep(lines, "eg+", invert=True, match='not a valid identifier')
+
 
         lines = big.lines("""
 cormorant
@@ -3660,18 +3744,19 @@ outdent
         with self.assertRaises(TypeError):
             next(big.lines("", tab_width=math.pi))
 
+        li = big.lines('')
         with self.assertRaises(TypeError):
-            big.LineInfo(math.pi, 1, 1)
+            big.LineInfo(li, math.pi, 1, 1)
         with self.assertRaises(TypeError):
-            big.LineInfo('', math.pi, 1)
+            big.LineInfo(li, '', math.pi, 1)
         with self.assertRaises(TypeError):
-            big.LineInfo('', 1, math.pi)
+            big.LineInfo(li, '', 1, math.pi)
         with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, leading=math.pi))
+            next(big.LineInfo(li, '', 1, 1, leading=math.pi))
         with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, trailing=math.pi))
+            next(big.LineInfo(li, '', 1, 1, trailing=math.pi))
         with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, end=math.pi))
+            next(big.LineInfo(li, '', 1, 1, end=math.pi))
 
         with self.assertRaises(ValueError):
             list(big.lines_filter_line_comment_lines("", []))
