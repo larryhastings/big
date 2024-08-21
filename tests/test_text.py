@@ -2791,7 +2791,7 @@ class BigTextTests(unittest.TestCase):
             big.normalize_whitespace(b"a b c d   e", separators=[])
 
     def test_split_quoted_strings(self):
-        def test(s, expected, test_ascii=True, **kwargs):
+        def test(s, expected, **kwargs):
             got = list(big.split_quoted_strings(s, **kwargs))
 
             if 0:
