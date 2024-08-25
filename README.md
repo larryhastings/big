@@ -1281,6 +1281,8 @@ multithreaded programs:
   and a second thread cancels all events,
   `sched.scheduler.run` won't exit until time **T**.
 
+big's `Scheduler` object fixes both these problems.
+
 Also, `sched.scheduler` is thirty years behind the times in
 Python API design--its design predates many common modern
 Python conventions.  Its events are callbacks, which it
@@ -1325,15 +1327,9 @@ understand time; it's all abstracted away by the
 `Regulator`.
 
 You can implement your own `Regulator` and use it
-with `Scheduler`.  Your `Regulator` subclass needs to
-implement a minimum of three methods: `now`,
-`sleep`, and `wake`.  It must also provide an
-attribute called 'lock'.  The lock must implement
-the context manager protocol, and should ensure thread
-safety for the `Regulator`.  (`Scheduler` will only
-request the `Regulator`'s lock if it's not already
-holding it.  Put another way, the `Regulator` doesn't
-need to be a "reentrant" or "recursive" lock.)
+with `Scheduler`.  Your `Regulator` subclass must
+implement three methods: `now`, `sleep`, and `wake`.
+It must also provide a `lock` attribute.
 
 Normally a `Regulator` represents time using
 a floating-point number, representing a fractional
@@ -1352,6 +1348,23 @@ fulfills these requirements will work:
   represent both the earliest time and a zero-length
   interval of time.
 
+</dd></dl>
+
+#### `Regulator.lock`
+
+<dl><dd>
+
+A [lock](https://en.wikipedia.org/wiki/Lock_(computer_science))
+object.  The `Scheduler` uses this lock
+to protect its internal data structures.
+
+Must support the "context manager" protocol
+(`__enter__` and `__exit__`).  Entering the
+object must acquire the lock; exiting must
+release the lock.
+
+This lock does not need to be
+[recursive.](https://en.wikipedia.org/wiki/Reentrant_mutex)
 </dd></dl>
 
 
@@ -1429,8 +1442,8 @@ over them again.
 
 <dl><dd>
 
-Schedules an object `o` to be yielded as an event by this `schedule` object
-at some time in the future.
+Schedules an object `o` to be yielded as an event by this `schedule`
+object at some time in the future.
 
 By default the `time` value is a relative time value,
 and is added to the current time; using a `time` value of 0
@@ -5494,6 +5507,10 @@ in the **big** test suite.
 
 *not yet released*
 
+Lots of changes this time.  Let's go over it by subsystem.
+
+### text
+
 * Breaking change: `split_quoted_string` has been completely
   re-tooled and re-written.  The new API is simpler, easier to
   understand, and conceptually sharper.  It's a major upgrade!
@@ -5623,19 +5640,38 @@ in the **big** test suite.
   function, then call it and return the iterator.  I promoted
   those local functions to module level, which means we no
   longer rebind them each time the function is called.  As a
-  very rough guess, this often makes `multisplit` 10% faster,
-  and never slower.
+  very rough guess, this can be as much as a 10% speedup for
+  `multisplit` run on short workloads.  (It's also *never* slower.)
 
   In the case of
   [`merge_columns`,](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
   we were binding functions inside a loop (!!) inside a function.
   These local functions are still bound inside `merge_columns`,
-  but I moved them outside the loop.
+  but they're now outside the loop.
 
 * Another minor speedup for `multisplit`: when `reverse=True`,
   we used to reverse the results *three times!*  We now explicitly
   observe and manage the reverse state of the result and avoid
   needless reversing.
+
+### scheduler
+
+* Slight cleanup on `Scheduler._next`, the internal method call
+  that implements the heart of the scheduler.  The only externally
+  visible change: the previous version would call `sleep(0)` every
+  time it yielded an event.  On modern operating systems this usually
+  yields the rest of the current thread's current time slice back
+  to the OS's scheduler, which can help make multitasking smoother,
+  particularly inside Python.  But this was too opinionated for
+  library code--if you want a `sleep(0)` there you can call it yourself.
+  So I have now restructured the code and eliminated this extraneous
+  `sleep(0)`.
+
+* Rewrote big chunks of the test suite (`tests/test_scheduler.py`).
+  The multithreaded tests are now much better synchronized, while
+  also becoming easier to read.
+
+### state
 
 * Slight performance upgrade for `StateMachine` observers.
   `StateMachine` always uses a copy of the observer

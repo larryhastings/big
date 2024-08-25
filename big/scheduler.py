@@ -30,11 +30,10 @@ __all__ = ['Regulator', 'SingleThreadedRegulator', 'ThreadSafeRegulator', 'Sched
 from abc import abstractmethod
 import threading
 from .heap import Heap
+import sys
 import time
 
 
-
-invalid_event = object()
 
 class InertContextManager:
     def __enter__(self):
@@ -160,11 +159,10 @@ default_regulator = SingleThreadedRegulator()
 
 class ThreadSafeRegulator(Regulator):
     """
-    A thread-safe implementation of Regulator
-    designed for use in multithreaded programs.
-
-    This `Regulator` isn't guaranteed to be safe
-    for use while in a signal-handler callback.
+    A thread-safe Regulator object designed
+    for use in multithreaded programs.
+    It uses Python's threading.Event and
+    threading.Lock.
     """
 
     def __init__(self):
@@ -188,6 +186,13 @@ class ThreadSafeRegulator(Regulator):
 DEFAULT_PRIORITY = 100
 
 class Event:
+    """
+    Wraps event objects in a Scheduler's queue.
+
+    Only supports one method: cancel(), which cancels
+    the event.  (If the event isn't currently scheduled,
+    raises ValueError.)
+    """
     def __init__(self, scheduler, event, time, priority, sequence):
         self.scheduler = scheduler
         self.event = event
@@ -260,7 +265,7 @@ class Scheduler:
     def __init__(self, regulator=default_regulator):
         self.regulator = regulator
         self.heap = Heap()
-        self.counter = 0
+        self.event_id_counter = 0
 
     def schedule(self, o, time, *, absolute=False, priority=DEFAULT_PRIORITY):
         """Schedule a new event to be yielded at a specific future time.
@@ -279,13 +284,11 @@ class Scheduler:
            o = scheduler.schedule(my_event, 5)
            scheduler.cancel(o)
         """
-        if o == invalid_event:
-            raise ValueError('invalid event')
         with self.regulator.lock:
             if not absolute:
                 time += self.regulator.now()
-            self.counter += 1
-            event = Event(self, o, time, priority, self.counter)
+            self.event_id_counter += 1
+            event = Event(self, o, time, priority, self.event_id_counter)
             self.heap.append(event)
             self.regulator.wake()
         return event
@@ -314,54 +317,49 @@ class Scheduler:
         A list of the currently scheduled Event objects,
         in the order they will be yielded.
         """
+
+        # Note: In many places I refer to the scheduler's "queue".
+        # This isn't a "queue" as in Python's built-in "queue" module.
+        # The Scheduler's "queue" is a conceptual ordered list of
+        # events in the order they'll be yielded.   (It actually uses
+        # a "heap", as in Python's built-in "heap" module.)
+
         with self.regulator.lock:
             return self.heap.queue
 
     def _next(self, blocking=True):
-        # why loop here? in case we get awakened by the queue changing.
+        # why a loop? in case we get awakened early by the queue changing.
         #
         # also, I swear that back in my early Win32 days, sleeping on
-        # timers wasn't perfect and would often return slightly early.
+        # timers wasn't perfect and would occasionally return slightly early.
+
         while True:
-            # print(f"{self._regulator.now()}  {self.heap=}")
-            # don't sleep while holding the lock!
-            # we write down what we need to do in
-            # local variables, then do it after releasing
-            # the lock.
-            sleep_interval = 0
-            event = invalid_event
 
             with self.regulator.lock:
                 if not self.heap:
-                    # print(" empty queue DONE")
                     raise StopIteration
 
+                now = self.regulator.now()
+                ev = self.heap[0]
+                time_to_next_event = ev.time - now
+
+                if time_to_next_event <= 0:
+                    self.heap.popleft()
+                    return ev.event
+
+                # don't sleep while holding the lock!
+                # do:
+                #   * fetch the sleep method while
+                #     holding the lock, then
+                #   * release the lock, then
+                #   * sleep.
                 sleep = self.regulator.sleep
 
-                ev = self.heap[0]
+            if not blocking:
+                raise StopIteration
 
-                now = self.regulator.now()
-                interval = ev.time - now
-                ready = interval <= 0
-
-                if not ready:
-                    if not blocking:
-                        # print(" wouldblock DONE")
-                        raise StopIteration
-                    sleep_interval = max(interval, 0)
-                else:
-                    self.heap.popleft()
-                    event = ev.event
-
-            # we always delay here.
-            # if sleep_interval is 0,
-            # this still yields the remainder of our timeslice
-            # and lets other threads run.
-            # print(f"  sleeping {sleep_interval}")
-            sleep(sleep_interval)
-            if event is not invalid_event:
-                # print(f"  returning {event}")
-                return event
+            # assert time_to_next_event > 0
+            sleep(time_to_next_event)
 
     def __iter__(self):
         return self
