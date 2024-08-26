@@ -5164,20 +5164,20 @@ However, the version in **big** has been greatly upgraded:
 
 Note that if you're using a view to iterate over the graph, and you modify the graph,
 and the view now represents a state that isn't *coherent* with the graph,
-attempting to use that view raises a `RuntimeError`.  More on what I mean
-by "coherence" in a minute.
+attempting to use that view raises a `RuntimeError`.  (I'll define what I mean
+by view "coherence" in the next subsection.)
 
 This implementation also fixes some minor warts with the existing API:
 
 - In Python's implementation, `static_order` and `get_ready`/`done` are mutually exclusive.  If you ever call
   `get_ready` on a graph,  you can never call `static_order`, and vice-versa.  The implementaiton in **big**
   doesn't have this restriction, because its implementation of `static_order` creates and uses a new view object
-  every time it's called..
+  every time it's called.
 - In Python's implementation, you can only iterate over the graph once, or call `static_order` once.
   The implementation in **big** solves this in several ways: it allows you to create as many views as you
   want, and you can call the new `reset` method on a view to reset it to its initial state.
 
-#### Graph / view coherence
+#### View coherence
 
 So what does it mean for a view to no longer be coherent with the graph?
 Consider the following code:
@@ -5193,7 +5193,7 @@ g.ready() # returns ('A',)
 g.add('A', 'Q')
 ```
 
-First this code creates a graph `g` with a classic "diamond"
+First this creates a graph `g` with a classic "diamond"
 dependency pattern.  Then it creates a new view `v`, and gets
 the currently "ready" nodes, which consists just of the node
 `'A'`.  Finally it adds a new dependency: `'A'` depends on `'Q'`.
