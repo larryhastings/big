@@ -5566,8 +5566,8 @@ Lots of changes this time!  Grouping by submodule:
   * `parse_delimiters` took an iterable of `Delimiters`
     objects.  `parse_delimiters` takes a dictionary
     mapping open delimiters to `Delimiter` objects,
-    and `Delimiter` objects no longer contain an
-    "open" field.
+    and `Delimiter` objects no longer have an
+    "open" attribute.
   * `split_delimiters` now accepts an `initial` parameter,
     which specifies the initial state of nested delimiters.
   * `split_delimiters` no longer cares if there were unclosed
@@ -5579,6 +5579,16 @@ Lots of changes this time!  Grouping by submodule:
     the uninteresting characters to find the delimiters
     and escape characters.  It's always faster, except
     for trivial calls which are fast enough anyway.
+  * The old `Delimiter` object used with `parse_delimiters`
+    used to have a boolean `backslash` attribute; if it was
+    True, that delimiter allowed escaping using a backslash.
+    The new `Delimiter` object used with `split_delimiters`
+    has an `escape=c` attribute, where `c` is the escape
+    character you want to use with that set of delimiters.
+    All the predefined `Delimiter` values have been updated
+    to match.
+  * As mentioned above, the `Delimiter` object no longer
+    has an `open` attribute.
 
 * Breaking change: the `LineInfo` constructor has added
   a new `lines` positional parameter, in front of the
@@ -5589,8 +5599,10 @@ Lots of changes this time!  Grouping by submodule:
 * New feature: `LineInfo` objects yielded by `lines`
   previously had many optional fields, which might or might
   not be added dynamically.  Now all fields are pre-added.
-  (This works better with assumptions inside the CPython 3.13
-  runtime.)
+  (This makes the CPython 3.13 runtime happier; it really
+  wants you to set *all* your class's attributes in its
+  `__init__`.)
+
   `LineInfo` objects now always have these attributes:
   * `lines`, which contains the base lines iterator.
   * `line`, which contains the original unmodified line.
@@ -5639,7 +5651,7 @@ Lots of changes this time!  Grouping by submodule:
   * `lines_grep` now adds a `match` attribute to the `LineInfo`
     object, containing the return value from calling `re.search`.
     (If you pass in `invert=True` to `lines_grep`, `lines_grep`
-    will never write to the `match` attribute.)
+    will still write `None` to the `match` attribute.)
   * Bugfix: `lines_strip_indent` previously required
     whitespace-only lines to obey the indenting rules.
     My intention was always for `lines_strip_indent` to
@@ -5651,12 +5663,6 @@ Lots of changes this time!  Grouping by submodule:
     indent value of an empty line should matter; this is
     mostly just there to present a consistent interface to
     the user.)
-
-* API change for the `Delimiter` object used with `parse_delimiters`:
-  instead of a `backslash=True` attribute, it now takes an
-  `escape=c` attribute, where `c` is the escape character you
-  want to use with that set of delimiters.  All the predefined
-  `Delimiter` values have been updated to match.
 
 * Minor but free speedup for several functions in `big.text`,
   most importantly

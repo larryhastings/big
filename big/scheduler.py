@@ -136,9 +136,6 @@ class SingleThreadedRegulator(Regulator):
     use in single-threaded programs.  It provides
     no thread safety, but is much higher performance
     than thread-safe Regulator implementations.
-
-    This `Regulator` isn't guaranteed to be safe
-    for use while in a signal-handler callback.
     """
 
     def __repr__(self): # pragma: no cover
