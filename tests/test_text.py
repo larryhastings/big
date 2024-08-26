@@ -2027,7 +2027,7 @@ class BigTextTests(unittest.TestCase):
 
     def test_multipartition(self):
         def test_multipartition(s, separator, count, expected, *, reverse=False):
-            for _ in range(2):
+             for _ in range(2):
                 if _ == 1:
                     # encode!
                     s = s.encode('ascii')
@@ -3014,10 +3014,10 @@ class BigTextTests(unittest.TestCase):
 
         self.maxDiff = 2**32
 
-        def test(s, expected, *, delimiters=None):
+        def test(s, expected, *, delimiters=None, initial=()):
             empty = ''
             for i in range(2):
-                got = tuple(big.parse_delimiters(s, delimiters=delimiters))
+                got = tuple(big.parse_delimiters(s, delimiters=delimiters, initial=initial))
 
                 flattened = []
                 for t in got:
@@ -3042,6 +3042,8 @@ class BigTextTests(unittest.TestCase):
                     s = to_bytes(s)
                     expected = to_bytes(expected)
                     empty = b''
+                    if initial:
+                        initial = to_bytes(initial)
 
         test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
             (
@@ -3092,6 +3094,14 @@ class BigTextTests(unittest.TestCase):
             ),
             )
 
+        test('x"], foo);}',
+            (
+                ('x',     '', '"'),
+                ('',      '', ']'),
+                (', foo', '', ')'),
+                (';',     '', '}'),
+            ), initial='{(["')
+
         with self.assertRaises(ValueError):
             test('a[3)', None)
         with self.assertRaises(ValueError):
@@ -3100,31 +3110,29 @@ class BigTextTests(unittest.TestCase):
             test('a(3}', None)
 
         with self.assertRaises(ValueError):
-            test('delimiters is empty', None, delimiters=[])
-        with self.assertRaises(ValueError):
-            test('delimiter is abc (huh!)', None, delimiters=['()', 'abc'])
+            test('delimiters is empty', None, delimiters={})
         with self.assertRaises(TypeError):
-            test('delimiters contains 3', None, delimiters=['{}', 3])
+            test('delimiter is abc (huh!)', None, delimiters={'a': 'abc'})
+        with self.assertRaises(TypeError):
+            test('str/bytes mismatch', None, delimiters={'a': big.Delimiter(close=b'b')})
+        with self.assertRaises(TypeError):
+            test('bytes/str mismatch', None, delimiters={b'a': big.Delimiter(close='b')})
         with self.assertRaises(ValueError):
-            test('delimiters contains a <backslash>', None, delimiters=['<>', '\\/'])
+            test('delimiters contains a <backslash>', None, delimiters={'\\': big.Delimiter(close='z')})
         with self.assertRaises(ValueError):
-            test('delimiters contains <angle> <brackets> <twice>', None, delimiters=['<>', '<>'])
+            test('delimiters contains <angle> <brackets> <twice>', None, delimiters={'<': big.Delimiter(close='x'), '>': big.Delimiter(close='<')})
 
-        with self.assertRaises(ValueError):
-            test('unclosed_paren(a[3]', None)
-        with self.assertRaises(ValueError):
-            test('x[3] = unclosed_curly{', None)
-        with self.assertRaises(ValueError):
-            test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
-        with self.assertRaises(ValueError):
-            test('"unterminated string\\', None)
-        with self.assertRaises(ValueError):
-            test('open_everything( { a[35 "foo', None)
+        # with self.assertRaises(ValueError):
+        #     test('unclosed_paren(a[3]', None)
+        # with self.assertRaises(ValueError):
+        #     test('x[3] = unclosed_curly{', None)
+        # with self.assertRaises(ValueError):
+        #     test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
+        # with self.assertRaises(ValueError):
+        #     test('"text ends with an escape character\\', None)
+        # with self.assertRaises(ValueError):
+        #     test('open_everything( { a[35 "foo', None)
 
-        with self.assertRaises(TypeError):
-            big.Delimiter('(', b')')
-        with self.assertRaises(TypeError):
-            big.Delimiter(b'(', ')')
 
     def test_lines(self):
         self.maxDiff = 2**32

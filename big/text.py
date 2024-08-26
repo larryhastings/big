@@ -2067,13 +2067,19 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
         [("", "a b c", "'"),]
 
     Note:
-    * split_quoted_strings is deliberately agnostic
-      about newlines.  If s contains newlines, this
-      function will happily yield them, inside or
-      outside of quoted substrings.  (If you want to
-      disallow newlines inside quoted strings, it's up
-      to you to detect them and react accordingly.)
-    * split_quoted_strings does not raise an error
+    * split_quoted_strings is agnostic about newlines.
+      If s contains newlines, this function will happily
+      yield them, inside or outside of quoted substrings.
+      (If you want to disallow newlines inside quoted
+      strings, it's up to you to detect them and react
+      accordingly.)
+    * Similarly, split_quoted_strings is agnostic about
+      the length of quoted strings.  If you're using
+      split_quoted_strings to parse a C-like language,
+      and you want to enforce C's requirement that
+      single-quoted strings only contain one character,
+      you'll have to do that yourself.
+    * split_quoted_strings doesn't raise an error
       if s ends with an unterminated string.  In that
       case, the last tuple yielded will have a non-empty
       leading_quote and an empty trailing_quote.
@@ -2156,134 +2162,81 @@ class Delimiter:
     nested is a boolean: must other delimiters nest in this delimiter?
        (Delimiters don't usually need to be nested inside single and double quotes.)
     """
-    def __init__(self, open, close, *, escape='', nested=True):
-        is_bytes = isinstance(open, bytes)
+    def __init__(self, close, *, escape='', nested=True):
+        is_bytes = isinstance(close, bytes)
         if is_bytes:
             t = bytes
             empty = b''
         else:
             t = str
             empty = ''
-        if not (isinstance(open, t) and isinstance(close, t)):
-            raise TypeError(f"open={open!r} and close={close!r}, they must be the same type, either str or bytes")
 
-        self.open = open
+        # they can't both be false, and they can't both be true
+        if not bool(escape) ^ bool(nested):
+            raise ValueError("exactly one of escape and nested must be a true value")
+
         self.close = close
         self.escape = escape or empty
         self.nested = nested
 
     def __repr__(self): # pragma: no cover
-        return f"Delimiter(open={self.open!r}, close={self.close!r}, escape={self.escape}, nested={self.nested})"
+        return f"Delimiter(close={self.close!r}, escape={self.escape}, nested={self.nested})"
 
-delimiter_parentheses = "()"
+delimiter_parentheses = Delimiter(")")
 _export_name('delimiter_parentheses')
 
-delimiter_square_brackets = "[]"
+delimiter_square_brackets = Delimiter("]")
 _export_name('delimiter_square_brackets')
 
-delimiter_curly_braces = "{}"
+delimiter_curly_braces = Delimiter("}")
 _export_name('delimiter_curly_braces')
 
-delimiter_angle_brackets = "<>"
+delimiter_angle_brackets = Delimiter(">")
 _export_name('delimiter_angle_brackets')
 
-delimiter_single_quote = Delimiter("'", "'", escape='\\', nested=False)
+delimiter_single_quote = Delimiter("'", escape='\\', nested=False)
 _export_name('delimiter_single_quote')
 
-delimiter_double_quotes = Delimiter('"', '"', escape='\\', nested=False)
+delimiter_double_quotes = Delimiter('"', escape='\\', nested=False)
 _export_name('delimiter_double_quotes')
 
-split_delimiters_default_delimiters = (
-    delimiter_parentheses,
-    delimiter_square_brackets,
-    delimiter_curly_braces,
-    delimiter_single_quote,
-    delimiter_double_quotes,
-    )
+split_delimiters_default_delimiters = {
+    '(': delimiter_parentheses,
+    '[': delimiter_square_brackets,
+    '{': delimiter_curly_braces,
+    "'": delimiter_single_quote,
+    '"': delimiter_double_quotes,
+    }
 _export_name('split_delimiters_default_delimiters')
 
 
-split_delimiters_default_delimiters_bytes = (
-    b'()',
-    b'[]',
-    b'{}',
-    Delimiter(b"'", b"'", escape=b'\\', nested=False),
-    Delimiter(b'"', b'"', escape=b'\\', nested=False),
-    )
+split_delimiters_default_delimiters_bytes = {
+    b'(': Delimiter(b')'),
+    b'[': Delimiter(b']'),
+    b'{': Delimiter(b'}'),
+    b"'": Delimiter(b"'", escape=b'\\', nested=False),
+    b'"': Delimiter(b'"', escape=b'\\', nested=False),
+    }
 _export_name('split_delimiters_default_delimiters_bytes')
 
 
-# break the rules
-_base_delimiter = Delimiter('a', 'b')
-_base_delimiter.open = _base_delimiter.close = None
-
-def split_delimiters(s, delimiters, closers, empty):
-    open_to_delimiter = {d.open: d for d in delimiters}
-
-    text = []
-    append = text.append
-    def flush(open, close):
-        s = empty.join(text)
-        text.clear()
-        assert s or open or close
-        return s, open, close
-
-    # d stores the *current* delimiter
-    # d is not in stack.
-    d = _base_delimiter
-    stack = []
-    escape = d.escape
-    nested = d.nested
-    close = None
-    quoted = False
-
-    for i, c in enumerate(_iterate_over_bytes(s)):
-        if quoted:
-            append(c)
-            quoted = False
-            continue
-        if c == close:
-            yield flush(empty, c)
-            d = stack.pop()
-            escape = d.escape
-            nested = d.nested
-            close = d.close
-            continue
-        if nested:
-            if c in closers:
-                # this is a closing delimiter,
-                # but it doesn't match.
-                # (if it did, we'd have handled it
-                #  in "if c == close" above.)
-                raise ValueError(f"mismatched closing delimiter at s[{i}]: expected {close}, got {c}")
-            next_d = open_to_delimiter.get(c)
-            if next_d:
-                yield flush(c, empty)
-                stack.append(d)
-                d = next_d
-                escape = d.escape
-                nested = d.nested
-                close = d.close
-                continue
-        if escape and (c == escape):
-            quoted = True
-        append(c)
-
-    if len(stack):
-        stack.pop(0)
-        stack.append(d)
-        raise ValueError("s does not close all opened delimiters, needs " + " ".join(d.close for d in reversed(stack)))
-
-    if text:
-        yield flush(empty, empty)
-
-_split_delimiters = split_delimiters
+class DelimiterTransitions:
+    def __init__(self, open={}, close=(), escape='', illegal={}):
+        self.open = open
+        self.close = close
+        self.escape = escape
+        # illegal characters in this context.
+        # these are always close delimiters
+        # (apart from the actual close delimiter)
+        # inside a nested=True open delimiter.
+        # e.g. the string "[foo(]" is invalid,
+        # ']' is an illegal character there.
+        self.illegal = illegal
 
 @_export
-def split_delimiters(s, delimiters=None):
+def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, initial=()):
     """
-    Parses a string containing nesting delimiters.
-    Raises an exception if mismatched delimiters are detected.
+    Splits a string at delimiter substrings.
 
     s may be str or bytes.
 
@@ -2313,63 +2266,158 @@ def split_delimiters(s, delimiters=None):
     once, though you may reuse a particular character as a closing
     delimiter multiple times.
 
-    Backslash ('\\') is not permitted as a delimiter.
+    You may not specify backslash ('\\') as a delimiter.
+
+    See the Delimiter object for how delimiters are defined, and how
+    you can define your own delimiters.
     """
     if isinstance(s, bytes):
         s_type = bytes
-        if delimiters is None:
+        s_type_description = "bytes"
+        not_s_type_description = "str"
+        if delimiters in (None, split_delimiters_default_delimiters):
             delimiters = split_delimiters_default_delimiters_bytes
-        disallowed_delimiters = b'\\'
+        disallowed_delimiter = b'\\'
         empty = b''
     else:
         s_type = str
-        if delimiters is None:
+        s_type_description = "str"
+        not_s_type_description = "bytes"
+        if delimiters in (None, split_delimiters_default_delimiters_bytes):
             delimiters = split_delimiters_default_delimiters
-        disallowed_delimiters = '\\'
+        disallowed_delimiter = '\\'
         empty = ''
 
     if not delimiters:
         raise ValueError("invalid delimiters")
-    # convert
-    delimiters2 = []
-    for d in delimiters:
-        if isinstance(d, Delimiter):
-            delimiters2.append(d)
+
+    all_closers = set()
+    all_openers = set(delimiters)
+    all_escapes = set()
+    nested_closers = set()
+    for k, v in delimiters.items():
+        if not isinstance(k, s_type):
+            raise TypeError(f"open delimiter {k!r} must be {s_type_description}, not {not_s_type_description}")
+        if k == disallowed_delimiter:
+            raise ValueError(f"illegal open delimiter {k!r}")
+        if not isinstance(v, Delimiter):
+            raise TypeError(f"delimiter values must be Delimiter, not {v!r}")
+        if not isinstance(v.close, s_type):
+            raise TypeError(f"close delimiter {v.close!r} must be {s_type_description}, not {not_s_type_description}")
+        if v.close == disallowed_delimiter:
+            raise ValueError(f"Delimiter: illegal close delimiter {v.close!r}")
+        all_closers.add(v.close)
+        if not isinstance(v.escape, s_type):
+            raise TypeError(f"Delimiter: escape {v.escape!r} must be {s_type_description}, not {not_s_type_description}")
+        if v.nested:
+            if v.escape:
+                raise ValueError(f"Delimiter: nested cannot be true when an escape character is specified ({v.escape!r})")
+            nested_closers.add(v.close)
+        else:
+            if not v.escape:
+                raise ValueError(f"Delimiter: nested must be true when an escape character is not specified")
+            all_escapes.add(v.escape)
+
+    in_both_openers_and_closers = all_openers & nested_closers
+    if in_both_openers_and_closers:
+        in_both_openers_and_closers = list(in_both_openers_and_closers)
+        if len(in_both_openers_and_closers) == 1:
+            in_both_openers_and_closers = in_both_openers_and_closers[0]
+            prefix = ''
+        else:
+            prefix = 'these characters '
+        raise ValueError(f"{prefix}{in_both_openers_and_closers!r} cannot be both an opening and closing delimiter")
+
+    all_delimiters = all_openers | all_closers
+
+    # compute transitions for delimiters for escape='' and nested=True
+    base = DelimiterTransitions(open={}, close=None, illegal=all_closers)
+
+    empty_dict = {}
+
+    for open, delimiter in delimiters.items():
+        if delimiter.nested:
+            openers = base.open
+            illegal = set(all_closers)
+            illegal.discard(delimiter.close)
+        else:
+            openers = illegal = empty_dict
+
+        transitions = DelimiterTransitions(open=openers, close=delimiter.close, escape=delimiter.escape, illegal=illegal)
+        base.open[open] = transitions
+
+    stack = []
+    push = stack.append
+    pop = stack.pop
+
+    current = base
+
+    if initial:
+        last_open = ''
+        for open in _iterate_over_bytes(initial):
+            # if current.open is false, we must be inside a non-nested open delimiter.
+            if not current.open:
+                raise ValueError(f"{open!r} specified in initial inside non-nested open delimiter {last_open!r}")
+            next = current.open.get(open, None)
+            if next is None:
+                raise ValueError(f"{open!r} specified in initial isn't a defined open delimiter")
+            push(current)
+            current = next
+            last_open = open
+
+    text = []
+    append = text.append
+    clear = text.clear
+
+    join = empty.join
+
+    escaped = ''
+
+    for s, delimiter in multisplit(s, all_delimiters, keep=AS_PAIRS, separate=True):
+        if escaped:
+            escaped = ''
+            if not s:
+                append(delimiter)
+                continue
+
+        append(s)
+
+        next = current.open.get(delimiter, None)
+        if next:
+            # flush open delimiter
+            s = join(text)
+            clear()
+            yield s, delimiter, empty
+
+            push(current)
+            current = next
             continue
-        if isinstance(d, s_type):
-            if not len(d) == 2:
-                raise ValueError(f"illegal delimiter string {d!r}, must be 2 characters long")
-            delimiters2.append(Delimiter(d[0:1], d[1:2]))
+
+        if delimiter == current.close:
+            # flush close delimiter
+            s = join(text)
+            clear()
+            yield s, empty, delimiter
+
+            current = pop()
             continue
-        raise TypeError(f"invalid delimiter {d!r}")
 
-    delimiters = delimiters2
-    # early-detect errors
+        if delimiter and (delimiter == current.escape):
+            append(delimiter)
+            escaped = delimiter
+            continue
 
-    # scan for disallowed
-    delimiter_characters = {d.open for d in delimiters} | {d.close for d in delimiters}
-    disallowed = {disallowed_delimiters}
-    illegal_delimiters = disallowed & delimiter_characters
-    if illegal_delimiters:
-        raise ValueError("illegal delimiters used: " + "".join(illegal_delimiters))
+        if delimiter in current.illegal:
+            raise ValueError(f"mismatched close delimiter {delimiter!r}")
 
-    # closers is a set of closing delimiters *only*.
-    # if open and close delimiters are the same (e.g. quote marks)
-    # it shouldn't go in closers.
-    seen = set()
-    repeated = []
-    closers = set()
-    for d in delimiters:
-        if d.open in seen:
-            repeated.append(d.open)
-        seen.add(d.open)
-        if d.close != d.open:
-            closers.add(d.close)
+        append(delimiter)
 
-    if repeated:
-        raise ValueError("these opening delimiters were used multiple times: " + " ".join(repeated))
+    if text:
+        s = join(text)
+        if s:
+            yield s, empty, empty
 
-    return _split_delimiters(s, delimiters, closers, empty)
+
 
 
 # backwards compatibility for old names, will stick around until at least September 2025

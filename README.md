@@ -1495,12 +1495,9 @@ event is not due yet, raises `StopIteration`.
 
 An implementation of `Regulator` designed for
 use in single-threaded programs.  It doesn't support
-multiple threads, and in particular is not thread-safe.
+multiple threads, and in particular is *not* thread-safe.
 But it's much higher performance
 than thread-safe `Regulator` implementations.
-
-This `Regulator` isn't guaranteed to be safe
-for use while in a signal-handler callback.
 </dd></dl>
 
 ### `ThreadSafeRegulator()`
@@ -1509,9 +1506,6 @@ for use while in a signal-handler callback.
 
 A thread-safe implementation of `Regulator`
 designed for use in multithreaded programs.
-
-This `Regulator` isn't guaranteed to be safe
-for use while in a signal-handler callback.
 </dd></dl>
 
 
@@ -5507,7 +5501,7 @@ in the **big** test suite.
 
 *not yet released*
 
-Lots of changes this time.  Let's go over it by subsystem.
+Lots of changes this time!  Grouping by submodule:
 
 ### text
 
@@ -5517,7 +5511,7 @@ Lots of changes this time.  Let's go over it by subsystem.
 
   The old version is still available under a new
   name: `old_split_quoted_string`.  It's deprecated, and will
-  be eventually removed, but not before August 2025
+  eventually be removed, but not before August 2025
   (one year from now).
 
   Changes:
@@ -5541,7 +5535,7 @@ Lots of changes this time.  Let's go over it by subsystem.
     `escape` allows specifying the escape string, which
     by default is '\\' (backslash).  If you specify a false
     value, there will be no escape character in strings.
-  * `split_quoted_string` also takes a new parameter,
+  * `split_quoted_string` also accepts a new parameter,
     `initial`, which sets the initial state of quoting.
   * The `triple_quotes` parameter has been removed.  (See
     next bullet point.)
@@ -5553,7 +5547,38 @@ Lots of changes this time.  Let's go over it by subsystem.
     officially up to you to enforce any rules here
     (e.g. "newlines aren't permitted in
     single-quoted strings.")
+  * The old `split_quoted_string` manually parsed the
+    string, character by character.  The shiny new
+    version uses `multisplit`, so it zips past
+    the uninteresting characters to find the quote
+    marks.  It's always faster, except for trivial
+    calls which are fast enough anyway.
 
+* Breaking change: `parse_delimiters` has also been
+  completely re-tooled, re-written... *and* re-named!
+  It's now called `split_delimiters`.
+
+  The old version is still available, under its old
+  name.  It's deprecated, and will eventually be
+  removed, but not before August 2025 (one year from now).
+
+  Changes:
+  * `parse_delimiters` took an iterable of `Delimiters`
+    objects.  `parse_delimiters` takes a dictionary
+    mapping open delimiters to `Delimiter` objects,
+    and `Delimiter` objects no longer contain an
+    "open" field.
+  * `split_delimiters` now accepts an `initial` parameter,
+    which specifies the initial state of nested delimiters.
+  * `split_delimiters` no longer cares if there were unclosed
+    open delimiters at the end of the string.  (It used to
+    raise `ValueError`.)
+  * `parse_delimiters` manually parsed the
+    string, character by character.  `split_delimiters`
+    uses `multisplit`, so it zips past
+    the uninteresting characters to find the delimiters
+    and escape characters.  It's always faster, except
+    for trivial calls which are fast enough anyway.
 
 * Breaking change: the `LineInfo` constructor has added
   a new `lines` positional parameter, in front of the
