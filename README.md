@@ -5564,10 +5564,10 @@ Lots of changes this time!  Grouping by submodule:
 
   Changes:
   * `parse_delimiters` took an iterable of `Delimiters`
-    objects.  `parse_delimiters` takes a dictionary
-    mapping open delimiters to `Delimiter` objects,
-    and `Delimiter` objects no longer have an
-    "open" attribute.
+    objects, or strings of length 2.  `parse_delimiters`
+    takes a dictionary mapping open delimiter strings to
+    `Delimiter` objects, and `Delimiter` objects no
+    longer have an "open" attribute.
   * `split_delimiters` now accepts an `initial` parameter,
     which specifies the initial state of nested delimiters.
   * `split_delimiters` no longer cares if there were unclosed
@@ -5595,6 +5595,15 @@ Lots of changes this time!  Grouping by submodule:
   existing positional parameters.  This should be the
   `lines` iterator that yielded this `LineInfo` object.
   It's stored in the `lines` attribute.
+
+* New function: `split_title_case`, which splits a string
+  at title case change word boundaries.
+
+* New function: `combine_splits`.  If you split a string
+  two different ways, producing two arrays that sum to the
+  original string, `combine_splits` will merge those splits
+  together, producing a new array that splits in every
+  place any of the two split arrays had a split.
 
 * New feature: `LineInfo` objects yielded by `lines`
   previously had many optional fields, which might or might
@@ -5692,15 +5701,16 @@ Lots of changes this time!  Grouping by submodule:
   visible change: the previous version would call `sleep(0)` every
   time it yielded an event.  On modern operating systems this usually
   yields the rest of the current thread's current time slice back
-  to the OS's scheduler, which can help make multitasking smoother,
-  particularly inside Python.  But this was too opinionated for
+  to the OS's scheduler; this can make multitasking smoother,
+  particularly in Python programs.  But this was too opinionated for
   library code--if you want a `sleep(0)` there you can call it yourself.
-  So I have now restructured the code and eliminated this extraneous
-  `sleep(0)`.
+  I've restructured the code and eliminated this extraneous `sleep(0)`.
 
 * Rewrote big chunks of the test suite (`tests/test_scheduler.py`).
   The multithreaded tests are now much better synchronized, while
-  also becoming easier to read.
+  also becoming easier to read.  Although it seems intractable to
+  purge *all* race conditions from the test suite, this change has
+  removed most of them.
 
 ### state
 

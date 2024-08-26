@@ -1463,8 +1463,11 @@ def combine_splits(s, *split_arrays):
 
     Note that the split arrays *must* contain all the
     characters from s.  ''.join(split_array) must recreate s.
-    (So, don't use the string's .split method to split it,
-    use big's multisplit with keep=True or keep=ALTERNATING.)
+    combine_splits only examines the lengths of the strings
+    in the split arrays, and makes no attempt to infer
+    stripped characters.  (So, don't use the string's .split
+    method to split, use big's multisplit with keep=True or
+    keep=ALTERNATING.)
     """
     # Convert every entry in split_arrays to a list.
     # Measure the strings in the split arrays, ignoring empty splits.
