@@ -5732,6 +5732,18 @@ Lots of changes this time!  Grouping by submodule:
 * The usual doc and test fixes, including a lot of touchups
   in `tests/test_text.py`.
 
+### builtin
+
+* Small tweak to `get_int_or_float`.  If the `o` you pass in
+  is a `float`, or can be converted to `float`, `get_int_or_float`
+  will experimentally convert it to `int`.  If the `float` and
+  `int` versions compare equal, it will return the `int`, otherwise
+  it'll return the `float`.
+
+  For example, `get_int_or_float("13.5")` will still return `13.5`
+  (a `float`), but `get_int_or_float("13.0")` will now return `13`
+  (an `int`).
+
 #### 0.11
 <dl><dd>
 
