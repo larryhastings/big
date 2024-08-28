@@ -1445,6 +1445,74 @@ def split_title_case(s, *, split_allcaps=True):
         yield empty_join(word)
 
 
+def combine_splits(s, split_lengths):
+    "The generator function returned by the public combine_splits function."
+    split_lengths_pop = split_lengths.pop
+
+    pops = 0
+
+    heap_pop = heapq.heappop
+    heap_push = heapq.heappush
+
+    if len(split_lengths) >= 2:
+        while True:
+            smallest = split_lengths[0]
+            index = smallest[0]
+
+            snippet = s[:index]
+            if snippet == s:
+                # check, did they try to split past the end?
+                if index > len(s):
+                    raise ValueError("split array is longer than the original string")
+
+            yield snippet
+            s = s[index:]
+            if not s:
+                return
+
+            # decrement the first value in every split array
+            # by index.
+            # (if every entry in a heapq is a list of integers, decrementing
+            # the first integer in every list by the same amount maintains
+            # the heap invariants.)
+            for lengths in split_lengths:
+                length = lengths[0]
+
+                new_value = length - index
+                # assert new_value >= 0
+                if not new_value:
+                    pops += 1
+
+                # we write the zeros here, even though we're about to pop them off,
+                # because otherwise we might break the heapq invariants.
+                lengths[0] = new_value
+
+            while pops:
+                pops -= 1
+                splits = heap_pop(split_lengths)
+                if len(splits) > 1:
+                    splits.pop(0)
+                    heap_push(split_lengths, splits)
+
+            if len(split_lengths) < 2:
+                break
+
+    if split_lengths:
+        start = end = 0
+        length = len(s)
+        for index in split_lengths[0]:
+            end += index
+            if end > length:
+                raise ValueError("split array is longer than the original string")
+            yield s[start:end]
+            start += index
+        s = s[end:]
+
+    if s:
+        yield s
+
+_combine_splits = combine_splits
+
 @_export
 def combine_splits(s, *split_arrays):
     """
@@ -1455,7 +1523,7 @@ def combine_splits(s, *split_arrays):
     A "split array" is an array containing the original
     string, but split into multiple pieces.  For example,
     the string "a b c d e" could be split into the
-    split array ["a ", "b ", "c ", "d ", "e "]
+    split array ["a ", "b ", "c ", "d ", "e"]
 
     For example,
         combine_splits('abcde', ['abcd', 'e'], ['a', 'bcde'])
@@ -1478,73 +1546,7 @@ def combine_splits(s, *split_arrays):
 
     heapq.heapify(split_lengths)
 
-    def combine_splits(s, split_lengths):
-        split_lengths_pop = split_lengths.pop
-        # split_lengths_remove = split_lengths.remove
-
-        pops = 0
-
-        heap_pop = heapq.heappop
-        heap_push = heapq.heappush
-
-        if len(split_lengths) >= 2:
-            while True:
-                smallest = split_lengths[0]
-                index = smallest[0]
-
-                snippet = s[:index]
-                if snippet == s:
-                    # check, did they try to split past the end?
-                    if index > len(s):
-                        raise ValueError("split array is longer than the original string")
-
-                yield snippet
-                s = s[index:]
-                if not s:
-                    return
-
-                # decrement the first value in every split array
-                # by index.
-                # (if every entry in a heapq is a list of integers, decrementing
-                # the first integer in every list by the same amount maintains
-                # the heap invariants.)
-                for lengths in split_lengths:
-                    length = lengths[0]
-
-                    new_value = length - index
-                    # assert new_value >= 0
-                    if not new_value:
-                        pops += 1
-
-                    # we write the zeros here, even though we're about to pop them off,
-                    # because otherwise we might break the heapq invariants.
-                    lengths[0] = new_value
-
-                while pops:
-                    pops -= 1
-                    splits = heap_pop(split_lengths)
-                    if len(splits) > 1:
-                        splits.pop(0)
-                        heap_push(split_lengths, splits)
-
-                if len(split_lengths) < 2:
-                    break
-
-        if split_lengths:
-            start = end = 0
-            length = len(s)
-            for index in split_lengths[0]:
-                end += index
-                if end > length:
-                    raise ValueError("split array is longer than the original string")
-                yield s[start:end]
-                start += index
-            s = s[end:]
-
-        if s:
-            yield s
-
-    return combine_splits(s, split_lengths)
+    return _combine_splits(s, split_lengths)
 
 
 _sentinel = object()
@@ -1963,7 +1965,7 @@ _sqs_escape_str   =  '\\'
 _sqs_escape_bytes = b'\\'
 
 
-def split_quoted_strings(s, separators, quotes, empty, initial):
+def split_quoted_strings(s, separators, quotes, empty, state):
     """
     This is the generator function implementing the split_quoted_strings
     iterator.  The public split_quoted_strings analyzes its arguments,
@@ -1973,8 +1975,8 @@ def split_quoted_strings(s, separators, quotes, empty, initial):
     """
     buffer = []
 
-    quote = initial
-    # print(f"    >> {initial=}")
+    quote = state
+    # print(f"    >> {state=}")
     for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
         # print(f"    >> {pair}  -- {quote=}")
         literal, separator = pair
@@ -1998,8 +2000,8 @@ def split_quoted_strings(s, separators, quotes, empty, initial):
         # separator == quote
         text = empty.join(buffer)
         if quote or text:
-            if initial:
-                initial = None
+            if state:
+                state = None
                 # print(f"    <<1 empty, {text=}, {quote=}")
                 yield (empty, text, quote)
             else:
@@ -2011,8 +2013,8 @@ def split_quoted_strings(s, separators, quotes, empty, initial):
     if buffer:
         text = empty.join(buffer)
         if text or quote:
-            if initial:
-                initial = None
+            if state:
+                state = None
                 quote = empty
             # print(f"    <<3 {quote=}, {text=}, empty")
             yield (quote, text, empty)
@@ -2021,7 +2023,7 @@ _split_quoted_strings = split_quoted_strings
 
 
 @_export
-def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, initial=None):
+def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, state=''):
     """
     Splits s into quoted and unquoted segments.
 
@@ -2049,7 +2051,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
     By default, escape is '\\'.  (If s is bytes, escape
     defaults to b'\\'.)
 
-    initial is a string.  It sets the initial state of
+    state is a string.  It sets the initial state of
     the function.  The default is an empty string (str
     or bytes, matching s); this means the parser starts
     parsing the string in an unquoted state.  If you
@@ -2059,11 +2061,11 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
     a new line continuing the state from the previous line--
     pass in the appropriate quote delimiter from quotes
     into initial.  When a non-empty string is passed in
-    to initial, the leading_quote in the first 3-tuple
+    to state, the leading_quote in the first 3-tuple
     yielded by split_quoted_strings will be an empty string.
     For example:
 
-        list(split_quoted_string("a b c'", initial="'"))
+        list(split_quoted_string("a b c'", state="'"))
 
     evaluates to
 
@@ -2088,7 +2090,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
       leading_quote and an empty trailing_quote.
     """
 
-    # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {initial=})")
+    # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {state=})")
 
     is_bytes = isinstance(s, bytes)
     if is_bytes:
@@ -2123,13 +2125,13 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
             raise TypeError("escape must match s (str or bytes), not {escape!r}")
 
 
-    if initial in (None, empty):
-        initial = empty
+    if state in (None, '', b''):
+        state = empty
     else:
-        if not isinstance(initial, s_type):
-            raise TypeError("initial must match s (str or bytes), not {initial!r}")
-        if initial not in quotes:
-            raise ValueError(f"initial must be be one of the delimiters listed in the quotes argument, not {initial!r}")
+        if not isinstance(state, s_type):
+            raise TypeError("state must match s (str or bytes), not {state!r}")
+        if state not in quotes:
+            raise ValueError(f"state must be be one of the delimiters listed in the quotes argument, not {state!r}")
 
     quotes_set = set(quotes)
     if len(quotes_set) != len(quotes):
@@ -2150,7 +2152,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, i
             separators.append(escape + first_character)
         separators.append(escape + escape)
 
-    return _split_quoted_strings(s, separators, quotes_set, empty, initial)
+    return _split_quoted_strings(s, separators, quotes_set, empty, state)
 
 
 @_export
@@ -2158,14 +2160,24 @@ class Delimiter:
     """
     Class representing a delimiter for split_delimiters.
 
-    open is the opening delimiter character, can be str or bytes, must be length 1.
     close is the closing delimiter character, must be the same type as open, and length 1.
-    backslash is a boolean: when inside this delimiter, can you escape delimiters
-       with a backslash?  (You usually can inside single or double quotes.)
-    nested is a boolean: must other delimiters nest in this delimiter?
-       (Delimiters don't usually need to be nested inside single and double quotes.)
+    escape is a string of maximum length 1: if true, when inside this delimiter,
+        you can escape the trailing delimiter with this string.
+    quoting is a boolean: does this set of delimiters "quote" the text inside?
+        When an open delimiter enables quoting, split_delimiters will ignore all
+        other delimiters in the text until it encounters the matching close delimiter.
+        (Single- and double-quotes set this to True.)
+    Currently escape and quoting must either both be true or both be false.
     """
-    def __init__(self, close, *, escape='', nested=True):
+    def __init__(self, close, *, escape='', quoting=False):
+        # you can pass in a Delimiter instance and we'll clone it
+        if isinstance(close, Delimiter):
+            d = close
+            self.close = d.close
+            self.escape = d.escape
+            self.quoting = d.quoting
+            return
+
         is_bytes = isinstance(close, bytes)
         if is_bytes:
             t = bytes
@@ -2175,15 +2187,26 @@ class Delimiter:
             empty = ''
 
         # they can't both be false, and they can't both be true
-        if not bool(escape) ^ bool(nested):
-            raise ValueError("exactly one of escape and nested must be a true value")
+        if bool(escape) != bool(quoting):
+            raise ValueError("quoting and escape mismatch; they must either both be true, or both be false")
 
         self.close = close
         self.escape = escape or empty
-        self.nested = nested
+        self.quoting = quoting
 
     def __repr__(self): # pragma: no cover
-        return f"Delimiter(close={self.close!r}, escape={self.escape}, nested={self.nested})"
+        return f"Delimiter(close={self.close!r}, escape={self.escape!r}, quoting={self.quoting})"
+
+    def __eq__(self, other):
+        return (isinstance(other, Delimiter)
+            and (self.close   == other.close)
+            and (self.escape  == other.escape)
+            and (self.quoting == other.quoting)
+            )
+
+    def copy(self):
+        return Delimiter(self)
+
 
 delimiter_parentheses = Delimiter(")")
 _export_name('delimiter_parentheses')
@@ -2197,10 +2220,10 @@ _export_name('delimiter_curly_braces')
 delimiter_angle_brackets = Delimiter(">")
 _export_name('delimiter_angle_brackets')
 
-delimiter_single_quote = Delimiter("'", escape='\\', nested=False)
+delimiter_single_quote = Delimiter("'", escape='\\', quoting=True)
 _export_name('delimiter_single_quote')
 
-delimiter_double_quotes = Delimiter('"', escape='\\', nested=False)
+delimiter_double_quotes = Delimiter('"', escape='\\', quoting=True)
 _export_name('delimiter_double_quotes')
 
 split_delimiters_default_delimiters = {
@@ -2217,13 +2240,14 @@ split_delimiters_default_delimiters_bytes = {
     b'(': Delimiter(b')'),
     b'[': Delimiter(b']'),
     b'{': Delimiter(b'}'),
-    b"'": Delimiter(b"'", escape=b'\\', nested=False),
-    b'"': Delimiter(b'"', escape=b'\\', nested=False),
+    b"'": Delimiter(b"'", escape=b'\\', quoting=True),
+    b'"': Delimiter(b'"', escape=b'\\', quoting=True),
     }
 _export_name('split_delimiters_default_delimiters_bytes')
 
 
-class DelimiterTransitions:
+class _DelimiterState:
+    "Data structure representing a delimiter, with precomputed state transitions"
     def __init__(self, open={}, close=(), escape='', illegal={}):
         self.open = open
         self.close = close
@@ -2231,68 +2255,35 @@ class DelimiterTransitions:
         # illegal characters in this context.
         # these are always close delimiters
         # (apart from the actual close delimiter)
-        # inside a nested=True open delimiter.
+        # inside a quoting=False open delimiter.
         # e.g. the string "[foo(]" is invalid,
         # ']' is an illegal character there.
         self.illegal = illegal
 
-@_export
-def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, initial=()):
+
+def _delimiters_to_state_machine(delimiters, is_bytes):
     """
-    Splits a string at delimiter substrings.
+    Converts delimiters into a _DelimiterState tree
+    as used by the split_delimiters generator.
+    Returns a 2-tuple:
 
-    s may be str or bytes.
+        (initial_state, all_tokens)
 
-    delimiters may be either None or an iterable containing
-    either Delimiter objects or objects matching s (str or bytes).
-    Entries in the delimiters iterable which are str or bytes
-    should be exactly two characters long; these will be used
-    as the open and close arguments for a new Delimiter object.
-
-    If delimiters is None, split_delimiters uses a default
-    value matching these pairs of delimiters:
-        () [] {} "" ''
-    The quote mark delimiters enable escape sequences
-    (with \\ as the escape character) and disable nesting.
-
-    Yields 3-tuples containing strings:
-        (text, open, close)
-    where text is the text before the next opening or closing delimiter,
-    open is the trailing opening delimiter,
-    and close is the trailing closing delimiter.
-    At least one of these three strings will always be non-empty.
-    If open is non-empty, close will be empty, and vice-versa.
-    If s does not end with a closing delimiter, in the final tuple
-    yielded, both open and close will be empty strings.
-
-    You can only specify a particular character as an opening delimiter
-    once, though you may reuse a particular character as a closing
-    delimiter multiple times.
-
-    You may not specify backslash ('\\') as a delimiter.
-
-    See the Delimiter object for how delimiters are defined, and how
-    you can define your own delimiters.
+    where initial_state is the _DelimiterState object for
+    the initial state, and all_tokens is an iterable
+    of all the token strings needed to parse, including open
+    delimimeters, close delimiters, and escape strings.
     """
-    if isinstance(s, bytes):
+    if is_bytes:
         s_type = bytes
         s_type_description = "bytes"
         not_s_type_description = "str"
-        if delimiters in (None, split_delimiters_default_delimiters):
-            delimiters = split_delimiters_default_delimiters_bytes
         disallowed_delimiter = b'\\'
-        empty = b''
     else:
         s_type = str
         s_type_description = "str"
         not_s_type_description = "bytes"
-        if delimiters in (None, split_delimiters_default_delimiters_bytes):
-            delimiters = split_delimiters_default_delimiters
         disallowed_delimiter = '\\'
-        empty = ''
-
-    if not delimiters:
-        raise ValueError("invalid delimiters")
 
     all_closers = set()
     all_openers = set(delimiters)
@@ -2312,14 +2303,12 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, initi
         all_closers.add(v.close)
         if not isinstance(v.escape, s_type):
             raise TypeError(f"Delimiter: escape {v.escape!r} must be {s_type_description}, not {not_s_type_description}")
-        if v.nested:
-            if v.escape:
-                raise ValueError(f"Delimiter: nested cannot be true when an escape character is specified ({v.escape!r})")
-            nested_closers.add(v.close)
-        else:
-            if not v.escape:
-                raise ValueError(f"Delimiter: nested must be true when an escape character is not specified")
+        if v.quoting:
+            assert v.escape
             all_escapes.add(v.escape)
+        else:
+            assert not v.escape
+            nested_closers.add(v.close)
 
     in_both_openers_and_closers = all_openers & nested_closers
     if in_both_openers_and_closers:
@@ -2331,42 +2320,32 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, initi
             prefix = 'these characters '
         raise ValueError(f"{prefix}{in_both_openers_and_closers!r} cannot be both an opening and closing delimiter")
 
-    all_delimiters = all_openers | all_closers
+    all_tokens = all_openers | all_closers | all_escapes
 
-    # compute transitions for delimiters for escape='' and nested=True
-    base = DelimiterTransitions(open={}, close=None, illegal=all_closers)
+    # the initial state contains all the open delimiters, and doesn't have a close delimiter.
+    # all the non-quoting states reuse the same open dictionary.
+    initial_state = _DelimiterState(open={}, close=None, illegal=all_closers)
 
     empty_dict = {}
 
     for open, delimiter in delimiters.items():
-        if delimiter.nested:
-            openers = base.open
+        if not delimiter.quoting:
+            openers = initial_state.open
             illegal = set(all_closers)
             illegal.discard(delimiter.close)
         else:
             openers = illegal = empty_dict
 
-        transitions = DelimiterTransitions(open=openers, close=delimiter.close, escape=delimiter.escape, illegal=illegal)
-        base.open[open] = transitions
+        state = _DelimiterState(open=openers, close=delimiter.close, escape=delimiter.escape, illegal=illegal)
+        initial_state.open[open] = state
 
-    stack = []
+    return initial_state, all_tokens
+
+
+def split_delimiters(s, all_tokens, current, stack, empty):
+    "Internal generator function returned by the real split_delimiters."
     push = stack.append
     pop = stack.pop
-
-    current = base
-
-    if initial:
-        last_open = ''
-        for open in _iterate_over_bytes(initial):
-            # if current.open is false, we must be inside a non-nested open delimiter.
-            if not current.open:
-                raise ValueError(f"{open!r} specified in initial inside non-nested open delimiter {last_open!r}")
-            next = current.open.get(open, None)
-            if next is None:
-                raise ValueError(f"{open!r} specified in initial isn't a defined open delimiter")
-            push(current)
-            current = next
-            last_open = open
 
     text = []
     append = text.append
@@ -2376,7 +2355,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, initi
 
     escaped = ''
 
-    for s, delimiter in multisplit(s, all_delimiters, keep=AS_PAIRS, separate=True):
+    for s, delimiter in multisplit(s, all_tokens, keep=AS_PAIRS, separate=True):
         if escaped:
             escaped = ''
             if not s:
@@ -2421,17 +2400,323 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, initi
             yield s, empty, empty
 
 
+_split_delimiters = split_delimiters
+
+_split_delimiters_default_delimiters_cache = _delimiters_to_state_machine(split_delimiters_default_delimiters, False)
+_split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_machine(split_delimiters_default_delimiters_bytes, True)
 
 
-# backwards compatibility for old names, will stick around until at least September 2025
-parse_delimiters_default_delimiters = split_delimiters_default_delimiters
+@_export
+def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state=()):
+    """
+    Splits a string at delimiter substrings.
+
+    s may be str or bytes.
+
+    delimiters may be either None or a mapping of open delimiter
+    strings to Delimiter objects.
+
+    If delimiters is None, split_delimiters uses a default
+    value matching these pairs of delimiters:
+        () [] {} "" ''
+    The quote mark delimiters enable escape sequences
+    (with \\ as the escape character) and also enable quoting.
+
+    state specifies the initial state of parsing. It's an iterable
+    of open delimiter strings specifying the initial nested state of
+    the parser, with the innermost nesting level on the right.
+    If you wanted split_delimiters to behave as if it'd already seen
+    a '(' and a '[', in that order, pass in ['(', '['] to state.
+
+    (Tip: Use a list as a stack to track the state of split_delimiters,
+    pushing open delimiters with .append and popping them with .pop
+    when you encounter the matching close delimiter.)
+
+    Yields 3-tuples containing strings:
+        (text, open, close)
+    where text is the text before the next opening or closing delimiter,
+    open is the trailing opening delimiter,
+    and close is the trailing closing delimiter.
+    At least one of these three strings will always be non-empty.
+    If open is non-empty, close will be empty, and vice-versa.
+    If s doesn't end with a closing delimiter, in the final tuple
+    yielded, both open and close will be empty strings.
+
+    You may reuse a particular character as a closing
+    delimiter multiple times.
+
+    You may not specify backslash ('\\') as a delimiter.
+
+    See the Delimiter object for how delimiters are defined, and how
+    you can define your own delimiters.
+    """
+    initial_state = all_tokens = None
+
+    is_bytes = isinstance(s, bytes)
+    if is_bytes:
+        if delimiters in (None, split_delimiters_default_delimiters):
+            initial_state, all_tokens = _split_delimiters_default_delimiters_bytes_cache
+        empty = b''
+    else:
+        if delimiters in (None, split_delimiters_default_delimiters_bytes):
+            initial_state, all_tokens = _split_delimiters_default_delimiters_cache
+        empty = ''
+
+    if not initial_state:
+        if not delimiters:
+            raise ValueError("invalid delimiters")
+
+        initial_state, all_tokens = _delimiters_to_state_machine(delimiters, is_bytes)
+
+    stack = []
+    push = stack.append
+
+    current = initial_state
+
+    if state:
+        last_open = ''
+        for open in _iterate_over_bytes(state):
+            # if current.open is false, we must be inside a quoting open delimiter.
+            if not current.open:
+                raise ValueError(f"{open!r} specified in state as being inside a quoting open delimiter {last_open!r}")
+            next = current.open.get(open, None)
+            if next is None:
+                raise ValueError(f"{open!r} specified in state, isn't a defined open delimiter")
+            push(current)
+            current = next
+            last_open = open
+
+    return _split_delimiters(s, all_tokens, current, stack, empty)
+
+
+
+
+# here lies the old version, parse_delimiters
+# it will be removed eventually, but no sooner than September 2025.
+
+@_export
+class ParseDelimiter:
+    """
+    Class representing a delimiter for parse_delimiters.
+
+    open is the opening delimiter character, can be str or bytes, must be length 1.
+    close is the closing delimiter character, must be the same type as open, and length 1.
+    backslash is a boolean: when inside this delimiter, can you escape delimiters
+       with a backslash?  (You usually can inside single or double quotes.)
+    nested is a boolean: must other delimiters nest in this delimiter?
+       (Delimiters don't usually need to be nested inside single and double quotes.)
+    """
+    def __init__(self, open, close, *, backslash=False, nested=True):
+        if isinstance(open, bytes):
+            t = bytes
+        else:
+            t = str
+        if not (isinstance(open, t) and isinstance(close, t)):
+            raise TypeError(f"open={open!r} and close={close!r}, they must be the same type, either str or bytes")
+
+        self.open = open
+        self.close = close
+        self.backslash = backslash
+        self.nested = nested
+
+    def __repr__(self): # pragma: no cover
+        return f"ParseDelimiter(open={self.open!r}, close={self.close!r}, backslash={self.backslash}, nested={self.nested})"
+
+parse_delimiter_parentheses = "()"
+_export_name('parse_delimiter_parentheses')
+
+parse_delimiter_square_brackets = "[]"
+_export_name('parse_delimiter_square_brackets')
+
+parse_delimiter_curly_braces = "{}"
+_export_name('delimiter_curly_braces')
+
+parse_delimiter_angle_brackets = "<>"
+_export_name('parse_delimiter_angle_brackets')
+
+parse_delimiter_single_quote = ParseDelimiter("'", "'", backslash=True, nested=False)
+_export_name('parse_delimiter_single_quote')
+
+parse_delimiter_double_quotes = ParseDelimiter('"', '"', backslash=True, nested=False)
+_export_name('parse_delimiter_double_quotes')
+
+parse_delimiters_default_delimiters = (
+    parse_delimiter_parentheses,
+    parse_delimiter_square_brackets,
+    parse_delimiter_curly_braces,
+    parse_delimiter_single_quote,
+    parse_delimiter_double_quotes,
+    )
 _export_name('parse_delimiters_default_delimiters')
 
-parse_delimiters_default_delimiters_bytes = split_delimiters_default_delimiters_bytes
+parse_delimiters_default_delimiters_bytes = (
+    b'()',
+    b'[]',
+    b'{}',
+    ParseDelimiter(b"'", b"'", backslash=True, nested=False),
+    ParseDelimiter(b'"', b'"', backslash=True, nested=False),
+    )
 _export_name('parse_delimiters_default_delimiters_bytes')
 
-parse_delimiters = split_delimiters
-_export_name('parse_delimiters')
+
+# break the rules
+_base_parse_delimiter = ParseDelimiter('a', 'b')
+_base_parse_delimiter.open = _base_parse_delimiter.close = None
+
+def parse_delimiters(s, delimiters, backslash_character, closers, empty):
+    open_to_delimiter = {d.open: d for d in delimiters}
+
+    text = []
+    append = text.append
+    def flush(open, close):
+        s = empty.join(text)
+        text.clear()
+        assert s or open or close
+        return s, open, close
+
+    # d stores the *current* delimiter
+    # d is not in stack.
+    d = _base_parse_delimiter
+    stack = []
+    backslash = d.backslash
+    nested = d.nested
+    close = None
+    quoted = False
+
+    for i, c in enumerate(_iterate_over_bytes(s)):
+        if quoted:
+            append(c)
+            quoted = False
+            continue
+        if c == close:
+            yield flush(empty, c)
+            d = stack.pop()
+            backslash = d.backslash
+            nested = d.nested
+            close = d.close
+            continue
+        if nested:
+            if c in closers:
+                # this is a closing delimiter,
+                # but it doesn't match.
+                # (if it did, we'd have handled it
+                #  in "if c == close" above.)
+                raise ValueError(f"mismatched closing delimiter at s[{i}]: expected {close}, got {c}")
+            next_d = open_to_delimiter.get(c)
+            if next_d:
+                yield flush(c, empty)
+                stack.append(d)
+                d = next_d
+                backslash = d.backslash
+                nested = d.nested
+                close = d.close
+                continue
+        if backslash and (c == backslash_character):
+            quoted = True
+        append(c)
+
+    if len(stack):
+        stack.pop(0)
+        stack.append(d)
+        raise ValueError("s does not close all opened delimiters, needs " + " ".join(d.close for d in reversed(stack)))
+
+    if text:
+        yield flush(empty, empty)
+
+_parse_delimiters = parse_delimiters
+
+@_export
+def parse_delimiters(s, delimiters=None):
+    """
+    NOTE: this function is deprecated.  Please use split_delimiters instead.
+
+    Parses a string containing nesting delimiters.
+    Raises an exception if mismatched delimiters are detected.
+
+    s may be str or bytes.
+
+    delimiters may be either None or an iterable containing
+    either Delimiter objects or objects matching s (str or bytes).
+    Entries in the delimiters iterable which are str or bytes
+    should be exactly two characters long; these will be used
+    as the open and close arguments for a new Delimiter object.
+
+    If delimiters is None, parse_delimiters uses a default
+    value matching these pairs of delimiters:
+        () [] {} "" ''
+    The quote mark delimiters enable backslash quoting and disable nesting.
+
+    Yields 3-tuples containing strings:
+        (text, open, close)
+    where text is the text before the next opening or closing delimiter,
+    open is the trailing opening delimiter,
+    and close is the trailing closing delimiter.
+    At least one of these three strings will always be non-empty.
+    If open is non-empty, close will be empty, and vice-versa.
+    If s does not end with a closing delimiter, in the final tuple
+    yielded, both open and close will be empty strings.
+
+    You can only specify a particular character as an opening delimiter
+    once, though you may reuse a particular character as a closing
+    delimiter multiple times.
+    """
+    if isinstance(s, bytes):
+        s_type = bytes
+        if delimiters is None:
+            delimiters = parse_delimiters_default_delimiters_bytes
+        backslash_character = b'\\'
+        disallowed_delimiters = backslash_character
+        empty = b''
+    else:
+        s_type = str
+        if delimiters is None:
+            delimiters = parse_delimiters_default_delimiters
+        backslash_character = '\\'
+        disallowed_delimiters = backslash_character
+        empty = ''
+
+    if not delimiters:
+        raise ValueError("invalid delimiters")
+    # convert
+    delimiters2 = []
+    for d in delimiters:
+        if isinstance(d, ParseDelimiter):
+            delimiters2.append(d)
+            continue
+        if isinstance(d, s_type):
+            if not len(d) == 2:
+                raise ValueError(f"illegal delimiter string {d!r}, must be 2 characters long")
+            delimiters2.append(ParseDelimiter(d[0:1], d[1:2]))
+            continue
+        raise TypeError(f"invalid delimiter {d!r}")
+
+    delimiters = delimiters2
+    # early-detect errors
+
+    # scan for disallowed
+    delimiter_characters = {d.open for d in delimiters} | {d.close for d in delimiters}
+    disallowed = {disallowed_delimiters}
+    illegal_delimiters = disallowed & delimiter_characters
+    if illegal_delimiters:
+        raise ValueError("illegal delimiters used: " + "".join(illegal_delimiters))
+
+    # closers is a set of closing delimiters *only*.
+    # if open and close delimiters are the same (e.g. quote marks)
+    # it shouldn't go in closers.
+    seen = set()
+    repeated = []
+    closers = set()
+    for d in delimiters:
+        if d.open in seen:
+            repeated.append(d.open)
+        seen.add(d.open)
+        if d.close != d.open:
+            closers.add(d.close)
+
+    if repeated:
+        raise ValueError("these opening delimiters were used multiple times: " + " ".join(repeated))
+
+    return _parse_delimiters(s, delimiters, backslash_character, closers, empty)
 
 
 
@@ -2738,6 +3023,16 @@ def lines_strip(li, separators=None):
 
         yield (info, line)
 
+def lines_filter_line_comment_lines(li, comment_re):
+    "The generator function returned by the public lines_filter_line_comment_lines function."
+    for info, line in li:
+        s = line.lstrip()
+        if comment_re.match(s):
+            continue
+        yield (info, line)
+
+_lines_filter_line_comment_lines = lines_filter_line_comment_lines
+
 @_export
 def lines_filter_line_comment_lines(li, comment_markers):
     """
@@ -2772,13 +3067,7 @@ def lines_filter_line_comment_lines(li, comment_markers):
     comment_pattern = _separators_to_re(comment_markers, comment_markers_is_bytes, separate=False, keep=False)
     comment_re = re.compile(comment_pattern)
 
-    def lines_filter_line_comment_lines(li, comment_re):
-        for info, line in li:
-            s = line.lstrip()
-            if comment_re.match(s):
-                continue
-            yield (info, line)
-    return lines_filter_line_comment_lines(li, comment_re)
+    return _lines_filter_line_comment_lines(li, comment_re)
 
 
 @_export
@@ -2801,6 +3090,27 @@ def lines_containing(li, s, *, invert=False):
     for t in li:
         if s in t[1]:
             yield t
+
+
+def lines_grep_inverted(li, search, match):
+    for t in li:
+        info, line = t
+        m = search(line)
+        if not m:
+            setattr(info, match, None)
+            yield t
+
+_lines_grep_inverted = lines_grep_inverted
+
+def lines_grep(li, search, match):
+    for t in li:
+        info, line = t
+        m = search(line)
+        if m:
+            setattr(info, match, m)
+            yield t
+
+_lines_grep = lines_grep
 
 @_export
 def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
@@ -2835,22 +3145,12 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     search = pattern.search
 
     if invert:
-        def lines_grep(li, search, match):
-            for t in li:
-                info, line = t
-                m = search(line)
-                if not m:
-                    setattr(info, match, None)
-                    yield t
+        lines_grep = _lines_grep_inverted
     else:
-        def lines_grep(li, search, match):
-            for t in li:
-                info, line = t
-                m = search(line)
-                if m:
-                    setattr(info, match, m)
-                    yield t
+        lines_grep = _lines_grep
+
     return lines_grep(li, search, match)
+
 
 @_export
 def lines_sort(li, *, reverse=False):
@@ -2865,6 +3165,74 @@ def lines_sort(li, *, reverse=False):
     lines = list(li)
     lines.sort(key=lambda t:t[1], reverse=reverse)
     yield from iter(lines)
+
+
+def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip, empty_join):
+    "The generator function returned by the public lines_strip_line_comments function."
+    state = None
+    starting_pair_for_state = None
+
+    for info, line in li:
+        # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
+
+        if quotes:
+            i = split_quoted_strings(line, quotes, escape=escape, state=state)
+        else:
+            i = iter( (('', line, ''),) )
+
+        line_comment_segments = None
+
+        for leading_quote, segment, trailing_quote in i:
+            # print(f"-- {leading_quote=} {segment=} {trailing_quote=}")
+            if leading_quote:
+                continue
+
+            if state:
+                # we're still in a quote from a previous line.
+                # assert not leading_quote
+                if trailing_quote:
+                    state = None
+                    starting_pair_for_state = None
+                else:
+                    # we didn't find the ending quote from the previous line,
+                    # so this should be the entire line
+                    assert segment == line
+                continue
+
+            fields = line_comment_splitter(segment, maxsplit=1)
+            if len(fields) == 1:
+                continue
+
+            # found a comment marker in an unquoted segment!
+            leading = fields[0]
+            line_comment_segments = fields[1:]
+
+            # exhaust i, draining it to line_comment_segments
+            for triplet in i:
+                line_comment_segments.extend(triplet)
+            assert line_comment_segments
+            line = info.extend_trailing(empty_join(line_comment_segments), line)
+
+            if rstrip:
+                stripped = leading.rstrip()
+                if stripped != leading:
+                    line = info.extend_trailing(leading[len(stripped):], line)
+            break
+
+        if not line_comment_segments:
+            if leading_quote and not trailing_quote:
+                if leading_quote not in multiline_quotes:
+                    raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
+                state = leading_quote
+                starting_pair_for_state = info, line
+
+        yield (info, line)
+
+    if state:
+        info, line = starting_pair_for_state
+        raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
+
+_lines_strip_line_comments = lines_strip_line_comments
 
 @_export
 def lines_strip_line_comments(li, line_comment_markers, *,
@@ -2953,71 +3321,7 @@ def lines_strip_line_comments(li, line_comment_markers, *,
         quotes.extend(multiline_quotes)
         multiline_quotes = set(multiline_quotes)
 
-    def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip):
-        state = None
-        starting_pair_for_state = None
-
-        for info, line in li:
-            # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
-
-            if quotes:
-                i = split_quoted_strings(line, quotes, escape=escape, initial=state)
-            else:
-                i = iter( (('', line, ''),) )
-
-            line_comment_segments = None
-
-            for leading_quote, segment, trailing_quote in i:
-                # print(f"-- {leading_quote=} {segment=} {trailing_quote=}")
-                if leading_quote:
-                    continue
-
-                if state:
-                    # we're still in a quote from a previous line.
-                    # assert not leading_quote
-                    if trailing_quote:
-                        state = None
-                        starting_pair_for_state = None
-                    else:
-                        # we didn't find the ending quote from the previous line,
-                        # so this should be the entire line
-                        assert segment == line
-                    continue
-
-                fields = line_comment_splitter(segment, maxsplit=1)
-                if len(fields) == 1:
-                    continue
-
-                # found a comment marker in an unquoted segment!
-                leading = fields[0]
-                line_comment_segments = fields[1:]
-
-                # exhaust i, draining it to line_comment_segments
-                for triplet in i:
-                    line_comment_segments.extend(triplet)
-                assert line_comment_segments
-                line = info.extend_trailing(empty_join(line_comment_segments), line)
-
-                if rstrip:
-                    stripped = leading.rstrip()
-                    if stripped != leading:
-                        line = info.extend_trailing(leading[len(stripped):], line)
-                break
-
-            if not line_comment_segments:
-                if leading_quote and not trailing_quote:
-                    if leading_quote not in multiline_quotes:
-                        raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
-                    state = leading_quote
-                    starting_pair_for_state = info, line
-
-            yield (info, line)
-
-        if state:
-            info, line = starting_pair_for_state
-            raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
-
-    return lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip)
+    return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip, empty_join)
 
 lines_strip_comments = lines_strip_line_comments
 _export_name("lines_strip_comments")

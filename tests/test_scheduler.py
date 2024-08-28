@@ -140,10 +140,6 @@ class ScheduleTesterBase(unittest.TestCase):
                 if self.thread:
                     self.thread.join()
 
-        def call(self, fn):
-            "Tell the worker thread to call a function, without arguments."
-            self.queue.put(fn)
-
         def _wait(self):
             """
             Block until the main thread
@@ -157,7 +153,7 @@ class ScheduleTesterBase(unittest.TestCase):
             to get right.
             """
             r = self.scheduler.regulator
-            while self._running and (not r.sleeping):
+            while self._running and (not r.sleeping): # pragma: nocover
                 time.sleep(0.001)
 
         def wait(self):
@@ -201,7 +197,7 @@ class ScheduleTesterBase(unittest.TestCase):
                 for expected, got in zip(events, i):
                     self.test_case.assertEqual(expected, got)
                     i = non_blocking
-            for unexpected in non_blocking:
+            for unexpected in non_blocking: # pragma: nocover
                 raise ValueError(f"no events should have been ready now, but we got {unexpected}")
 
         def _thread(self):
@@ -211,33 +207,28 @@ class ScheduleTesterBase(unittest.TestCase):
 
             o = None
 
-            try:
-                while self._running:
-                    if o:
-                        q.task_done()
+            while self._running:
+                if o:
+                    q.task_done()
 
-                    o = q.get()
+                o = q.get()
 
-                    if o == ExitThread:
-                        break
+                if o == ExitThread:
+                    break
 
-                    if callable(o):
-                        o()
-                        continue
+                if callable(o):
+                    o()
+                    continue
 
-                    if isinstance(o, (int, float)):
-                        # a time interval, advance the regulator
-                        r.advance(o)
-                        continue
+                if isinstance(o, (int, float)):
+                    # a time interval, advance the regulator
+                    r.advance(o)
+                    continue
 
-                    if isinstance(o, tuple):
-                        event, t, absolute, priority = o
-                        s.schedule(event, t, absolute=absolute, priority=priority)
-                        continue
-
-                    raise ValueError(f"unhandled object {o} in MockTimeThread.thread")
-            except Exception as e:
-                pass
+                if isinstance(o, tuple):
+                    event, t, absolute, priority = o
+                    s.schedule(event, t, absolute=absolute, priority=priority)
+                    continue
 
             self._running = False
             t = self.thread

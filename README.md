@@ -329,7 +329,7 @@ And here are five little functions/classes I use all the time:
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
-[`split_quoted_strings(s, quotes=('"', "'"), *, escape="\\", initial=None)`](#split_quoted_stringss-quotes---escape-initialnone)
+[`split_quoted_strings(s, quotes=('"', "'"), *, escape="\\", state='')`](#split_quoted_stringss-quotes---escape-state)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
@@ -2237,22 +2237,56 @@ Equivalent to [`bytes_whitespace`](#bytes_whitespace) without `'\r\n'`.
 
 </dd></dl>
 
-#### `Delimiter(open, close, *, backslash=False, nested=True)`
+#### `combine_splits(s, *split_arrays)`
+
+<dl><dd>
+
+Takes a string `s`, and one or more "split arrays",
+and applies all the splits to `s`.  Returns
+an iterator of the resulting string segments.
+
+A "split array" is an array containing the original
+string, but split into multiple pieces.  For example,
+the string `"a b c d e"`` could be split into the
+split array `["a ", "b ", "c ", "d ", "e"]``
+
+For example,
+
+```
+    combine_splits('abcde', ['abcd', 'e'], ['a', 'bcde'])
+```
+
+returns `['a', 'bcd', 'e']`.
+
+Note that the split arrays *must* contain all the
+characters from `s`.  `''.join(split_array)`` must recreate `s`.
+`combine_splits` only examines the lengths of the strings
+in the split arrays, and makes no attempt to infer
+stripped characters.  (So, don't use the string's `.split`
+method to split, use big's `multisplit` with `keep=True` or
+`keep=ALTERNATING`.)
+
+</dd></dl>
+
+#### `Delimiter(close, *, escape='', quoting=False)`
 
 <dl><dd>
 
 Class representing a delimiter for
-[`parse_delimiters`.](#parse_delimiterss-delimitersNone)
-
-`open` is the opening delimiter character, can be `str` or `bytes`, must be length 1.
+`split_delimiters`.
 
 `close` is the closing delimiter character, must be the same type as `open`, and length 1.
 
-`backslash` is a boolean: when inside this delimiter, can you escape delimiters
-with a backslash?  (You usually can inside single or double quotes.)
+`escape` is a string of maximum length 1.  If true, when inside this delimiter,
+you can escape the trailing delimiter with this string.
 
-`nested` is a boolean: must other delimiters nest in this delimiter?
-(Delimiters don't usually need to be nested inside single and double quotes.)
+`quoting` is a boolean: does this set of delimiters "quote" the text inside?
+When an open delimiter enables quoting, `split_delimiters` will ignore all
+other delimiters in the text until it encounters the matching close delimiter.
+(Single- and double-quotes set this to `True`.)
+
+Currently `escape` and `quoting` must either both be true or both be false.
+
 </dd></dl>
 
 #### `encode_strings(o, *, encoding='ascii')`
@@ -3041,54 +3075,6 @@ normalize_whitespace("   a    b   c") == " a b c"
 ```
 </dd></dl>
 
-#### `parse_delimiters(s, delimiters=None)`
-
-<dl><dd>
-
-Parses a string containing nesting delimiters.
-Raises an exception if mismatched delimiters are detected.
-
-`s` may be `str` or `bytes`.
-
-`delimiters` may be either `None` or an iterable containing
-either
-[`Delimiter`](#delimiteropen-close--backslashfalse-nestedtrue)
-objects or objects matching `s` (`str` or `bytes`).
-Entries in the `delimiters` iterable which are `str` or `bytes`
-should be exactly two characters long; these will be used
-as the `open` and `close` arguments for a new `Delimiter` object.
-
-If `delimiters` is `None`, `parse_delimiters` uses a default
-value matching these pairs of delimiters:
-
-```
-() [] {} "" ''
-```
-
-The quote mark delimiters enable backslash quoting and disable nesting.
-
-Yields 3-tuples containing strings:
-
-```
-(text, open, close)
-```
-
-where `text` is the text before the next opening or closing delimiter,
-`open` is the trailing opening delimiter,
-and `close` is the trailing closing delimiter.
-At least one of these three strings will always be non-empty.
-If `open` is non-empty, `close` will be empty, and vice-versa.
-If `s` does not end with a closing delimiter, in the final tuple
-yielded, both `open` and `close` will be empty strings.
-
-(Concatenating every string yielded by `parse_delimiters` together
-produces a new string identical to `s`.)
-
-You can only specify a particular character as an opening delimiter
-once, though you may reuse a particular character as a closing
-delimiter multiple times.
-</dd></dl>
-
 #### `re_partition(text, pattern, count=1, *, flags=0, reverse=False)`
 
 <dl><dd>
@@ -3202,7 +3188,63 @@ with `re.compile` using the `flags` you passed in.
 `string` should be the same type as `pattern` (or `pattern.pattern`).
 </dd></dl>
 
-#### `split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, initial=None)`
+#### `split_delimiters(s, delimiters=..., *, state=())`
+
+<dl><dd>
+
+Splits a string `s` at delimiter substrings.
+
+`s` may be str or bytes.
+
+`delimiters` may be either `None` or a mapping of open delimiter
+strings to `Delimiter` objects.
+
+If `delimiters` is `None`, `split_delimiters` uses a default
+value matching these pairs of delimiters:
+
+```
+    () [] {} "" ''
+```
+
+The quote mark delimiters enable escape sequences
+(with `\` as the escape character) and also enable quoting.
+
+`state` specifies the initial state of parsing. It's an iterable
+of open delimiter strings specifying the initial nested state of
+the parser, with the innermost nesting level on the right.
+If you wanted `split_delimiters` to behave as if it'd already seen
+a `'('` and a `'['`, in that order, pass in `['(', '[']`
+to `state`.
+
+(Tip: Use a `list` as a stack to track the state of `split_delimiters`.
+Push open delimiters with `.append`, and pop them with `.pop`
+when you encounter the matching close delimiter.)
+
+Yields 3-tuples containing strings:
+
+```
+    (text, open, close)
+```
+
+where `text` is the text before the next opening or closing delimiter,
+`open` is the trailing opening delimiter,
+and `close` is the trailing closing delimiter.
+At least one of these three strings will always be non-empty.
+If `open` is non-empty, `close` will be empty, and vice-versa.
+If `s` doesn't end with a closing delimiter, in the final tuple
+yielded, both `open` and `close` will be empty strings.
+
+You may reuse a particular character as a closing
+delimiter multiple times.
+
+You may not specify backslash (`'\'`) as a delimiter.
+
+See the `Delimiter` object for how delimiters are defined, and how
+you can define your own delimiters.
+
+</dd></dl>
+
+#### `split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, state='')`
 
 <dl><dd>
 
@@ -3234,7 +3276,7 @@ backslash ('\\') character inside strings in Python.
 By default, `escape` is `'\\'`.  (If `s` is `bytes`,
 `escape` defaults to `b'\\'`.)
 
-`initial` is a string.  It sets the initial state of
+`state` is a string.  It sets the initial state of
 the function.  The default is an empty string (`str`
 or `bytes`, matching `s`); this means the parser starts
 parsing the string in an unquoted state.  If you
@@ -3243,13 +3285,13 @@ a quote delimiter--for example, if you were parsing
 multiple lines individually, and you wanted to begin
 a new line continuing the state from the previous line--
 pass in the appropriate quote delimiter from `quotes`
-into `initial`.  Note that when a non-empty string is
-passed in to `initial`, the `leading_quote` in the first
+into `state`.  Note that when a non-empty string is
+passed in to `state`, the `leading_quote` in the first
 3-tuple yielded by `split_quoted_strings` will be an
 empty string:
 
 ```
-    list(split_quoted_string("a b c'", initial="'"))
+    list(split_quoted_string("a b c'", state="'"))
 ```
 
 evaluates to
@@ -3290,6 +3332,60 @@ examples when these words are rejoined into lines by
 For more information, see the deep-dive on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
+
+#### `split_title_case(s, *, split_allcaps=True)`
+
+<dl><dd>
+
+Splits `s` into words, assuming that
+upper-case characters start new words.
+Returns an iterator yielding the split words.
+
+Example:
+
+```
+    list(split_title_case('ThisIsATitleCaseString'))
+```
+
+is equal to
+
+```
+    ['This', 'Is', 'A', 'Title', 'Case', 'String']
+```
+
+If `split_allcaps` is a true value (the default),
+runs of multiple uppercase characters will also
+be split before the last character.  This is
+needed to handle splitting single-letter words.
+Consider:
+
+```
+    list(split_title_case('WhenIWasATeapot', split_allcaps=True))
+```
+
+returns
+
+```
+    ['When', 'I', 'Was', 'A', 'Teapot']
+```
+
+but
+
+```
+    list(split_title_case('WhenIWasATeapot', split_allcaps=False))
+```
+
+returns
+
+```
+    ['When', 'IWas', 'ATeapot']
+```
+
+Note: uses the `isupper` and `islower` methods
+to determine what are upper- and lower-case
+characters.  This means it only recognizes the ASCII
+upper- and lower-case letters for bytes strings.
+
 
 #### `str_linebreaks`
 
@@ -5518,25 +5614,28 @@ Lots of changes this time!  Grouping by submodule:
   * `split_quoted_string` used to use a hand-coded parser,
     manually analyzing each character in the input text.
     Now it uses `multisplit` to only examine the interesting
-    characters.  `multisplit` has a large startup cost
+    substrings.  `multisplit` has a large startup cost
     the first time you use a particular set of iterators,
     but this information is cached for subsequent calls.
-    Bottom line, the new version is  much faster
+    Bottom line, the new version is much faster
     for larger workloads.  (It's slower for trivial
     examples... where speed doesn't matter.)
-  * `quotes` may now contain quote delimiters of any nonzero
-    length.
-    * By default `quotes` only contains `'`` (single-quote) 
-      and `"` (double-quote).  The previous version also
-      activated `"""` and `'''` by default; this was judged
-      to be too opinionated and Python-specific.
   * The `backslash` parameter has been replaced by a
     new parameter, `escape`.
     `escape` allows specifying the escape string, which
     by default is '\\' (backslash).  If you specify a false
     value, there will be no escape character in strings.
+  * Another benefit of switching to `multisplit`: `quotes`
+    now supports quote delimiters and an escape string
+    of any nonzero length.  If more than one quote delimiter
+    matches at a time, `split_quoted_string` will always
+    pick the longer string.
+  * By default `quotes` only contains `'`` (single-quote)
+    and `"` (double-quote).  The previous version also
+    supported `"""` and `'''` by default; this is no longer
+    true, it was too opinionated and Python-specific.
   * `split_quoted_string` also accepts a new parameter,
-    `initial`, which sets the initial state of quoting.
+    `state`, which sets the initial state of quoting.
   * The `triple_quotes` parameter has been removed.  (See
     next bullet point.)
   * `split_quoted_string` is now documented as being completely
@@ -5547,63 +5646,54 @@ Lots of changes this time!  Grouping by submodule:
     officially up to you to enforce any rules here
     (e.g. "newlines aren't permitted in
     single-quoted strings.")
-  * The old `split_quoted_string` manually parsed the
-    string, character by character.  The shiny new
-    version uses `multisplit`, so it zips past
-    the uninteresting characters to find the quote
-    marks.  It's always faster, except for trivial
-    calls which are fast enough anyway.
 
 * Breaking change: `parse_delimiters` has also been
   completely re-tooled, re-written... *and* re-named!
-  It's now called `split_delimiters`.
+  The new name is `split_delimiters`.
 
-  The old version is still available, under its old
+  The old version is still available under the old
   name.  It's deprecated, and will eventually be
   removed, but not before August 2025 (one year from now).
+  However, the old `Delimiter` class has been
+  renamed to `ParseDelimiter`; there's a new
+  `Delimiter` class used by `split_delimiters`.
 
   Changes:
   * `parse_delimiters` took an iterable of `Delimiters`
-    objects, or strings of length 2.  `parse_delimiters`
+    objects, or strings of length 2.  `split_delimiters`
     takes a dictionary mapping open delimiter strings to
     `Delimiter` objects, and `Delimiter` objects no
     longer have an "open" attribute.
-  * `split_delimiters` now accepts an `initial` parameter,
+  * `split_delimiters` now accepts an `state` parameter,
     which specifies the initial state of nested delimiters.
   * `split_delimiters` no longer cares if there were unclosed
     open delimiters at the end of the string.  (It used to
     raise `ValueError`.)
-  * `parse_delimiters` manually parsed the
-    string, character by character.  `split_delimiters`
-    uses `multisplit`, so it zips past
-    the uninteresting characters to find the delimiters
-    and escape characters.  It's always faster, except
-    for trivial calls which are fast enough anyway.
-  * The old `Delimiter` object used with `parse_delimiters`
-    used to have a boolean `backslash` attribute; if it was
-    True, that delimiter allowed escaping using a backslash.
-    The new `Delimiter` object used with `split_delimiters`
+  * `parse_delimiters` manually parsed the string, character
+    by character.  `split_delimiters` uses `multisplit`, so it
+    zips past the uninteresting characters to find the delimiters
+    and escape characters.  It's always faster, except for
+    some trivial calls (which are fast enough anyway).
+  * Another benefit of using `multisplit`: open delimiters,
+    close delimiters, and the escape string may now all be
+    any nonzero length.  (In the face of ambiguity,
+    `split_delimiters` will always choose the longer delimiter.)
+  * The `ParseDelimiter` object used with `parse_delimiters`
+    has a boolean `backslash` attribute; if it's True, that
+    delimiter allows escaping using a backslash.  The new
+    `Delimiter` class used with `split_delimiters` instead
     has an `escape=c` attribute, where `c` is the escape
     character you want to use with that set of delimiters.
     All the predefined `Delimiter` values have been updated
     to match.
-  * As mentioned above, the `Delimiter` object no longer
-    has an `open` attribute.
+  * As mentioned above, the `Delimiter` object doesn't have
+    an `open` attribute.  (`ParseDelimiter` still does.)
 
 * Breaking change: the `LineInfo` constructor has added
   a new `lines` positional parameter, in front of the
   existing positional parameters.  This should be the
   `lines` iterator that yielded this `LineInfo` object.
   It's stored in the `lines` attribute.
-
-* New function: `split_title_case`, which splits a string
-  at title case change word boundaries.
-
-* New function: `combine_splits`.  If you split a string
-  two different ways, producing two arrays that sum to the
-  original string, `combine_splits` will merge those splits
-  together, producing a new array that splits in every
-  place any of the two split arrays had a split.
 
 * New feature: `LineInfo` objects yielded by `lines`
   previously had many optional fields, which might or might
@@ -5673,6 +5763,15 @@ Lots of changes this time!  Grouping by submodule:
     mostly just there to present a consistent interface to
     the user.)
 
+* New function: `split_title_case`, which splits a string
+  at title case change word boundaries.
+
+* New function: `combine_splits`.  If you split a string
+  two different ways, producing two arrays that sum to the
+  original string, `combine_splits` will merge those splits
+  together, producing a new array that splits in every
+  place any of the two split arrays had a split.
+
 * Minor but free speedup for several functions in `big.text`,
   most importantly
   [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
@@ -5681,13 +5780,14 @@ Lots of changes this time!  Grouping by submodule:
   those local functions to module level, which means we no
   longer rebind them each time the function is called.  As a
   very rough guess, this can be as much as a 10% speedup for
-  `multisplit` run on short workloads.  (It's also *never* slower.)
+  `multisplit` run on very short workloads.  (It's also *never*
+  slower.)
 
   In the case of
   [`merge_columns`,](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
   we were binding functions inside a loop (!!) inside a function.
-  These local functions are still bound inside `merge_columns`,
-  but they're now outside the loop.
+  (That was dumb, huh.)  These local functions are still bound
+  inside `merge_columns`, but now at least they're outside the loop.
 
 * Another minor speedup for `multisplit`: when `reverse=True`,
   we used to reverse the results *three times!*  We now explicitly
@@ -5735,14 +5835,16 @@ Lots of changes this time!  Grouping by submodule:
 ### builtin
 
 * Small tweak to `get_int_or_float`.  If the `o` you pass in
-  is a `float`, or can be converted to `float`, `get_int_or_float`
-  will experimentally convert it to `int`.  If the `float` and
-  `int` versions compare equal, it will return the `int`, otherwise
-  it'll return the `float`.
+  is a `float`, or can be converted to `float` (but not `int`),
+  `get_int_or_float` will experimentally convert the float to `int`.
+  If the `float` and `int` versions compare equal, it'll return
+  the `int`, otherwise it'll return the `float`.
 
   For example, `get_int_or_float("13.5")` will still return `13.5`
-  (a `float`), but `get_int_or_float("13.0")` will now return `13`
+  (a `float`), but `get_int_or_float("13.0")` now returns `13`
   (an `int`).
+
+
 
 #### 0.11
 <dl><dd>

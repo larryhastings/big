@@ -2814,8 +2814,8 @@ class BigTextTests(unittest.TestCase):
             # convert everybody to ascii
             if 'quotes' in kwargs:
                 kwargs['quotes'] = [x.encode('ascii') for x in kwargs['quotes']]
-            if 'initial' in kwargs:
-                kwargs['initial'] = kwargs['initial'].encode('ascii')
+            if 'state' in kwargs:
+                kwargs['state'] = kwargs['state'].encode('ascii')
             if 'escape' in kwargs:
                 kwargs['escape']  = kwargs['escape'].encode('ascii')
 
@@ -2862,7 +2862,7 @@ class BigTextTests(unittest.TestCase):
                 ("",  ' x y z ', ""),
                 ("'", 'd e f', "'"),
             ],
-            initial="'"
+            state="'"
             )
 
         # let's get weird!
@@ -2900,7 +2900,7 @@ class BigTextTests(unittest.TestCase):
                 ("",   " efg ", ""),
                 ("'",  'hgi',   ""),
             ],
-            initial="'"
+            state="'"
             )
 
         # test auto-converting _sqs_quotes_str
@@ -2980,19 +2980,19 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             test("a b c' x y z 'd e f'",
                 [],
-                initial='"""'
+                state='"""'
                 )
 
         with self.assertRaises(ValueError):
             test("a b c' x y z 'd e f'",
                 [],
-                initial='Q'
+                state='Q'
                 )
 
         with self.assertRaises(TypeError):
             test("a b c' x y z 'd e f'",
                 [],
-                initial=b"'"
+                state=b"'"
                 )
 
         # repeated markers
@@ -3006,18 +3006,18 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             test("a b c' x y z 'd e f'",
                 [],
-                initial="Z"
+                state="Z"
                 )
 
 
-    def test_parse_delimiters(self):
+    def test_split_delimiters(self):
 
         self.maxDiff = 2**32
 
-        def test(s, expected, *, delimiters=None, initial=()):
+        def test(s, expected, *, delimiters=None, state=()):
             empty = ''
             for i in range(2):
-                got = tuple(big.parse_delimiters(s, delimiters=delimiters, initial=initial))
+                got = tuple(big.split_delimiters(s, delimiters=delimiters, state=state))
 
                 flattened = []
                 for t in got:
@@ -3042,8 +3042,8 @@ class BigTextTests(unittest.TestCase):
                     s = to_bytes(s)
                     expected = to_bytes(expected)
                     empty = b''
-                    if initial:
-                        initial = to_bytes(initial)
+                    if state:
+                        state = to_bytes(state)
 
         test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
             (
@@ -3094,13 +3094,39 @@ class BigTextTests(unittest.TestCase):
             ),
             )
 
+        # test state
         test('x"], foo);}',
             (
                 ('x',     '', '"'),
                 ('',      '', ']'),
                 (', foo', '', ')'),
                 (';',     '', '}'),
-            ), initial='{(["')
+            ), state='{(["')
+
+        with self.assertRaises(ValueError):
+            test('abc', None, state='[{"(')
+
+        with self.assertRaises(ValueError):
+            test('abc', None, state='{(x[')
+
+        # test escapes
+        test(r"foo('ab\'cd')",
+            (
+                ( 'foo',    '(', '' ),
+                ( '',       "'", '' ),
+                (r"ab\'cd", '',  "'"),
+                ( '',       '',  ')'),
+            ),
+            )
+
+        test(r'foo("ab\"cd")',
+            (
+                ( 'foo',    '(', '' ),
+                ( '',       '"', '' ),
+                (r'ab\"cd', '',  '"'),
+                ( '',       '',  ')'),
+            ),
+            )
 
         with self.assertRaises(ValueError):
             test('a[3)', None)
@@ -3116,33 +3142,161 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             test('str/bytes mismatch', None, delimiters={'a': big.Delimiter(close=b'b')})
         with self.assertRaises(TypeError):
+            test('str/bytes mismatch', None, delimiters={'a': big.Delimiter(close='x', escape=b'b', quoting=True)})
+        with self.assertRaises(TypeError):
             test('bytes/str mismatch', None, delimiters={b'a': big.Delimiter(close='b')})
+        with self.assertRaises(TypeError):
+            test('bytes/str mismatch', None, delimiters={b'a': big.Delimiter(close=b'x', escape='b', quoting=True)})
         with self.assertRaises(ValueError):
-            test('delimiters contains a <backslash>', None, delimiters={'\\': big.Delimiter(close='z')})
+            test('open delimiters is a <backslash>', None, delimiters={'\\': big.Delimiter(close='z')})
         with self.assertRaises(ValueError):
-            test('delimiters contains <angle> <brackets> <twice>', None, delimiters={'<': big.Delimiter(close='x'), '>': big.Delimiter(close='<')})
+            test('close delimiter is a <backslash>', None, delimiters={'z': big.Delimiter(close='\\')})
+        with self.assertRaises(ValueError):
+            test('delimiters contains <angle> <brackets> as both open and close delimiters', None, delimiters={'<': big.Delimiter(close='x'), '>': big.Delimiter(close='<')})
+        with self.assertRaises(ValueError):
+            test('delimiters contains <angle> <brackets> as both open and close delimiters', None, delimiters={'<': big.Delimiter(close='>'), 'x': big.Delimiter(close='<'), '{': big.Delimiter(close='}'), 'q': big.Delimiter(close='{')})
+        with self.assertRaises(ValueError):
+            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=True, escape='')})
+        with self.assertRaises(ValueError):
+            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
 
-        # with self.assertRaises(ValueError):
-        #     test('unclosed_paren(a[3]', None)
-        # with self.assertRaises(ValueError):
-        #     test('x[3] = unclosed_curly{', None)
-        # with self.assertRaises(ValueError):
-        #     test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
-        # with self.assertRaises(ValueError):
-        #     test('"text ends with an escape character\\', None)
-        # with self.assertRaises(ValueError):
-        #     test('open_everything( { a[35 "foo', None)
+        # testing on the Delimiter class itself
+        d = big.Delimiter(close='x')
+        self.assertEqual(d, big.Delimiter(d) )
+        d = big.Delimiter(close='q', quoting=True, escape='>')
+        self.assertEqual(d, d.copy() )
+
+        with self.assertRaises(ValueError):
+            big.Delimiter(close='x', escape='', quoting=True)
+        with self.assertRaises(ValueError):
+            big.Delimiter(close='x', escape='z', quoting=False)
+
+
+    def test_parse_delimiters(self):
+
+        self.maxDiff = 2**32
+
+        def test(s, expected, *, delimiters=None):
+            empty = ''
+            for i in range(2):
+                got = tuple(big.parse_delimiters(s, delimiters=delimiters))
+
+                flattened = []
+                for t in got:
+                    flattened.extend(t)
+                s2 = empty.join(flattened)
+                self.assertEqual(s, s2)
+
+                self.assertEqual(expected, got)
+
+                if not i:
+                    s = to_bytes(s)
+                    expected = to_bytes(expected)
+                    empty = b''
+
+        test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
+            (
+                ('a',                '[',  ''),
+                ('x',                 '', ']'),
+                (' = foo',           '(',  ''),
+                ('',                 '"',  ''),
+                ('howdy (folks)\\n',  '', '"'),
+                (', ',               '{',  ''),
+                ('1:2, 3:4',          '', '}'),
+                ('',                  '', ')'),
+            ),
+            )
+
+        test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
+            (
+                ('a', '[',  ''),
+                ('',  '[',  ''),
+                ('',  '[',  ''),
+                ('z',  '', ']'),
+                ('',   '', ']'),
+                ('',   '', ']'),
+                ('',  '{',  ''),
+                ('',  '{',  ''),
+                ('',  '{',  ''),
+                ('',  '{',  ''),
+                ('q',  '', '}'),
+                ('',   '', '}'),
+                ('',   '', '}'),
+                ('',   '', '}'),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('',  '[',  ''),
+                ('',  '{',  ''),
+                ('z',  '', '}'),
+                ('',   '', ']'),
+                ('',   '', '}'),
+                ('',   '', ']'),
+                ('',   '', '}'),
+                ('',   '', ']'),
+                ('',   '', '}'),
+                ('',   '', ']'),
+                ('!',  '',  ''),
+            ),
+            )
+
+        with self.assertRaises(ValueError):
+            test('a[3)', None)
+        with self.assertRaises(ValueError):
+            test('a{3]', None)
+        with self.assertRaises(ValueError):
+            test('a(3}', None)
+
+        with self.assertRaises(ValueError):
+            test('delimiters is empty', None, delimiters=[])
+        with self.assertRaises(ValueError):
+            test('delimiter is abc (huh!)', None, delimiters=['()', 'abc'])
+        with self.assertRaises(TypeError):
+            test('delimiters contains 3', None, delimiters=['{}', 3])
+        with self.assertRaises(ValueError):
+            test('delimiters contains a <backslash>', None, delimiters=['<>', '\\/'])
+        with self.assertRaises(ValueError):
+            test('delimiters contains <angle> <brackets> <twice>', None, delimiters=['<>', '<>'])
+
+        with self.assertRaises(ValueError):
+            test('unclosed_paren(a[3]', None)
+        with self.assertRaises(ValueError):
+            test('x[3] = unclosed_curly{', None)
+        with self.assertRaises(ValueError):
+            test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
+        with self.assertRaises(ValueError):
+            test('"unterminated string\\', None)
+        with self.assertRaises(ValueError):
+            test('open_everything( { a[35 "foo', None)
+
+        with self.assertRaises(TypeError):
+            big.ParseDelimiter('(', b')')
+        with self.assertRaises(TypeError):
+            big.ParseDelimiter(b'(', ')')
 
 
     def test_lines(self):
         self.maxDiff = 2**32
-        def test(i, expected):
+
+        def assert_lines_reconstitutes_properly(i):
+            for t in i:
+                info, line = t
+                reconstituted_line = info.leading + line + info.trailing
+                self.assertEqual(info.line, reconstituted_line)
+                yield t
+
+        def test(i, expected, *, test_reconstituted_line=True):
             # slight hack
             nonlocal lines
             for info, line in expected:
                 info.lines = lines
 
             # print("I", i)
+            if test_reconstituted_line:
+                i = assert_lines_reconstitutes_properly(i)
             got = list(i)
             if 0:
                 import pprint
@@ -3277,7 +3431,7 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        i = big.lines_grep(lines, "eg+")
+        i = assert_lines_reconstitutes_properly(big.lines_grep(lines, "eg+"))
         got = test_and_remove_lineinfo_match(i, "eg")
         test(got,
             [
@@ -3297,7 +3451,7 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        i = big.lines_grep(lines, "eg+", invert=True, match='quixote')
+        i = assert_lines_reconstitutes_properly(big.lines_grep(lines, "eg+", invert=True, match='quixote'))
         got = test_and_remove_lineinfo_match(i, "eg", invert=True, match='quixote')
         test(got,
             [
@@ -3436,7 +3590,7 @@ hummingbird
                 L("\t\tsecond line", 2, 1, final="                second line"),
                 L("  \tthird line", 3, 1,  final="        third line"),
                 L("", 4, 1, end=''),
-            ])
+            ], test_reconstituted_line=False)
 
         lines = big.lines("""
 for x in range(5): # this is my exciting comment
@@ -3559,9 +3713,16 @@ for x in range(5): # this is a comment
     def test_lines_strip_indent(self):
         self.maxDiff = 2**32
 
+        def assert_lines_reconstitutes_properly(i):
+            for t in i:
+                info, line = t
+                reconstituted_line = info.leading + line + info.trailing
+                self.assertEqual(info.line, reconstituted_line)
+                yield t
+
         def test(lines, expected, *, tab_width=8):
             lines = big.lines(lines, tab_width=tab_width)
-            i = big.lines_strip_indent(lines)
+            i = assert_lines_reconstitutes_properly(big.lines_strip_indent(lines))
             got = list(i)
 
             # fixup lines objects
