@@ -2524,7 +2524,7 @@ For more information, see the deep-dive on
 
 <dl><dd>
 
-The second object yielded by a
+The first object yielded by a
 [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 iterator, containing metadata about the line.
 You can add your own fields by passing them in
@@ -4970,11 +4970,29 @@ best practice for any field in `LineInfo`; you should amend
 it, rather than set it outright.
 
 Speaking of best practices for lines modifier functions,
-it's also considered good hygiene to modify the `LineInfo`
-object that was yielded to you.  Don't create a new one
-and yield that instead.  Previous lines modifier iterators
-may have added fields to the `LineInfo` that you need to
-preserve.
+it's also best practice to *modify* the *existing*
+`LineInfo` object that was yielded to you, rather than
+throwing it away, creating a new one, and yielding that
+instead.  Previous lines modifier iterators may have added
+fields to the `LineInfo` that you'd to preserve.
+
+### leading + line + trailing + end
+
+Generally speaking, `LineInfo` objects obey an invariant.
+For any `(info, line)` pair yielded by `lines` or a lines
+modifier:
+
+    info.leading + line + info.trailing + info.end == info.line
+
+That is, you can recreate the original line by concatenating
+the "leading" string, the modified line, the "trailing" string,
+and the "end" string.
+
+However, this is no longer true when using lines modifiers that
+replace characters in the line.  For example, `lines_convert_tabs_to_spaces`
+replaces tab characters with one or more space characters.
+If the original line contains tabs, obviously the above invariant
+will no longer hold true.
 
 </dd></dl>
 
@@ -5607,10 +5625,36 @@ Lots of changes this time!  Grouping by submodule:
 
   The old version is still available under a new
   name: `old_split_quoted_string`.  It's deprecated, and will
-  eventually be removed, but not before August 2025
+  eventually be removed, but not before September 2025
   (one year from now).
 
   Changes:
+  * The value it yields has changed:
+    * The old version yielded `(is_quote, segment)`, where
+      `is_quote` was a boolean value indicating whether or not
+      `segment` was quoted.  If `segment` was quoted, it began
+      and ended with (single character) quote marks.  To reassemble
+      the original string, join together all the `segment` strings
+      in order.
+    * The new version yields `(leading_quote, segment, trailing_quote)`,
+      where `leading_quote` and `trailing_quote` are either matching
+      quote marks or empty.  If they're true values, the `segment`
+      string is inside the quotes.  To reassemble the original string,
+      join together *all* the yielded strings in order.
+  * The `backslash` parameter has been replaced by a
+    new parameter, `escape`.
+    `escape` allows specifying the escape string, which
+    by default is '\\' (backslash).  If you specify a false
+    value, there will be no escape character in strings.
+  * By default `quotes` only contains `'`` (single-quote)
+    and `"` (double-quote).  The previous version also
+    used `"""` and `'''` as multiline quote marks
+    by default; this is no longer true, as it was too
+    opinionated and Python-specific.
+  * `split_quoted_string` also accepts a new parameter,
+    `state`, which sets the initial state of quoting.
+  * The `triple_quotes` parameter has been removed.  (See
+    next bullet point.)
   * `split_quoted_string` used to use a hand-coded parser,
     manually analyzing each character in the input text.
     Now it uses `multisplit` to only examine the interesting
@@ -5620,32 +5664,20 @@ Lots of changes this time!  Grouping by submodule:
     Bottom line, the new version is much faster
     for larger workloads.  (It's slower for trivial
     examples... where speed doesn't matter.)
-  * The `backslash` parameter has been replaced by a
-    new parameter, `escape`.
-    `escape` allows specifying the escape string, which
-    by default is '\\' (backslash).  If you specify a false
-    value, there will be no escape character in strings.
   * Another benefit of switching to `multisplit`: `quotes`
     now supports quote delimiters and an escape string
-    of any nonzero length.  If more than one quote delimiter
-    matches at a time, `split_quoted_string` will always
-    pick the longer string.
-  * By default `quotes` only contains `'`` (single-quote)
-    and `"` (double-quote).  The previous version also
-    supported `"""` and `'''` by default; this is no longer
-    true, it was too opinionated and Python-specific.
-  * `split_quoted_string` also accepts a new parameter,
-    `state`, which sets the initial state of quoting.
-  * The `triple_quotes` parameter has been removed.  (See
-    next bullet point.)
-  * `split_quoted_string` is now documented as being completely
-    agnostic about newlines.  The previous version was, too;
-    even though the documentation discussed triple-quoted
-    strings vs single-quoted strings, in reality it didn't
-    ever care about newlines.  With the updated API, it's
-    officially up to you to enforce any rules here
-    (e.g. "newlines aren't permitted in
-    single-quoted strings.")
+    of any nonzero length.  In the case of ambiguity--if
+    more than one quote delimiter matches at a
+    time--`split_quoted_string` will always pick the
+    longer string.
+  * `split_quoted_string` is now deliberately
+    (and documented-ly) completely agnostic about newlines.
+    The previous version was, too; even though the
+    documentation discussed triple-quoted strings vs
+    single-quoted strings, in reality it didn't ever care
+    about newlines.  With the updated API, it's officially
+    up to you to enforce the rules you want (e.g. "newlines
+    aren't permitted in single-quoted strings.")
 
 * Breaking change: `parse_delimiters` has also been
   completely re-tooled, re-written... *and* re-named!
@@ -5653,7 +5685,8 @@ Lots of changes this time!  Grouping by submodule:
 
   The old version is still available under the old
   name.  It's deprecated, and will eventually be
-  removed, but not before August 2025 (one year from now).
+  removed, but not before September 2025.
+
   However, the old `Delimiter` class has been
   renamed to `ParseDelimiter`; there's a new
   `Delimiter` class used by `split_delimiters`.
@@ -5668,39 +5701,63 @@ Lots of changes this time!  Grouping by submodule:
     which specifies the initial state of nested delimiters.
   * `split_delimiters` no longer cares if there were unclosed
     open delimiters at the end of the string.  (It used to
-    raise `ValueError`.)
-  * `parse_delimiters` manually parsed the string, character
-    by character.  `split_delimiters` uses `multisplit`, so it
-    zips past the uninteresting characters to find the delimiters
-    and escape characters.  It's always faster, except for
-    some trivial calls (which are fast enough anyway).
+    raise `ValueError`.)  This includes quote marks; if you
+    don't want quoted strings to span multiple lines, it's up
+    to you to detect it and react (e.g. raise an exception).
+  * `parse_delimiters` manually parsed the input string
+    character by character.  `split_delimiters` uses `multisplit`,
+    so it zips past the uninteresting characters and only examines
+    the delimiters and escape characters.  It's always faster,
+    except for some trivial calls (which are fast enough anyway).
   * Another benefit of using `multisplit`: open delimiters,
     close delimiters, and the escape string may now all be
     any nonzero length.  (In the face of ambiguity,
     `split_delimiters` will always choose the longer delimiter.)
   * The `ParseDelimiter` object used with `parse_delimiters`
-    has a boolean `backslash` attribute; if it's True, that
+    has a boolean `backslash` attribute; if it was True, that
     delimiter allows escaping using a backslash.  The new
-    `Delimiter` class used with `split_delimiters` instead
-    has an `escape=c` attribute, where `c` is the escape
+    `Delimiter` class used with `split_delimiters` replaces that
+    with an `escape=c` attribute, where `c` is the escape
     character you want to use with that set of delimiters.
     All the predefined `Delimiter` values have been updated
     to match.
-  * As mentioned above, the `Delimiter` object doesn't have
-    an `open` attribute.  (`ParseDelimiter` still does.)
+  * As mentioned above, the new `Delimiter` object doesn't
+    have an `open` attribute.  (`ParseDelimiter` still does.)
 
-* Breaking change: the `LineInfo` constructor has added
-  a new `lines` positional parameter, in front of the
-  existing positional parameters.  This should be the
-  `lines` iterator that yielded this `LineInfo` object.
-  It's stored in the `lines` attribute.
+* Breaking change: `lines_strip_comments` has *also* been
+  completely rewritten and renamed.  It's now named
+  `lines_strip_line_comments`.
 
-* New feature: `LineInfo` objects yielded by `lines`
-  previously had many optional fields, which might or might
-  not be added dynamically.  Now all fields are pre-added.
-  (This makes the CPython 3.13 runtime happier; it really
-  wants you to set *all* your class's attributes in its
-  `__init__`.)
+  Changes:
+  * The old function required quote marks and the escape string
+    to be single characters, and had a slightly-smelly
+    `triple_quotes` parameter to support multiline strings.
+    The new function allows quote marks to be of any length,
+    and has separate parameters for single-line quote marks
+    and multiline quote marks.
+  * The `backslash` parameter has been renamed to `escape`.
+  * The old function didn't enforce that strings shouldn't
+    span lines.  The new version raises `SyntaxError`
+    if quoted strings aren't closed (unless they're explicitly
+    strings that support multiline).
+  * Breaking change to the old version: it used to write the
+    comment it rstripped to `info.comment`, and it threw away
+    any whitespace it stripped.  It now obeys the modern
+    `LineInfo` aesthetic, and writes *both* the whitespace it
+    rstripped *and* the comment to `info.trailing`.
+
+
+* Breaking change: the `LineInfo` constructor has a
+  new `lines` positional parameter, added *in front of*
+  the existing positional parameters.  This new first argument
+  should be the  `lines` iterator that yielded this
+  `LineInfo` object.  It's stored in the `lines` attribute.
+
+* `LineInfo` objects (yielded by `lines`) previously had
+  many optional fields, which might or might not be added
+  dynamically.  Now all fields are pre-added.  (This makes
+  the CPython 3.13 runtime happier; it really wants you to
+  set *all* your class's attributes in its `__init__`.)
 
   `LineInfo` objects now always have these attributes:
   * `lines`, which contains the base lines iterator.
@@ -5727,41 +5784,41 @@ Lots of changes this time!  Grouping by submodule:
     was matched with a regular expression, and `None` otherwise.
 
 * `LineInfo` now has two new methods: `extend_leading`
-  and `extend_trailing`.  These methods
-  move a leading or trailing substring from the current `line`
-  to the relevant field in `LineInfo`, maintaining all the
-  guaranteed invariants, and updating all related `LineInfo`
-  fields (like `column_number`).
+  and `extend_trailing`.  These methods move a leading or
+  trailing substring from the current `line` to the relevant
+  field in `LineInfo`, maintaining all the guaranteed
+  invariants, and updating all related `LineInfo` fields
+  (like `column_number`).
 
-* There have been plenty of changes to line modifiers, too:
-  * `lines_strip_comments` has been renamed to `lines_strip_line_comments`.
-    It's also been improved: now it raises `SyntaxError` if quoted
-    strings aren't closed.
-  * `lines_filter_comment_lines` has been renamed to
-    `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
-    now enforces that single-quoted strings can't span lines,
-    and multi-quoted strings must be closed before the end of
-    the last line.
-  * `lines_strip` and `lines_rstrip` now accept a new `separators`
-    argument; this is an iterable of separators, like the argument
-    to `multisplit`.
-    The default value of `None` preserves the existing behavior,
-    stripping whitespace.
-  * `lines_grep` now adds a `match` attribute to the `LineInfo`
-    object, containing the return value from calling `re.search`.
-    (If you pass in `invert=True` to `lines_grep`, `lines_grep`
-    will still write `None` to the `match` attribute.)
-  * Bugfix: `lines_strip_indent` previously required
-    whitespace-only lines to obey the indenting rules.
-    My intention was always for `lines_strip_indent` to
-    behave like Python, and that includes not really caring
-    about the intra-line-whitespace for whitespace-only
-    lines.  Now `lines_strip_indent` behaves more like Python:
-    a whitespace-only line behaves as if it has
-    the same indent as the previous line.  (Not that the
-    indent value of an empty line should matter; this is
-    mostly just there to present a consistent interface to
-    the user.)
+* `lines_filter_comment_lines` has been renamed to
+  `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
+  now enforces that single-quoted strings can't span lines,
+  and multi-quoted strings must be closed before the end of
+  the last line.  For backwards compatibility, the new function
+  is also available under the old name; this old name will
+  eventually be removed, but not before September 2025.
+
+* `lines_strip` and `lines_rstrip` now accept a new `separators`
+  argument; this is an iterable of separators, like the argument
+  to `multisplit`.
+  The default value of `None` preserves the existing behavior,
+  stripping whitespace.
+
+* `lines_grep` now writes to the `match` attribute to the `LineInfo`
+  object, containing the return value from calling `re.search`.
+  (If you pass in `invert=True` to `lines_grep`, `lines_grep`
+  still writes to the `match` attribute--but it always writes `None`.)
+
+* Bugfix: `lines_strip_indent` previously required
+  whitespace-only lines to obey the indenting rules, which was
+  a mistake.  My intention was always for `lines_strip_indent`
+  to behave like Python, and that includes not really caring
+  about the intra-line-whitespace for whitespace-only
+  lines.  Now `lines_strip_indent` behaves more like Python:
+  a whitespace-only line behaves as if it has
+  the same indent as the previous line.  (Not that the
+  indent value of an empty line should matter--but this
+  behavior is how you'd intuitively expect it to work.)
 
 * New function: `split_title_case`, which splits a string
   at title case change word boundaries.
@@ -5791,7 +5848,7 @@ Lots of changes this time!  Grouping by submodule:
 
 * Another minor speedup for `multisplit`: when `reverse=True`,
   we used to reverse the results *three times!*  We now explicitly
-  observe and manage the reverse state of the result and avoid
+  observe and manage the reverse state of the result, to avoid
   needless reversing.
 
 ### scheduler

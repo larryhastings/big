@@ -1819,7 +1819,8 @@ def old_split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=No
     Returns an iterator yielding 2-tuples:
         (is_quoted, segment)
     where segment is a substring of s, and is_quoted is true if the segment is
-    quoted.  Joining all the segments together recreates s.
+    quoted.  Joining all the segments together recreates s.  (The segment
+    strings include the quote marks.)
 
     If triple_quotes is true, supports "triple-quoted" strings like Python.
 
@@ -2738,38 +2739,38 @@ class LineInfo:
         elif is_str:
             empty = ''
         else:
-            raise TypeError("line must be str or bytes")
+            raise TypeError(f"line must be str or bytes, not {line!r}")
 
         if not isinstance(line_number, int):
-            raise TypeError("line_number must be int")
+            raise TypeError(f"line_number must be int, not {line_number!r}")
         if not isinstance(column_number, int):
-            raise TypeError("column_number must be int")
+            raise TypeError(f"column_number must be int, not {column_number!r}")
 
         line_type = type(line)
 
         if leading == None:
             leading = empty
         elif not isinstance(leading, line_type):
-            raise TypeError("leading must be same type as line or None")
+            raise TypeError(f"leading must be same type as line or None, not {leading!r}")
 
         if trailing == None:
             trailing = empty
         elif not isinstance(trailing, line_type):
-            raise TypeError("trailing must be same type as line or None")
+            raise TypeError(f"trailing must be same type as line or None, not {trailing!r}")
 
         if end == None:
             end = empty
         elif not isinstance(end, line_type):
-            raise TypeError("end must be same type as line or None")
+            raise TypeError(f"end must be same type as line or None, not {end!r}")
 
         self.lines = lines
         self.line = line
         self.line_number = line_number
         self.column_number = column_number
-        self.indent = None
         self.leading = leading
         self.trailing = trailing
         self.end = end
+        self.indent = None
         self.match = None
         self._is_bytes = is_bytes
         self.__dict__.update(kwargs)
@@ -2779,7 +2780,7 @@ class LineInfo:
 
     def extend_leading(self, s, line):
         if isinstance(s, int):
-            assert -len(line) <= s < len(line)
+            assert -len(line) <= s < len(line), f"extend_leading invalid parameters: s={s!r} line={line!r}"
             s = line[:s]
         else:
             assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
@@ -2793,7 +2794,7 @@ class LineInfo:
 
     def extend_trailing(self, s, line):
         if isinstance(s, int):
-            assert -len(line) <= s < len(line)
+            assert -len(line) <= s < len(line), f"extend_trailing invalid parameters: s={s!r} line={line!r}"
             s = line[-s:]
         else:
             assert line.endswith(s), f"line {line!r} doesn't end with s {s!r}"
@@ -2804,7 +2805,7 @@ class LineInfo:
 
     def __repr__(self):
         names = list(self.__dict__)
-        priority_names = ['line', 'lines', 'line_number', 'column_number', 'leading', 'trailing', 'end']
+        priority_names = ['lines', 'line', 'line_number', 'column_number', 'leading', 'trailing', 'end']
         fields = []
         for name in priority_names:
             names.remove(name)
@@ -3023,11 +3024,11 @@ def lines_strip(li, separators=None):
 
         yield (info, line)
 
-def lines_filter_line_comment_lines(li, comment_re):
+def lines_filter_line_comment_lines(li, match):
     "The generator function returned by the public lines_filter_line_comment_lines function."
     for info, line in li:
         s = line.lstrip()
-        if comment_re.match(s):
+        if match(s):
             continue
         yield (info, line)
 
@@ -3067,8 +3068,12 @@ def lines_filter_line_comment_lines(li, comment_markers):
     comment_pattern = _separators_to_re(comment_markers, comment_markers_is_bytes, separate=False, keep=False)
     comment_re = re.compile(comment_pattern)
 
-    return _lines_filter_line_comment_lines(li, comment_re)
+    return _lines_filter_line_comment_lines(li, comment_re.match)
 
+# old, deprecated name.
+# will eventually be deleted, but not before September 2025.
+lines_filter_comment_lines = lines_filter_line_comment_lines
+_export_name("lines_filter_comment_lines")
 
 @_export
 def lines_containing(li, s, *, invert=False):
@@ -3242,18 +3247,18 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     A lines modifier function.  Strips line comments from the lines
     of a "lines iterator".  Line comments are substrings beginning
     with a special marker that mean the rest of the line should be
-    ignored; lines_strip_comments truncates the line at the
+    ignored; lines_strip_line_comments truncates the line at the
     beginning of the leftmost line comment marker.
 
     line_comment_markers should be an iterable of line comment
     marker strings.  These are strings that denote a "line comment",
     which is to say, a comment that extends from the marker to the
-    end of the line.  lines_strip_comments truncates each line
+    end of the line.  lines_strip_line_comments truncates each line
     starting at the beginning of the leftmost line comment marker
     found on that line.
 
     If quotes is true, it must be an iterable of quote marker
-    strings, length 1 or more.  lines_strip_comments will
+    strings, length 1 or more.  lines_strip_line_comments will
     parse the line using big's split_quoted_strings function,
     and ignore comment characters inside quoted strings.  If
     quotes is false, quote characters are ignored and
@@ -3261,7 +3266,7 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     By default quotes is the tuple ("'", '"').  Quoted strings
     delimited by markers in quotes may not span lines; if a
     line ends with an unterminated quoted string,
-    lines_strip_comments will raise a SyntaxError.
+    lines_strip_line_comments will raise a SyntaxError.
 
     If escape is true, it must be a string.  This string
     will "escape" (quote) quote markers, as per backslash
@@ -3276,18 +3281,18 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     in (conventional) quotes are not allowed to.  By default
     multiline_quotes is an empty string.
 
-    If rstrip is true (the default), lines_strip_comments calls
-    the rstrip() method on line after it truncates the line.
+    If rstrip is true (the default), lines_strip_line_comments
+    calls the rstrip() method on line after it truncates the line.
 
     Updates LineInfo.comment and LineInfo.trailing as appropriate.
 
-    What's the difference between lines_strip_comments and
+    What's the difference between lines_strip_line_comments and
     lines_filter_comment_lines?
       * lines_filter_comment_lines only recognizes lines that
         *start* with a comment separator (ignoring leading
         whitespace).  Also, it filters out those lines
         completely, rather than modifying the line.
-      * lines_strip_comments handles comment characters
+      * lines_strip_line_comments handles comment characters
         anywhere in the line, although it can ignore
         comments inside quoted strings.  It truncates the
         line but still always yields the line.
@@ -3323,8 +3328,109 @@ def lines_strip_line_comments(li, line_comment_markers, *,
 
     return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip, empty_join)
 
-lines_strip_comments = lines_strip_line_comments
-_export_name("lines_strip_comments")
+
+# backwards compatibility
+@_export
+def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True):
+    """
+    NOTE: This function is deprecated.  Please use
+    lines_strip_line_comments instead.  lines_strip_comments
+    will eventually be removed from big, no sooner than September 2025.
+
+    A lines modifier function.  Strips comments from the lines
+    of a "lines iterator".  Comments are substrings that indicate
+    the rest of the line should be ignored; lines_strip_comments
+    truncates the line at the beginning of the leftmost comment
+    separator.
+
+    If rstrip is true (the default), lines_strip_comments calls
+    the rstrip() method on line after it truncates the line.
+
+    If quotes is true, it must be an iterable of quote characters.
+    (Each quote character MUST be a single character.)
+    lines_strip_comments will parse the line and ignore comment
+    characters inside quoted strings.  If quotes is false,
+    quote characters are ignored and line_strip_comments will
+    truncate anywhere in the line.
+
+    backslash and triple_quotes are passed in to
+    split_quoted_string, which is used internally to detect
+    the quoted strings in the line.
+
+    Sets a new field on the associated LineInfo object for every line:
+      * comment - the comment stripped from the line, if any.
+        if no comment was found, "comment" will be an empty string.
+
+    What's the difference between lines_strip_comments and
+    lines_filter_comment_lines?
+      * lines_filter_comment_lines only recognizes lines that
+        *start* with a comment separator (ignoring leading
+        whitespace).  Also, it filters out those lines
+        completely, rather than modifying the line.
+      * lines_strip_comments handles comment characters
+        anywhere in the line, although it can ignore
+        comments inside quoted strings.  It truncates the
+        line but still always yields the line.
+
+    Composable with all the lines_ modifier functions in the big.text module.
+    """
+    if not comment_separators:
+        raise ValueError("illegal comment_separators")
+
+    if isinstance(comment_separators, bytes):
+        comment_separators = _iterate_over_bytes(comment_separators)
+        comment_separators_is_bytes = True
+    else:
+        comment_separators_is_bytes = isinstance(comment_separators[0], bytes)
+    comment_separators = tuple(comment_separators)
+
+    if comment_separators_is_bytes:
+        empty = b''
+    else:
+        empty = ''
+    empty_join = empty.join
+
+    comment_pattern = __separators_to_re(comment_separators, separators_is_bytes=comment_separators_is_bytes, separate=True, keep=True)
+    re_comment = re.compile(comment_pattern)
+    split = re_comment.split
+
+
+    def lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes):
+        for info, line in li:
+            if quotes:
+                i = old_split_quoted_strings(line, quotes, backslash=backslash, triple_quotes=triple_quotes)
+            else:
+                i = ((False, line),)
+
+            # iterate over the line until we either hit the end or find a comment.
+            segments = []
+            append = segments.append
+            for is_quoted, segment in i:
+                if is_quoted:
+                    append(segment)
+                    continue
+
+                fields = split(segment, maxsplit=1)
+                leading = fields[0]
+                if len(fields) == 1:
+                    append(leading)
+                    continue
+
+                # found a comment marker in an unquoted segment!
+                if rstrip:
+                    leading = leading.rstrip()
+                append(leading)
+                break
+
+            keeping = sum(len(s) for s in segments)
+            removing = len(line) - keeping
+            if removing:
+                line = info.extend_trailing(removing, line)
+            yield (info, line)
+    return lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes)
+
+
+
 
 @_export
 def lines_convert_tabs_to_spaces(li):

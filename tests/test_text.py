@@ -3308,6 +3308,9 @@ class BigTextTests(unittest.TestCase):
                 print("got:")
                 pprint.pprint(got)
                 print("\n\n")
+                for e, g in zip(expected, got):
+                    print(e==g)
+                print("\n\n")
             self.assertEqual(expected, got)
 
         def L(line, line_number, column_number=1, end='\n', final=None, **kwargs):
@@ -3694,6 +3697,55 @@ for x in range(5): # this is a comment
             ]
             )
 
+
+        ##
+        ## testing for a deprecated function!
+        ## lines_strip_comments
+        ##
+        lines = big.lines("""
+for x in range(5): # this is a comment
+    print("# this is quoted", x)
+    print("") # this "comment" is useless
+    print(no_comments_or_quotes_on_this_line)
+"""[1:])
+        test(big.lines_strip_comments(lines, ("#", "//")),
+            [
+                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, trailing=' # this is a comment', final='for x in range(5):'),
+                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
+                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
+                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
+                L(line='', line_number=5, column_number=1, end=''),
+            ])
+
+        # don't get alarmed!  we intentionally break quote characters in this test.
+        lines = big.lines("""
+for x in range(5): # this is a comment
+    print("# this is quoted", x)
+    print("") # this "comment" is useless
+    print(no_comments_or_quotes_on_this_line)
+"""[1:])
+        test(big.lines_strip_comments(lines, ("#", "//"), quotes=None),
+            [
+                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, trailing=' # this is a comment', final='for x in range(5):'),
+                L(line='    print("# this is quoted", x)', line_number=2, column_number=1, trailing='# this is quoted", x)', final='    print("'),
+                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
+                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
+                L(line='', line_number=5, column_number=1, end=''),
+            ])
+
+        with self.assertRaises(ValueError):
+            list(big.lines_strip_comments(big.lines("a\nb\n"), None))
+
+        lines = big.lines(b"a\nb# ignored\n c")
+        test(big.lines_strip_comments(lines, b'#'),
+            [
+            L(b'a', 1),
+            L(b'b# ignored', 2, 1, trailing=b'# ignored', final=b'b'),
+            L(b' c', 3, end=b''),
+            ]
+            )
+
+
         lines = big.lines(
 "   \n" +
 "    a = b \n" +
@@ -3713,7 +3765,7 @@ for x in range(5): # this is a comment
     def test_lines_strip_indent(self):
         self.maxDiff = 2**32
 
-        def assert_lines_reconstitutes_properly(i):
+        def assert_line_reconstitutes_properly(i):
             for t in i:
                 info, line = t
                 reconstituted_line = info.leading + line + info.trailing
@@ -3721,8 +3773,9 @@ for x in range(5): # this is a comment
                 yield t
 
         def test(lines, expected, *, tab_width=8):
-            lines = big.lines(lines, tab_width=tab_width)
-            i = assert_lines_reconstitutes_properly(big.lines_strip_indent(lines))
+            if not isinstance(lines, types.GeneratorType):
+                lines = big.lines(lines, tab_width=tab_width)
+            i = assert_line_reconstitutes_properly(big.lines_strip_indent(lines))
             got = list(i)
 
             # fixup lines objects
@@ -3898,6 +3951,8 @@ outdent
 
         # with self.assertRaises(ValueError):
         #     test("first line\n  \u3000  second line\nthird line\n", [])
+
+
 
     def test_lines_misc(self):
         ## error handling
