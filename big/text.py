@@ -78,6 +78,303 @@ def _iterate_over_bytes(b):
     return iter(b)
 
 
+def _recursive_encode_strings(o, encoding):
+    if isinstance(o, str):
+        return o.encode(encoding)
+
+    a = []
+    if isinstance(o, dict):
+        for k, v in o.items():
+            k = _recursive_encode_strings(k, encoding)
+            v = _recursive_encode_strings(v, encoding)
+            a.append((k, v))
+    else:
+        for element in o:
+            a.append(_recursive_encode_strings(element, encoding))
+    return type(o)(a)
+
+
+@_export
+def encode_strings(o, encoding='ascii'):
+    """
+    Accepts a container object 'o' containing
+    str objects; returns an equivalent object
+    with the strings encoded to bytes.
+
+    'o' must be either dict, list, or tuple,
+    or a subclass.
+
+    Encodes every string inside using the encoding
+    specified in the 'encoding' parameter, default
+    is 'ascii'.  Handles nested containers.
+
+    If 'o' contains an object that is not a
+    str, dict, list, or tuple, raises TypeError.
+    """
+    if isinstance(o, str):
+        raise TypeError('encode_strings only accepts tuple, list, or dict')
+    return _recursive_encode_strings(o, encoding)
+
+
+# Tuples enumerating all the whitespace and newline characters,
+# for use with big functions taking "separators" arguments
+# (e.g. lines, multisplit).  For an explanation of what they
+# represent, please see the "Whitespace and line-breaking
+# characters in Python and big" deep-dive in big's README.
+
+_export_name('str_whitespace')
+str_whitespace = (
+    # char    decimal   hex      identity
+    ##########################################
+    '\t'    , #     9 - 0x0009 - tab
+    '\n'    , #    10 - 0x000a - newline
+    '\v'    , #    11 - 0x000b - vertical tab
+    '\f'    , #    12 - 0x000c - form feed
+    '\r'    , #    13 - 0x000d - carriage return
+    '\r\n'  , # bonus! the classic DOS newline sequence!
+    '\x1c'  , #    28 - 0x001c - file separator
+    '\x1d'  , #    29 - 0x001d - group separator
+    '\x1e'  , #    30 - 0x001e - record separator
+    '\x1f'  , #    31 - 0x001f - unit separator
+    ' '     , #    32 - 0x0020 - space
+    '\x85'  , #   133 - 0x0085 - next line
+    '\xa0'  , #   160 - 0x00a0 - non-breaking space
+    '\u1680', #  5760 - 0x1680 - ogham space mark
+    '\u2000', #  8192 - 0x2000 - en quad
+    '\u2001', #  8193 - 0x2001 - em quad
+    '\u2002', #  8194 - 0x2002 - en space
+    '\u2003', #  8195 - 0x2003 - em space
+    '\u2004', #  8196 - 0x2004 - three-per-em space
+    '\u2005', #  8197 - 0x2005 - four-per-em space
+    '\u2006', #  8198 - 0x2006 - six-per-em space
+    '\u2007', #  8199 - 0x2007 - figure space
+    '\u2008', #  8200 - 0x2008 - punctuation space
+    '\u2009', #  8201 - 0x2009 - thin space
+    '\u200a', #  8202 - 0x200a - hair space
+    '\u2028', #  8232 - 0x2028 - line separator
+    '\u2029', #  8233 - 0x2029 - paragraph separator
+    '\u202f', #  8239 - 0x202f - narrow no-break space
+    '\u205f', #  8287 - 0x205f - medium mathematical space
+    '\u3000', # 12288 - 0x3000 - ideographic space
+    )
+_export_name('str_whitespace_without_crlf')
+str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
+
+_export_name('whitespace')
+whitespace = str_whitespace
+_export_name('whitespace_without_crlf')
+whitespace_without_crlf = str_whitespace_without_crlf
+
+_export_name('unicode_whitespace')
+unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
+_export_name('unicode_whitespace_without_crlf')
+unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
+
+_export_name('ascii_whitespace')
+ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
+_export_name('ascii_whitespace_without_crlf')
+ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
+
+_export_name('bytes_whitespace')
+bytes_whitespace = encode_strings(ascii_whitespace)
+_export_name('bytes_whitespace_without_crlf')
+bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
+
+
+_export_name('str_linebreaks')
+str_linebreaks = (
+    # char    decimal   hex      identity
+    ##########################################
+    '\n'    , #   10 - 0x000a - newline
+    '\v'    , #   11 - 0x000b - vertical tab
+    '\f'    , #   12 - 0x000c - form feed
+    '\r'    , #   13 - 0x000d - carriage return
+    '\r\n'  , # bonus! the classic DOS newline sequence!
+    '\x1c'  , #   28 - 0x001c - file separator
+    '\x1d'  , #   29 - 0x001d - group separator
+    '\x1e'  , #   30 - 0x001e - record separator
+    '\x85'  , #  133 - 0x0085 - next line
+    '\u2028', # 8232 - 0x2028 - line separator
+    '\u2029', # 8233 - 0x2029 - paragraph separator
+
+    # What about '\n\r'?
+    # Sorry, Acorn and RISC OS users, you'll have to add this yourselves.
+    # I'm worried it would cause bugs with a malformed DOS string,
+    # or maybe when operating in reverse mode.
+    #
+    # Also: welcome, Acorn and RISC OS users!
+    # What are you doing here?  You can't run Python 3.6+!
+    )
+_export_name('str_linebreaks_without_crlf')
+str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
+
+_export_name('linebreaks')
+linebreaks = str_linebreaks
+_export_name('linebreaks_without_crlf')
+linebreaks_without_crlf = str_linebreaks_without_crlf
+
+_export_name('unicode_linebreaks')
+unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
+_export_name('unicode_linebreaks_without_crlf')
+unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
+
+_export_name('ascii_linebreaks')
+ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
+_export_name('ascii_linebreaks_without_crlf')
+ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
+
+# Notice that bytes_linebreaks doesn't contain \v or \f.
+# This is so big agrees with Python itself.
+#
+#    >>> define is_newline_str(c): return len( ("a"+c+"x").splitlines() ) > 1
+#    >>> is_newline_str('\n')
+#    True
+#    >>> is_newline_str('\r')
+#    True
+#    >>> is_newline_str('\f')
+#    True
+#    >>> is_newline_str('\v')
+#    True
+#
+#    >>> define is_newline_byte(c): return len( (b"a"+c+b"x").splitlines() ) > 1
+#    >>> is_newline_byte(b'\n')
+#    True
+#    >>> is_newline_byte(b'\r')
+#    True
+#    >>> is_newline_byte(b'\f')
+#    False
+#    >>> is_newline_byte(b'\v')
+#    False
+
+_export_name('bytes_linebreaks')
+bytes_linebreaks = (
+    b'\n'    , #   10 0x000a - newline
+    b'\r'    , #   13 0x000d - carriage return
+    b'\r\n'  , # bonus! the classic DOS newline sequence!
+    )
+_export_name('bytes_linebreaks_without_crlf')
+bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
+
+
+
+# Before 10.1, big used the word "newlines" instead of "linebreaks"
+# in the names of these tuples.  I realized in September 2023 that
+# "linebreaks" was a better name; Unicode uses the term "line breaks"
+# for these characters.
+#
+# Similarly, "_without_crlf" used to be "_without_dos".  As much
+# as we might dream about a world without DOS, _without_crlf is
+# far more accurate.
+#
+# Here's some backwards-compatibility for you.
+# I promise to keep the old names around until September 2024.
+_export_name('whitespace_without_dos')
+whitespace_without_dos = str_whitespace_without_crlf
+
+_export_name('ascii_whitespace_without_dos')
+ascii_whitespace_without_dos = bytes_whitespace_without_crlf
+
+_export_name('newlines')
+newlines = str_linebreaks
+_export_name('newlines_without_dos')
+newlines_without_dos = str_linebreaks_without_crlf
+
+_export_name('ascii_newlines')
+ascii_newlines = bytes_linebreaks
+_export_name('ascii_newlines_without_dos')
+ascii_newlines_without_dos = bytes_linebreaks_without_crlf
+
+# These old tuples are deprecated, because it's easy to make
+# them yourself (and a million other variants) with encode_strings().
+# They'll be removed when I remove the backwards-compatibility
+# names above.
+_export_name('utf8_whitespace')
+utf8_whitespace = encode_strings(str_whitespace, "utf-8")
+_export_name('utf8_whitespace_without_dos')
+utf8_whitespace_without_dos = tuple(b for b in utf8_whitespace if b != b'\r\n')
+
+_export_name('utf8_newlines')
+utf8_newlines   = encode_strings(str_linebreaks, "utf-8")
+_export_name('utf8_newlines_without_dos')
+utf8_newlines_without_dos =  tuple(b for b in utf8_newlines if b != b'\r\n')
+
+
+# reverse an iterable thing.
+# o must be str, bytes, list, tuple, set, or frozenset.
+# if o is a collection (not str or bytes),
+# the elements of o are recursively reversed.
+# value returned is the same type as o.
+#
+# we don't need to bother checking the type of o.
+# _multisplit_reversed is an internal function
+# and I've manually checked every call site.
+def _multisplit_reversed(o, name='s'):
+    if isinstance(o, str):
+        if len(o) <= 1:
+            return o
+        return "".join(reversed(o))
+    if isinstance(o, bytes):
+        if len(o) <= 1:
+            return o
+        return b"".join(o[i:i+1] for i in range(len(o)-1, -1, -1))
+    # assert isinstance(o, (list, tuple, set, frozenset))
+    t = type(o)
+    return t(_multisplit_reversed(p) for p in o)
+
+
+# _reversed_builtin_separators precalculates the reversed versions
+# of the builtin separators.  we use the reversed versions when
+# reverse=True.  this is a minor speed optimization, particularly
+# as it helps with the lrucache for _separators_to_re.
+#
+# we test that these cached versions are correct in tests/test_text.py.
+#
+_reversed_utf8_whitespace_without_dos = _multisplit_reversed(utf8_whitespace_without_dos)
+_reversed_utf8_newlines_without_dos = _multisplit_reversed(utf8_newlines_without_dos)
+
+_reversed_builtin_separators = {
+    str_whitespace: str_whitespace_without_crlf + ('\n\r',),
+    str_whitespace_without_crlf: str_whitespace_without_crlf,
+
+    unicode_whitespace: unicode_whitespace_without_crlf + ('\n\r',),
+    unicode_whitespace_without_crlf: unicode_whitespace_without_crlf,
+
+    ascii_whitespace: ascii_whitespace_without_crlf + ("\n\r",),
+    ascii_whitespace_without_crlf: ascii_whitespace_without_crlf,
+
+    str_linebreaks: str_linebreaks_without_crlf + ("\n\r",),
+    str_linebreaks_without_crlf: str_linebreaks_without_crlf,
+
+    unicode_linebreaks: unicode_linebreaks_without_crlf + ("\n\r",),
+    unicode_linebreaks_without_crlf: unicode_linebreaks_without_crlf,
+
+    bytes_linebreaks: bytes_linebreaks_without_crlf + (b"\n\r",),
+    bytes_linebreaks_without_crlf: bytes_linebreaks_without_crlf,
+
+    # deprecated
+    utf8_whitespace: _reversed_utf8_whitespace_without_dos + (b"\n\r",),
+    utf8_whitespace_without_dos: _reversed_utf8_whitespace_without_dos,
+
+    utf8_newlines: _reversed_utf8_newlines_without_dos + (b"\n\r",),
+    utf8_newlines_without_dos: _reversed_utf8_newlines_without_dos,
+    }
+
+
+def _re_quote(s):
+    # don't bother escaping whitespace.
+    # re.escape escapes whitespace because of VERBOSE mode,
+    # which we're not using.  (escaping the whitespace doesn't
+    # hurt anything really, but it makes the patterns harder
+    # to read for us humans.)
+    if not s.isspace():
+        return re.escape(s)
+    if len(s) > 1:
+        if isinstance(s, bytes):
+            return b"(?:" + s + b")"
+        return f"(?:{s})"
+    return s
+
+
 @_export
 def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     """
@@ -517,279 +814,6 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     result.append(s)
     result.reverse()
     return extension + tuple(result)
-
-
-@_export
-def _recursive_encode_strings(o, encoding):
-    if isinstance(o, str):
-        return o.encode(encoding)
-
-    a = []
-    if isinstance(o, dict):
-        for k, v in o.items():
-            k = _recursive_encode_strings(k, encoding)
-            v = _recursive_encode_strings(v, encoding)
-            a.append((k, v))
-    else:
-        for element in o:
-            a.append(_recursive_encode_strings(element, encoding))
-    return type(o)(a)
-
-@_export
-def encode_strings(o, encoding='ascii'):
-    """
-    Accepts a container object 'o' containing
-    str objects; returns an equivalent object
-    with the strings encoded to bytes.
-
-    'o' must be either dict, list, or tuple,
-    or a subclass.
-
-    Encodes every string inside using the encoding
-    specified in the 'encoding' parameter, default
-    is 'ascii'.  Handles nested containers.
-
-    If 'o' contains an object that is not a
-    str, dict, list, or tuple, raises TypeError.
-    """
-    if isinstance(o, str):
-        raise TypeError('encode_strings only accepts tuple, list, or dict')
-    return _recursive_encode_strings(o, encoding)
-
-
-# Tuples enumerating all the whitespace and newline characters,
-# for use with big functions taking "separators" arguments
-# (e.g. lines, multisplit).  For an explanation of what they
-# represent, please see the "Whitespace and line-breaking
-# characters in Python and big" deep-dive in the big documentation.
-
-_export_name('str_whitespace')
-str_whitespace = (
-    # char    decimal   hex      identity
-    ##########################################
-    '\t'    , #     9 - 0x0009 - tab
-    '\n'    , #    10 - 0x000a - newline
-    '\v'    , #    11 - 0x000b - vertical tab
-    '\f'    , #    12 - 0x000c - form feed
-    '\r'    , #    13 - 0x000d - carriage return
-    '\r\n'  , # bonus! the classic DOS newline sequence!
-    '\x1c'  , #    28 - 0x001c - file separator
-    '\x1d'  , #    29 - 0x001d - group separator
-    '\x1e'  , #    30 - 0x001e - record separator
-    '\x1f'  , #    31 - 0x001f - unit separator
-    ' '     , #    32 - 0x0020 - space
-    '\x85'  , #   133 - 0x0085 - next line
-    '\xa0'  , #   160 - 0x00a0 - non-breaking space
-    '\u1680', #  5760 - 0x1680 - ogham space mark
-    '\u2000', #  8192 - 0x2000 - en quad
-    '\u2001', #  8193 - 0x2001 - em quad
-    '\u2002', #  8194 - 0x2002 - en space
-    '\u2003', #  8195 - 0x2003 - em space
-    '\u2004', #  8196 - 0x2004 - three-per-em space
-    '\u2005', #  8197 - 0x2005 - four-per-em space
-    '\u2006', #  8198 - 0x2006 - six-per-em space
-    '\u2007', #  8199 - 0x2007 - figure space
-    '\u2008', #  8200 - 0x2008 - punctuation space
-    '\u2009', #  8201 - 0x2009 - thin space
-    '\u200a', #  8202 - 0x200a - hair space
-    '\u2028', #  8232 - 0x2028 - line separator
-    '\u2029', #  8233 - 0x2029 - paragraph separator
-    '\u202f', #  8239 - 0x202f - narrow no-break space
-    '\u205f', #  8287 - 0x205f - medium mathematical space
-    '\u3000', # 12288 - 0x3000 - ideographic space
-    )
-_export_name('str_whitespace_without_crlf')
-str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
-
-_export_name('whitespace')
-whitespace = str_whitespace
-_export_name('whitespace_without_crlf')
-whitespace_without_crlf = str_whitespace_without_crlf
-
-_export_name('unicode_whitespace')
-unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
-_export_name('unicode_whitespace_without_crlf')
-unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
-
-_export_name('ascii_whitespace')
-ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
-_export_name('ascii_whitespace_without_crlf')
-ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
-
-_export_name('bytes_whitespace')
-bytes_whitespace = encode_strings(ascii_whitespace)
-_export_name('bytes_whitespace_without_crlf')
-bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
-
-
-_export_name('str_linebreaks')
-str_linebreaks = (
-    # char    decimal   hex      identity
-    ##########################################
-    '\n'    , #   10 - 0x000a - newline
-    '\v'    , #   11 - 0x000b - vertical tab
-    '\f'    , #   12 - 0x000c - form feed
-    '\r'    , #   13 - 0x000d - carriage return
-    '\r\n'  , # bonus! the classic DOS newline sequence!
-    '\x1c'  , #   28 - 0x001c - file separator
-    '\x1d'  , #   29 - 0x001d - group separator
-    '\x1e'  , #   30 - 0x001e - record separator
-    '\x85'  , #  133 - 0x0085 - next line
-    '\u2028', # 8232 - 0x2028 - line separator
-    '\u2029', # 8233 - 0x2029 - paragraph separator
-
-    # what about '\n\r'?
-    # sorry, Acorn and RISC OS users, you'll have to add this yourselves.
-    # I'm worried it would cause bugs with a malformed DOS string,
-    # or maybe when operating in reverse mode.
-    #
-    # Also: welcome, Acorn and RISC OS users!
-    # What are you doing here?  You can't run Python 3.6+!
-    )
-_export_name('str_linebreaks_without_crlf')
-str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
-
-_export_name('linebreaks')
-linebreaks = str_linebreaks
-_export_name('linebreaks_without_crlf')
-linebreaks_without_crlf = str_linebreaks_without_crlf
-
-_export_name('unicode_linebreaks')
-unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
-_export_name('unicode_linebreaks_without_crlf')
-unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
-
-_export_name('ascii_linebreaks')
-ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
-_export_name('ascii_linebreaks_without_crlf')
-ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
-
-_export_name('bytes_linebreaks')
-bytes_linebreaks = (
-    b'\n'    , #   10 0x000a - newline
-    b'\r'    , #   13 0x000d - carriage return
-    b'\r\n'  , # the classic DOS newline sequence
-    )
-_export_name('bytes_linebreaks_without_crlf')
-bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
-
-
-# Before 10.1, big used the word "newlines" instead of "linebreaks"
-# in the names of these tuples.  I realized in September 2023 that
-# "linebreaks" was a better name; Unicode uses the term "line breaks"
-# for these characters.
-#
-# Similarly, "_without_crlf" used to be "_without_dos".  As much
-# as we might dream about a world without DOS, _without_crlf is
-# far more accurate.
-#
-# Here's some backwards-compatibility for you.
-# I promise to keep the old names around until September 2024.
-_export_name('whitespace_without_dos')
-whitespace_without_dos = str_whitespace_without_crlf
-
-_export_name('ascii_whitespace_without_dos')
-ascii_whitespace_without_dos = bytes_whitespace_without_crlf
-
-_export_name('newlines')
-newlines = str_linebreaks
-_export_name('newlines_without_dos')
-newlines_without_dos = str_linebreaks_without_crlf
-
-_export_name('ascii_newlines')
-ascii_newlines = bytes_linebreaks
-_export_name('ascii_newlines_without_dos')
-ascii_newlines_without_dos = bytes_linebreaks_without_crlf
-
-# These old tuples are deprecated, because it's easy to make
-# them yourself (and a million other variants) with encode_strings().
-# They'll be removed when I remove the backwards-compatibility
-# names above.
-_export_name('utf8_whitespace')
-utf8_whitespace = encode_strings(str_whitespace, "utf-8")
-_export_name('utf8_whitespace_without_dos')
-utf8_whitespace_without_dos = tuple(b for b in utf8_whitespace if b != b'\r\n')
-
-_export_name('utf8_newlines')
-utf8_newlines   = encode_strings(str_linebreaks, "utf-8")
-_export_name('utf8_newlines_without_dos')
-utf8_newlines_without_dos =  tuple(b for b in utf8_newlines if b != b'\r\n')
-
-
-# reverse an iterable thing.
-# o must be str, bytes, list, tuple, set, or frozenset.
-# if o is a collection (not str or bytes),
-# the elements of o are recursively reversed.
-# value returned is the same type as o.
-#
-# we don't need to bother checking the type of o.
-# _multisplit_reversed is an internal function
-# and I've manually checked every call site.
-def _multisplit_reversed(o, name='s'):
-    if isinstance(o, str):
-        if len(o) <= 1:
-            return o
-        return "".join(reversed(o))
-    if isinstance(o, bytes):
-        if len(o) <= 1:
-            return o
-        return b"".join(o[i:i+1] for i in range(len(o)-1, -1, -1))
-    # assert isinstance(o, (list, tuple, set, frozenset))
-    t = type(o)
-    return t(_multisplit_reversed(p) for p in o)
-
-
-# _reversed_builtin_separators precalculates the reversed versions
-# of the builtin separators.  we use the reversed versions when
-# reverse=True.  this is a minor speed optimization, particularly
-# as it helps with the lrucache for _separators_to_re.
-#
-# we test that these cached versions are correct in tests/test_text.py.
-#
-_reversed_utf8_whitespace_without_dos = _multisplit_reversed(utf8_whitespace_without_dos)
-_reversed_utf8_newlines_without_dos = _multisplit_reversed(utf8_newlines_without_dos)
-
-_reversed_builtin_separators = {
-    str_whitespace: str_whitespace_without_crlf + ('\n\r',),
-    str_whitespace_without_crlf: str_whitespace_without_crlf,
-
-    unicode_whitespace: unicode_whitespace_without_crlf + ('\n\r',),
-    unicode_whitespace_without_crlf: unicode_whitespace_without_crlf,
-
-    ascii_whitespace: ascii_whitespace_without_crlf + ("\n\r",),
-    ascii_whitespace_without_crlf: ascii_whitespace_without_crlf,
-
-    str_linebreaks: str_linebreaks_without_crlf + ("\n\r",),
-    str_linebreaks_without_crlf: str_linebreaks_without_crlf,
-
-    unicode_linebreaks: unicode_linebreaks_without_crlf + ("\n\r",),
-    unicode_linebreaks_without_crlf: unicode_linebreaks_without_crlf,
-
-    bytes_linebreaks: bytes_linebreaks_without_crlf + (b"\n\r",),
-    bytes_linebreaks_without_crlf: bytes_linebreaks_without_crlf,
-
-    # deprecated
-    utf8_whitespace: _reversed_utf8_whitespace_without_dos + (b"\n\r",),
-    utf8_whitespace_without_dos: _reversed_utf8_whitespace_without_dos,
-
-    utf8_newlines: _reversed_utf8_newlines_without_dos + (b"\n\r",),
-    utf8_newlines_without_dos: _reversed_utf8_newlines_without_dos,
-    }
-
-
-def _re_quote(s):
-    # don't bother escaping whitespace.
-    # re.escape escapes whitespace because of VERBOSE mode,
-    # which we're not using.  (escaping the whitespace doesn't
-    # hurt anything really, but it makes the patterns harder
-    # to read for us humans.)
-    if not s.isspace():
-        return re.escape(s)
-    if len(s) > 1:
-        if isinstance(s, bytes):
-            return b"(?:" + s + b")"
-        return f"(?:{s})"
-    return s
 
 
 @functools.lru_cache(re._MAXCACHE)
@@ -1959,6 +1983,34 @@ def old_split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=No
         yield in_quote, empty_join(text)
 
 
+##
+## A short treatise on detecting newlines.
+##
+## What's the fastest way to detect if a string contains newlines?
+##
+## I experimented with several approaches, including re.compile(newlines-separated-by-|).search
+## and brute-force checking with s.find.  These are fast, but there's something even faster.
+##
+## Before I answer, let me back up a little.  In big, I want to detect if a string contains
+## newlines in several places--and in every one of these places, I raise an exception if the
+## string contains newlines.  This means that, if the string contains newlines, performance
+## is now out the window; we're gonna raise an exception, processing is over, etc etc etc.
+## Therefore, the only scenario that's relevant to performance is when the string *doesn't*
+## contain newlines.  And what's the fastest way to confirm that a string contains no newlines?
+##         contains_newlines = len( s.splitlines() ) > 1
+## In the case that s doesn't contain any newlines, this allocates a list, then examines every
+## character in s to see if it's a newline.  Once it reaches the end of the list, nope, no newline
+## characters detected, so it adds a reference to s to its list and returns the list.  All that
+## work is done in C.  The only extraneous bit is the list, but that's not really a big deal.
+##
+## In the case where s does contain newlines, this is going to allocate N strings, where the sum
+## of their lengths is the same as len(s), etc etc.  That's slow.  But we only do that when we're
+## gonna throw an exception anyway.
+##
+## One added benefit of this approach: it works on both str and bytes objects, you don't need to
+## handle them separately.
+##
+
 _sqs_quotes_str   = ( '"',  "'")
 _sqs_quotes_bytes = (b'"', b"'")
 
@@ -1966,7 +2018,7 @@ _sqs_escape_str   =  '\\'
 _sqs_escape_bytes = b'\\'
 
 
-def split_quoted_strings(s, separators, quotes, empty, state):
+def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes, empty, state):
     """
     This is the generator function implementing the split_quoted_strings
     iterator.  The public split_quoted_strings analyzes its arguments,
@@ -1986,7 +2038,7 @@ def split_quoted_strings(s, separators, quotes, empty, state):
             buffer.append(literal)
         if not quote:
             # not currently quoted
-            if separator not in quotes:
+            if separator not in all_quotes_set:
                 buffer.append(separator)
                 continue
             if buffer:
@@ -2001,6 +2053,10 @@ def split_quoted_strings(s, separators, quotes, empty, state):
         # separator == quote
         text = empty.join(buffer)
         if quote or text:
+            if quote and text and (quote not in multiline_quotes):
+                # see treatise above
+                if len(text.splitlines()) > 1:
+                    raise SyntaxError("unterminated quoted string, {s!r}")
             if state:
                 state = None
                 # print(f"    <<1 empty, {text=}, {quote=}")
@@ -2014,6 +2070,10 @@ def split_quoted_strings(s, separators, quotes, empty, state):
     if buffer:
         text = empty.join(buffer)
         if text or quote:
+            if quote and text and (quote not in multiline_quotes):
+                # see treatise above
+                if len(text.splitlines()) > 1:
+                    raise SyntaxError("unterminated quoted string, {s!r}")
             if state:
                 state = None
                 quote = empty
@@ -2024,7 +2084,7 @@ _split_quoted_strings = split_quoted_strings
 
 
 @_export
-def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, state=''):
+def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, multiline_quotes=(), state=''):
     """
     Splits s into quoted and unquoted segments.
 
@@ -2043,7 +2103,8 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
     Quote delimiters may be any string of 1 or more characters.
     They must be the same type as s, either str or bytes.
     By default, quotes is ('"', "'").  (If s is bytes,
-    quotes defaults to (b'"', b"'").)
+    quotes defaults to (b'"', b"'").)  Text delimited
+    inside quotes must not contain a newline.
 
     escape is a string of any length.  If escape is not
     an empty string, the string will "escape" (quote)
@@ -2051,6 +2112,12 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
     backslash ('\\') character inside strings in Python.
     By default, escape is '\\'.  (If s is bytes, escape
     defaults to b'\\'.)
+
+    multiline_quotes is like quotes, except text inside
+    multiline quotes is permitted to contain newlines.
+    multiline_quotes and quotes must not both contain the
+    same string.  By default there are no multiline quotes
+    defined.
 
     state is a string.  It sets the initial state of
     the function.  The default is an empty string (str
@@ -2073,18 +2140,11 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
         [("", "a b c", "'"),]
 
     Note:
-    * split_quoted_strings is agnostic about newlines.
-      If s contains newlines, this function will happily
-      yield them, inside or outside of quoted substrings.
-      (If you want to disallow newlines inside quoted
-      strings, it's up to you to detect them and react
-      accordingly.)
-    * Similarly, split_quoted_strings is agnostic about
-      the length of quoted strings.  If you're using
-      split_quoted_strings to parse a C-like language,
-      and you want to enforce C's requirement that
-      single-quoted strings only contain one character,
-      you'll have to do that yourself.
+    * split_quoted_strings is agnostic about the length
+      of quoted strings.  If you're using split_quoted_strings
+      to parse a C-like language, and you want to enforce
+      C's requirement that single-quoted strings only contain
+      one character, you'll have to do that yourself.
     * split_quoted_strings doesn't raise an error
       if s ends with an unterminated string.  In that
       case, the last tuple yielded will have a non-empty
@@ -2092,6 +2152,9 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
     """
 
     # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {state=})")
+
+    if multiline_quotes is None:
+        multiline_quotes = ()
 
     is_bytes = isinstance(s, bytes)
     if is_bytes:
@@ -2102,13 +2165,19 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
         else:
             for q in quotes:
                 if not isinstance(q, s_type):
-                    raise TypeError("values in quotes must match s (str or bytes)")
+                    raise TypeError(f"values in quotes must match s (str or bytes), not {q!r}")
                 if not q:
                     raise ValueError("quotes cannot contain an empty string")
         if escape in (_sqs_escape_str, None):
             escape = _sqs_escape_bytes
+        if multiline_quotes:
+            for q in multiline_quotes:
+                if not isinstance(q, s_type):
+                    raise TypeError(f"values in multiline_quotes must match s (str or bytes), not {q!r}")
+                if not q:
+                    raise ValueError("multiline_quotes cannot contain an empty string")
         elif not isinstance(escape, s_type):
-            raise TypeError("escape must match s (str or bytes)")
+            raise TypeError(f"escape must match s (str or bytes), not {escape!r}")
     else:
         s_type = str
         empty = ""
@@ -2117,24 +2186,29 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
         else:
             for q in quotes:
                 if not isinstance(q, s_type):
-                    raise TypeError("values in quotes must match s (str or bytes)")
+                    raise TypeError(f"values in quotes must match s (str or bytes), not {q!r}")
                 if not q:
                     raise ValueError("quotes cannot contain an empty string")
         if escape in (_sqs_escape_bytes, None):
             escape = _sqs_escape_str
         elif not isinstance(escape, s_type):
-            raise TypeError("escape must match s (str or bytes), not {escape!r}")
+            raise TypeError(f"escape must match s (str or bytes), not {escape!r}")
 
+    quotes_set = set(quotes)
+    multiline_quotes_set = set(multiline_quotes)
+    all_quotes_set = quotes_set | multiline_quotes_set
+
+    if not all_quotes_set:
+        raise ValueError("either quotes or multiline_quotes must be non-empty")
 
     if state in (None, '', b''):
         state = empty
     else:
         if not isinstance(state, s_type):
             raise TypeError("state must match s (str or bytes), not {state!r}")
-        if state not in quotes:
-            raise ValueError(f"state must be be one of the delimiters listed in the quotes argument, not {state!r}")
+        if state not in all_quotes_set:
+            raise ValueError(f"state must be be one of the delimiters listed in the quotes or multiline_quotes arguments, not {state!r}")
 
-    quotes_set = set(quotes)
     if len(quotes_set) != len(quotes):
         repeated = set()
         seen = set()
@@ -2146,14 +2220,39 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, s
         repeated.sort()
         raise ValueError("quotes contains repeated quote markers: " + ", ".join(repr(q) for q in repeated))
 
+    if len(multiline_quotes_set) != len(multiline_quotes):
+        repeated = set()
+        seen = set()
+        for q in multiline_quotes:
+            if q in seen:
+                repeated.add(q)
+            seen.add(q)
+        repeated = list(repeated)
+        repeated.sort()
+        raise ValueError("multiline_quotes contains repeated quote markers: " + ", ".join(repr(q) for q in repeated))
+
+    in_both_quotes_sets = quotes_set & multiline_quotes_set
+    if in_both_quotes_sets:
+        in_both_quotes_sets = list(in_both_quotes_sets)
+        if len(in_both_quotes_sets) == 1:
+            s = repr(list(in_both_quotes_sets)[0])
+        else:
+            in_both_quotes_sets.sort()
+            s = ', '.join(repr(_) for _ in in_both_quotes_sets)
+        raise ValueError(f"{s} appears in both quotes and multiline_quotes")
+
     # separators is a list, and it also contains the escaped quote marks (if any).
-    separators = list(quotes)
+    separators = list(quotes_set)
+    separators.extend(multiline_quotes_set)
     if escape:
         for first_character in {q[0:] for q in quotes}:
             separators.append(escape + first_character)
         separators.append(escape + escape)
 
-    return _split_quoted_strings(s, separators, quotes_set, empty, state)
+    # help multisplit work better--it memoizes the conversion to a regular expression
+    separators.sort()
+
+    return _split_quoted_strings(s, separators, all_quotes_set, quotes_set, multiline_quotes_set, empty, state)
 
 
 @_export
@@ -2170,13 +2269,14 @@ class Delimiter:
         (Single- and double-quotes set this to True.)
     Currently escape and quoting must either both be true or both be false.
     """
-    def __init__(self, close, *, escape='', quoting=False):
+    def __init__(self, close, *, escape='', multiline=True, quoting=False):
         # you can pass in a Delimiter instance and we'll clone it
         if isinstance(close, Delimiter):
             d = close
-            self.close = d.close
-            self.escape = d.escape
-            self.quoting = d.quoting
+            self._close = d._close
+            self._escape = d._escape
+            self._quoting = d._quoting
+            self._multiline = d._multiline
             return
 
         is_bytes = isinstance(close, bytes)
@@ -2191,18 +2291,36 @@ class Delimiter:
         if bool(escape) != bool(quoting):
             raise ValueError("quoting and escape mismatch; they must either both be true, or both be false")
 
-        self.close = close
-        self.escape = escape or empty
-        self.quoting = quoting
+        self._close = close
+        self._escape = escape or empty
+        self._quoting = quoting
+        self._multiline = multiline
+
+    @property
+    def close(self):
+        return self._close
+
+    @property
+    def escape(self):
+        return self._escape
+
+    @property
+    def quoting(self):
+        return self._quoting
+
+    @property
+    def multiline(self):
+        return self._multiline
 
     def __repr__(self): # pragma: no cover
-        return f"Delimiter(close={self.close!r}, escape={self.escape!r}, quoting={self.quoting})"
+        return f"Delimiter(close={self._close!r}, escape={self._escape!r}, multiline={self._multiline!r}, quoting={self._quoting!r})"
 
     def __eq__(self, other):
         return (isinstance(other, Delimiter)
-            and (self.close   == other.close)
-            and (self.escape  == other.escape)
-            and (self.quoting == other.quoting)
+            and (self._close   == other._close)
+            and (self._escape  == other._escape)
+            and (self._quoting == other._quoting)
+            and (self._multiline == other._multiline)
             )
 
     def copy(self):
@@ -2221,10 +2339,10 @@ _export_name('delimiter_curly_braces')
 delimiter_angle_brackets = Delimiter(">")
 _export_name('delimiter_angle_brackets')
 
-delimiter_single_quote = Delimiter("'", escape='\\', quoting=True)
+delimiter_single_quote = Delimiter("'", escape='\\', multiline=False, quoting=True)
 _export_name('delimiter_single_quote')
 
-delimiter_double_quotes = Delimiter('"', escape='\\', quoting=True)
+delimiter_double_quotes = Delimiter('"', escape='\\', multiline=False, quoting=True)
 _export_name('delimiter_double_quotes')
 
 split_delimiters_default_delimiters = {
@@ -2241,15 +2359,15 @@ split_delimiters_default_delimiters_bytes = {
     b'(': Delimiter(b')'),
     b'[': Delimiter(b']'),
     b'{': Delimiter(b'}'),
-    b"'": Delimiter(b"'", escape=b'\\', quoting=True),
-    b'"': Delimiter(b'"', escape=b'\\', quoting=True),
+    b"'": Delimiter(b"'", escape=b'\\', multiline=False, quoting=True),
+    b'"': Delimiter(b'"', escape=b'\\', multiline=False, quoting=True),
     }
 _export_name('split_delimiters_default_delimiters_bytes')
 
 
 class _DelimiterState:
     "Data structure representing a delimiter, with precomputed state transitions"
-    def __init__(self, open={}, close=(), escape='', illegal={}):
+    def __init__(self, open={}, close=(), escape='', illegal={}, single_line_only=False):
         self.open = open
         self.close = close
         self.escape = escape
@@ -2260,6 +2378,10 @@ class _DelimiterState:
         # e.g. the string "[foo(]" is invalid,
         # ']' is an illegal character there.
         self.illegal = illegal
+        self.single_line_only = single_line_only
+
+    def __repr__(self):
+        return f"DelimiterState(open={self.open!r}, close={self.close!r}, escape={self.escape!r}, illegal={self.illegal!r}, single_line_only={self.single_line_only!r})"
 
 
 def _delimiters_to_state_machine(delimiters, is_bytes):
@@ -2325,7 +2447,7 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
 
     # the initial state contains all the open delimiters, and doesn't have a close delimiter.
     # all the non-quoting states reuse the same open dictionary.
-    initial_state = _DelimiterState(open={}, close=None, illegal=all_closers)
+    initial_state = _DelimiterState(open={}, close=None, illegal=all_closers, single_line_only=False)
 
     empty_dict = {}
 
@@ -2337,7 +2459,7 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
         else:
             openers = illegal = empty_dict
 
-        state = _DelimiterState(open=openers, close=delimiter.close, escape=delimiter.escape, illegal=illegal)
+        state = _DelimiterState(open=openers, close=delimiter.close, escape=delimiter.escape, illegal=illegal, single_line_only=not delimiter.multiline)
         initial_state.open[open] = state
 
     return initial_state, all_tokens
@@ -2370,6 +2492,9 @@ def split_delimiters(s, all_tokens, current, stack, empty):
             # flush open delimiter
             s = join(text)
             clear()
+            # see treatise above
+            if current.single_line_only and (len(s.splitlines()) > 1):
+                raise SyntaxError("unterminated quoted string, {s!r}")
             yield s, delimiter, empty
 
             push(current)
@@ -2380,6 +2505,9 @@ def split_delimiters(s, all_tokens, current, stack, empty):
             # flush close delimiter
             s = join(text)
             clear()
+            # see treatise above
+            if current.single_line_only and (len(s.splitlines()) > 1):
+                raise SyntaxError("unterminated quoted string, {s!r}")
             yield s, empty, delimiter
 
             current = pop()
@@ -2398,6 +2526,9 @@ def split_delimiters(s, all_tokens, current, stack, empty):
     if text:
         s = join(text)
         if s:
+            # see treatise above
+            if current.single_line_only and (len(s.splitlines()) > 1):
+                raise SyntaxError("unterminated quoted string, {s!r}")
             yield s, empty, empty
 
 
@@ -2421,17 +2552,15 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     value matching these pairs of delimiters:
         () [] {} "" ''
     The quote mark delimiters enable escape sequences
-    (with \\ as the escape character) and also enable quoting.
+    (with \\ as the escape character), enable quoting,
+    and raise an exception if there's a newline character
+    between the quote marks.
 
     state specifies the initial state of parsing. It's an iterable
     of open delimiter strings specifying the initial nested state of
     the parser, with the innermost nesting level on the right.
     If you wanted split_delimiters to behave as if it'd already seen
     a '(' and a '[', in that order, pass in ['(', '['] to state.
-
-    (Tip: Use a list as a stack to track the state of split_delimiters,
-    pushing open delimiters with .append and popping them with .pop
-    when you encounter the matching close delimiter.)
 
     Yields 3-tuples containing strings:
         (text, open, close)
@@ -2443,13 +2572,21 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     If s doesn't end with a closing delimiter, in the final tuple
     yielded, both open and close will be empty strings.
 
+    (Tip: Use a list as a stack to track the state of split_delimiters.
+    Every time split_delimiters yields a tuple, first process text.
+    Then, if open is true, push that string with stack.append.
+    Else, if close is true, pop the stack with stack.pop.)
+
     You may reuse a particular character as a closing
     delimiter multiple times.
 
     You may not specify backslash ('\\') as a delimiter.
 
-    See the Delimiter object for how delimiters are defined, and how
-    you can define your own delimiters.
+    parse_delimiter doesn't complain if a string ends with unclosed
+    delimiters.
+
+    See the Delimiter object for how the existing delimiters are defined,
+    and how you can define your own delimiters.
     """
     initial_state = all_tokens = None
 
@@ -3027,8 +3164,7 @@ def lines_strip(li, separators=None):
 def lines_filter_line_comment_lines(li, match):
     "The generator function returned by the public lines_filter_line_comment_lines function."
     for info, line in li:
-        s = line.lstrip()
-        if match(s):
+        if match(line):
             continue
         yield (info, line)
 
@@ -3061,14 +3197,24 @@ def lines_filter_line_comment_lines(li, comment_markers):
     if isinstance(comment_markers, bytes):
         comment_markers = _iterate_over_bytes(comment_markers)
         comment_markers_is_bytes = True
+        skip_whitespace = b"\\s*"
     else:
         comment_markers_is_bytes = isinstance(comment_markers[0], bytes)
+        skip_whitespace = "\\s*"
+
+    # in case comment_markers is an iterator
     comment_markers = tuple(comment_markers)
 
-    comment_pattern = _separators_to_re(comment_markers, comment_markers_is_bytes, separate=False, keep=False)
-    comment_re = re.compile(comment_pattern)
+    if len(comment_markers) == 1:
+        comment_marker = comment_markers[0]
+        def match(s):
+            return s.lstrip().startswith(comment_marker)
+    else:
+        comment_pattern = _separators_to_re(comment_markers, comment_markers_is_bytes, separate=False, keep=False)
+        comment_re = re.compile(skip_whitespace + comment_pattern)
+        match = comment_re.match
 
-    return _lines_filter_line_comment_lines(li, comment_re.match)
+    return _lines_filter_line_comment_lines(li, match)
 
 # old, deprecated name.
 # will eventually be deleted, but not before September 2025.
@@ -3180,8 +3326,8 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
     for info, line in li:
         # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
 
-        if quotes:
-            i = split_quoted_strings(line, quotes, escape=escape, state=state)
+        if quotes or multiline_quotes:
+            i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
         else:
             i = iter( (('', line, ''),) )
 
@@ -3321,10 +3467,6 @@ def lines_strip_line_comments(li, line_comment_markers, *,
 
     if not multiline_quotes:
         multiline_quotes = ()
-    else:
-        quotes = list(quotes)
-        quotes.extend(multiline_quotes)
-        multiline_quotes = set(multiline_quotes)
 
     return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, rstrip, empty_join)
 

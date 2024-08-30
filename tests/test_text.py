@@ -2812,16 +2812,19 @@ class BigTextTests(unittest.TestCase):
                 return
 
             # convert everybody to ascii
-            if 'quotes' in kwargs:
-                kwargs['quotes'] = [x.encode('ascii') for x in kwargs['quotes']]
-            if 'state' in kwargs:
-                kwargs['state'] = kwargs['state'].encode('ascii')
-            if 'escape' in kwargs:
-                kwargs['escape']  = kwargs['escape'].encode('ascii')
+            try:
+                if 'quotes' in kwargs:
+                    kwargs['quotes'] = [x.encode('ascii') for x in kwargs['quotes']]
+                if 'state' in kwargs:
+                    kwargs['state'] = kwargs['state'].encode('ascii')
+                if 'escape' in kwargs:
+                    kwargs['escape']  = kwargs['escape'].encode('ascii')
 
-            got = list(big.split_quoted_strings(s.encode('ascii'), **kwargs))
-            expected = [(b.encode('ascii'), x.encode('ascii'), a.encode('ascii')) for b, x, a in expected]
-            self.assertEqual(expected, got)
+                got = list(big.split_quoted_strings(s.encode('ascii'), **kwargs))
+                expected = [(b.encode('ascii'), x.encode('ascii'), a.encode('ascii')) for b, x, a in expected]
+                self.assertEqual(expected, got)
+            except UnicodeEncodeError:
+                pass
 
         test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
             [
@@ -3009,6 +3012,42 @@ class BigTextTests(unittest.TestCase):
                 state="Z"
                 )
 
+        # newlines and multiline_quotes
+        with self.assertRaises(SyntaxError):
+            test('abc "def\nghi" jkl',
+                [],
+                )
+
+        test('abc """def\nghi""" jkl',
+            [('', 'abc ', ''), ('"""', 'def\nghi', '"""'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        test('abc """def\vghi""" jkl',
+            [('', 'abc ', ''), ('"""', 'def\vghi', '"""'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        # the exotic Unicode paragraph separator!
+        # note: this test will automatically skip trying the bytes version.
+        test('abc """def\u2029ghi""" jkl',
+            [('', 'abc ', ''), ('"""', 'def\u2029ghi', '"""'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        test('abc "def ghi" jkl',
+            [('', 'abc ', ''), ('"', 'def ghi', '"'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        # can't have the same mark in both quotes and multiline_quotes
+        with self.assertRaises(ValueError):
+            test('abc "def\nghi" jkl',
+                [],
+                multiline_quotes=('"',)
+                )
+
+
 
     def test_split_delimiters(self):
 
@@ -3128,6 +3167,22 @@ class BigTextTests(unittest.TestCase):
             ),
             )
 
+        # single-quoted strings by default don't allow newlines inside
+        with self.assertRaises(SyntaxError):
+            test('foo("ab\ncd")', [])
+        with self.assertRaises(SyntaxError):
+            test("foo('ab\ncd')", [])
+        # but the others delimiters permit it
+        test(r'foo([{ab\ncd}])',
+            (
+                ( 'foo',    '(', '' ),
+                ( '',       '[', '' ),
+                ( '',       '{', '' ),
+                (r'ab\ncd', '',  '}'),
+                ( '',       '',  ']'),
+                ( '',       '',  ')'),
+            ))
+
         with self.assertRaises(ValueError):
             test('a[3)', None)
         with self.assertRaises(ValueError):
@@ -3159,6 +3214,16 @@ class BigTextTests(unittest.TestCase):
             test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=True, escape='')})
         with self.assertRaises(ValueError):
             test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
+        # Delimiter objects are now read-only
+        d = big.Delimiter(close='x')
+        with self.assertRaises(AttributeError):
+            d.close = 'y'
+        with self.assertRaises(AttributeError):
+            d.escape = '\\'
+        with self.assertRaises(AttributeError):
+            d.quoting = True
+        with self.assertRaises(AttributeError):
+            d.quoting = True
 
         # testing on the Delimiter class itself
         d = big.Delimiter(close='x')
@@ -3170,6 +3235,7 @@ class BigTextTests(unittest.TestCase):
             big.Delimiter(close='x', escape='', quoting=True)
         with self.assertRaises(ValueError):
             big.Delimiter(close='x', escape='z', quoting=False)
+
 
 
     def test_parse_delimiters(self):
@@ -3341,6 +3407,19 @@ class BigTextTests(unittest.TestCase):
             L('third line', 3, 1, end=''),
             ])
 
+        # test lines_filter_line_comment_lines
+        # note, slight white box testing here:
+        # lines_filter_line_comment_lines has different approaches
+        # for one comment marker vs more than one.  so, test both.
+
+        lines = big.lines(b"a\n# ignored\n  # also ignored\n d")
+        test(big.lines_filter_line_comment_lines(lines, b'#'),
+            [
+            L(b'a',  1),
+            L(b' d', 4, end=b''),
+            ]
+            )
+
         lines = big.lines("""
     # comment
     a = b
@@ -3348,7 +3427,7 @@ class BigTextTests(unittest.TestCase):
     c = d
     / not a comment
     /// is a comment!
-    ## another comment!
+## another comment!
     #! a third comment!
 """.lstrip('\n'))
         test(big.lines_filter_line_comment_lines(lines, ('#', '//')),
@@ -3358,14 +3437,6 @@ class BigTextTests(unittest.TestCase):
             L('    / not a comment', 5, 1),
             L('',                    9, 1, end=''),
             ])
-
-        lines = big.lines(b"a\n# ignored\n c")
-        test(big.lines_filter_line_comment_lines(lines, b'#'),
-            [
-            L(b'a',  1),
-            L(b' c', 3, end=b''),
-            ]
-            )
 
         lines = big.lines("""
 hello yolks

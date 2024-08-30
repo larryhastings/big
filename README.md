@@ -5723,6 +5723,7 @@ Lots of changes this time!  Grouping by submodule:
     to match.
   * As mentioned above, the new `Delimiter` object doesn't
     have an `open` attribute.  (`ParseDelimiter` still does.)
+  * The new `Delimiter` object is read-only after construction.
 
 * Breaking change: `lines_strip_comments` has *also* been
   completely rewritten and renamed.  It's now named
@@ -5850,6 +5851,12 @@ Lots of changes this time!  Grouping by submodule:
   we used to reverse the results *three times!*  We now explicitly
   observe and manage the reverse state of the result, to avoid
   needless reversing.
+
+* Minor speedup for `lines_filter_line_comment_lines`: for every
+  line, it used to `lstrip` the line, then use a regular expression
+  to see if the line started with one of the comment characters.
+  Now it folds "skip initial whitespace" into the regular expression
+  itself.
 
 ### scheduler
 
