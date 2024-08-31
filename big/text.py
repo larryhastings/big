@@ -2915,9 +2915,13 @@ class LineInfo:
     def detab(self, s):
         return self.lines.detab(s)
 
-    def extend_leading(self, s, line):
+    def clip_leading(self, line, s):
+        """
+        Clip the leading substring s from line,
+        appending it to the 'leading' attribute.
+        """
         if isinstance(s, int):
-            assert -len(line) <= s < len(line), f"extend_leading invalid parameters: s={s!r} line={line!r}"
+            assert -len(line) <= s < len(line), f"clip_leading s={s!r} index is larger than the length of line={line!r}"
             s = line[:s]
         else:
             assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
@@ -2929,9 +2933,13 @@ class LineInfo:
         self.column_number += length
         return line
 
-    def extend_trailing(self, s, line):
+    def clip_trailing(self, line, s):
+        """
+        Clip the trailing substring s from line,
+        prepending it to the 'trailing' attribute.
+        """
         if isinstance(s, int):
-            assert -len(line) <= s < len(line), f"extend_trailing invalid parameters: s={s!r} line={line!r}"
+            assert -len(line) <= s < len(line), f"clip_trailing s={s!r} index is larger than the length of line={line!r}"
             s = line[-s:]
         else:
             assert line.endswith(s), f"line {line!r} doesn't end with s {s!r}"
@@ -3093,14 +3101,14 @@ def lines_rstrip(li, separators=None):
         for info, line in li:
             rstripped = line.rstrip()
             if rstripped != line:
-                line = info.extend_trailing(-len(rstripped), line)
+                line = info.clip_trailing(line, -len(rstripped))
             yield (info, line)
         return
 
     for info, line in li:
         rstripped = multistrip(line, separators, left=False, right=True)
         if rstripped != line:
-            line = info.extend_trailing(-len(rstripped), line)
+            line = info.clip_trailing(line, -len(rstripped))
         yield (info, rstripped)
 
 
@@ -3125,10 +3133,10 @@ def lines_strip(li, separators=None):
                 leading, _, trailing = line.partition(stripped)
 
             if leading:
-                line = info.extend_leading(leading, line)
+                line = info.clip_leading(line, leading)
 
             if trailing:
-                line = info.extend_trailing(trailing, line)
+                line = info.clip_trailing(line, trailing)
 
             yield (info, line)
 
@@ -3154,10 +3162,10 @@ def lines_strip(li, separators=None):
                     trailing = lstripped[len(rstripped):]
 
         if leading:
-            line = info.extend_leading(leading, line)
+            line = info.clip_leading(line, leading)
 
         if trailing:
-            line = info.extend_trailing(trailing, line)
+            line = info.clip_trailing(line, trailing)
 
         yield (info, line)
 
@@ -3333,8 +3341,14 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
 
         line_comment_segments = None
 
+        column_number = info.column_number
+
+        leading_quote = segment = trailing_quote = ''
         for leading_quote, segment, trailing_quote in i:
-            # print(f"-- {leading_quote=} {segment=} {trailing_quote=}")
+            # it's easier to proactively add the length, and remove it if we raise
+            length_yielded = len(leading_quote) + len(segment) + len(trailing_quote)
+            column_number += length_yielded
+
             if leading_quote:
                 continue
 
@@ -3362,18 +3376,19 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
             for triplet in i:
                 line_comment_segments.extend(triplet)
             assert line_comment_segments
-            line = info.extend_trailing(empty_join(line_comment_segments), line)
+            line = info.clip_trailing(line, empty_join(line_comment_segments))
 
             if rstrip:
                 stripped = leading.rstrip()
                 if stripped != leading:
-                    line = info.extend_trailing(leading[len(stripped):], line)
+                    line = info.clip_trailing(line, leading[len(stripped):])
             break
 
         if not line_comment_segments:
             if leading_quote and not trailing_quote:
                 if leading_quote not in multiline_quotes:
-                    raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
+                    column_number -= length_yielded
+                    raise SyntaxError(f"Line {info.line_number} column {column_number}: unterminated quoted marker {leading_quote}")
                 state = leading_quote
                 starting_pair_for_state = info, line
 
@@ -3381,7 +3396,8 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
 
     if state:
         info, line = starting_pair_for_state
-        raise SyntaxError(f"Unterminated quoted string in line {info.line_number}: {line}")
+        column_number -= length_yielded
+        raise SyntaxError(f"Line {info.line_number} column {column_number}: unterminated quoted marker {state}")
 
 _lines_strip_line_comments = lines_strip_line_comments
 
@@ -3567,7 +3583,7 @@ def lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash
             keeping = sum(len(s) for s in segments)
             removing = len(line) - keeping
             if removing:
-                line = info.extend_trailing(removing, line)
+                line = info.clip_trailing(line, removing)
             yield (info, line)
     return lines_strip_comments(li, split, quotes, backslash, rstrip, triple_quotes)
 
@@ -3633,12 +3649,12 @@ def lines_strip_indent(li):
 
         lstripped = line.lstrip()
         if not lstripped:
-            line = info.extend_leading(line, line)
+            line = info.clip_leading(line, line)
             blank_lines.append((info, line))
             # print(f"BL+ {info=} {lstripped=}")
             continue
 
-        line = info.extend_leading(len(line) - len(lstripped), line)
+        line = info.clip_leading(line, len(line) - len(lstripped))
         column_number = info.column_number
 
         if column_number == info.lines.column_number:
@@ -3673,7 +3689,7 @@ def lines_strip_indent(li):
                 leadings.pop()
                 indent -= 1
             if not leadings:
-                raise IndentationError(f"line {info.line_number} column {column_number}: unindent doesn't match any outer indentation level")
+                raise IndentationError(f"Line {info.line_number} column {column_number}: unindent doesn't match any outer indentation level")
             new_indent = False
 
         # print(f"  >> {leadings=} {new_indent=}")
@@ -3910,7 +3926,7 @@ class _column_wrapper_splitter:
         word = self.word
         write_word = None
         write_newline = False
-        append_c_to_leading = False
+        append_c_clip_leading = False
         empty = self.empty
         newline_string = self.newline_string
 
@@ -3930,7 +3946,7 @@ class _column_wrapper_splitter:
             else:
                 write_word = c
         else:
-            append_c_to_leading = True
+            append_c_clip_leading = True
 
         if write_word:
             if leading:
@@ -3946,9 +3962,9 @@ class _column_wrapper_splitter:
                 self.state(empty, newline_string)
                 write_newline = False
 
-        if append_c_to_leading:
+        if append_c_clip_leading:
             leading.append(c)
-            append_c_to_leading = False
+            append_c_clip_leading = False
 
     def close(self):
         # flush the current word, if any.

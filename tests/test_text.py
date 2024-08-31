@@ -3751,11 +3751,23 @@ for x in range(5): # this is a comment
         with self.assertRaises(ValueError):
             test(big.lines_strip_line_comments(big.lines("a\nb\n"), None), [])
 
-        # unterminated single-quotes
+        # unterminated single-quotes across lines
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar\n' bat 'zzz'"), ("#", '//',)), [])
+
+        # check that the exception has the right column number
+        try:
+            list(big.lines_strip_line_comments(big.lines("\nfoo\nbar 'bat' baz 'cinco\n' doodle 'zzz'"), ("#", '//',)))
+            self.assertTrue(False, "shouldn't reach here")
+        except SyntaxError as e:
+            self.assertTrue(str(e).startswith("Line 3 column 15:"))
+            self.assertTrue(str(e).endswith("'"))
+
+        # unterminated single-quotes at the end
         with self.assertRaises(SyntaxError):
             test(big.lines_strip_line_comments(big.lines("foo 'bar' bat 'zzz"), ("#", '//',)), [])
 
-        # unterminated triple-quotes
+        # unterminated triple-quotes at the end
         with self.assertRaises(SyntaxError):
             test(big.lines_strip_line_comments(big.lines("foo 'bar' bat '''zzz\nmore lines here\nwait what's happening?"), ("#", '//',), multiline_quotes=("'''",)), [])
 

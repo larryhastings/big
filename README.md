@@ -5784,12 +5784,16 @@ Lots of changes this time!  Grouping by submodule:
   * `match`, which contains a `Match` object if this line
     was matched with a regular expression, and `None` otherwise.
 
-* `LineInfo` now has two new methods: `extend_leading`
-  and `extend_trailing`.  These methods move a leading or
-  trailing substring from the current `line` to the relevant
-  field in `LineInfo`, maintaining all the guaranteed
-  invariants, and updating all related `LineInfo` fields
-  (like `column_number`).
+* `LineInfo` has two new methods: `clip_leading`
+  and `clip_trailing`.  These methods clip a leading or
+  trailing substring from the current `line`, and transfer
+  it to the relevant field in `LineInfo`, maintaining all
+  the guaranteed invariants, and updating all related `LineInfo`
+  fields (like `column_number`).
+
+  Conceptually, "clip" is different from "strip", in that "strip"
+  removes things and throws them away, whereas "clip" removes things
+  and puts them somewhere else.
 
 * `lines_filter_comment_lines` has been renamed to
   `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
