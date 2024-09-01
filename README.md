@@ -5615,69 +5615,79 @@ in the **big** test suite.
 
 *not yet released*
 
-Lots of changes this time!  Grouping by submodule:
+Lots of changes this time!  Grouping by submodule, then severity:
 
 ### text
 
-* Breaking change: `split_quoted_string` has been completely
-  re-tooled and re-written.  The new API is simpler, easier to
-  understand, and conceptually sharper.  It's a major upgrade!
+<dl><dd>
+#### `split_quoted_string`
 
-  The old version is still available under a new
-  name: `old_split_quoted_string`.  It's deprecated, and will
-  eventually be removed, but not before September 2025
-  (one year from now).
+<dl><dd>
 
-  Changes:
-  * The value it yields has changed:
-    * The old version yielded `(is_quote, segment)`, where
-      `is_quote` was a boolean value indicating whether or not
-      `segment` was quoted.  If `segment` was quoted, it began
-      and ended with (single character) quote marks.  To reassemble
-      the original string, join together all the `segment` strings
-      in order.
-    * The new version yields `(leading_quote, segment, trailing_quote)`,
-      where `leading_quote` and `trailing_quote` are either matching
-      quote marks or empty.  If they're true values, the `segment`
-      string is inside the quotes.  To reassemble the original string,
-      join together *all* the yielded strings in order.
-  * The `backslash` parameter has been replaced by a
-    new parameter, `escape`.
-    `escape` allows specifying the escape string, which
-    by default is '\\' (backslash).  If you specify a false
-    value, there will be no escape character in strings.
-  * By default `quotes` only contains `'`` (single-quote)
-    and `"` (double-quote).  The previous version also
-    used `"""` and `'''` as multiline quote marks
-    by default; this is no longer true, as it was too
-    opinionated and Python-specific.
-  * `split_quoted_string` also accepts a new parameter,
-    `state`, which sets the initial state of quoting.
-  * The `triple_quotes` parameter has been removed.  (See
-    next bullet point.)
-  * `split_quoted_string` used to use a hand-coded parser,
-    manually analyzing each character in the input text.
-    Now it uses `multisplit` to only examine the interesting
-    substrings.  `multisplit` has a large startup cost
-    the first time you use a particular set of iterators,
-    but this information is cached for subsequent calls.
-    Bottom line, the new version is much faster
-    for larger workloads.  (It's slower for trivial
-    examples... where speed doesn't matter.)
-  * Another benefit of switching to `multisplit`: `quotes`
-    now supports quote delimiters and an escape string
-    of any nonzero length.  In the case of ambiguity--if
-    more than one quote delimiter matches at a
-    time--`split_quoted_string` will always pick the
-    longer string.
-  * `split_quoted_string` is now deliberately
-    (and documented-ly) completely agnostic about newlines.
-    The previous version was, too; even though the
-    documentation discussed triple-quoted strings vs
-    single-quoted strings, in reality it didn't ever care
-    about newlines.  With the updated API, it's officially
-    up to you to enforce the rules you want (e.g. "newlines
-    aren't permitted in single-quoted strings.")
+*Breaking change.*
+
+`split_quoted_string` has been completely
+re-tooled and re-written.  The new API is simpler, easier to
+understand, and conceptually sharper.  It's a major upgrade!
+
+The old version is still available under a new
+name: `old_split_quoted_string`.  It's deprecated, and will
+eventually be removed, but not before September 2025
+(one year from now).
+
+Changes:
+* The value it yields has changed:
+  * The old version yielded `(is_quote, segment)`, where
+    `is_quote` was a boolean value indicating whether or not
+    `segment` was quoted.  If `segment` was quoted, it began
+    and ended with (single character) quote marks.  To reassemble
+    the original string, join together all the `segment` strings
+    in order.
+  * The new version yields `(leading_quote, segment, trailing_quote)`,
+    where `leading_quote` and `trailing_quote` are either matching
+    quote marks or empty.  If they're true values, the `segment`
+    string is inside the quotes.  To reassemble the original string,
+    join together *all* the yielded strings in order.
+* The `backslash` parameter has been replaced by a
+  new parameter, `escape`.
+  `escape` allows specifying the escape string, which
+  by default is '\\' (backslash).  If you specify a false
+  value, there will be no escape character in strings.
+* By default `quotes` only contains `'`` (single-quote)
+  and `"` (double-quote).  The previous version also
+  used `"""` and `'''` as multiline quote marks
+  by default; this is no longer true, as it was too
+  opinionated and Python-specific.
+* `split_quoted_string` also accepts a new parameter,
+  `state`, which sets the initial state of quoting.
+* The `triple_quotes` parameter has been removed.  (See
+  next bullet point.)
+* `split_quoted_string` used to use a hand-coded parser,
+  manually analyzing each character in the input text.
+  Now it uses `multisplit` to only examine the interesting
+  substrings.  `multisplit` has a large startup cost
+  the first time you use a particular set of iterators,
+  but this information is cached for subsequent calls.
+  Bottom line, the new version is much faster
+  for larger workloads.  (It's slower for trivial
+  examples... where speed doesn't matter.)
+* Another benefit of switching to `multisplit`: `quotes`
+  now supports quote delimiters and an escape string
+  of any nonzero length.  In the case of ambiguity--if
+  more than one quote delimiter matches at a
+  time--`split_quoted_string` will always pick the
+  longer string.
+* `split_quoted_string` is now deliberately
+  (and documented-ly) completely agnostic about newlines.
+  The previous version was, too; even though the
+  documentation discussed triple-quoted strings vs
+  single-quoted strings, in reality it didn't ever care
+  about newlines.  With the updated API, it's officially
+  up to you to enforce the rules you want (e.g. "newlines
+  aren't permitted in single-quoted strings.")
+
+</dd></dl>
+</dd></dl>
 
 * Breaking change: `parse_delimiters` has also been
   completely re-tooled, re-written... *and* re-named!
