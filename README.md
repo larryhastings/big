@@ -5625,7 +5625,7 @@ Lots of changes this time!  Grouping by submodule, then severity:
 
 <dl><dd>
 
-<p><font size=+1 color=red>Breaking changes.</font></p>
+| This API has breaking changes. |
 
 `split_quoted_string` has been completely
 re-tooled and re-written.  The new API is simpler, easier to
