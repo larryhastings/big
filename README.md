@@ -5967,6 +5967,10 @@ Changes:
   Now it folds "skip initial whitespace" into the regular expression
   itself.
 
+</dd></dl>
+
+</dd></dl>
+
 ### scheduler
 
 * Slight cleanup on `Scheduler._next`, the internal method call
