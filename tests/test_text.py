@@ -67,6 +67,8 @@ def unchanged(o):
 def to_bytes(o): # pragma: no cover
     if o is None:
         return None
+    if isinstance(o, bytes):
+        return o
     if isinstance(o, str):
         return o.encode('ascii')
     if isinstance(o, list):
@@ -75,11 +77,20 @@ def to_bytes(o): # pragma: no cover
         return tuple(to_bytes(x) for x in o)
     if isinstance(o, set):
         return set(to_bytes(x) for x in o)
+    if isinstance(o, dict):
+        return {to_bytes(k): to_bytes(v) for k, v in o.items()}
     if isinstance(o, re_Pattern):
         flags = o.flags
         if flags & re.UNICODE:
             flags = flags - re.UNICODE
-        o = re.compile(to_bytes(o.pattern), flags=flags)
+        return re.compile(to_bytes(o.pattern), flags=flags)
+    if isinstance(o, big.Delimiter):
+        return big.Delimiter(
+            close=to_bytes(o.close),
+            escape=to_bytes(o.escape),
+            multiline=o.multiline,
+            quoting=o.quoting,
+            )
     return o
 
 
@@ -2812,19 +2823,11 @@ class BigTextTests(unittest.TestCase):
                 return
 
             # convert everybody to ascii
-            try:
-                if 'quotes' in kwargs:
-                    kwargs['quotes'] = [x.encode('ascii') for x in kwargs['quotes']]
-                if 'state' in kwargs:
-                    kwargs['state'] = kwargs['state'].encode('ascii')
-                if 'escape' in kwargs:
-                    kwargs['escape']  = kwargs['escape'].encode('ascii')
+            kwargs = {k: to_bytes(v) for k, v in kwargs.items()}
 
-                got = list(big.split_quoted_strings(s.encode('ascii'), **kwargs))
-                expected = [(b.encode('ascii'), x.encode('ascii'), a.encode('ascii')) for b, x, a in expected]
-                self.assertEqual(expected, got)
-            except UnicodeEncodeError:
-                pass
+            got = list(big.split_quoted_strings(to_bytes(s), **kwargs))
+            expected = to_bytes(expected)
+            self.assertEqual(expected, got)
 
         test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
             [
@@ -2875,7 +2878,7 @@ class BigTextTests(unittest.TestCase):
                 ("\n", 'def', "\n"),
                 ("",   'ghi', ""),
             ],
-            quotes=("\n")
+            quotes=("\n",)
             )
 
         test("abc'qxqqxx'qqq'def",
@@ -2885,6 +2888,16 @@ class BigTextTests(unittest.TestCase):
                 ("",   'def',        ""),
             ],
             escape="xx"
+            )
+
+        test("abc^Sqxqq^X^Sqqq^Sdef^Qghi^Q",
+            [
+                ("",    'abc',         ""),
+                ("^S",  "qxqq^X^Sqqq", "^S"),
+                ("",    'def',         ""),
+                ("^Q",  'ghi',         "^Q"),
+            ],
+            quotes=('^S', '^Q',), escape="^X"
             )
 
         test("abc'qxqqxx\\'qqq'def",
@@ -2927,7 +2940,8 @@ class BigTextTests(unittest.TestCase):
             [
                 (b"",  b'abcd',  b""),
             ],
-            escape=big.text._sqs_escape_str
+            escape=big.text._sqs_escape_str,
+            multiline_quotes=None,
             )
 
         # test auto-converting _sqs_escape_bytes
@@ -2937,6 +2951,14 @@ class BigTextTests(unittest.TestCase):
             ],
             escape=big.text._sqs_escape_bytes
             )
+
+        # quotes and multiline_quotes are both empty
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=(),
+                multiline_quotes=(),
+                )
 
         # type mismatch, s is str and quotes are bytes
         with self.assertRaises(TypeError):
@@ -2950,6 +2972,20 @@ class BigTextTests(unittest.TestCase):
             test(b"a b c' x y z 'd e f'",
                 [],
                 quotes=('"', "'", "'''"),
+                )
+
+        # type mismatch, s is str and multiline_quotes are bytes
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=(b'<<', b">>", b"^^^"),
+                )
+
+        # type mismatch, s is bytes and multiline_quotes are str
+        with self.assertRaises(TypeError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", "^^^"),
                 )
 
         # type mismatch, s is str and escape is bytes
@@ -2980,6 +3016,20 @@ class BigTextTests(unittest.TestCase):
                 quotes=(b'"', b"'", b""),
                 )
 
+        # empty string in multiline_quotes str
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", ""),
+                )
+
+        # empty string in multiline_quotes bytes
+        with self.assertRaises(ValueError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=(b'<<', b">>", b""),
+                )
+
         with self.assertRaises(ValueError):
             test("a b c' x y z 'd e f'",
                 [],
@@ -2998,11 +3048,32 @@ class BigTextTests(unittest.TestCase):
                 state=b"'"
                 )
 
-        # repeated markers
+        # repeated markers in quotes
         with self.assertRaises(ValueError):
             test("a b c' x y z 'd e f'",
                 [],
                 quotes=('"', "'", '"'),
+                )
+
+        # repeated markers in multiline_quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", '<<'),
+                )
+
+        # marker appears in both quotes and multiline_quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", '"'),
+                )
+
+        # marker appears in both quotes and multiline_quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', "'", '"'),
                 )
 
         # initial state is not a quote marker
@@ -3015,6 +3086,10 @@ class BigTextTests(unittest.TestCase):
         # newlines and multiline_quotes
         with self.assertRaises(SyntaxError):
             test('abc "def\nghi" jkl',
+                [],
+                )
+        with self.assertRaises(SyntaxError):
+            test('abc "defghi" "jk\nl',
                 [],
                 )
 
@@ -3083,6 +3158,8 @@ class BigTextTests(unittest.TestCase):
                     empty = b''
                     if state:
                         state = to_bytes(state)
+                    if delimiters:
+                        delimiters = to_bytes(delimiters)
 
         test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
             (
@@ -3183,6 +3260,26 @@ class BigTextTests(unittest.TestCase):
                 ( '',       '',  ')'),
             ))
 
+        # test multi-character delimiters and escape
+        test(r'abc^Sdef<<gh><i>>klm^Xno**^Xp*^Xqrs^Qtuv<<wxy>>z',
+            (
+                ('abc',      '^S', ''),
+                ('def',      '<<', ''),
+                ('gh><i',    '',   '>>'),
+                ('klm',      '^X', ''),
+                ('no**^Xp*', '',   '^X'),
+                ('qrs',      '',   '^Q'),
+                ('tuv',      '<<', ''),
+                ('wxy',      '',   '>>'),
+                ('z',        '',   ''),
+                ),
+            delimiters = {
+                '^S': big.Delimiter('^Q'),
+                '<<': big.Delimiter('>>'),
+                '^X': big.Delimiter('^X', escape='**', quoting=True),
+                },
+            )
+
         with self.assertRaises(ValueError):
             test('a[3)', None)
         with self.assertRaises(ValueError):
@@ -3203,7 +3300,13 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             test('bytes/str mismatch', None, delimiters={b'a': big.Delimiter(close=b'x', escape='b', quoting=True)})
         with self.assertRaises(ValueError):
+            test('no delimiters?!', None, delimiters={})
+        with self.assertRaises(ValueError):
+            test(b'no delimiters?!', None, delimiters={})
+        with self.assertRaises(ValueError):
             test('open delimiters is a <backslash>', None, delimiters={'\\': big.Delimiter(close='z')})
+        with self.assertRaises(ValueError):
+            test(b'open delimiters is a bytes <backslash>', None, delimiters={b'\\': big.Delimiter(close=b'z')})
         with self.assertRaises(ValueError):
             test('close delimiter is a <backslash>', None, delimiters={'z': big.Delimiter(close='\\')})
         with self.assertRaises(ValueError):
@@ -3214,6 +3317,43 @@ class BigTextTests(unittest.TestCase):
             test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=True, escape='')})
         with self.assertRaises(ValueError):
             test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
+        with self.assertRaises(ValueError):
+            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
+
+        with self.assertRaises(SyntaxError):
+            test('by default quote marks are now single-line only "ab\n", test 1, complete quoted string', None, )
+        with self.assertRaises(SyntaxError):
+            test('by default quote marks are now single-line only "ab\n, test 2, unterminated quoted string', None, )
+
+        # testing on the Delimiter class itself
+        d = big.Delimiter(close='x')
+        self.assertEqual(d, big.Delimiter(d) )
+        d = big.Delimiter(close='q', quoting=True, escape='>')
+        self.assertEqual(d, d.copy() )
+
+        self.assertEqual(
+            repr(big.Delimiter(close='x', escape='y', multiline=False, quoting=True)),
+                    "Delimiter(close='x', escape='y', multiline=False, quoting=True)"
+            )
+
+        with self.assertRaises(ValueError):
+            big.Delimiter(close='x', escape='', quoting=True, multiline=True)
+        with self.assertRaises(ValueError):
+            big.Delimiter(close='x', escape='', quoting=True, multiline=False)
+        with self.assertRaises(ValueError):
+            big.Delimiter(close='x', escape='z', quoting=False, multiline=True)
+        with self.assertRaises(ValueError):
+            big.Delimiter(close='\\')
+        with self.assertRaises(ValueError):
+            big.Delimiter(close=b'\\')
+        # invariant: one of multiline or quoting must be true.
+        with self.assertRaises(ValueError):
+            big.Delimiter(close=')', multiline=False, quoting=False)
+        with self.assertRaises(ValueError):
+            test('abcde', [],
+            delimiters={'\\': big.Delimiter(close='x')},
+            )
+
         # Delimiter objects are now read-only
         d = big.Delimiter(close='x')
         with self.assertRaises(AttributeError):
@@ -3224,17 +3364,6 @@ class BigTextTests(unittest.TestCase):
             d.quoting = True
         with self.assertRaises(AttributeError):
             d.quoting = True
-
-        # testing on the Delimiter class itself
-        d = big.Delimiter(close='x')
-        self.assertEqual(d, big.Delimiter(d) )
-        d = big.Delimiter(close='q', quoting=True, escape='>')
-        self.assertEqual(d, d.copy() )
-
-        with self.assertRaises(ValueError):
-            big.Delimiter(close='x', escape='', quoting=True)
-        with self.assertRaises(ValueError):
-            big.Delimiter(close='x', escape='z', quoting=False)
 
 
 
@@ -3398,13 +3527,35 @@ class BigTextTests(unittest.TestCase):
             L('',  6, 1, end=''),
             ])
 
-        list_of_lines = ['first line', '\tsecond line', 'third line']
+        # you can give lines an iterable of strings,
+        # in which case we don't populate "end".
+        list_of_lines = [
+            'first line',
+            '\tsecond line',
+            'third line'
+            ]
         lines = big.lines(list_of_lines)
         test(big.lines_strip(lines),
             [
             L('first line', 1, 1, end=''),
             L('\tsecond line', 2, 9, leading='\t', final='second line', end=''),
             L('third line', 3, 1, end=''),
+            ])
+
+        # or! you can give lines an iterable of 2-tuples of strings,
+        # in which case the first string is the line and the second is the end.
+        list_of_lines = [
+            ('line 1', '\n'),
+            ('hey!  line 2.', '\n'),
+            ('the only line with the word eggplant! line 3!', '\n'),
+            ('the final line, line 4.', '')
+            ]
+        lines = big.lines(list_of_lines)
+        test(big.lines_grep(lines, 'eggplant', invert=True),
+            [
+            L('line 1', 1, 1),
+            L('hey!  line 2.', 2, 1),
+            L('the final line, line 4.', 4, 1, end=''),
             ])
 
         # test lines_filter_line_comment_lines
@@ -3639,6 +3790,21 @@ hummingbird
             L('',                  3, 1, end=''),
             ])
 
+        # test funny separators for lines_strip,
+        # *and* multiple calls to clip_leading and clip_trailing
+        li = lines = big.text.lines('xxxA B C Dyyy\nyyyE F G Hzzz\nxyzI J K Lyzx')
+        li = big.text.lines_strip(li, ('x', '?'))
+        li = big.text.lines_strip(li, ('y', '!'))
+        li = big.text.lines_strip(li, ('z', '.'))
+        test(li,
+            [
+            L('xxxA B C Dyyy', 1, 4, leading='xxx', final='A B C D',  trailing='yyy'),
+            L('yyyE F G Hzzz', 2, 4, leading='yyy', final='E F G H',  trailing='zzz'),
+            L('xyzI J K Lyzx', 3, 4, leading='xyz', final='I J K Ly', trailing='zx', end=''),
+            ]
+            )
+
+
         lines = big.lines("""
 
     a = b
@@ -3756,12 +3922,15 @@ for x in range(5): # this is a comment
             test(big.lines_strip_line_comments(big.lines("foo 'bar\n' bat 'zzz'"), ("#", '//',)), [])
 
         # check that the exception has the right column number
+        sentinel = object()
+        result = sentinel
         try:
-            list(big.lines_strip_line_comments(big.lines("\nfoo\nbar 'bat' baz 'cinco\n' doodle 'zzz'"), ("#", '//',)))
-            self.assertTrue(False, "shouldn't reach here")
+            # this should throw an exception, result should not be written to here.
+            result = list(big.lines_strip_line_comments(big.lines("\nfoo\nbar 'bat' baz 'cinco\n' doodle 'zzz'"), ("#", '//',)))
         except SyntaxError as e:
             self.assertTrue(str(e).startswith("Line 3 column 15:"))
             self.assertTrue(str(e).endswith("'"))
+        self.assertEqual(result, sentinel)
 
         # unterminated single-quotes at the end
         with self.assertRaises(SyntaxError):
@@ -3877,7 +4046,7 @@ for x in range(5): # this is a comment
                 pprint.pprint(got)
                 print("\n\n")
 
-            self.assertEqual(got, expected)
+            self.assertEqual(expected, got)
 
         _sentinel = object()
 
@@ -3940,7 +4109,6 @@ outdent
             (LineInfo(li, line='', line_number=15, column_number=1, indent=0, leading='', end=''),
                 ''),
             ]
-
         test(lines, expected)
 
 

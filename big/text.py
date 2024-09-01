@@ -245,13 +245,34 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 #    False
 #    >>> is_newline_byte(b'\v')
 #    False
+#
+# however! with defensive programming, in case this changes in the future
+# (as it should!), big will automatically still agree with Python.
+#
+# p.s. you have to put characters around the linebreak character,
+# because str.splitlines (and bytes.splitlines) rstrips the linebreak
+# characters before it splits, sigh.
 
 _export_name('bytes_linebreaks')
 bytes_linebreaks = (
     b'\n'    , #   10 0x000a - newline
+    )
+
+if len(b'x\vx'.splitlines()) == 2: # pragma: nocover
+    bytes_linebreaks += (
+        '\v'    , #   11 - 0x000b - vertical tab
+        )
+
+if len(b'x\fx'.splitlines()) == 2: # pragma: nocover
+    bytes_linebreaks += (
+        '\f'    , #   12 - 0x000c - form feed
+        )
+
+bytes_linebreaks += (
     b'\r'    , #   13 0x000d - carriage return
     b'\r\n'  , # bonus! the classic DOS newline sequence!
     )
+
 _export_name('bytes_linebreaks_without_crlf')
 bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
 
@@ -2010,6 +2031,13 @@ def old_split_quoted_strings(s, quotes=None, *, triple_quotes=True, backslash=No
 ## One added benefit of this approach: it works on both str and bytes objects, you don't need to
 ## handle them separately.
 ##
+## Update: OOOOPS! s.splitlines() implicitly does an s.rstrip(newline-characters) before splitting!
+## Hooray for special cases breaking the rules!
+##
+## So now I have to do this more complicated version:
+##         contains_newlines = (len( s.splitlines() ) > 1) or (len( ( s[-1:] + 'x' ').splitlines() ) > 1)
+## (Why the colon in [-1:] ?  So it works on bytes strings.  yes, we also have to use b'x' then.)
+##
 
 _sqs_quotes_str   = ( '"',  "'")
 _sqs_quotes_bytes = (b'"', b"'")
@@ -2018,7 +2046,7 @@ _sqs_escape_str   =  '\\'
 _sqs_escape_bytes = b'\\'
 
 
-def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes, empty, state):
+def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes, empty, laden, state):
     """
     This is the generator function implementing the split_quoted_strings
     iterator.  The public split_quoted_strings analyzes its arguments,
@@ -2055,7 +2083,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
         if quote or text:
             if quote and text and (quote not in multiline_quotes):
                 # see treatise above
-                if len(text.splitlines()) > 1:
+                if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
                     raise SyntaxError("unterminated quoted string, {s!r}")
             if state:
                 state = None
@@ -2072,7 +2100,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
         if text or quote:
             if quote and text and (quote not in multiline_quotes):
                 # see treatise above
-                if len(text.splitlines()) > 1:
+                if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
                     raise SyntaxError("unterminated quoted string, {s!r}")
             if state:
                 state = None
@@ -2102,9 +2130,12 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     quotes is an iterable of unique quote delimiters.
     Quote delimiters may be any string of 1 or more characters.
     They must be the same type as s, either str or bytes.
-    By default, quotes is ('"', "'").  (If s is bytes,
-    quotes defaults to (b'"', b"'").)  Text delimited
-    inside quotes must not contain a newline.
+    When one of these quote delimiters is encountered in s,
+    it begins a quoted section, which only ends at the
+    next occurance of that quote delimiter.  By default,
+    quotes is ('"', "'").  (If s is bytes, quotes defaults
+    to (b'"', b"'").)  Text delimited inside quotes must
+    not contain a newline.
 
     escape is a string of any length.  If escape is not
     an empty string, the string will "escape" (quote)
@@ -2149,9 +2180,13 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
       if s ends with an unterminated string.  In that
       case, the last tuple yielded will have a non-empty
       leading_quote and an empty trailing_quote.
+    * split_quoted_strings only supports the opening and
+      closing marker for a string being the same string.
+      If you need the opening and closing markers to be
+      different strings, use split_delimiters.
     """
 
-    # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {state=})")
+    # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {multiline_quotes=}, {state=})")
 
     if multiline_quotes is None:
         multiline_quotes = ()
@@ -2160,6 +2195,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     if is_bytes:
         s_type = bytes
         empty = b''
+        laden = b'x'
         if quotes in (_sqs_quotes_str, None):
             quotes = _sqs_quotes_bytes
         else:
@@ -2181,6 +2217,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     else:
         s_type = str
         empty = ""
+        laden = 'x'
         if quotes in (_sqs_quotes_bytes, None):
             quotes = _sqs_quotes_str
         else:
@@ -2191,6 +2228,12 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
                     raise ValueError("quotes cannot contain an empty string")
         if escape in (_sqs_escape_bytes, None):
             escape = _sqs_escape_str
+        if multiline_quotes:
+            for q in multiline_quotes:
+                if not isinstance(q, s_type):
+                    raise TypeError(f"values in multiline_quotes must match s (str or bytes), not {q!r}")
+                if not q:
+                    raise ValueError("multiline_quotes cannot contain an empty string")
         elif not isinstance(escape, s_type):
             raise TypeError(f"escape must match s (str or bytes), not {escape!r}")
 
@@ -2252,7 +2295,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     # help multisplit work better--it memoizes the conversion to a regular expression
     separators.sort()
 
-    return _split_quoted_strings(s, separators, all_quotes_set, quotes_set, multiline_quotes_set, empty, state)
+    return _split_quoted_strings(s, separators, all_quotes_set, quotes_set, multiline_quotes_set, empty, laden, state)
 
 
 @_export
@@ -2283,13 +2326,21 @@ class Delimiter:
         if is_bytes:
             t = bytes
             empty = b''
+            if close == b'\\':
+                raise ValueError("close delimiter must not be '\\'")
         else:
             t = str
             empty = ''
+            if close == '\\':
+                raise ValueError("close delimiter must not be b'\\'")
 
         # they can't both be false, and they can't both be true
         if bool(escape) != bool(quoting):
             raise ValueError("quoting and escape mismatch; they must either both be true, or both be false")
+
+        # if quoting=False, you can only have multiline=True
+        if not (quoting or multiline):
+            raise ValueError(f"multiline=False unsupported when quoting=False")
 
         self._close = close
         self._escape = escape or empty
@@ -2380,7 +2431,7 @@ class _DelimiterState:
         self.illegal = illegal
         self.single_line_only = single_line_only
 
-    def __repr__(self):
+    def __repr__(self): # pragma: nocover
         return f"DelimiterState(open={self.open!r}, close={self.close!r}, escape={self.escape!r}, illegal={self.illegal!r}, single_line_only={self.single_line_only!r})"
 
 
@@ -2401,12 +2452,10 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
         s_type = bytes
         s_type_description = "bytes"
         not_s_type_description = "str"
-        disallowed_delimiter = b'\\'
     else:
         s_type = str
         s_type_description = "str"
         not_s_type_description = "bytes"
-        disallowed_delimiter = '\\'
 
     all_closers = set()
     all_openers = set(delimiters)
@@ -2415,14 +2464,10 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
     for k, v in delimiters.items():
         if not isinstance(k, s_type):
             raise TypeError(f"open delimiter {k!r} must be {s_type_description}, not {not_s_type_description}")
-        if k == disallowed_delimiter:
-            raise ValueError(f"illegal open delimiter {k!r}")
         if not isinstance(v, Delimiter):
             raise TypeError(f"delimiter values must be Delimiter, not {v!r}")
         if not isinstance(v.close, s_type):
             raise TypeError(f"close delimiter {v.close!r} must be {s_type_description}, not {not_s_type_description}")
-        if v.close == disallowed_delimiter:
-            raise ValueError(f"Delimiter: illegal close delimiter {v.close!r}")
         all_closers.add(v.close)
         if not isinstance(v.escape, s_type):
             raise TypeError(f"Delimiter: escape {v.escape!r} must be {s_type_description}, not {not_s_type_description}")
@@ -2465,7 +2510,7 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
     return initial_state, all_tokens
 
 
-def split_delimiters(s, all_tokens, current, stack, empty):
+def split_delimiters(s, all_tokens, current, stack, empty, laden):
     "Internal generator function returned by the real split_delimiters."
     push = stack.append
     pop = stack.pop
@@ -2492,9 +2537,9 @@ def split_delimiters(s, all_tokens, current, stack, empty):
             # flush open delimiter
             s = join(text)
             clear()
-            # see treatise above
-            if current.single_line_only and (len(s.splitlines()) > 1):
-                raise SyntaxError("unterminated quoted string, {s!r}")
+            # we don't need to test to see if s contains a newline here.
+            # if we have an open delimiter, that means quoting is False.
+            # if quoting is False, multiline must be True.  this is a Delimiter invariant.
             yield s, delimiter, empty
 
             push(current)
@@ -2505,9 +2550,10 @@ def split_delimiters(s, all_tokens, current, stack, empty):
             # flush close delimiter
             s = join(text)
             clear()
-            # see treatise above
-            if current.single_line_only and (len(s.splitlines()) > 1):
-                raise SyntaxError("unterminated quoted string, {s!r}")
+            if s:
+                # see treatise above
+                if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
+                    raise SyntaxError(f"unterminated quoted string, {s!r}")
             yield s, empty, delimiter
 
             current = pop()
@@ -2527,8 +2573,8 @@ def split_delimiters(s, all_tokens, current, stack, empty):
         s = join(text)
         if s:
             # see treatise above
-            if current.single_line_only and (len(s.splitlines()) > 1):
-                raise SyntaxError("unterminated quoted string, {s!r}")
+            if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
+                raise SyntaxError(f"unterminated quoted string, {s!r}")
             yield s, empty, empty
 
 
@@ -2572,15 +2618,19 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     If s doesn't end with a closing delimiter, in the final tuple
     yielded, both open and close will be empty strings.
 
-    (Tip: Use a list as a stack to track the state of split_delimiters.
-    Every time split_delimiters yields a tuple, first process text.
-    Then, if open is true, push that string with stack.append.
-    Else, if close is true, pop the stack with stack.pop.)
+    split_delimiters doesn't publish its internal state, but it's
+    easy to track.  Use a list as a stack to track the state,
+    like so:
+        * Create an empty list to store the state.
+        * Every time split_delimiters yields a tuple, first,
+          process the text.
+        * Then, if open is true, push that string with
+          stack.append.
+        * Else, if close is true, pop the stack with stack.pop.
 
-    You may reuse a particular character as a closing
-    delimiter multiple times.
+    You may use multiple Delimiter objects with the same close string.
 
-    You may not specify backslash ('\\') as a delimiter.
+    You may not specify backslash ('\\') as an open or close delimiter.
 
     parse_delimiter doesn't complain if a string ends with unclosed
     delimiters.
@@ -2592,18 +2642,25 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 
     is_bytes = isinstance(s, bytes)
     if is_bytes:
+        empty = b''
+        laden = b'x'
         if delimiters in (None, split_delimiters_default_delimiters):
             initial_state, all_tokens = _split_delimiters_default_delimiters_bytes_cache
-        empty = b''
+        elif not delimiters:
+            raise ValueError("invalid delimiters")
+        elif b'\\' in delimiters:
+            raise ValueError("open delimiter must not be b'\\'")
     else:
+        empty = ''
+        laden = 'x'
         if delimiters in (None, split_delimiters_default_delimiters_bytes):
             initial_state, all_tokens = _split_delimiters_default_delimiters_cache
-        empty = ''
+        elif not delimiters:
+            raise ValueError("invalid delimiters")
+        elif '\\' in delimiters:
+            raise ValueError("open delimiter must not be '\\'")
 
     if not initial_state:
-        if not delimiters:
-            raise ValueError("invalid delimiters")
-
         initial_state, all_tokens = _delimiters_to_state_machine(delimiters, is_bytes)
 
     stack = []
@@ -2624,7 +2681,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
             current = next
             last_open = open
 
-    return _split_delimiters(s, all_tokens, current, stack, empty)
+    return _split_delimiters(s, all_tokens, current, stack, empty, laden)
 
 
 
