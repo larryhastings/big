@@ -715,7 +715,7 @@ Example:
 ```Python
 with big.pushd('x'):
     pass
-````
+```
 
 This would change into the `'x'` subdirectory before
 executing the nested block, then change back to
@@ -1966,7 +1966,7 @@ the initial state object, from inside the `StateManager` constructor.
 
 `on_exit` is similar to `on_enter`, except the attribute is
 called when transitioning *away* from a state object.
-Its default value is `'on_exit'``.
+Its default value is `'on_exit'`.
 
 `on_exit` is called
 *during* the state transition, which means you're expressly
@@ -2247,8 +2247,8 @@ an iterator of the resulting string segments.
 
 A "split array" is an array containing the original
 string, but split into multiple pieces.  For example,
-the string `"a b c d e"`` could be split into the
-split array `["a ", "b ", "c ", "d ", "e"]``
+the string `"a b c d e"` could be split into the
+split array `["a ", "b ", "c ", "d ", "e"]`.
 
 For example,
 
@@ -2259,12 +2259,12 @@ For example,
 returns `['a', 'bcd', 'e']`.
 
 Note that the split arrays *must* contain all the
-characters from `s`.  `''.join(split_array)`` must recreate `s`.
+characters from `s`.  `''.join(split_array)` must recreate `s`.
 `combine_splits` only examines the lengths of the strings
 in the split arrays, and makes no attempt to infer
 stripped characters.  (So, don't use the string's `.split`
-method to split, use big's `multisplit` with `keep=True` or
-`keep=ALTERNATING`.)
+method if you want to use `combine_splits`.  Instead, consider
+big's `multisplit` with `keep=True` or `keep=ALTERNATING`.)
 
 </dd></dl>
 
@@ -5654,7 +5654,7 @@ Changes:
   `escape` allows specifying the escape string, which
   by default is '\\' (backslash).  If you specify a false
   value, there will be no escape character in strings.
-* By default `quotes` only contains `'`` (single-quote)
+* By default `quotes` only contains `'` (single-quote)
   and `"` (double-quote).  The previous version also
   used `"""` and `'''` as multiline quote marks
   by default; this is no longer true, as it was too
