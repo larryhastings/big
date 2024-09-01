@@ -5625,7 +5625,7 @@ Lots of changes this time!  Grouping by submodule, then severity:
 
 <dl><dd>
 
-*Breaking change.*
+*Breaking changes.*
 
 `split_quoted_string` has been completely
 re-tooled and re-written.  The new API is simpler, easier to
@@ -5688,7 +5688,15 @@ Changes:
   aren't permitted in single-quoted strings.")
 
 </dd></dl>
+
 </dd></dl>
+
+<dl><dd>
+
+#### `parse_delimiters`
+
+<dl><dd>
+
 
 * Breaking change: `parse_delimiters` has also been
   completely re-tooled, re-written... *and* re-named!
@@ -5758,6 +5766,16 @@ Changes:
     `LineInfo` aesthetic, and writes *both* the whitespace it
     rstripped *and* the comment to `info.trailing`.
 
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `LineInfo`
+
+<dl><dd>
+
 
 * Breaking change: the `LineInfo` constructor has a
   new `lines` positional parameter, added *in front of*
@@ -5806,6 +5824,17 @@ Changes:
   removes things and throws them away, whereas "clip" removes things
   and puts them somewhere else.
 
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `lines_filter_comment_lines`
+
+<dl><dd>
+
+
 * `lines_filter_comment_lines` has been renamed to
   `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
   now enforces that single-quoted strings can't span lines,
@@ -5814,16 +5843,50 @@ Changes:
   is also available under the old name; this old name will
   eventually be removed, but not before September 2025.
 
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `lines_strip` and `lines_rstrip`
+
+<dl><dd>
+
+
 * `lines_strip` and `lines_rstrip` now accept a new `separators`
   argument; this is an iterable of separators, like the argument
   to `multisplit`.
   The default value of `None` preserves the existing behavior,
   stripping whitespace.
 
+
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `lines_grep`
+
+<dl><dd>
+
 * `lines_grep` now writes to the `match` attribute to the `LineInfo`
   object, containing the return value from calling `re.search`.
   (If you pass in `invert=True` to `lines_grep`, `lines_grep`
   still writes to the `match` attribute--but it always writes `None`.)
+
+
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `lines_strip_indent`
+
+<dl><dd>
+
 
 * Bugfix: `lines_strip_indent` previously required
   whitespace-only lines to obey the indenting rules, which was
@@ -5836,14 +5899,45 @@ Changes:
   indent value of an empty line should matter--but this
   behavior is how you'd intuitively expect it to work.)
 
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `split_title_case`
+
+<dl><dd>
+
 * New function: `split_title_case`, which splits a string
   at title case change word boundaries.
+
+
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### `combine_splits`
+
+<dl><dd>
 
 * New function: `combine_splits`.  If you split a string
   two different ways, producing two arrays that sum to the
   original string, `combine_splits` will merge those splits
   together, producing a new array that splits in every
   place any of the two split arrays had a split.
+
+</dd></dl>
+
+</dd></dl>
+
+<dl><dd>
+
+#### Performance improvements
+
+<dl><dd>
 
 * Minor but free speedup for several functions in `big.text`,
   most importantly
