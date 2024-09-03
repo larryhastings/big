@@ -123,13 +123,6 @@ for symbol in """
     big.ascii_linebreaks
     big.ascii_linebreaks_without_crlf
 
-    # deprecated
-
-    big.utf8_whitespace
-    big.utf8_whitespace_without_dos
-    big.utf8_newlines
-    big.utf8_newlines_without_dos
-
 """.strip().split('\n'):
     symbol = symbol.strip()
     if (not symbol) or symbol.startswith('#'):
@@ -552,30 +545,6 @@ class BigTextTests(unittest.TestCase):
         form_feed_and_vertical_tab = set('\f\v')
         self.assertEqual(set(big.ascii_linebreaks), decode_byteses(observed_bytes_linebreaks) | form_feed_and_vertical_tab)
         self.assertEqual(set(big.ascii_linebreaks_without_crlf), decode_byteses(observed_bytes_linebreaks_without_crlf) | form_feed_and_vertical_tab)
-
-        # now test the deprecated utf-8 variants!
-        # they should match... python str, sigh.
-        # (principle of least surprise.)
-        utf8_whitespace = big.encode_strings(big.str_whitespace, 'utf-8')
-        self.assertEqual(set(big.utf8_whitespace), set(utf8_whitespace))
-        utf8_whitespace_without_dos = big.encode_strings(big.str_whitespace_without_crlf, 'utf-8')
-        self.assertEqual(set(big.utf8_whitespace_without_dos), set(utf8_whitespace_without_dos))
-        utf8_newlines = big.encode_strings(big.str_linebreaks, 'utf-8')
-        self.assertEqual(set(big.utf8_newlines), set(utf8_newlines))
-        utf8_newlines_without_dos = big.encode_strings(big.str_linebreaks_without_crlf, 'utf-8')
-        self.assertEqual(set(big.utf8_newlines_without_dos), set(utf8_newlines_without_dos))
-
-        # test that the compatibility layer for the old "newlines" names is correct
-        self.assertEqual(big.newlines, big.str_linebreaks)
-        self.assertEqual(big.newlines_without_dos, big.str_linebreaks_without_crlf)
-        self.assertEqual(big.ascii_newlines, big.bytes_linebreaks)
-        self.assertEqual(big.ascii_newlines_without_dos, big.bytes_linebreaks_without_crlf)
-        self.assertEqual(big.utf8_newlines, big.encode_strings(big.linebreaks, 'utf-8'))
-        self.assertEqual(big.utf8_newlines_without_dos, big.encode_strings(big.linebreaks_without_crlf, 'utf-8'))
-
-        # and for my final trick: test the cached reversed builtin separators!
-        for forwards, backwards in big.text._reversed_builtin_separators.items():
-            self.assertEqual(set(backwards), set(big.text._multisplit_reversed(forwards)), f"failed on {printable_separators(forwards)}")
 
     def test_reversed_re_finditer(self):
         # Cribbed off the test suite from the 'regex' package
@@ -2790,7 +2759,7 @@ class BigTextTests(unittest.TestCase):
         string_with_em_space = "ab\u2003cd"
         result = "ab cd"
         self.assertEqual(big.normalize_whitespace("ab\u2003cd"), result)
-        self.assertEqual(big.normalize_whitespace("ab\u2003cd".encode('utf-8'), big.utf8_whitespace), result.encode('utf-8'))
+        self.assertEqual(big.normalize_whitespace("ab\u2003cd".encode('utf-8'), big.encode_strings(big.unicode_whitespace, 'utf-8')), result.encode('utf-8'))
 
         with self.assertRaises(ValueError):
             big.normalize_whitespace("a b c d   e", separators='')
@@ -3336,26 +3305,27 @@ class BigTextTests(unittest.TestCase):
                     "Delimiter(close='x', escape='y', multiline=False, quoting=True)"
             )
 
+        D = big.Delimiter
         with self.assertRaises(ValueError):
-            big.Delimiter(close='x', escape='', quoting=True, multiline=True)
+            D(close='x', escape='', quoting=True, multiline=True)
         with self.assertRaises(ValueError):
-            big.Delimiter(close='x', escape='', quoting=True, multiline=False)
+            D(close='x', escape='', quoting=True, multiline=False)
         with self.assertRaises(ValueError):
-            big.Delimiter(close='x', escape='z', quoting=False, multiline=True)
+            D(close='x', escape='z', quoting=False, multiline=True)
         with self.assertRaises(ValueError):
-            big.Delimiter(close='\\')
+            D(close='\\')
         with self.assertRaises(ValueError):
-            big.Delimiter(close=b'\\')
+            D(close=b'\\')
         # invariant: one of multiline or quoting must be true.
         with self.assertRaises(ValueError):
-            big.Delimiter(close=')', multiline=False, quoting=False)
+            D(close=')', multiline=False, quoting=False)
         with self.assertRaises(ValueError):
             test('abcde', [],
-            delimiters={'\\': big.Delimiter(close='x')},
+            delimiters={'\\': D(close='x')},
             )
 
         # Delimiter objects are now read-only
-        d = big.Delimiter(close='x')
+        d = D(close='x')
         with self.assertRaises(AttributeError):
             d.close = 'y'
         with self.assertRaises(AttributeError):
@@ -3365,112 +3335,6 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             d.quoting = True
 
-
-
-    def test_parse_delimiters(self):
-
-        self.maxDiff = 2**32
-
-        def test(s, expected, *, delimiters=None):
-            empty = ''
-            for i in range(2):
-                got = tuple(big.parse_delimiters(s, delimiters=delimiters))
-
-                flattened = []
-                for t in got:
-                    flattened.extend(t)
-                s2 = empty.join(flattened)
-                self.assertEqual(s, s2)
-
-                self.assertEqual(expected, got)
-
-                if not i:
-                    s = to_bytes(s)
-                    expected = to_bytes(expected)
-                    empty = b''
-
-        test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
-            (
-                ('a',                '[',  ''),
-                ('x',                 '', ']'),
-                (' = foo',           '(',  ''),
-                ('',                 '"',  ''),
-                ('howdy (folks)\\n',  '', '"'),
-                (', ',               '{',  ''),
-                ('1:2, 3:4',          '', '}'),
-                ('',                  '', ')'),
-            ),
-            )
-
-        test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
-            (
-                ('a', '[',  ''),
-                ('',  '[',  ''),
-                ('',  '[',  ''),
-                ('z',  '', ']'),
-                ('',   '', ']'),
-                ('',   '', ']'),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('q',  '', '}'),
-                ('',   '', '}'),
-                ('',   '', '}'),
-                ('',   '', '}'),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('z',  '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('!',  '',  ''),
-            ),
-            )
-
-        with self.assertRaises(ValueError):
-            test('a[3)', None)
-        with self.assertRaises(ValueError):
-            test('a{3]', None)
-        with self.assertRaises(ValueError):
-            test('a(3}', None)
-
-        with self.assertRaises(ValueError):
-            test('delimiters is empty', None, delimiters=[])
-        with self.assertRaises(ValueError):
-            test('delimiter is abc (huh!)', None, delimiters=['()', 'abc'])
-        with self.assertRaises(TypeError):
-            test('delimiters contains 3', None, delimiters=['{}', 3])
-        with self.assertRaises(ValueError):
-            test('delimiters contains a <backslash>', None, delimiters=['<>', '\\/'])
-        with self.assertRaises(ValueError):
-            test('delimiters contains <angle> <brackets> <twice>', None, delimiters=['<>', '<>'])
-
-        with self.assertRaises(ValueError):
-            test('unclosed_paren(a[3]', None)
-        with self.assertRaises(ValueError):
-            test('x[3] = unclosed_curly{', None)
-        with self.assertRaises(ValueError):
-            test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
-        with self.assertRaises(ValueError):
-            test('"unterminated string\\', None)
-        with self.assertRaises(ValueError):
-            test('open_everything( { a[35 "foo', None)
-
-        with self.assertRaises(TypeError):
-            big.ParseDelimiter('(', b')')
-        with self.assertRaises(TypeError):
-            big.ParseDelimiter(b'(', ')')
 
 
     def test_lines(self):
@@ -3587,6 +3451,26 @@ class BigTextTests(unittest.TestCase):
             L('    c = d',           4, 1),
             L('    / not a comment', 5, 1),
             L('',                    9, 1, end=''),
+            ])
+
+        # minor regression test--
+        # I noticed this was broken right before release
+        lines = big.lines(b"""
+    # comment
+    a = b
+    // another comment
+    c = d
+    / not a comment
+    /// is a comment!
+## another comment!
+    #! a third comment!
+""".lstrip(b'\n'))
+        test(big.lines_filter_line_comment_lines(lines, (b'#', b'//')),
+            [
+            L(b'    a = b',           2, 1),
+            L(b'    c = d',           4, 1),
+            L(b'    / not a comment', 5, 1),
+            L(b'',                    9, 1, end=b''),
             ])
 
         lines = big.lines("""
@@ -3746,6 +3630,29 @@ hummingbird
             ]
             )
 
+        lines = big.lines("""
+cormorant
+firefox
+alligator
+diplodocus
+elephant
+giraffe
+barracuda
+hummingbird
+"""[1:-1])
+        test(big.lines_sort(lines, key=lambda t:t[1][1:]), # sort by second letter onward
+            [
+                L('barracuda', 7),
+                L('diplodocus', 4),
+                L('giraffe', 6),
+                L('firefox', 2),
+                L('elephant', 5),
+                L('alligator', 3),
+                L('cormorant', 1),
+                L('hummingbird', 8, end=''),
+            ]
+            )
+
         lines = big.lines(
 "    a = b  \n"
 "    c = d     \n"
@@ -3840,6 +3747,21 @@ for x in range(5): # this is my exciting comment
 """[1:])
         test(big.lines_strip_line_comments(lines, ("#", "//")),
             [
+                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing='# this is my exciting comment', final='for x in range(5): '),
+                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
+                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing='# this "comment" is useless', final='    print("") '),
+                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
+                L(line='', line_number=5, column_number=1, end=''),
+            ])
+
+        lines = big.lines("""
+for x in range(5): # this is my exciting comment
+    print("# this is quoted", x)
+    print("") # this "comment" is useless
+    print(no_comments_or_quotes_on_this_line)
+"""[1:])
+        test(big.lines_rstrip(big.lines_strip_line_comments(lines, ("#", "//"))),
+            [
                 L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing=' # this is my exciting comment', final='for x in range(5):'),
                 L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
                 L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
@@ -3860,8 +3782,8 @@ for x in range(5): # this is my exciting comment
             [
                 L(line_number=1, column_number=1,
                     line ='for x in range(5): # this is my exciting comment',
-                    final='for x in range(5):',
-                    trailing=' # this is my exciting comment',),
+                    final='for x in range(5): ',
+                    trailing='# this is my exciting comment',),
                 L(line_number=2, column_number=1,
                     line ="    print('''",
                     final="    print('''"),
@@ -3873,13 +3795,13 @@ for x in range(5): # this is my exciting comment
                     final="    does this line have a comment? # no!"),
                 L(line_number=5, column_number=1,
                     line="    ''') # but here's a comment",
-                    trailing=" # but here's a comment",
-                    final="    ''')",
+                    trailing="# but here's a comment",
+                    final="    ''') ",
                     ),
                 L(line_number=6, column_number=1,
                     line='    print("just checking, # here too") # here is another comment',
-                    trailing=" # here is another comment",
-                    final='    print("just checking, # here too")'),
+                    trailing="# here is another comment",
+                    final='    print("just checking, # here too") '),
                 L(line_number=7, column_number=1,
                     line='',
                     end=''),
@@ -3896,16 +3818,16 @@ for x in range(5): # this is a comment
             [
                 L(  line_number=1, column_number=1,
                     line='for x in range(5): # this is a comment',
-                    trailing=' # this is a comment',
-                    final='for x in range(5):'),
+                    trailing='# this is a comment',
+                    final='for x in range(5): '),
                 L(  line_number=2, column_number=1,
                     line='    print("# this is quoted", x)',
                     trailing='# this is quoted", x)',
                     final='    print("'),
                 L(  line_number=3, column_number=1,
                     line='    print("") # this "comment" is useless',
-                    trailing=' # this "comment" is useless',
-                    final='    print("")'),
+                    trailing='# this "comment" is useless',
+                    final='    print("") '),
                 L(  line_number=4, column_number=1,
                     line='    print(no_comments_or_quotes_on_this_line)'),
                 L(  line_number=5, column_number=1,
@@ -3949,53 +3871,6 @@ for x in range(5): # this is a comment
             ]
             )
 
-
-        ##
-        ## testing for a deprecated function!
-        ## lines_strip_comments
-        ##
-        lines = big.lines("""
-for x in range(5): # this is a comment
-    print("# this is quoted", x)
-    print("") # this "comment" is useless
-    print(no_comments_or_quotes_on_this_line)
-"""[1:])
-        test(big.lines_strip_comments(lines, ("#", "//")),
-            [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, trailing=' # this is a comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
-                L(line='', line_number=5, column_number=1, end=''),
-            ])
-
-        # don't get alarmed!  we intentionally break quote characters in this test.
-        lines = big.lines("""
-for x in range(5): # this is a comment
-    print("# this is quoted", x)
-    print("") # this "comment" is useless
-    print(no_comments_or_quotes_on_this_line)
-"""[1:])
-        test(big.lines_strip_comments(lines, ("#", "//"), quotes=None),
-            [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, trailing=' # this is a comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1, trailing='# this is quoted", x)', final='    print("'),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
-                L(line='', line_number=5, column_number=1, end=''),
-            ])
-
-        with self.assertRaises(ValueError):
-            list(big.lines_strip_comments(big.lines("a\nb\n"), None))
-
-        lines = big.lines(b"a\nb# ignored\n c")
-        test(big.lines_strip_comments(lines, b'#'),
-            [
-            L(b'a', 1),
-            L(b'b# ignored', 2, 1, trailing=b'# ignored', final=b'b'),
-            L(b' c', 3, end=b''),
-            ]
-            )
 
 
         lines = big.lines(
@@ -5067,9 +4942,15 @@ outdent
                 got = big.encode_strings(o, encoding)
             self.assertEqual(got, expected)
 
-        test(['a', 'b', 'c'], [b'a', b'b', b'c'])
-        test(('x', 'y', 'z'), (b'x', b'y', b'z'))
-        test({'ab': 'cd', 'ef': 'gh'}, {b'ab': b'cd', b'ef': b'gh'})
+        test(['a', 'b', 'c'], [b'a', b'b', b'c']) # list
+        test(('x', 'y', 'z'), (b'x', b'y', b'z')) # tuple
+        test({'x', 'y', 'z'}, {b'x', b'y', b'z'}) # set
+        test({'ab': 'cd', 'ef': 'gh'}, {b'ab': b'cd', b'ef': b'gh'}) # dict
+
+        test([{ 'ab': ( 'cd',  'ef'),  'gh': { 'ij',  'kl'},  'mn': [ 'op', b'qr', { 'st':  'uv'}, ( 'wx',), { 'yz',} ]}],
+             [{b'ab': (b'cd', b'ef'), b'gh': {b'ij', b'kl'}, b'mn': [b'op', b'qr', {b'st': b'uv'}, (b'wx',), {b'yz',} ]}],
+             ) # super bombad nested stuffs
+
 
         class SubclassOfList(list):
             pass
@@ -5078,11 +4959,18 @@ outdent
 
         test(('x', 'y', 'z', "\N{PILE OF POO}"), (b'x', b'y', b'z', b'\xf0\x9f\x92\xa9'), encoding='utf-8')
 
-        with self.assertRaises(TypeError):
-            big.encode_strings('abcde')
+        test('abcde', b'abcde')
+        test('ijklm 🐿️', b'ijklm \xf0\x9f\x90\xbf\xef\xb8\x8f', encoding="utf-8")
+        with self.assertRaises(UnicodeEncodeError):
+            test('ijklm 🐿️', b'')
+        test(b'wxyz', b'wxyz')
 
         with self.assertRaises(TypeError):
-            big.encode_strings('ijklm', encoding="utf-8")
+            class Foo:
+                def __init__(self, x):
+                    self.x = x
+            foo = Foo('abc')
+            test(foo, None)
 
 
 def run_tests():

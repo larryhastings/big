@@ -155,6 +155,8 @@ And here are five little functions/classes I use all the time:
 
 [`big.file`](#bigfile)
 
+[`big.deprecated`](#bigdeprecated)
+
 [`big.graph`](#biggraph)
 
 [`big.heap`](#bigheap)
@@ -259,7 +261,7 @@ And here are five little functions/classes I use all the time:
 
 [`lines_strip(li)`](#lines_stripli)
 
-[`lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+[`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_commentsli-comment_separators--quotes--backslash-triple_quotestrue)
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
@@ -592,6 +594,15 @@ Returns `True` if `o` can be converted into an `int`,
 and `False` if it can't.
 </dd></dl>
 
+
+## `big.deprecated`
+
+Old versions of functions (and classes) from **big**.  Either
+the name was changed, or the semantics were changed, or both.
+
+Unlike the other modules, the contents of `big.deprecated` aren't
+imported into `big.all`.  (`big.all` does import `deprecated`,
+it just doesn't `from deprected import *` all the symbols.)
 
 
 ## `big.file`
@@ -2268,17 +2279,20 @@ big's `multisplit` with `keep=True` or `keep=ALTERNATING`.)
 
 </dd></dl>
 
-#### `Delimiter(close, *, escape='', quoting=False)`
+#### `Delimiter(close, *, escape='', multiline=True, quoting=False)`
 
 <dl><dd>
 
 Class representing a delimiter for
 `split_delimiters`.
 
-`close` is the closing delimiter character, must be the same type as `open`, and length 1.
+`close` is the closing delimiter character.  It must be a valid
+string or bytes object, and cannot be a backslash ('"\\"' or `b"\\"`).
 
-`escape` is a string of maximum length 1.  If true, when inside this delimiter,
-you can escape the trailing delimiter with this string.
+If `escape` is true, it should be a string;
+when inside this delimiter, you can escape the trailing
+delimiter with this string.  If `escape` is false,
+there is no escape string for this delimiter.
 
 `quoting` is a boolean: does this set of delimiters "quote" the text inside?
 When an open delimiter enables quoting, `split_delimiters` will ignore all
@@ -2287,27 +2301,32 @@ other delimiters in the text until it encounters the matching close delimiter.
 
 Currently `escape` and `quoting` must either both be true or both be false.
 
+If `multiline` is true, the closing delimiter may be on the current line
+or any subsequent line.  If `multiline` is false, the closing delimiter
+must appear on the current line.
+
 </dd></dl>
 
 #### `encode_strings(o, *, encoding='ascii')`
 
 <dl><dd>
 
-Accepts a container object `o` containing
-`str` objects; returns an equivalent object
-with the strings encoded to `bytes`.
+Converts an object `o` from `str` to `bytes`.
+If `o` is a container, recursively converts
+all objects and containers inside.
 
-`o` must be either `dict`, `list`, or `tuple`,
-or a subclass of one of those.
+`o` and all `objects` inside `o` must be either
+`bytes`, `str`, `dict`, `set`, `list`, `tuple`, or a subclass
+of one of those.
 
-Encodes every `str` inside using the encoding
-specified in the `encoding` parameter, default
-is `'ascii'`.  Handles nested containers.
+Encodes every string inside using the encoding
+specified in the _encoding_ parameter, default
+is `'ascii'``.
 
-If `o` is a `str`, raises `TypeError`.
-If `o` is a container and contains an object that
-isn't a
-`str`, `dict`, `list`, or `tuple`, raises `TypeError`.
+Handles nested containers.
+
+If `o` is of, or contains, a type not listed above,
+raises `TypeError`.
 </dd></dl>
 
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
@@ -2623,14 +2642,18 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_sort(li, *, reverse=False)`
+#### `lines_sort(li, *, key=None, reverse=False)`
 
 <dl><dd>
 
 A lines modifier function.  Sorts all input lines before
 yielding them.
 
-Lines are sorted lexicographically, from lowest to highest.
+If `key` is specified, it's used as the `key` parameter to `list.sort`.
+The `key` function will be called with the `(info, line)`` tuple yielded
+by the *lines iterator.*  If `key` is a false value, `lines_sort`
+sorts the lines lexicographically, from lowest to highest.
+
 If `reverse` is true, lines are sorted from highest to lowest.
 
 For more information, see the deep-dive on
@@ -2654,37 +2677,32 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_strip_comments(li, comment_separators, *, quotes=('"', "'"), backslash='\\', rstrip=True, triple_quotes=True)`
+#### `lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`
 
 <dl><dd>
 
 A lines modifier function.  Strips comments from the lines
 of a "lines iterator".  Comments are substrings that indicate
-the rest of the line should be ignored; `lines_strip_comments`
+the rest of the line should be ignored; `lines_strip_line_comments`
 truncates the line at the beginning of the leftmost comment
 separator.
 
-If `rstrip` is true (the default), `lines_strip_comments` calls
-the `rstrip()` method on `line` after it truncates the line.
-
 If `quotes` is true, it must be an iterable of quote characters.
-(Each quote character *must* be a single character.)
-`lines_strip_comments` will parse the line and ignore comment
-characters inside quoted strings.  If `quotes` is false,
-quote characters are ignored and `line_strip_comments` will truncate
-anywhere in the line.
+`lines_strip_line_comments` will parse the line and ignore comment
+characters inside quoted strings.  If a line ends with an unterminated
+quoted string, `lines_strip_line_comments` will raise `SyntaxError`.
 
-`backslash` and `triple_quotes` are passed in to
-`split_quoted_string`, which is used internally to detect the quoted
-strings in the line.
+`multiline_quotes` is similar to `quotes`, except quoted strings are
+permitted to span lines.  If the iterator stops iteration with an
+unterminated multiline quoted string, `lines_strip_line_comments`
+will raise `SyntaxError`.
 
-Sets a new field on the associated `LineInfo` object for every line:
-
-* `comment` - the comment stripped from the line, if any.
-  If no comment was found, `comment` will be an empty string.
+`escape` specifies an escape string to allow specifying a quote marker
+inside a quoted string without ending the string.  If false, there is
+no escape string.
 
 What's the difference between
-[`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+[`lines_strip_line_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
 and
 [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)?
 
@@ -2694,8 +2712,8 @@ and
   completely, rather than modifying the line.
 * [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
   handles comment characters anywhere in the line, although it can ignore
-  comments inside quoted strings.  It truncates the line but still always
-  yields the line.
+  comments inside quoted strings.  It always yields the line, whether or
+  not it's truncated the line.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
@@ -3188,16 +3206,18 @@ with `re.compile` using the `flags` you passed in.
 `string` should be the same type as `pattern` (or `pattern.pattern`).
 </dd></dl>
 
-#### `split_delimiters(s, delimiters=..., *, state=())`
+#### `split_delimiters(s, delimiters={...}, *, state=())`
 
 <dl><dd>
 
 Splits a string `s` at delimiter substrings.
 
-`s` may be str or bytes.
+`s` may be `str` or `bytes`.
 
 `delimiters` may be either `None` or a mapping of open delimiter
-strings to `Delimiter` objects.
+strings to `Delimiter` objects.  The open delimiter strings,
+close delimiter strings, and escape strings must match the type
+of `s` (either `str` or `bytes`).
 
 If `delimiters` is `None`, `split_delimiters` uses a default
 value matching these pairs of delimiters:
@@ -3206,8 +3226,12 @@ value matching these pairs of delimiters:
     () [] {} "" ''
 ```
 
-The quote mark delimiters enable escape sequences
-(with `\` as the escape character) and also enable quoting.
+The first three delimiters allow multiline, disable
+quoting, and have no escape string.  The quote mark
+delimiters enable quoting, disallow multiline, and
+specify their escape string as a single backslash.
+(This default value automatically supports both str
+and bytes.)
 
 `state` specifies the initial state of parsing. It's an iterable
 of open delimiter strings specifying the initial nested state of
@@ -3230,21 +3254,23 @@ where `text` is the text before the next opening or closing delimiter,
 `open` is the trailing opening delimiter,
 and `close` is the trailing closing delimiter.
 At least one of these three strings will always be non-empty.
-If `open` is non-empty, `close` will be empty, and vice-versa.
-If `s` doesn't end with a closing delimiter, in the final tuple
-yielded, both `open` and `close` will be empty strings.
+(If `open` is non-empty, `close` will be empty, and vice-versa.)
+If `s` doesn't end with an opening or closing delimiter,  the final
+tuple yielded will have empty strings for both `open` and `close`.
 
-You may reuse a particular character as a closing
-delimiter multiple times.
+You may not specify backslash (`'\\'`) as an open delimiter.
 
-You may not specify backslash (`'\'`) as a delimiter.
+Multiple Delimiters may use the same close delimiter string.
+
+split_delimiters doesn't complain if the string ends with
+unterminated delimiters.
 
 See the `Delimiter` object for how delimiters are defined, and how
 you can define your own delimiters.
 
 </dd></dl>
 
-#### `split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, state='')`
+#### `split_quoted_strings(s, quotes=('"', "'"), *, escape='\\', multiline_quotes=(), state='')`
 
 <dl><dd>
 
@@ -3257,17 +3283,23 @@ Returns an iterator yielding 3-tuples:
 ```
 
 where `leading_quote` and `trailing_quote` are either
-empty strings or quote delimiters from `quoted`,
+empty strings or quote delimiters from `quotes`,
 and `segment` is a substring of `s`.  Joining together
 all strings yielded recreates `s`.
 
 `s` can be either `str` or `bytes`.
 
 `quotes` is an iterable of unique quote delimiters.
-Quote delimiters may be any string of 1 or more characters.
+Quote delimiters may be any non-empty string.
 They must be the same type as `s`, either `str` or `bytes`.
 By default, `quotes` is `('"', "'")`.  (If `s` is `bytes`,
-`quotes` defaults to `(b'"', b"'")`.)
+`quotes` defaults to `(b'"', b"'")`.)  Quoted strings
+inside `s` may not contain newlines.
+
+`multiline_quotes` is like `quotes`, except quoted strings
+using multiline quotes are permitted to contain newlines.
+By default `split_quoted_strings` doesn't define any
+multiline quote marks.
 
 `escape` is a string of any length.  If `escape` is not
 an empty string, the string will "escape" (quote)
@@ -3291,21 +3323,29 @@ passed in to `state`, the `leading_quote` in the first
 empty string:
 
 ```
-    list(split_quoted_string("a b c'", state="'"))
+    list(split_quoted_strings("a b c'", state="'"))
 ```
 
 evaluates to
 
 ```
-    ["", "a b c", "'"]
+    [('', 'a b c', "'")]
 ```
 
-Note that this function is deliberately agnostic
-about newlines.  If `s` contains newlines, this function
-will happily yield them, inside or outside of quoted
-substrings.  (If you want to disallow newlines inside
-quoted strings, it's up to you to detect them, raise
-an exception, etc.)
+Note:
+* `split_quoted_strings` is agnostic about the length
+  of quoted strings.  If you're using `split_quoted_strings`
+  to parse a C-like language, and you want to enforce
+  C's requirement that single-quoted strings only contain
+  one character, you'll have to do that yourself.
+* `split_quoted_strings` doesn't raise an error
+  if `s` ends with an unterminated string.  In that
+  case, the last tuple yielded will have a non-empty
+  `leading_quote` and an empty `trailing_quote`.
+* `split_quoted_strings` only supports the opening and
+  closing markers for a string being the same string.
+  If you need the opening and closing markers to be
+  different strings, use `split_delimiters`.
 
 </dd></dl>
 
@@ -5615,29 +5655,280 @@ in the **big** test suite.
 
 *not yet released*
 
-Lots of changes this time!  Grouping by submodule, then severity:
+Lots of changes this time!  Sorted by function/class name.
 
-### text
+**big** has a new module: `deprecated`.  This is where deprecated
+and old versions of functions go.  Note that the contents of
+`deprecated` are not automatically imported into `big.all`.
+
+-----
+
+Here's a list of all the functions/classes with breaking changes:
+
+>
+>
+> `split_quoted_strings`
+
+-----
+
+Here's a list of all the renamed functions:
+
+> `parse_delimiters` -> `split_delimiters`
+
+-----
+
+Here's a list of all the new functions:
+
+> `combine_splits`
+>
+> `encode_strings`
+>
+> `split_title_case`
+
+-----
+
+#### `bytes_linebreaks` and `bytes_linebreaks_without_crlf`
 
 <dl><dd>
 
-#### `split_quoted_string`
+Extremely minor change!  Python's `bytes` and `str` objects
+don't agree on which ASCII characters represent line breaks.
+The `str` object obeys the Unicode standard, which means
+there are four:
+
+    \n \v \f \r
+
+For some reason, Python's `bytes` object only supports two:
+
+    \n \r
+
+I have no idea why this is.  We might fix it.  And if we do,
+**big** is ready.  It now calculates `bytes_linebreaks` and
+`bytes_linebreaks_without_crlf` on the fly to agree with Python.
+If either (or both) work as newline characters for the `splitlines`
+method on a `bytes` object, they'll automatically be inserted
+into these iterables of bytes linebreaks.
+
+</dd></dl>
+
+#### `combine_splits`
+
+<dl><dd>
+
+New function. If you split a string two different ways,
+producing two arrays that sum to the original string,
+`combine_splits` will merge those splits together, producing
+a new array that splits in every place any of the two split
+arrays had a split.
+
+Example:
+
+    >>> big.combine_splits("abcdefg", ['a', 'bcdef', 'g'], ['abc', 'd', 'efg'])
+    ['a, 'bc', 'd', 'ef', 'g']
+
+</dd></dl>
+
+#### `encode_strings`
+
+<dl><dd>
+
+Slightly liberalized the types it accepts.  It previously
+required `o` to be a collection; now `o` can be a `bytes`
+or `str` object.  Also, now explicitly supports `set`.
+
+</dd></dl>
+
+#### `get_int_or_float`
+
+<dl><dd>
+
+Minor change to behavior.  If the `o` you pass in is a `float`,
+or can be converted to `float` (but couldn't be converted directly
+to an `int`), `get_int_or_float` will experimentally convert that
+`float` to an `int`.  If the resulting `int` compares equal to that
+`float`, it'll return the `int`, otherwise it'll return the `float`.
+
+For example, `get_int_or_float("13.5")` still returns `13.5`
+(a `float`), but `get_int_or_float("13.0")` now returns `13`
+(an `int`).
+
+This better represents the stated purpose of the function;
+it prefers ints to floats.  And since the int and float are
+interchangable I assert this is totally backwards compatible.
+
+</dd></dl>
+
+#### `Heap`
+
+<dl><dd>
+
+Minor updates to the documentation and to the text of some exceptions.
+
+</dd></dl>
+
+#### `lines_sort`
+
+<dl><dd>
+
+`lines_sort` accepts a new parameter: `key`, which is
+used as the `key` argument for `list.sort`.  The value
+passed in to `key` is the `(info, line)` tuple yielded
+by the upstream iterator.
+
+</dd></dl>
+
+
+#### `lines_strip_comments`
+
+<dl><dd>
+
+This function has been renamed `lines_strip_line_comments`, see below.
+
+</dd></dl>
+
+#### `lines_strip_line_comments`
+
+<dl><dd>
+
+`lines_strip_line_comments` is the new name for the old
+`lines_strip_comments` lines modifier function.  It's also
+been completely rewritten.
+
+Changes:
+* The old function required quote marks and the escape string
+  to be single characters, and had a slightly-smelly
+  `triple_quotes` parameter to support multiline strings.
+  The new function allows quote marks to be of any length,
+  and has separate parameters for single-line quote marks
+  (`quotes`)  and multiline quote marks (`multiline_quotes`).
+* The `backslash` parameter has been renamed to `escape`.
+* The `rstrip` parameter has been removed.  If you need to
+  rstrip the line after stripping the comment, wrap your
+  `lines_strip_line_comments` call with a `lines_rstrip` call.
+* The old function didn't enforce that strings shouldn't
+  span lines--single-quoted and triple-quoted strings behaved
+  identically.  The new version raises `SyntaxError` if quoted
+  strings aren't closed (unless they're explicitly
+  strings that support multiline).
+
+</dd></dl>
+
+#### `multisplit`
+
+<dl><dd>
+
+`multisplit` used to locally define a new generator
+function, then call it and return the generator.  I promoted
+the generator function to module level, which means we no
+longer rebind it each time `multisplit` is called.  As a
+very rough guess, this can be as much as a 10% speedup for
+`multisplit` run on very short workloads.  (It's also *never*
+slower.)
+
+I also applied this same small optimization to several other
+functions in the `text` module.  In particular,
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+was binding functions inside a loop (!!).  (Dumb, huh!)
+These local functions are still bound inside `merge_columns`,
+but now at least they're outside the loop.
+
+Another minor speedup for `multisplit`: when `reverse=True`,
+it used to reverse the results *three times!*  `multisplit`
+now explicitly observes and manages the reversed state of the
+result to avoid needless reversing.
+
+</dd></dl>
+
+#### `parse_delimiters`
+
+<dl><dd>
+
+This function has been renamed `split_delimiters`, see below.
+
+</dd></dl>
+
+
+#### `Scheduler`
+
+<dl><dd>
+
+Small cleanup on `Scheduler._next`, the internal method call
+that implements the heart of the scheduler.  The only externally
+visible change: the previous version would call `sleep(0)` every
+time it yielded an event.  On modern operating systems this usually
+yields the rest of the current thread's current time slice back
+to the OS's scheduler; this can make multitasking smoother,
+particularly in Python programs.  But this was too opinionated for
+library code--if you want a `sleep(0)` there you can call it yourself.
+I've restructured the code and eliminated this extraneous `sleep(0)`.
+
+Also, rewrote big chunks of the test suite (`tests/test_scheduler.py`).
+The multithreaded tests are now much better synchronized, while
+also becoming easier to read.  Although it seems intractable to
+purge *all* race conditions from the test suite, this change has
+removed most of them.
+
+</dd></dl>
+
+#### `split_delimiters`
 
 <dl><dd>
 
 > This API has breaking changes.
 
-`split_quoted_string` has been completely
-re-tooled and re-written.  The new API is simpler, easier to
-understand, and conceptually sharper.  It's a major upgrade!
-
-The old version is still available under a new
-name: `old_split_quoted_string`.  It's deprecated, and will
-eventually be removed, but not before September 2025
-(one year from now).
+`split_delimiters` is the new name for the old `parse_delimiters`
+function.  The function has also been completely re-tooled and
+re-written.
 
 Changes:
-* The value it yields has changed:
+* `parse_delimiters` took an iterable of `Delimiters`
+  objects, or strings of length 2.  `split_delimiters`
+  takes a dictionary mapping open delimiter strings to
+  `Delimiter` objects, and `Delimiter` objects no
+  longer have an "open" attribute.
+* `split_delimiters` now accepts an `state` parameter,
+  which specifies the initial state of nested delimiters.
+* `split_delimiters` no longer cares if there were unclosed
+  open delimiters at the end of the string.  (It used to
+  raise `ValueError`.)  This includes quote marks; if you
+  don't want quoted strings to span multiple lines, it's up
+  to you to detect it and react (e.g. raise an exception).
+* `parse_delimiters` manually parsed the input string
+  character by character.  `split_delimiters` uses `multisplit`,
+  so it zips past the uninteresting characters and only examines
+  the delimiters and escape characters.  It's always faster,
+  except for some trivial calls (which are fast enough anyway).
+* Another benefit of using `multisplit`: open delimiters,
+  close delimiters, and the escape string may now all be
+  any nonzero length.  (In the face of ambiguity,
+  `split_delimiters` will always choose the longer delimiter.)
+* The `ParseDelimiter` object used with `parse_delimiters`
+  has a boolean `backslash` attribute; if it was True, that
+  delimiter allows escaping using a backslash.  The new
+  `Delimiter` class used with `split_delimiters` replaces that
+  with an `escape=c` attribute, where `c` is the escape
+  character you want to use with that set of delimiters.
+  All the predefined `Delimiter` values have been updated
+  to match.
+* As mentioned above, the new `Delimiter` object doesn't
+  have an `open` attribute.  (`ParseDelimiter` still does.)
+* The new `Delimiter` object is read-only after construction.
+
+
+</dd></dl>
+
+#### `split_quoted_strings`
+
+<dl><dd>
+
+> This API has breaking changes.
+
+`split_quoted_strings` has been completely
+re-tooled and re-written.  The new API is simpler, easier to
+understand, and conceptually clarified.  It's a major upgrade!
+
+Changes:
+* The value it yields is different:
   * The old version yielded `(is_quote, segment)`, where
     `is_quote` was a boolean value indicating whether or not
     `segment` was quoted.  If `segment` was quoted, it began
@@ -5652,121 +5943,148 @@ Changes:
 * The `backslash` parameter has been replaced by a
   new parameter, `escape`.
   `escape` allows specifying the escape string, which
-  by default is '\\' (backslash).  If you specify a false
+  defaults to '\\' (backslash).  If you specify a false
   value, there will be no escape character in strings.
 * By default `quotes` only contains `'` (single-quote)
   and `"` (double-quote).  The previous version also
-  used `"""` and `'''` as multiline quote marks
-  by default; this is no longer true, as it was too
+  recognized `"""` and `'''` as multiline quote marks
+  by default; this is no longer true, as it's too
   opinionated and Python-specific.
-* `split_quoted_string` also accepts a new parameter,
+* The old version didn't actually distinguish between
+  single-quoted strings and triple-quoted strings.  It
+  simply didn't care whether or not there were newlines
+  inside quoted strings.  The new version raises a
+  `SyntaxError` if there's a newline character inside
+  a string delimited with a quote marker from `quotes`.
+* The old version accepted a junky `triple_quotes` parameter.
+  That's been removed in favor of a new parameter,
+  `multiline_quotes`.  It's like `quotes`, except
+  that newline characters are allowed inside their
+  quoted strings.
+* `split_quoted_string` accepts another new parameter,
   `state`, which sets the initial state of quoting.
-* The `triple_quotes` parameter has been removed.  (See
-  next bullet point.)
-* `split_quoted_string` used to use a hand-coded parser,
-  manually analyzing each character in the input text.
-  Now it uses `multisplit` to only examine the interesting
-  substrings.  `multisplit` has a large startup cost
-  the first time you use a particular set of iterators,
-  but this information is cached for subsequent calls.
+* Thd old implementation of `split_quoted_string` used a
+  hand-coded parser, manually analyzing each character in
+  the input text.  Now it uses `multisplit` to only examine
+  the interesting substrings.  `multisplit` has a large
+  startup cost the first time you use a particular set of
+  iterators, but this information is cached for subsequent calls.
   Bottom line, the new version is much faster
-  for larger workloads.  (It's slower for trivial
-  examples... where speed doesn't matter.)
+  for larger workloads.  (It can be slower for trivial
+  examples... where speed doesn't matter anyway.)
 * Another benefit of switching to `multisplit`: `quotes`
   now supports quote delimiters and an escape string
   of any nonzero length.  In the case of ambiguity--if
   more than one quote delimiter matches at a
   time--`split_quoted_string` will always pick the
   longer string.
-* `split_quoted_string` is now deliberately
-  (and documented-ly) completely agnostic about newlines.
-  The previous version was, too; even though the
-  documentation discussed triple-quoted strings vs
-  single-quoted strings, in reality it didn't ever care
-  about newlines.  With the updated API, it's officially
-  up to you to enforce the rules you want (e.g. "newlines
-  aren't permitted in single-quoted strings.")
 
 </dd></dl>
+
+#### `split_title_case`
+
+<dl><dd>
+
+New function.  Splits a string at word boundaries,
+assuming the string is in "TitleCase".
+
+</dd></dl>
+
+### StateMachine
+
+<dl><dd>
+
+Small performance upgrade for `StateMachine` observers.
+`StateMachine` always uses a copy of the observer
+list (specifically, a tuple) when calling the observers; this
+means it's safe to modify the observer list at any time.
+`StateMachine` used to always make a fresh copy every time you
+called an event; now it uses a cached copy, and only recomputes
+the tuple when the observer list changes.
+
+(Note that it's not thread-safe to modify the observer list
+from one thread while also dispatching events in another.
+Your program won't crash, but the list of observers called
+may be unpredictable based on which thread wins or loses the
+race.  But this has always been true.  As with many libraries,
+the `StateMachine` API leaves locking up to you.)
+
+</dd></dl>
+
+
+---------------------------------------------------------------
+---------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------
+---------------------------------------------------------------
+
+
+### text
+
+<dl><dd>
+
 
 </dd></dl>
 
 <dl><dd>
 
-#### `parse_delimiters`
-
-<dl><dd>
-
-
-* Breaking change: `parse_delimiters` has also been
-  completely re-tooled, re-written... *and* re-named!
-  The new name is `split_delimiters`.
-
-  The old version is still available under the old
-  name.  It's deprecated, and will eventually be
-  removed, but not before September 2025.
-
-  However, the old `Delimiter` class has been
-  renamed to `ParseDelimiter`; there's a new
-  `Delimiter` class used by `split_delimiters`.
-
-  Changes:
-  * `parse_delimiters` took an iterable of `Delimiters`
-    objects, or strings of length 2.  `split_delimiters`
-    takes a dictionary mapping open delimiter strings to
-    `Delimiter` objects, and `Delimiter` objects no
-    longer have an "open" attribute.
-  * `split_delimiters` now accepts an `state` parameter,
-    which specifies the initial state of nested delimiters.
-  * `split_delimiters` no longer cares if there were unclosed
-    open delimiters at the end of the string.  (It used to
-    raise `ValueError`.)  This includes quote marks; if you
-    don't want quoted strings to span multiple lines, it's up
-    to you to detect it and react (e.g. raise an exception).
-  * `parse_delimiters` manually parsed the input string
-    character by character.  `split_delimiters` uses `multisplit`,
-    so it zips past the uninteresting characters and only examines
-    the delimiters and escape characters.  It's always faster,
-    except for some trivial calls (which are fast enough anyway).
-  * Another benefit of using `multisplit`: open delimiters,
-    close delimiters, and the escape string may now all be
-    any nonzero length.  (In the face of ambiguity,
-    `split_delimiters` will always choose the longer delimiter.)
-  * The `ParseDelimiter` object used with `parse_delimiters`
-    has a boolean `backslash` attribute; if it was True, that
-    delimiter allows escaping using a backslash.  The new
-    `Delimiter` class used with `split_delimiters` replaces that
-    with an `escape=c` attribute, where `c` is the escape
-    character you want to use with that set of delimiters.
-    All the predefined `Delimiter` values have been updated
-    to match.
-  * As mentioned above, the new `Delimiter` object doesn't
-    have an `open` attribute.  (`ParseDelimiter` still does.)
-  * The new `Delimiter` object is read-only after construction.
-
-* Breaking change: `lines_strip_comments` has *also* been
-  completely rewritten and renamed.  It's now named
-  `lines_strip_line_comments`.
-
-  Changes:
-  * The old function required quote marks and the escape string
-    to be single characters, and had a slightly-smelly
-    `triple_quotes` parameter to support multiline strings.
-    The new function allows quote marks to be of any length,
-    and has separate parameters for single-line quote marks
-    and multiline quote marks.
-  * The `backslash` parameter has been renamed to `escape`.
-  * The old function didn't enforce that strings shouldn't
-    span lines.  The new version raises `SyntaxError`
-    if quoted strings aren't closed (unless they're explicitly
-    strings that support multiline).
-  * Breaking change to the old version: it used to write the
-    comment it rstripped to `info.comment`, and it threw away
-    any whitespace it stripped.  It now obeys the modern
-    `LineInfo` aesthetic, and writes *both* the whitespace it
-    rstripped *and* the comment to `info.trailing`.
-
-</dd></dl>
 
 </dd></dl>
 
@@ -5901,65 +6219,11 @@ Changes:
 
 </dd></dl>
 
-</dd></dl>
 
-<dl><dd>
-
-#### `split_title_case`
-
-<dl><dd>
-
-* New function: `split_title_case`, which splits a string
-  at title case change word boundaries.
-
-
-</dd></dl>
-
-</dd></dl>
-
-<dl><dd>
-
-#### `combine_splits`
-
-<dl><dd>
-
-* New function: `combine_splits`.  If you split a string
-  two different ways, producing two arrays that sum to the
-  original string, `combine_splits` will merge those splits
-  together, producing a new array that splits in every
-  place any of the two split arrays had a split.
-
-</dd></dl>
-
-</dd></dl>
-
-<dl><dd>
 
 #### Performance improvements
 
 <dl><dd>
-
-* Minor but free speedup for several functions in `big.text`,
-  most importantly
-  [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-  These functions used to locally define a new iterator
-  function, then call it and return the iterator.  I promoted
-  those local functions to module level, which means we no
-  longer rebind them each time the function is called.  As a
-  very rough guess, this can be as much as a 10% speedup for
-  `multisplit` run on very short workloads.  (It's also *never*
-  slower.)
-
-  In the case of
-  [`merge_columns`,](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
-  we were binding functions inside a loop (!!) inside a function.
-  (That was dumb, huh.)  These local functions are still bound
-  inside `merge_columns`, but now at least they're outside the loop.
-
-* Another minor speedup for `multisplit`: when `reverse=True`,
-  we used to reverse the results *three times!*  We now explicitly
-  observe and manage the reverse state of the result, to avoid
-  needless reversing.
 
 * Minor speedup for `lines_filter_line_comment_lines`: for every
   line, it used to `lstrip` the line, then use a regular expression
@@ -5970,57 +6234,6 @@ Changes:
 </dd></dl>
 
 </dd></dl>
-
-
-### scheduler
-
-* Slight cleanup on `Scheduler._next`, the internal method call
-  that implements the heart of the scheduler.  The only externally
-  visible change: the previous version would call `sleep(0)` every
-  time it yielded an event.  On modern operating systems this usually
-  yields the rest of the current thread's current time slice back
-  to the OS's scheduler; this can make multitasking smoother,
-  particularly in Python programs.  But this was too opinionated for
-  library code--if you want a `sleep(0)` there you can call it yourself.
-  I've restructured the code and eliminated this extraneous `sleep(0)`.
-
-* Rewrote big chunks of the test suite (`tests/test_scheduler.py`).
-  The multithreaded tests are now much better synchronized, while
-  also becoming easier to read.  Although it seems intractable to
-  purge *all* race conditions from the test suite, this change has
-  removed most of them.
-
-### state
-
-* Slight performance upgrade for `StateMachine` observers.
-  `StateMachine` always uses a copy of the observer
-  list (specifically, a tuple) when calling the observers; this
-  means it's safe to modify the observer list at any time.
-  `StateMachine` used to always make a fresh copy every time you
-  called an event; now it uses a cached copy, and only recomputes
-  the tuple when the observer list changes.
-
-  (Note that it's not thread-safe to modify the observer list
-  from one thread while also dispatching events in another.
-  Your program won't crash, but the list of observers called
-  may be unpredictable based on which thread wins or loses the
-  race.  But this has always been true.  As with many libraries,
-  the `StateMachine` API leaves locking up to you.)
-
-* The usual doc and test fixes, including a lot of touchups
-  in `tests/test_text.py`.
-
-### builtin
-
-* Small tweak to `get_int_or_float`.  If the `o` you pass in
-  is a `float`, or can be converted to `float` (but not `int`),
-  `get_int_or_float` will experimentally convert the float to `int`.
-  If the `float` and `int` versions compare equal, it'll return
-  the `int`, otherwise it'll return the `float`.
-
-  For example, `get_int_or_float("13.5")` will still return `13.5`
-  (a `float`), but `get_int_or_float("13.0")` now returns `13`
-  (an `int`).
 
 
 
@@ -6074,13 +6287,13 @@ Changes:
           unicode_linebreaks_without_crlf
           unicode_whitespace_without_crlf
 
-* New function in the [`big.text`](#bigtext) module: [`encode_strings`,](#encode_stringso--encodingascii)
-  which takes a container object containing `str` objects and returns an equivalent object
-  containing encoded versions of those strings as `bytes`.
 * Changed
   [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
   implementation to use `StateManager`.
   (No API or semantic changes, just an change to the internal implementation.)
+* New function in the [`big.text`](#bigtext) module: [`encode_strings`,](#encode_stringso--encodingascii)
+  which takes a container object containing `str` objects and returns an equivalent object
+  containing encoded versions of those strings as `bytes`.
 * When you call
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   with a type mismatch

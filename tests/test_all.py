@@ -31,6 +31,7 @@ bigtestlib.preload_local_big()
 for test_module in """
     test_boundinnerclass
     test_builtin
+    test_deprecated
     test_file
     test_graph
     test_heap
