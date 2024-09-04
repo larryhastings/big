@@ -2405,32 +2405,33 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
                         break
                     continue
 
-            is_close = delimiter == current.close
-            if is_close:
-                redo_iterator = False
-            else:
-                # maybe the delimiter we found *starts* with our close delimiter!
-                if delimiter.startswith(current.close):
-                    is_close = redo_iterator = True
+            if current.close:
+                is_close = delimiter == current.close
+                if is_close:
+                    redo_iterator = False
+                else:
+                    # maybe the delimiter we found *starts* with our close delimiter!
+                    if delimiter.startswith(current.close):
+                        is_close = redo_iterator = True
 
-            if is_close:
-                # flush close delimiter
-                s = join(buffer)
-                clear()
-                if s:
-                    # see treatise above
-                    if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
-                        raise SyntaxError(f"unterminated quoted string, {s!r}")
-                yield s, empty, current.close
-                consumed += len(current.close)
+                if is_close:
+                    # flush close delimiter
+                    s = join(buffer)
+                    clear()
+                    if s:
+                        # see treatise above
+                        if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
+                            raise SyntaxError(f"unterminated quoted string, {s!r}")
+                    yield s, empty, current.close
+                    consumed += len(current.close)
 
-                current = pop()
+                    current = pop()
 
-                if redo_iterator:
-                    i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
-                    break
+                    if redo_iterator:
+                        i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                        break
 
-                continue
+                    continue
 
             next = current.open.get(delimiter, None)
             if next:
