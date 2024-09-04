@@ -5657,10 +5657,11 @@ in the **big** test suite.
 
 ## Release history
 
-#### next version
+#### 0.12
+
 <dl><dd>
 
-*not yet released*
+*2024/09/05*
 
 Lots of changes this time!  Sorted by function/class name.
 
@@ -5675,6 +5676,8 @@ of `deprecated` are not automatically imported into `big.all`.
 Here's a list of all the functions/classes with breaking changes:
 
 > `Delimiter`
+>
+> `LineInfo`
 >
 > `lines_strip_line_comments`
 >
@@ -5783,14 +5786,133 @@ Minor updates to the documentation and to the text of some exceptions.
 
 </dd></dl>
 
+#### `lines_filter_comment_lines`
+
+<dl><dd>
+
+`lines_filter_comment_lines` has been renamed to
+`lines_filter_line_comment_lines`.  For backwards compatibility,
+the function
+is also available under the old name; this old name will
+eventually be removed, but not before September 2025.
+
+</dd></dl>
+
+#### `lines_filter_line_comment_lines`
+
+> This API has breaking changes.
+
+<dl><dd>
+
+New name for `lines_filter_comment_lines`.
+
+Correctness improvements: `lines_filter_line_comment_lines`
+now enforces that single-quoted strings can't span lines,
+and multi-quoted strings must be closed before the end of
+the last line.
+
+Minor optimization: for every line, it used to `lstrip` the line,
+then use a regular expression to see if the line started with one
+of the comment characters.  Now the regular expression skips the
+leading whitespace automatically.
+
+</dd></dl>
+
+#### `lines_grep`
+
+<dl><dd>
+
+New feature: `lines_grep` has always used `re.search` to examine
+the lines yielded.  It now writes the result to `info.match`.
+(If you pass in `invert=True` to `lines_grep`, `lines_grep`
+still writes to the `match` attribute--but it always writes `None`.)
+
+If you want to write the `Match` object to another attribute,
+pass in the name of that attribute to the keyword-only
+parameter `match`.
+
+</dd></dl>
+
+#### `LineInfo`
+
+> This API has breaking changes.
+
+<dl><dd>
+
+Breaking change: the `LineInfo` constructor has a
+new `lines` positional parameter, added *in front of*
+the existing positional parameters.  This new first argument
+should be the  `lines` iterator that yielded this
+`LineInfo` object.  It's stored in the `lines` attribute.
+(Why this change?  The `lines` object contains information
+needed by the lines modifiers, for example `tab_width`.)
+
+Minor optimization: `LineInfo` objects previously had many
+optional fields, which might or might not be added
+dynamically.  Now all fields are pre-added.  (This makes
+the CPython 3.13 runtime happier; it really wants you to
+set *all* your class's attributes in its `__init__`.)
+
+`LineInfo` objects now always have these attributes:
+  * `lines`, which contains the base lines iterator.
+  * `line`, which contains the original unmodified line.
+  * `line_number`, which contains the line number of
+    this line.
+  * `column_number`, which contains the starting column
+    number of the first character of this line.
+  * `indent`, which contains the indent level of the
+    line if computed, and `None` otherwise.
+  * `leading`, which contains the string stripped from
+    the beginning of the line.  Initially this is the
+    empty string.
+  * `trailing`, which contains the string stripped from
+    the end of the line.  Initially this is the
+    empty string.
+  * `end`, which is the end-of-line character
+    that ended the current line.  For the last line yielded,
+    `info.end` will always be the empty string.  If the last
+    character of the text split by `lines` was an end-of-line
+    character, the last `line` yielded will be the empty string,
+    and `info.end` will also be the empty string.
+  * `match`, which contains a `Match` object if this line
+    was matched with a regular expression, and `None` otherwise.
+
+`LineInfo` has two new methods: `clip_leading`
+and `clip_trailing`.  These methods clip a leading or
+trailing substring from the current `line`, and transfer
+it to the relevant field in `LineInfo`, maintaining all
+the guaranteed invariants, and updating all related `LineInfo`
+fields (like `column_number`).
+
+Conceptually, "clip" is different from "strip", in that "strip"
+removes things and throws them away, whereas "clip" removes things
+and puts them somewhere else.
+
+</dd></dl>
+
+
+#### `lines_strip` and `lines_rstrip`
+
+<dl><dd>
+
+New feature: `lines_strip` and `lines_rstrip` now accept a
+`separators` argument; this is an iterable of separators,
+like the argument to `multisplit`.
+The default value of `None` preserves the previous behavior,
+stripping whitespace.
+
+</dd></dl>
+
 #### `lines_sort`
 
 <dl><dd>
 
-New feature.  `lines_sort` accepts a new parameter: `key`,
+New feature: `lines_sort` now accepts a `key` parameter,
 which is used as the `key` argument for `list.sort`.
 The value passed in to `key` is the `(info, line)` tuple
-yielded by the upstream iterator.
+yielded by the upstream iterator.  The default value preserves
+the previous behavior, sorting by the `line` (ignoring the
+`info`).
 
 </dd></dl>
 
@@ -5806,11 +5928,29 @@ least September 2025.
 
 </dd></dl>
 
-#### `lines_strip_line_comments`
+#### `lines_strip_indent`
 
 <dl><dd>
 
+Bugfix: `lines_strip_indent` previously required
+whitespace-only lines to obey the indenting rules, which was
+a mistake.  My intention was always for `lines_strip_indent`
+to behave like Python, and that includes not really caring
+about the intra-line-whitespace for whitespace-only
+lines.  Now `lines_strip_indent` behaves more like Python:
+a whitespace-only line behaves as if it has
+the same indent as the previous line.  (Not that the
+indent value of an empty line should matter--but this
+behavior is how you'd intuitively expect it to work.)
+
+</dd></dl>
+
+
+#### `lines_strip_line_comments`
+
 > This API has breaking changes.
+
+<dl><dd>
 
 `lines_strip_line_comments` is the new name for the old
 `lines_strip_comments` lines modifier function.  It's also
@@ -5832,6 +5972,12 @@ Changes:
   span lines--single-quoted and triple-quoted strings behaved
   identically.  The new version raises `SyntaxError` if quoted
   strings using non-multiline quote marks contain newlines.
+
+(`lines_strip_line_comments` has always been implemented using
+`split_quoted_strings`; this is why it now supports multicharacter
+quote marks and escape strings.  It also benefits from the
+new optimizations in `split_quoted_strings`.)
+
 
 </dd></dl>
 
@@ -5865,7 +6011,10 @@ result to avoid needless reversing.
 
 <dl><dd>
 
-This function has been renamed `split_delimiters`, see below.
+This function has been renamed `split_delimiters` and rewritten,
+see below.  The old version is still available, using the name
+`big.deprecated.parse_delimiters` module, and will be available
+until at least September 2025.
 
 </dd></dl>
 
@@ -6038,230 +6187,10 @@ the `StateMachine` API leaves locking up to you.)
 
 </dd></dl>
 
-
----------------------------------------------------------------
----------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
----------------------------------------------------------------
----------------------------------------------------------------
-
-
-### text
-
-<dl><dd>
-
+_p.s. I'm getting close to declaring big as being version 1.0._
+_I don't want to do it until I'm done revising the APIs._
 
 </dd></dl>
-
-<dl><dd>
-
-
-</dd></dl>
-
-<dl><dd>
-
-#### `LineInfo`
-
-<dl><dd>
-
-
-* Breaking change: the `LineInfo` constructor has a
-  new `lines` positional parameter, added *in front of*
-  the existing positional parameters.  This new first argument
-  should be the  `lines` iterator that yielded this
-  `LineInfo` object.  It's stored in the `lines` attribute.
-
-* `LineInfo` objects (yielded by `lines`) previously had
-  many optional fields, which might or might not be added
-  dynamically.  Now all fields are pre-added.  (This makes
-  the CPython 3.13 runtime happier; it really wants you to
-  set *all* your class's attributes in its `__init__`.)
-
-  `LineInfo` objects now always have these attributes:
-  * `lines`, which contains the base lines iterator.
-  * `line`, which contains the original unmodified line.
-  * `line_number`, which contains the line number of
-    this line.
-  * `column_number`, which contains the starting column
-    number of the first character of this line.
-  * `indent`, which contains the indent level of the
-    line if computed, and `None` otherwise.
-  * `leading`, which contains the string stripped from
-    the beginning of the line.  Initially this is the
-    empty string.
-  * `trailing`, which contains the string stripped from
-    the end of the line.  Initially this is the
-    empty string.
-  * `end`, which is the end-of-line character
-    that ended the current line.  For the last line yielded,
-    `info.end` will always be the empty string.  If the last
-    character of the text split by `lines` was an end-of-line
-    character, the last `line` yielded will be the empty string,
-    and `info.end` will also be the empty string.
-  * `match`, which contains a `Match` object if this line
-    was matched with a regular expression, and `None` otherwise.
-
-* `LineInfo` has two new methods: `clip_leading`
-  and `clip_trailing`.  These methods clip a leading or
-  trailing substring from the current `line`, and transfer
-  it to the relevant field in `LineInfo`, maintaining all
-  the guaranteed invariants, and updating all related `LineInfo`
-  fields (like `column_number`).
-
-  Conceptually, "clip" is different from "strip", in that "strip"
-  removes things and throws them away, whereas "clip" removes things
-  and puts them somewhere else.
-
-</dd></dl>
-
-</dd></dl>
-
-<dl><dd>
-
-#### `lines_filter_comment_lines`
-
-<dl><dd>
-
-
-* `lines_filter_comment_lines` has been renamed to
-  `lines_filter_line_comment_lines`.  `lines_filter_line_comment_lines`
-  now enforces that single-quoted strings can't span lines,
-  and multi-quoted strings must be closed before the end of
-  the last line.  For backwards compatibility, the new function
-  is also available under the old name; this old name will
-  eventually be removed, but not before September 2025.
-
-</dd></dl>
-
-</dd></dl>
-
-<dl><dd>
-
-#### `lines_strip` and `lines_rstrip`
-
-<dl><dd>
-
-
-* `lines_strip` and `lines_rstrip` now accept a new `separators`
-  argument; this is an iterable of separators, like the argument
-  to `multisplit`.
-  The default value of `None` preserves the existing behavior,
-  stripping whitespace.
-
-
-</dd></dl>
-
-</dd></dl>
-
-<dl><dd>
-
-#### `lines_grep`
-
-<dl><dd>
-
-* `lines_grep` now writes to the `match` attribute to the `LineInfo`
-  object, containing the return value from calling `re.search`.
-  (If you pass in `invert=True` to `lines_grep`, `lines_grep`
-  still writes to the `match` attribute--but it always writes `None`.)
-
-
-</dd></dl>
-
-</dd></dl>
-
-<dl><dd>
-
-#### `lines_strip_indent`
-
-<dl><dd>
-
-
-* Bugfix: `lines_strip_indent` previously required
-  whitespace-only lines to obey the indenting rules, which was
-  a mistake.  My intention was always for `lines_strip_indent`
-  to behave like Python, and that includes not really caring
-  about the intra-line-whitespace for whitespace-only
-  lines.  Now `lines_strip_indent` behaves more like Python:
-  a whitespace-only line behaves as if it has
-  the same indent as the previous line.  (Not that the
-  indent value of an empty line should matter--but this
-  behavior is how you'd intuitively expect it to work.)
-
-</dd></dl>
-
-
-
-#### Performance improvements
-
-<dl><dd>
-
-* Minor speedup for `lines_filter_line_comment_lines`: for every
-  line, it used to `lstrip` the line, then use a regular expression
-  to see if the line started with one of the comment characters.
-  Now it folds "skip initial whitespace" into the regular expression
-  itself.
-
-</dd></dl>
-
-</dd></dl>
-
 
 
 #### 0.11
