@@ -1,6 +1,6 @@
 ![# big](https://raw.githubusercontent.com/larryhastings/big/master/resources/images/big.header.png)
 
-##### Copyright 2022-2023 by Larry Hastings
+##### Copyright 2022-2024 by Larry Hastings
 
 [![# test badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# coverage badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml) [![# python versions badge](https://img.shields.io/pypi/pyversions/big.svg?logo=python&logoColor=FBE072)](https://pypi.org/project/big/)
 
@@ -5667,6 +5667,8 @@ Lots of changes this time!  Sorted by function/class name.
 **big** has a new module: `deprecated`.  Deprecated versions of
 functions and classes are moved into here.  Note that the contents
 of `deprecated` are not automatically imported into `big.all`.
+
+(Also, updated copyright notices to 2024.)
 
 -----
 

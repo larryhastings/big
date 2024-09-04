@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -52,7 +52,7 @@ def _export(o):
 # far more accurate.
 #
 # Here's some backwards-compatibility for you.
-# I promise to keep the old names around until September 2024.
+# I promise to keep the old names around until at least September 2024.
 _export_name('whitespace_without_dos')
 whitespace_without_dos = text.str_whitespace_without_crlf
 
