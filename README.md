@@ -597,12 +597,14 @@ and `False` if it can't.
 
 ## `big.deprecated`
 
-Old versions of functions (and classes) from **big**.  Either
-the name was changed, or the semantics were changed, or both.
+Old versions of functions (and classes) from **big**.  These
+versions are deprecated, either because the name was changed,
+or the semantics were changed, or both.
 
 Unlike the other modules, the contents of `big.deprecated` aren't
-imported into `big.all`.  (`big.all` does import `deprecated`,
-it just doesn't `from deprected import *` all the symbols.)
+automatically imported into `big.all`.  (`big.all` does import
+the `deprecated` submodule, it just doesn't `from deprected import *`
+all the symbols.)
 
 
 ## `big.file`
@@ -5662,15 +5664,19 @@ in the **big** test suite.
 
 Lots of changes this time!  Sorted by function/class name.
 
-**big** has a new module: `deprecated`.  This is where deprecated
-and old versions of functions go.  Note that the contents of
-`deprecated` are not automatically imported into `big.all`.
+**big** has a new module: `deprecated`.  Deprecated versions of
+functions and classes are moved into here.  Note that the contents
+of `deprecated` are not automatically imported into `big.all`.
 
 -----
 
 Here's a list of all the functions/classes with breaking changes:
 
+> `Delimiter`
 >
+> `lines_strip_line_comments`
+>
+> `split_delimiters`
 >
 > `split_quoted_strings`
 
@@ -5678,6 +5684,10 @@ Here's a list of all the functions/classes with breaking changes:
 
 Here's a list of all the renamed functions:
 
+> `lines_filter_comment_lines` -> `lines_filter_line_comment_lines`
+>
+> `lines_strip_comments` -> `lines_strip_line_comments`
+>
 > `parse_delimiters` -> `split_delimiters`
 
 -----
@@ -5775,10 +5785,10 @@ Minor updates to the documentation and to the text of some exceptions.
 
 <dl><dd>
 
-`lines_sort` accepts a new parameter: `key`, which is
-used as the `key` argument for `list.sort`.  The value
-passed in to `key` is the `(info, line)` tuple yielded
-by the upstream iterator.
+New feature.  `lines_sort` accepts a new parameter: `key`,
+which is used as the `key` argument for `list.sort`.
+The value passed in to `key` is the `(info, line)` tuple
+yielded by the upstream iterator.
 
 </dd></dl>
 
@@ -5787,7 +5797,10 @@ by the upstream iterator.
 
 <dl><dd>
 
-This function has been renamed `lines_strip_line_comments`, see below.
+This function has been renamed `lines_strip_line_comments` and
+rewritten, see below.  The old deprecated version will be
+available at `big.deprecated.lines_strip_comments` until at
+least September 2025.
 
 </dd></dl>
 
@@ -5795,17 +5808,20 @@ This function has been renamed `lines_strip_line_comments`, see below.
 
 <dl><dd>
 
+> This API has breaking changes.
+
 `lines_strip_line_comments` is the new name for the old
 `lines_strip_comments` lines modifier function.  It's also
 been completely rewritten.
 
 Changes:
 * The old function required quote marks and the escape string
-  to be single characters, and had a slightly-smelly
-  `triple_quotes` parameter to support multiline strings.
-  The new function allows quote marks to be of any length,
-  and has separate parameters for single-line quote marks
-  (`quotes`)  and multiline quote marks (`multiline_quotes`).
+  to be single characters. The new function allows quote marks
+  and the escape string to be of any length.
+* The old function had a slightly-smelly `triple_quotes` parameter
+  to support multiline strings.  The new version supports separate
+  parameters for single-line quote marks (`quotes`)  and multiline
+  quote marks (`multiline_quotes`).
 * The `backslash` parameter has been renamed to `escape`.
 * The `rstrip` parameter has been removed.  If you need to
   rstrip the line after stripping the comment, wrap your
@@ -5813,8 +5829,7 @@ Changes:
 * The old function didn't enforce that strings shouldn't
   span lines--single-quoted and triple-quoted strings behaved
   identically.  The new version raises `SyntaxError` if quoted
-  strings aren't closed (unless they're explicitly
-  strings that support multiline).
+  strings using non-multiline quote marks contain newlines.
 
 </dd></dl>
 
@@ -5822,11 +5837,11 @@ Changes:
 
 <dl><dd>
 
-`multisplit` used to locally define a new generator
-function, then call it and return the generator.  I promoted
-the generator function to module level, which means we no
-longer rebind it each time `multisplit` is called.  As a
-very rough guess, this can be as much as a 10% speedup for
+Minor optimizations.  `multisplit` used to locally define a
+new generator function, then call it and return the generator.
+I promoted the generator function to module level, which means
+we no longer rebind it each time `multisplit` is called.  As
+a very rough guess, this can be as much as a 10% speedup for
 `multisplit` run on very short workloads.  (It's also *never*
 slower.)
 
@@ -5857,15 +5872,19 @@ This function has been renamed `split_delimiters`, see below.
 
 <dl><dd>
 
-Small cleanup on `Scheduler._next`, the internal method call
+Code cleanups both in the implementation and the test suite,
+including one minor semantic change.
+
+Cleaned up `Scheduler._next`, the internal method call
 that implements the heart of the scheduler.  The only externally
 visible change: the previous version would call `sleep(0)` every
 time it yielded an event.  On modern operating systems this usually
 yields the rest of the current thread's current time slice back
 to the OS's scheduler; this can make multitasking smoother,
-particularly in Python programs.  But this was too opinionated for
-library code--if you want a `sleep(0)` there you can call it yourself.
-I've restructured the code and eliminated this extraneous `sleep(0)`.
+particularly in Python programs.  But this is too opinionated for
+library code--if you want a `sleep(0)` there you can call it yourself
+when the `Scheduler` object yields to you.  I've restructured the
+code and eliminated this extraneous `sleep(0)`.
 
 Also, rewrote big chunks of the test suite (`tests/test_scheduler.py`).
 The multithreaded tests are now much better synchronized, while
@@ -5907,7 +5926,7 @@ Changes:
   close delimiters, and the escape string may now all be
   any nonzero length.  (In the face of ambiguity,
   `split_delimiters` will always choose the longer delimiter.)
-* The `ParseDelimiter` object used with `parse_delimiters`
+* The old `Delimiter` object used with `parse_delimiters`
   has a boolean `backslash` attribute; if it was True, that
   delimiter allows escaping using a backslash.  The new
   `Delimiter` class used with `split_delimiters` replaces that
@@ -5916,7 +5935,9 @@ Changes:
   All the predefined `Delimiter` values have been updated
   to match.
 * As mentioned above, the new `Delimiter` object doesn't
-  have an `open` attribute.  (`ParseDelimiter` still does.)
+  have an `open` attribute.  The open delimiter is the key
+  in the `delimiters` dict, mapping to the appropriate
+  `Delimiter` object.
 * The new `Delimiter` object is read-only after construction.
 
 
@@ -5928,9 +5949,9 @@ Changes:
 
 > This API has breaking changes.
 
-`split_quoted_strings` has been completely
-re-tooled and re-written.  The new API is simpler, easier to
-understand, and conceptually clarified.  It's a major upgrade!
+`split_quoted_strings` has been completely re-tooled and
+re-written.  The new API is simpler, easier to understand,
+and conceptually clarified.  It's a major upgrade!
 
 Changes:
 * The value it yields is different:
@@ -5945,11 +5966,10 @@ Changes:
     quote marks or empty.  If they're true values, the `segment`
     string is inside the quotes.  To reassemble the original string,
     join together *all* the yielded strings in order.
-* The `backslash` parameter has been replaced by a
-  new parameter, `escape`.
-  `escape` allows specifying the escape string, which
-  defaults to '\\' (backslash).  If you specify a false
-  value, there will be no escape character in strings.
+* The `backslash` parameter has been replaced by a new parameter,
+  `escape`.  `escape` allows specifying the escape string, which
+  defaults to '\\' (backslash).  If you specify a false value,
+  there will be no escape character in strings.
 * By default `quotes` only contains `'` (single-quote)
   and `"` (double-quote).  The previous version also
   recognized `"""` and `'''` as multiline quote marks
@@ -5961,10 +5981,10 @@ Changes:
   inside quoted strings.  The new version raises a
   `SyntaxError` if there's a newline character inside
   a string delimited with a quote marker from `quotes`.
-* The old version accepted a junky `triple_quotes` parameter.
+* The old version accepted a stinky `triple_quotes` parameter.
   That's been removed in favor of a new parameter,
-  `multiline_quotes`.  It's like `quotes`, except
-  that newline characters are allowed inside their
+  `multiline_quotes`.  `multiline_quotes` is like `quotes`,
+  except that newline characters are allowed inside their
   quoted strings.
 * `split_quoted_string` accepts another new parameter,
   `state`, which sets the initial state of quoting.
@@ -5981,8 +6001,8 @@ Changes:
   now supports quote delimiters and an escape string
   of any nonzero length.  In the case of ambiguity--if
   more than one quote delimiter matches at a
-  time--`split_quoted_string` will always pick the
-  longer string.
+  time--`split_quoted_string` will always choose the
+  longer delimiter.
 
 </dd></dl>
 
