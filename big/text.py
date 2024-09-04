@@ -2231,7 +2231,7 @@ _export_name('split_delimiters_default_delimiters_bytes')
 
 class _DelimiterState:
     "Data structure representing a delimiter, with precomputed state transitions"
-    def __init__(self, open={}, close=(), escape='', illegal={}, single_line_only=False):
+    def __init__(self, open={}, close=(), escape='', illegal={}, single_line_only=False, clip_and_retry=False):
         self.open = open
         self.close = close
         self.escape = escape
@@ -2243,9 +2243,14 @@ class _DelimiterState:
         # ']' is an illegal character there.
         self.illegal = illegal
         self.single_line_only = single_line_only
+        # if multisplit yields a separator of len > 1
+        # that isn't in open, close, or escape, should
+        # we clip off the first character and recreate
+        # the iterator from that point?
+        self.clip_and_retry = clip_and_retry
 
     def __repr__(self): # pragma: nocover
-        return f"DelimiterState(open={self.open!r}, close={self.close!r}, escape={self.escape!r}, illegal={self.illegal!r}, single_line_only={self.single_line_only!r})"
+        return f"DelimiterState(open={self.open!r}, close={self.close!r}, escape={self.escape!r}, illegal={self.illegal!r}, single_line_only={self.single_line_only!r}, clip_and_retry={self.clip_and_retry!r})"
 
 @functools.lru_cache(maxsize=None)
 def _delimiters_to_state_machine(delimiters, is_bytes):
@@ -2322,78 +2327,135 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
         else:
             openers = illegal = empty_dict
 
-        state = _DelimiterState(open=openers, close=delimiter.close, escape=delimiter.escape, illegal=illegal, single_line_only=not delimiter.multiline)
+        clip_and_retry = delimiter.quoting
+
+        single_line_only = not delimiter.multiline
+
+        state = _DelimiterState(
+            open=openers,
+            close=delimiter.close,
+            escape=delimiter.escape,
+            illegal=illegal,
+            single_line_only=single_line_only,
+            clip_and_retry=clip_and_retry)
         initial_state.open[open] = state
 
     return initial_state, all_tokens
 
 
-def split_delimiters(s, all_tokens, current, stack, empty, laden):
+def split_delimiters(text, all_tokens, current, stack, empty, laden):
     "Internal generator function returned by the real split_delimiters."
     push = stack.append
     pop = stack.pop
 
-    text = []
-    append = text.append
-    clear = text.clear
+    buffer = []
+    append = buffer.append
+    clear = buffer.clear
 
     join = empty.join
 
     escaped = ''
 
-    for s, delimiter in multisplit(s, all_tokens, keep=AS_PAIRS, separate=True):
-        if escaped:
-            escaped = ''
-            if not s:
-                append(delimiter)
+    consumed = 0
+
+    i = multisplit(text, all_tokens, keep=AS_PAIRS, separate=True)
+
+    while True:
+        for s, delimiter in i:
+            if escaped:
+                escaped = ''
+                if not s:
+                    append(delimiter)
+                    consumed += len(delimiter)
+                    continue
+
+            append(s)
+            consumed += len(s)
+
+            if not delimiter:
+                # we're done!
+                if buffer:
+                    if escaped:
+                        raise SyntaxError(f"text ends with escape string {escaped=}")
+                    s = join(buffer)
+                    if s:
+                        # see treatise above
+                        if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
+                            raise SyntaxError(f"unterminated quoted string, {s!r}")
+                        yield s, empty, empty
+                return
+
+            next = current.open.get(delimiter, None)
+            if next:
+                # flush open delimiter
+                s = join(buffer)
+                clear()
+                # we don't need to test to see if s contains a newline here.
+                # if we have an open delimiter, that means quoting is False.
+                # if quoting is False, multiline must be True.  this is a Delimiter invariant.
+                yield s, delimiter, empty
+                consumed += len(delimiter)
+
+                push(current)
+                current = next
                 continue
 
-        append(s)
+            is_close = delimiter == current.close
+            if is_close:
+                redo_iterator = False
+            else:
+                # maybe the delimiter we found *starts* with our close delimiter!
+                if delimiter.startswith(current.close):
+                    is_close = redo_iterator = True
 
-        next = current.open.get(delimiter, None)
-        if next:
-            # flush open delimiter
-            s = join(text)
-            clear()
-            # we don't need to test to see if s contains a newline here.
-            # if we have an open delimiter, that means quoting is False.
-            # if quoting is False, multiline must be True.  this is a Delimiter invariant.
-            yield s, delimiter, empty
+            if is_close:
+                # flush close delimiter
+                s = join(buffer)
+                clear()
+                if s:
+                    # see treatise above
+                    if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
+                        raise SyntaxError(f"unterminated quoted string, {s!r}")
+                yield s, empty, current.close
+                consumed += len(current.close)
 
-            push(current)
-            current = next
-            continue
+                current = pop()
 
-        if delimiter == current.close:
-            # flush close delimiter
-            s = join(text)
-            clear()
-            if s:
-                # see treatise above
-                if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
-                    raise SyntaxError(f"unterminated quoted string, {s!r}")
-            yield s, empty, delimiter
+                if redo_iterator:
+                    i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                    break
 
-            current = pop()
-            continue
+                continue
 
-        if delimiter and (delimiter == current.escape):
+            if current.escape:
+                is_escape = delimiter == current.escape
+                if is_escape:
+                    redo_iterator = False
+                else:
+                    # maybe the delimiter we found *starts* with our close delimiter!
+                    if delimiter.startswith(current.escape):
+                        is_escape = redo_iterator = True
+
+                if is_escape:
+                    append(current.escape)
+                    consumed += len(current.escape)
+                    escaped = current.escape
+                    if redo_iterator:
+                        i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                        break
+                    continue
+
+            if delimiter in current.illegal:
+                raise ValueError(f"mismatched close delimiter {delimiter!r}")
+
+            if current.clip_and_retry and (len(delimiter) > 1):
+                append(delimiter[0:1])
+                consumed += 1
+                i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                break
+
             append(delimiter)
-            escaped = delimiter
-            continue
-
-        if delimiter in current.illegal:
-            raise ValueError(f"mismatched close delimiter {delimiter!r}")
-
-        append(delimiter)
-
-    if text:
-        s = join(text)
-        if s:
-            # see treatise above
-            if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
-                raise SyntaxError(f"unterminated quoted string, {s!r}")
-            yield s, empty, empty
+            consumed += len(delimiter)
 
 
 _split_delimiters = split_delimiters
@@ -2768,8 +2830,16 @@ def lines_rstrip(li, separators=None):
 @_export
 def lines_strip(li, separators=None):
     """
-    A lines modifier function.  Strips leading and trailing whitespace
-    from every line.
+    A lines modifier function.  Strips leading and trailing strings
+    from the lines of a "lines iterator".
+
+    separators is an iterable of separators, like the argument
+    to multistrip.  The default value is None, which means
+    lines_strip strips all leading and trailing whitespace characters.
+
+    All characters are clipped to info.leading and info.trailing
+    as appropriate.  If the line is non-empty before stripping, and
+    empty after stripping, the entire line is clipped to info.trailing.
 
     Composable with all the lines_ modifier functions in the big.text module.
     """

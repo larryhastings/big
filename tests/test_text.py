@@ -3097,6 +3097,8 @@ class BigTextTests(unittest.TestCase):
 
         self.maxDiff = 2**32
 
+        D = big.Delimiter
+
         def test(s, expected, *, delimiters=big.split_delimiters_default_delimiters, state=()):
             empty = ''
             for i in range(2):
@@ -3245,10 +3247,75 @@ class BigTextTests(unittest.TestCase):
                 ('z',        '',   ''),
                 ),
             delimiters = {
-                '^S': big.Delimiter('^Q'),
-                '<<': big.Delimiter('>>'),
-                '^X': big.Delimiter('^X', escape='**', quoting=True),
+                '^S': D('^Q'),
+                '<<': D('>>'),
+                '^X': D('^X', escape='**', quoting=True),
                 },
+            )
+
+        # torture test time!
+        # split_delimiters uses multisplit, which always returns
+        # the largest delimiter.  but what if we have delimiters
+        # that are substrings of other delimiters?  what if we
+        # have delimiters that overlap?  multisplit is greedy,
+        # it will always want to split on the larger string.
+
+        # torture test #1:
+        # current close delimiter is a prefix of another delimiter.
+        cruel_delimiters_1 = {
+            '(': D(')'),
+            '[': D(']'),
+            '[(': D(')]'),
+        }
+        #          vv -- multisplit will split here
+        test('a[b(c)]',
+            #      ^ -- but really we want to split here
+            (
+                ('a', '[', ''),
+                ('b', '(', ''),
+                ('c', '',  ')'),
+                ('',  '',  ']'),
+                ),
+            delimiters = cruel_delimiters_1,
+            )
+
+        # torture test #2:
+        # current escape string is a prefix of another delimiter.
+        cruel_delimiters_2 = {
+            '(': D(')', escape=']', quoting=True),
+            '[': D(']'),
+            '[(': D(')]'),
+        }
+        #          vv -- multisplit will split here
+        test('a[b(c]))]',
+            #      ^ -- but really we want to split here
+            (
+                ('a',   '[', ''),
+                ('b',   '(', ''),
+                ('c])', '',  ')'),
+                ('',    '',  ']'),
+                ),
+            delimiters = cruel_delimiters_2,
+            )
+
+        # torture test #3:
+        # we have a set of quoting delimiters, and
+        # random garbage that happens to combine with
+        # our close delimiter to form another overlapping
+        # delimiter.
+        cruel_delimiters_3 = {
+            '(': D(')'),
+            '[(': D(')]'),
+            '<[': D(']>', quoting=True, escape='**'),
+        }
+        #         vv -- multisplit will split here
+        test('a<[b)]>',
+            #      ^^ -- but really we want to split here
+            (
+                ('a',  '<[', ''),
+                ('b)', '',   ']>'),
+                ),
+            delimiters = cruel_delimiters_3,
             )
 
         with self.assertRaises(ValueError):
@@ -3307,7 +3374,6 @@ class BigTextTests(unittest.TestCase):
                     "Delimiter(close='x', escape='y', multiline=False, quoting=True)"
             )
 
-        D = big.Delimiter
         with self.assertRaises(ValueError):
             D(close='x', escape='', quoting=True, multiline=True)
         with self.assertRaises(ValueError):
