@@ -2362,28 +2362,30 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
 
     while True:
         for s, delimiter in i:
+            if not (s or delimiter):
+                continue
             if escaped:
+                # either s or delimiter is true
                 escaped = ''
                 if not s:
-                    append(delimiter)
-                    consumed += len(delimiter)
-                    continue
+                    # must be delimiter
+                    consumed += 1
+                    if len(delimiter) == 1:
+                        append(delimiter)
+                        continue
+
+                    # only escape the first character of the delimiter
+                    # the rest may be a valid delimiter after all!
+                    append(delimiter[0:1])
+                    i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                    break
 
             append(s)
             consumed += len(s)
 
             if not delimiter:
                 # we're done!
-                if buffer:
-                    if escaped:
-                        raise SyntaxError(f"text ends with escape string {escaped=}")
-                    s = join(buffer)
-                    if s:
-                        # see treatise above
-                        if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
-                            raise SyntaxError(f"unterminated quoted string, {s!r}")
-                        yield s, empty, empty
-                return
+                break
 
             next = current.open.get(delimiter, None)
             if next:
@@ -2456,6 +2458,18 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
 
             append(delimiter)
             consumed += len(delimiter)
+        else:
+            break
+
+    if buffer:
+        if escaped:
+            raise SyntaxError(f"text ends with escape string {escaped!r}")
+        s = join(buffer)
+        if s:
+            # see treatise above
+            if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
+                raise SyntaxError(f"unterminated quoted string, {s!r}")
+            yield s, empty, empty
 
 
 _split_delimiters = split_delimiters

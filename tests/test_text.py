@@ -3269,7 +3269,8 @@ class BigTextTests(unittest.TestCase):
         }
         #          vv -- multisplit will split here
         test('a[b(c)]',
-            #      ^ -- but really we want to split here
+            #      ^ --- but really we want to split here
+            #       ^ -- and here
             (
                 ('a', '[', ''),
                 ('b', '(', ''),
@@ -3288,7 +3289,8 @@ class BigTextTests(unittest.TestCase):
         }
         #          vv -- multisplit will split here
         test('a[b(c]))]',
-            #      ^ -- but really we want to split here
+            #      ^ --- but really we want to split here
+            #       ^ -- and here
             (
                 ('a',   '[', ''),
                 ('b',   '(', ''),
@@ -3308,14 +3310,51 @@ class BigTextTests(unittest.TestCase):
             '[(': D(')]'),
             '<[': D(']>', quoting=True, escape='**'),
         }
-        #         vv -- multisplit will split here
+        #         vv --- multisplit will split here
         test('a<[b)]>',
-            #      ^^ -- but really we want to split here
+            #     ^ ---- but really we want to split here
+            #      ^^ -- and here
             (
                 ('a',  '<[', ''),
                 ('b)', '',   ']>'),
                 ),
             delimiters = cruel_delimiters_3,
+            )
+
+        # torture test #4:
+        # we want to escape our ending quote mark,
+        # followed by another
+        cruel_delimiters_4 = {
+            '<': D('>', quoting=True, escape='\\'),
+            '<<': D('>>'),
+        }
+        #          vv --- multisplit will split here
+        test('a<b\\>>',
+            #      ^ --- but really we want to split here
+            #       ^ -- and here
+            (
+                ('a',    '<', ''),
+                ('b\\>', '',   '>'),
+                ),
+            delimiters = cruel_delimiters_4,
+            )
+
+        # torture test #5:
+        # our current escape string is the prefix of
+        # another delimiter
+        cruel_delimiters_5 = {
+            '<': D('>', quoting=True, escape='\\'),
+            'Q': D('\\>'),
+        }
+        #        vvv --- multisplit will split here
+        test('a<b\\>>',
+            #    ^^ ---- but really we want to split here
+            #      ^ -- and here
+            (
+                ('a',    '<', ''),
+                ('b\\>', '',   '>'),
+                ),
+            delimiters = cruel_delimiters_5,
             )
 
         with self.assertRaises(ValueError):
@@ -3362,6 +3401,8 @@ class BigTextTests(unittest.TestCase):
             test('by default quote marks are now single-line only "ab\n", test 1, complete quoted string', None, )
         with self.assertRaises(SyntaxError):
             test('by default quote marks are now single-line only "ab\n, test 2, unterminated quoted string', None, )
+        with self.assertRaises(SyntaxError):
+            test('text ends with "escape string\\', None, )
 
         # testing on the Delimiter class itself
         d = big.Delimiter(close='x')
