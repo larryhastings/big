@@ -3097,7 +3097,7 @@ class BigTextTests(unittest.TestCase):
 
         self.maxDiff = 2**32
 
-        def test(s, expected, *, delimiters=None, state=()):
+        def test(s, expected, *, delimiters=big.split_delimiters_default_delimiters, state=()):
             empty = ''
             for i in range(2):
                 got = tuple(big.split_delimiters(s, delimiters=delimiters, state=state))
@@ -3141,6 +3141,7 @@ class BigTextTests(unittest.TestCase):
                 ('1:2, 3:4',          '', '}'),
                 ('',                  '', ')'),
             ),
+            delimiters=big.split_delimiters_default_delimiters_bytes, # test default
             )
 
         test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
@@ -3177,6 +3178,7 @@ class BigTextTests(unittest.TestCase):
                 ('',   '', ']'),
                 ('!',  '',  ''),
             ),
+            delimiters=None,
             )
 
         # test state
@@ -3396,14 +3398,18 @@ class BigTextTests(unittest.TestCase):
         list_of_lines = [
             'first line',
             '\tsecond line',
-            'third line'
+            'third line',
+            '         ',
+            ''
             ]
         lines = big.lines(list_of_lines)
         test(big.lines_strip(lines),
             [
-            L('first line', 1, 1, end=''),
-            L('\tsecond line', 2, 9, leading='\t', final='second line', end=''),
-            L('third line', 3, 1, end=''),
+            L('first line',    1, 1,                                                          end=''),
+            L('\tsecond line', 2, 9, leading='\t', final='second line',                       end=''),
+            L('third line',    3, 1,                                                          end=''),
+            L('         ',     4, 1,               final='',            trailing='         ', end=''),
+            L('',              5, 1,                                                          end=''),
             ])
 
         # or! you can give lines an iterable of 2-tuples of strings,
@@ -3677,24 +3683,28 @@ hummingbird
 
         lines = big.lines(
 "    a = b  \n"
-"    c = d     \n"
+"      c = d     \n"
+"   \n"
 )
         test(big.lines_strip(lines),
             [
-            L('    a = b  ',    1, 5, leading='    ', final='a = b', trailing='  '),
-            L('    c = d     ', 2, 5, leading='    ', final='c = d', trailing='     '),
-            L('',               3, 1, end=''),
+            L('    a = b  ',      1, 5, leading='    ',   final='a = b', trailing='  '),
+            L('      c = d     ', 2, 7, leading='      ', final='c = d', trailing='     '),
+            L('   ',              3, 1,                   final='',      trailing='   '),
+            L('',                 4, 1, end=''),
             ])
 
         lines = big.lines(
 "QXYXYQa = bXY\n"
 "XYQQXYXYc = dQQQQ\n"
+'QXYQQXYXYQ\n'
 )
         test(big.lines_strip(lines, separators=('Q', 'XY')),
             [
             L('QXYXYQa = bXY',     1, 7, leading='QXYXYQ',   final='a = b', trailing='XY'),
             L('XYQQXYXYc = dQQQQ', 2, 9, leading='XYQQXYXY', final='c = d', trailing='QQQQ'),
-            L('',                  3, 1, end=''),
+            L('QXYQQXYXYQ',        3, 1,                     final='',      trailing='QXYQQXYXYQ'),
+            L('',                  4, 1, end=''),
             ])
 
         # test funny separators for lines_strip,

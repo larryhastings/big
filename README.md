@@ -2660,24 +2660,26 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_strip(li)`
+#### `lines_strip(li, separators=None)`
 
 <dl><dd>
 
-A lines modifier function.  Strips leading and trailing whitespace
+A lines modifier function.  Strips leading and trailing strings
 from the lines of a "lines iterator".
 
-If `lines_strip` removes leading whitespace from a line,
-it updates `LineInfo.column_number` with the new starting
-column number, and also adds a field to the `LinesInfo` object:
+`separators` is an iterable of separators, like the argument
+to `multistrip`.  The default value is `None`, which means
+`lines_strip` strips all leading and trailing whitespace characters.
 
-* `leading` - the leading whitespace string that was removed
+All characters are clipped to `info.leading` and `info.trailing`
+as appropriate.  If the line is non-empty before stripping, and
+empty after stripping, the entire line is clipped to `info.trailing`.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`
+#### `lines_strip_line_comments(li, line_comment_markers, *, escape='\\', multiline_quotes=None, quotes=('"', "'"))`
 
 <dl><dd>
 
@@ -2697,9 +2699,9 @@ permitted to span lines.  If the iterator stops iteration with an
 unterminated multiline quoted string, `lines_strip_line_comments`
 will raise `SyntaxError`.
 
-`escape` specifies an escape string to allow specifying a quote marker
-inside a quoted string without ending the string.  If false, there is
-no escape string.
+`escape` specifies an escape string to allow having the closing quote
+marker inside a quoted string without closing ending the string.
+If false, there is no escape string.
 
 What's the difference between
 [`lines_strip_line_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
@@ -3293,8 +3295,9 @@ all strings yielded recreates `s`.
 Quote delimiters may be any non-empty string.
 They must be the same type as `s`, either `str` or `bytes`.
 By default, `quotes` is `('"', "'")`.  (If `s` is `bytes`,
-`quotes` defaults to `(b'"', b"'")`.)  Quoted strings
-inside `s` may not contain newlines.
+`quotes` defaults to `(b'"', b"'")`.)  If a newline character
+appears inside a quoted string, `split_quoted_strings` will
+raise `SyntaxError`.
 
 `multiline_quotes` is like `quotes`, except quoted strings
 using multiline quotes are permitted to contain newlines.
@@ -3339,9 +3342,11 @@ Note:
   C's requirement that single-quoted strings only contain
   one character, you'll have to do that yourself.
 * `split_quoted_strings` doesn't raise an error
-  if `s` ends with an unterminated string.  In that
-  case, the last tuple yielded will have a non-empty
-  `leading_quote` and an empty `trailing_quote`.
+  if `s` ends with an unterminated quoted string.  In
+  that case, the last tuple yielded will have a non-empty
+  `leading_quote` and an empty `trailing_quote`.  (If you
+  consider this an error, you'll need to raise `SyntaxError`
+  in your own code.)
 * `split_quoted_strings` only supports the opening and
   closing markers for a string being the same string.
   If you need the opening and closing markers to be

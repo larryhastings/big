@@ -1933,8 +1933,8 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     it begins a quoted section, which only ends at the
     next occurance of that quote delimiter.  By default,
     quotes is ('"', "'").  (If s is bytes, quotes defaults
-    to (b'"', b"'").)    Quoted strings inside s may not
-    contain newlines.
+    to (b'"', b"'").)  If a newline character appears inside a
+    quoted string, split_quoted_strings will raise SyntaxError.
 
     multiline_quotes is like quotes, except quoted strings
     using multiline quotes are permitted to contain newlines.
@@ -1981,9 +1981,11 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
       C's requirement that single-quoted strings only contain
       one character, you'll have to do that yourself.
     * split_quoted_strings doesn't raise an error
-      if s ends with an unterminated string.  In that
-      case, the last tuple yielded will have a non-empty
-      leading_quote and an empty trailing_quote.
+      if s ends with an unterminated quoted string.  In
+      that case, the last tuple yielded will have a non-empty
+      leading_quote and an empty trailing_quote.  (If you
+      consider this an error, you'll need to raise SyntaxError
+      in your own code.)
     * split_quoted_strings only supports the opening and
       closing marker for a string being the same string.
       If you need the opening and closing markers to be
@@ -2108,14 +2110,15 @@ class Delimiter:
     Class representing a delimiter for split_delimiters.
 
     close is the closing delimiter character, must be the same type as open, and length 1.
-    escape is a string of maximum length 1: if true, when inside this delimiter,
-        you can escape the trailing delimiter with this string.
     quoting is a boolean: does this set of delimiters "quote" the text inside?
         When an open delimiter enables quoting, split_delimiters will ignore all
         other delimiters in the text until it encounters the matching close delimiter.
         (Single- and double-quotes set this to True.)
-
-    Currently escape and quoting must either both be true or both be false.
+    escape is a string of maximum length 1: if true, when inside this pair of delimiters,
+        you can escape the closing delimiter using this string.  When quoting is true,
+        escape may not be empty, and when quoting is false escape must be empty.
+    multiline is a boolean: are newline characters permitted inside these delimiters?
+        multiline may only be false when quoting is true.
 
     You may not specify backslash ('\\') as an open or close delimiter.
     """
@@ -2181,6 +2184,9 @@ class Delimiter:
             and (self._multiline == other._multiline)
             )
 
+    def __hash__(self):
+        return hash(self._close) ^ hash(self._escape) ^ hash(self._quoting) ^ hash(self._multiline)
+
     def copy(self):
         return Delimiter(self)
 
@@ -2241,7 +2247,7 @@ class _DelimiterState:
     def __repr__(self): # pragma: nocover
         return f"DelimiterState(open={self.open!r}, close={self.close!r}, escape={self.escape!r}, illegal={self.illegal!r}, single_line_only={self.single_line_only!r})"
 
-
+@functools.lru_cache(maxsize=None)
 def _delimiters_to_state_machine(delimiters, is_bytes):
     """
     Converts delimiters into a _DelimiterState tree
@@ -2254,6 +2260,10 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
     the initial state, and all_tokens is an iterable
     of all the token strings needed to parse, including open
     delimimeters, close delimiters, and escape strings.
+
+    Because this function is memoized (using functools.lru_cache)
+    you must convert delimiters from a dict into a tuple of
+    2-tuples, a la tuple(delimiters.items()).
     """
     if is_bytes:
         s_type = bytes
@@ -2265,16 +2275,17 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
         not_s_type_description = "bytes"
 
     all_closers = set()
-    all_openers = set(delimiters)
+    all_openers = set()
     all_escapes = set()
     nested_closers = set()
-    for k, v in delimiters.items():
+    for k, v in delimiters:
         if not isinstance(k, s_type):
             raise TypeError(f"open delimiter {k!r} must be {s_type_description}, not {not_s_type_description}")
         if not isinstance(v, Delimiter):
             raise TypeError(f"delimiter values must be Delimiter, not {v!r}")
         if not isinstance(v.close, s_type):
             raise TypeError(f"close delimiter {v.close!r} must be {s_type_description}, not {not_s_type_description}")
+        all_openers.add(k)
         all_closers.add(v.close)
         if not isinstance(v.escape, s_type):
             raise TypeError(f"Delimiter: escape {v.escape!r} must be {s_type_description}, not {not_s_type_description}")
@@ -2303,7 +2314,7 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
 
     empty_dict = {}
 
-    for open, delimiter in delimiters.items():
+    for open, delimiter in delimiters:
         if not delimiter.quoting:
             openers = initial_state.open
             illegal = set(all_closers)
@@ -2387,8 +2398,8 @@ def split_delimiters(s, all_tokens, current, stack, empty, laden):
 
 _split_delimiters = split_delimiters
 
-_split_delimiters_default_delimiters_cache = _delimiters_to_state_machine(split_delimiters_default_delimiters, False)
-_split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_machine(split_delimiters_default_delimiters_bytes, True)
+_split_delimiters_default_delimiters_cache = _delimiters_to_state_machine(tuple(split_delimiters_default_delimiters.items()), False)
+_split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_machine(tuple(split_delimiters_default_delimiters_bytes.items()), True)
 
 
 @_export
@@ -2449,11 +2460,14 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     """
     initial_state = all_tokens = None
 
+    if delimiters in (split_delimiters_default_delimiters, split_delimiters_default_delimiters_bytes):
+        delimiters = None
+
     is_bytes = isinstance(s, bytes)
     if is_bytes:
         empty = b''
         laden = b'x'
-        if delimiters in (None, split_delimiters_default_delimiters):
+        if delimiters is None:
             initial_state, all_tokens = _split_delimiters_default_delimiters_bytes_cache
         elif not delimiters:
             raise ValueError("invalid delimiters")
@@ -2462,7 +2476,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     else:
         empty = ''
         laden = 'x'
-        if delimiters in (None, split_delimiters_default_delimiters_bytes):
+        if delimiters is None:
             initial_state, all_tokens = _split_delimiters_default_delimiters_cache
         elif not delimiters:
             raise ValueError("invalid delimiters")
@@ -2470,7 +2484,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
             raise ValueError("open delimiter must not be '\\'")
 
     if not initial_state:
-        initial_state, all_tokens = _delimiters_to_state_machine(delimiters, is_bytes)
+        initial_state, all_tokens = _delimiters_to_state_machine(tuple(delimiters.items()), is_bytes)
 
     stack = []
     push = stack.append
@@ -2790,7 +2804,7 @@ def lines_strip(li, separators=None):
             lstripped = line.lstrip()
             if not lstripped:
                 # line was all whitespace.
-                leading = line
+                trailing = line
             else:
                 if len(line) != len(lstripped):
                     # we stripped leading whitespace, preserve it
@@ -3070,14 +3084,14 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     escape is "\\".
 
     If multiline_quotes is true, it must be an iterable of
-    quote marker strings, length 1 or more.  There must
+    quote marker strings, length 1 or more.  (By default
+    multiline_quotes is an empty string.)  There must
     be no quote markers in common between quotes and
     multiline_quotes.  Quoted strings enclosed in multiline
     quotes may span multiple lines; quoted strings enclosed
-    in (conventional) quotes are not allowed to.  By default
-    multiline_quotes is an empty string.
-
-    Updates LineInfo.comment and LineInfo.trailing as appropriate.
+    in (conventional) quotes are not allowed to.  If the last
+    line yielded by the upstream iterator ends with an unterminated
+    multiline string, lines_strip_line_comments will raise a SyntaxError.
 
     What's the difference between lines_strip_line_comments and
     lines_filter_comment_lines?
