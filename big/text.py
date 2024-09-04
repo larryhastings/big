@@ -2387,20 +2387,23 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
                 # we're done!
                 break
 
-            next = current.open.get(delimiter, None)
-            if next:
-                # flush open delimiter
-                s = join(buffer)
-                clear()
-                # we don't need to test to see if s contains a newline here.
-                # if we have an open delimiter, that means quoting is False.
-                # if quoting is False, multiline must be True.  this is a Delimiter invariant.
-                yield s, delimiter, empty
-                consumed += len(delimiter)
+            if current.escape:
+                is_escape = delimiter == current.escape
+                if is_escape:
+                    redo_iterator = False
+                else:
+                    # maybe the delimiter we found *starts* with our close delimiter!
+                    if delimiter.startswith(current.escape):
+                        is_escape = redo_iterator = True
 
-                push(current)
-                current = next
-                continue
+                if is_escape:
+                    append(current.escape)
+                    consumed += len(current.escape)
+                    escaped = current.escape
+                    if redo_iterator:
+                        i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                        break
+                    continue
 
             is_close = delimiter == current.close
             if is_close:
@@ -2429,23 +2432,20 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
 
                 continue
 
-            if current.escape:
-                is_escape = delimiter == current.escape
-                if is_escape:
-                    redo_iterator = False
-                else:
-                    # maybe the delimiter we found *starts* with our close delimiter!
-                    if delimiter.startswith(current.escape):
-                        is_escape = redo_iterator = True
+            next = current.open.get(delimiter, None)
+            if next:
+                # flush open delimiter
+                s = join(buffer)
+                clear()
+                # we don't need to test to see if s contains a newline here.
+                # if we have an open delimiter, that means quoting is False.
+                # if quoting is False, multiline must be True.  this is a Delimiter invariant.
+                yield s, delimiter, empty
+                consumed += len(delimiter)
 
-                if is_escape:
-                    append(current.escape)
-                    consumed += len(current.escape)
-                    escaped = current.escape
-                    if redo_iterator:
-                        i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
-                        break
-                    continue
+                push(current)
+                current = next
+                continue
 
             if delimiter in current.illegal:
                 raise ValueError(f"mismatched close delimiter {delimiter!r}")
