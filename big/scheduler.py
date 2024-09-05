@@ -270,16 +270,16 @@ class Scheduler:
         By default, "time" is relative to the current time.
         If absolute is true, "time" is an absolute time.
 
-        "priority" represents the importance of the event.
-        Lower numbers are more important.
-        There are no predefined priorities; you may use it however you like.
+        "priority" represents the importance of the event. Lower numbers
+        are more important.  There are no predefined priorities; you may
+        assign priorities however you like.
 
         Returns an object which can be used to remove the event from the queue:
            o = scheduler.schedule(my_event, 5)
-           o.cancel() # cancels the event
+           o.cancel()  # cancels the event
         Alternately you can pass in this object to the scheduler's cancel method:
            o = scheduler.schedule(my_event, 5)
-           scheduler.cancel(o)
+           scheduler.cancel(o)  # also cancels the event
         """
         with self.regulator.lock:
             if not absolute:
@@ -303,7 +303,10 @@ class Scheduler:
 
     def __bool__(self):
         """
-        Returns True if the queue is not empty.
+        Returns True if the scheduler contains any scheduled events.
+        This includes both events scheduled for the future,
+        as well as events that have already expired but have
+        yet to be yielded by the Scheduler.
         """
         with self.regulator.lock:
             return bool(self.heap)
@@ -319,16 +322,20 @@ class Scheduler:
         # This isn't a "queue" as in Python's built-in "queue" module.
         # The Scheduler's "queue" is a conceptual ordered list of
         # events in the order they'll be yielded.   (It actually uses
-        # a "heap", as in Python's built-in "heap" module.)
+        # a "heap", as in Python's built-in "heap" module.)  The
+        # Python scheduler uses the term "queue" a lot, including
+        # having this exact property, so I kept it.
 
         with self.regulator.lock:
             return self.heap.queue
 
     def _next(self, blocking=True):
-        # why a loop? in case we get awakened early by the queue changing.
+        # Why a loop?  In case we get woken up early.
+        # That can happen when the queue changes.
         #
-        # also, I swear that back in my early Win32 days, sleeping on
-        # timers wasn't perfect and would occasionally return slightly early.
+        # Also, I swear that back in my early Win32 days,
+        # timers weren't perfect, and the Sleep call would
+        # occasionally wake up slightly early.
 
         while True:
 
@@ -344,12 +351,13 @@ class Scheduler:
                     self.heap.popleft()
                     return ev.event
 
-                # don't sleep while holding the lock!
-                # do:
-                #   * fetch the sleep method while
+                # Don't sleep while holding the lock!
+                #
+                # Do this instead:
+                #   * Fetch the sleep method while
                 #     holding the lock, then
-                #   * release the lock, then
-                #   * sleep.
+                #   * Release the lock, then
+                #   * Sleep.
                 sleep = self.regulator.sleep
 
             if not blocking:
@@ -377,9 +385,7 @@ class Scheduler:
 
     def non_blocking(self):
         """
-        A non-blocking iterator over the queue.
-        Only yields events that are currently ready,
-        then stops iteration.
+        A non-blocking iterator.  Yields all events
+        that are currently ready, then stops iteration.
         """
         return self.NonBlockingSchedulerIterator(self)
-

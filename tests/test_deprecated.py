@@ -222,7 +222,7 @@ class BigDeprecatedTests(unittest.TestCase):
                 final = line
             if isinstance(end, str) and isinstance(line, bytes):
                 end = end.encode('ascii')
-            info = big.LineInfo(lines, line, line_number, column_number, end=end, **kwargs)
+            info = big.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
             return (info, final)
 
         lines = big.lines("""

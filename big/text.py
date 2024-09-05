@@ -912,8 +912,8 @@ def multistrip(s, separators, left=True, right=True):
     if not (left or right):
         return s
 
-    # we can sidestep the hashability test of _separators_to_re,
-    # separators is guaranteed to always a tuple at this point
+    # We can sidestep the hashability test of _separators_to_re.
+    # separators is always guaranteed to be a tuple at this point.
     pattern = __separators_to_re(separators, is_bytes, separate=False, keep=False)
 
     if left:
@@ -1547,9 +1547,6 @@ def combine_splits(s, *split_arrays):
     return _combine_splits(s, split_lengths)
 
 
-_sentinel = object()
-
-_invalid_state = "_invalid_state"
 _in_word = "_in_word"
 _after_whitespace = "_after_whitespace"
 _after_whitespace_then_apostrophe_or_double_quote = "_after_whitespace_then_apostrophe_or_double_quote"
@@ -2591,14 +2588,45 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 @_export
 class LineInfo:
     """
-    The second object yielded by a lines iterator,
-    containing metadata about the line.
+    The first object in the 2-tuple yielded by a
+    lines iterator, containing metadata about the line.
+    Every parameter to the constructor is stored as an
+    attribute of the new LineInfo object using the
+    same identifier.
+
+    line is the original unmodified line, split
+    from the original s input to lines.  Note
+    that line includes the trailing newline character,
+    if any.
+
+    line_number is the line number of this line.
+    `
+    column_number is the starting column of the
+    accompanying line string (the second entry
+    in the 2-tuple yielded by lines).
+
+    leading and trailing are strings that have
+    been stripped from the beginning or end of the
+    original line, if any.  (Not counting the
+    line-terminating linebreak character.)
+
+    end is the linebreak character that terminated
+    the current line, if any.
+
+    indent is the indent level of the current line,
+    represented as an integer.  See lines_strip_indent.
+    If the indent level hasn't been measured yet this
+    should be 0.
+
+    match is the re.Match object that matched this
+    line, if any.  See lines_grep.
+
     You can add your own fields by passing them in
-    via **kwargs; you can also add new attributes
+    via `**kwargs`; you can also add new attributes
     or modify existing attributes as needed from
     inside a "lines modifier" function.
     """
-    def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, **kwargs):
+    def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs):
         is_str = isinstance(line, str)
         is_bytes = isinstance(line, bytes)
         if is_bytes:
@@ -2615,6 +2643,9 @@ class LineInfo:
 
         line_type = type(line)
 
+        if not isinstance(indent, int):
+            raise TypeError("indent must be int")
+
         if leading == None:
             leading = empty
         elif not isinstance(leading, line_type):
@@ -2630,6 +2661,9 @@ class LineInfo:
         elif not isinstance(end, line_type):
             raise TypeError(f"end must be same type as line or None, not {end!r}")
 
+        if not ((match == None) or isinstance_re_pattern(match)):
+            raise TypeError("match must be None or re.Pattern")
+
         self.lines = lines
         self.line = line
         self.line_number = line_number
@@ -2637,8 +2671,8 @@ class LineInfo:
         self.leading = leading
         self.trailing = trailing
         self.end = end
-        self.indent = None
-        self.match = None
+        self.indent = indent
+        self.match = match
         self._is_bytes = is_bytes
         self.__dict__.update(kwargs)
 
@@ -2647,8 +2681,21 @@ class LineInfo:
 
     def clip_leading(self, line, s):
         """
-        Clip the leading substring s from line,
-        appending it to the 'leading' attribute.
+        Clip the leading substring s from line.
+
+        s may be either a string (str or bytes) or an int.
+        If s is a string, it must match the leading substring
+        of line you wish clipped.  If s is an int, it should
+        representing the number of characters you want clipped
+        from the beginning of s.
+
+        Returns line with s clipped; also appends
+        the clipped portion to self.leading, and updates
+        self.column_number to represent the column number
+        where line now starts.  (If the clipped portion of
+        line contains tabs, it's detabbed using lines.tab_width
+        and the detab method on the clipped substring before it
+        is measured.)
         """
         if isinstance(s, int):
             assert -len(line) <= s < len(line), f"clip_leading s={s!r} index is larger than the length of line={line!r}"
@@ -2665,8 +2712,16 @@ class LineInfo:
 
     def clip_trailing(self, line, s):
         """
-        Clip the trailing substring s from line,
-        prepending it to the 'trailing' attribute.
+        Clip the trailing substring s from line.
+
+        s may be either a string (str or bytes) or an int.
+        If s is a string, it must match the trailing substring
+        of line you wish clipped.  If s is an int, it should
+        representing the number of characters you want clipped
+        from the end of s.
+
+        Returns line with s clipped; also prepends
+        the clipped portion to self.trailing.
         """
         if isinstance(s, int):
             assert -len(line) <= s < len(line), f"clip_trailing s={s!r} index is larger than the length of line={line!r}"
@@ -2703,39 +2758,38 @@ class lines:
         """
         A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
 
+        When iterated over, yields 2-tuples:
+            (info, line)
+        where info is a LineInfo object, and line is a str or bytes.
+
         "s" can be str, bytes, or any iterable of str or bytes.
 
         If s is neither str nor bytes, s must be an iterable;
         lines yields successive elements of s as lines.  All objects
         yielded by this iterable should be homogeneous, either str or bytes.
 
-        If s is str or bytes, and separators is None, lines
-        will split s at line boundaries and yield those lines,
-        including empty lines.  If separators is not None,
-        it must be an iterable of strings of the same type as s;
-        lines will split s using multisplit.
+        separators is either None or an iterable of separator strings,
+        as per the separators argument to multisplit.  If s is str or bytes,
+        it will be split using multisplit, using these separators.  If
+        separators is None--which is the default value--and s is str or bytes,
+        s will be split at linebreak characters.
 
-        When iterated over, yields 2-tuples:
-            (info, line)
+        line_number is the starting line number given to the first LineInfo
+        object.  This number is then incremented for every subsequent line.
 
-        info is a LineInfo object, which contains three fields by default:
-            * line - the original line, never modified
-            * line_number - the line number of this line, starting at the
-              line_number passed in and adding 1 for each successive line
-            * column_number - the column this line starts on,
-              starting at the column_number passed in, and adjusted when
-              characters are removed from the beginning of line
+        column_number is the starting column number given to every LineInfo
+        object.  This number represents the leftmost column of every line.
 
-        tab_width is not used by lines itself, but is stored internally and
-        may be used by other lines modifier functions
-        (e.g. lines_convert_tabs_to_spaces, lines_strip_indent). Similarly,
-        all keyword arguments passed in via kwargs are stored internally
-        and can be accessed by user-defined lines modifier functions.
+        tab_width isn't used by lines itself, but is stored internally and
+        may be used by other lines modifier functions (e.g. lines_strip_indent,
+        lines_convert_tabs_to_spaces). Similarly, all keyword arguments passed
+        in via kwargs are stored internally and can be accessed by user-defined
+        lines modifier functions.
 
         You can pass in an instance of a subclass of bytes or str
         for s and elements of separators, but the base class
         for both must be the same (str or bytes).  lines will
-        only yield str or bytes objects.
+        only yield str or bytes objects for line.
 
         Composable with all the lines_ modifier functions in the big.text module.
         """
@@ -2746,30 +2800,27 @@ class lines:
         if not isinstance(tab_width, int):
             raise TypeError("tab_width must be int")
 
-        # self.end_is_yielded does double duty.
-        # if we're splitting the string ourself, we're going to use multisplit
-        #   with keep=AS_PAIRS, so we're going to get the end yielded to us in a 2-tuple.
-        # if we're not splitting the string ourselves, we need to
+        self.s = s
+        self.separators = separators
+        self.line_number = line_number
+        self.column_number = column_number
+        self.tab_width = tab_width
 
         is_bytes = isinstance(s, bytes)
         is_str = isinstance(s, str)
         if is_bytes or is_str:
             if not separators:
                 separators = linebreaks if is_str else bytes_linebreaks
-            i = multisplit(s, separators, keep=AS_PAIRS, separate=True, strip=False)
+            self.i = multisplit(s, separators, keep=AS_PAIRS, separate=True, strip=False)
+            self.is_pairs = True
+            self.s_is_bytes = is_bytes
         else:
-            i = iter(s)
+            if separators is not None:
+                raise ValueError("separators must be None when s is not str or bytes")
+            self.i = iter(s)
             is_bytes = None
-
-        self.s = s
-        self.separators = separators
-        self.line_number = line_number
-        self.column_number = column_number
-        self.tab_width = tab_width
-        self.s_is_bytes = is_bytes
-
-        self.i = i
-        self.is_pairs = None # sentinel initial value
+            self.is_pairs = None # sentinel initial value
+            self.s_is_bytes = None # sentinel initial value
 
         self.__dict__.update(kwargs)
 
@@ -2782,13 +2833,14 @@ class lines:
     def __next__(self):
         value = next(self.i)
 
-        # slightly wacky:
+        # self.is_pairs is slightly wacky:
         #
-        # if self.is_pairs is True, our iterator yields iterables of 2 objects,
+        # If self.is_pairs is true, our iterator yields iterables of 2 objects,
         #     line and end.
-        # if self.is_pairs is a false value, it contains the appropriate empty
-        #     string, '' or b'', that should be used for LineInfo.end.
-        # if self.is_pairs is None, it's our first time iterating, we need
+        # If self.is_pairs is a false value besides None, it contains the
+        #     appropriate empty string ('' or b'') that should be used for
+        #     LineInfo.end when iteration is done.
+        # If self.is_pairs is None, it's our first time iterating, we need
         #     to analyze the value we got back from the iterator and determine
         #     what we're working with.
 
@@ -2813,9 +2865,13 @@ class lines:
                     self.s_is_bytes = isinstance(line, bytes)
 
                 if not is_pairs:
-                    end = self.is_pairs = b'' if self.s_is_bytes else ''
+                    self.is_pairs = end = b'' if self.s_is_bytes else ''
 
-        return_value = (LineInfo(self, line, self.line_number, self.column_number, end=end), line)
+        if self.is_pairs and end:
+            original_line = line + end
+        else:
+            original_line = line
+        return_value = (LineInfo(self, original_line, self.line_number, self.column_number, end=end), line)
         self.line_number += 1
         return return_value
 
@@ -2824,6 +2880,14 @@ def lines_rstrip(li, separators=None):
     """
     A lines modifier function.  Strips trailing whitespace from the
     lines of a "lines iterator".
+
+    separators is an iterable of separators, like the argument
+    to multistrip.  The default value is None, which means
+    lines_rstrip strips all trailing whitespace characters.
+
+    All characters removed are clipped to info.trailing
+    as appropriate.  If the line is non-empty before stripping, and
+    empty after stripping, the entire line is clipped to info.trailing.
 
     Composable with all the lines_ modifier functions in the big.text module.
     """
@@ -3234,12 +3298,15 @@ def lines_convert_tabs_to_spaces(li):
 @_export
 def lines_strip_indent(li):
     """
-    A lines modifier function.  Automatically measures and strips indents.
+    A lines modifier function.  Strips leading whitespace and tracks
+    the indent level.
 
-    May modify the following attributes of the LineInfo object:
-    column_number, leading, and indent.  indent will contain the
-    ordinal number of the current indent; if the text has indented
-    three times, indent will be 3.
+    The indent level is stored in the LineInfo object's attribute
+    "indent".  indent is an integer, the ordinal number of the current
+    indent; if the text has been indented three times, indent will be 3.
+
+    Strips any leading whitespace from the line, updating the LineInfo
+    attributes "leading" and "column_number" as needed.
 
     Uses an intentionally simple algorithm.  Only understands tab and
     space characters as indent characters.  Internally detabs to spaces
@@ -3555,7 +3622,7 @@ class _column_wrapper_splitter:
         word = self.word
         write_word = None
         write_newline = False
-        append_c_clip_leading = False
+        append_c_to_leading = False
         empty = self.empty
         newline_string = self.newline_string
 
@@ -3575,7 +3642,7 @@ class _column_wrapper_splitter:
             else:
                 write_word = c
         else:
-            append_c_clip_leading = True
+            append_c_to_leading = True
 
         if write_word:
             if leading:
@@ -3591,9 +3658,9 @@ class _column_wrapper_splitter:
                 self.state(empty, newline_string)
                 write_newline = False
 
-        if append_c_clip_leading:
+        if append_c_to_leading:
             leading.append(c)
-            append_c_clip_leading = False
+            append_c_to_leading = False
 
     def close(self):
         # flush the current word, if any.

@@ -61,6 +61,7 @@ try:
 except ImportError: # pragma: no cover
     have_regex = False
 
+
 def unchanged(o):
     return o
 
@@ -95,7 +96,6 @@ def to_bytes(o): # pragma: no cover
 
 
 _iterate_over_bytes = big.text._iterate_over_bytes
-
 
 
 #
@@ -167,61 +167,10 @@ def finditer_group0(i):
 
 
 
-def toy_multisplit_original(s, separators): # pragma: no cover
-    """
-    The original toy version of multisplit.
-    I keep it around as a *third* implementation of multisplit,
-    to make sure all three agree.  (The new toy_multisplit
-    is usually faster though.)
-
-    s is str or bytes.
-    separators is str or bytes, or an iterable of str or bytes.
-
-    Returns a list equivalent to
-        list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
-
-    (Doesn't support any other arguments--maxsplit etc.)
-    """
-
-    segments = []
-    word = []
-
-    if isinstance(s, bytes):
-        empty = b''
-    else:
-        empty = ''
-
-    if isinstance(separators, (str, bytes)):
-        separators = (separators,)
-    # assert empty not in separators
-
-    def flush_word():
-        segments.append(empty.join(word))
-        word.clear()
-
-    while s:
-        longest_separator_length = 0
-        longest_separator = None
-        for sep in separators:
-            length = len(sep)
-            if s.startswith(sep) and (length > longest_separator_length):
-                longest_separator = sep
-                longest_separator_length = length
-        if longest_separator:
-            flush_word()
-            segments.append(longest_separator)
-            s = s[longest_separator_length:]
-            continue
-        word.append(s[:1])
-        s = s[1:]
-    flush_word()
-
-    return segments
-
-
 def toy_multisplit(s, separators):
     """
-    A toy version of multisplit.
+    A toy version of multisplit, used by the test suite
+    to validate that multisplit is working correctly.
 
     s is a str or bytes.
     separators is a str or iterable of str,
@@ -232,9 +181,10 @@ def toy_multisplit(s, separators):
 
     (Doesn't support any other arguments--maxsplit etc.)
 
-    This is second version of toy_multisplit, a needless
-    (but fun to write) optimized improvement over the original,
-    toy_multisplit_original (lovingly preserved above for posterity).
+    This is my second version of toy_multisplit, a needless
+    (but fun to write) optimized improvement over the original.
+    (You'll find toy_multisplit_original later in the file,
+    lovingly preserved for posterity.)
 
     toy_multisplit is *usually* faster than toy_multisplit_original,
     and it's *way* faster when there are lots of separators--or exactly
@@ -339,10 +289,13 @@ def toy_multisplit(s, separators):
 
     return segments
 
+
 def toy_multisplit_reverse(s, separators):
     """
-    A toy version of multisplit, in reverse mode.
+    A toy version of multisplit in reverse mode.
     (A slightly-hacked version of toy_multisplit.)
+    Like toy_multisplit, used by the test suite
+    to verify that multisplit is working correctly.
 
     s is a str or bytes.
     separators is a str or iterable of str,
@@ -450,6 +403,57 @@ def toy_multisplit_reverse(s, separators):
     segments.reverse()
     return segments
 
+
+def toy_multisplit_original(s, separators): # pragma: no cover
+    """
+    The original toy version of multisplit.
+    I keep it around as a *third* implementation of multisplit,
+    to make sure all three agree.  (The new toy_multisplit
+    is usually faster though.)
+
+    s is str or bytes.
+    separators is str or bytes, or an iterable of str or bytes.
+
+    Returns a list equivalent to
+        list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
+
+    (Doesn't support any other arguments--maxsplit etc.)
+    """
+
+    segments = []
+    word = []
+
+    if isinstance(s, bytes):
+        empty = b''
+    else:
+        empty = ''
+
+    if isinstance(separators, (str, bytes)):
+        separators = (separators,)
+    # assert empty not in separators
+
+    def flush_word():
+        segments.append(empty.join(word))
+        word.clear()
+
+    while s:
+        longest_separator_length = 0
+        longest_separator = None
+        for sep in separators:
+            length = len(sep)
+            if s.startswith(sep) and (length > longest_separator_length):
+                longest_separator = sep
+                longest_separator_length = length
+        if longest_separator:
+            flush_word()
+            segments.append(longest_separator)
+            s = s[longest_separator_length:]
+            continue
+        word.append(s[:1])
+        s = s[1:]
+    flush_word()
+
+    return segments
 
 
 
@@ -1100,12 +1104,12 @@ class BigTextTests(unittest.TestCase):
         The second of *seven* multisplit test suites.
         (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
-        This tests that multisplit, toy_multisplit,
-        toy_multisplit_reverse, and toy_multisplit_original
-        all agree.
+        This tests that multisplit(reverse=False), toy_multisplit, and
+        toy_multisplit_original all agree, and that
+        multisplit(reverse=True) and toy_multisplit_reverse also agree.
 
         (In a later test suite, we use the toy_multisplit*
-        functions to test multisplit.)
+        functions to predict the output multisplit should give us.)
         """
         want_prints = False
         # want_prints = True
@@ -1531,7 +1535,7 @@ class BigTextTests(unittest.TestCase):
 
         multisplit_tester() then independently computes what the output
         *should* be, given those inputs, and confirms that multisplit()
-        returned the correct output.
+        indeed returned that output.
         """
 
         def multisplit_tester(s, separators=None):
@@ -2077,7 +2081,6 @@ class BigTextTests(unittest.TestCase):
             big.multipartition("a x x b y y c", (" x ", " y "), -1)
 
 
-
     def test_wrap_words(self):
         def test(words, expected, margin=79):
             got = big.wrap_words(words, margin)
@@ -2105,6 +2108,7 @@ class BigTextTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             big.wrap_words([])
+
 
     def test_split_text_with_code(self):
         def test(s, expected, **kwargs):
@@ -2157,6 +2161,7 @@ class BigTextTests(unittest.TestCase):
             big.split_text_with_code("howdy.\n\vwhat's this?")
         with self.assertRaises(RuntimeError):
             big.split_text_with_code("howdy.\n    for a in \v range(30):\n        print(a)")
+
 
     def test_merge_columns(self):
         def test(columns, expected, **kwargs):
@@ -2258,7 +2263,6 @@ class BigTextTests(unittest.TestCase):
             )
 
 
-
     def test_text_pipeline(self):
         def test(columns, expected):
             for i in range(2):
@@ -2339,6 +2343,7 @@ class BigTextTests(unittest.TestCase):
             ),
             '    -v|--verbose        Causes the program to produce more output.  Specifying it\n                        multiple times raises the volume of output.'
         )
+
 
     def test_split_title_case(self):
 
@@ -2424,9 +2429,13 @@ class BigTextTests(unittest.TestCase):
         test("WhenIWasATeapot", split_allcaps=False)
         test("WhenIWasATeapot", split_allcaps=True)
 
+
     def test_combine_splits(self):
 
+        # that's right! this is the maximum possible integer.
+        # there are literally no integers greater than this number.
         INT_MAX = 2**256
+        # p.s. shhhhh, don't tell him
 
         def original_combine_splits(s, *splits):
             "Alternate implementation of combine_splits, used for testing."
@@ -2567,9 +2576,7 @@ class BigTextTests(unittest.TestCase):
             bytes_got = list(big.combine_splits(bytes_s, *bytes_split_arrays))
             self.assertEqual(bytes_expected, bytes_got)
 
-
         self.assertIsInstance(big.combine_splits('abc', ['a', 'bc'], ['ab', 'c']), types.GeneratorType)
-
 
         s  = 'abcdefghijklmnopq'
         s1 = [ 'ab', 'cde', 'fghi', 'jklmnop', 'q' ]
@@ -2587,13 +2594,11 @@ class BigTextTests(unittest.TestCase):
             ["aa b", "b cc d", "d ee"],
             )
 
-
         s = "aa bb cc dd ee ff"
         test(s,
             s.split(),
             ["aa bb cc dd ee f", "f"],
             )
-
 
         with self.assertRaises(ValueError):
             list(big.combine_splits("a b c d e",
@@ -2607,7 +2612,6 @@ class BigTextTests(unittest.TestCase):
                 ["a b c d ", "e f g ", "h "],
                 ["a b c ", "d e f ", "g h "],
                 ))
-
 
 
     def test_gently_title(self):
@@ -2654,7 +2658,6 @@ class BigTextTests(unittest.TestCase):
             big.gently_title("the \"string's\" the thing", double_quotes=(b'"',))
         with self.assertRaises(TypeError):
             big.gently_title("the \"string's\" the thing", apostrophes=(b"'",), double_quotes=(b'"',))
-
 
         with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes)
@@ -2769,6 +2772,7 @@ class BigTextTests(unittest.TestCase):
             big.normalize_whitespace(b"a b c d   e", separators=b'')
         with self.assertRaises(ValueError):
             big.normalize_whitespace(b"a b c d   e", separators=[])
+
 
     def test_split_quoted_strings(self):
         def test(s, expected, **kwargs):
@@ -3090,7 +3094,6 @@ class BigTextTests(unittest.TestCase):
                 [],
                 multiline_quotes=('"',)
                 )
-
 
 
     def test_split_delimiters(self):
@@ -3452,7 +3455,7 @@ class BigTextTests(unittest.TestCase):
         def assert_lines_reconstitutes_properly(i):
             for t in i:
                 info, line = t
-                reconstituted_line = info.leading + line + info.trailing
+                reconstituted_line = info.leading + line + info.trailing + info.end
                 self.assertEqual(info.line, reconstituted_line)
                 yield t
 
@@ -3486,7 +3489,7 @@ class BigTextTests(unittest.TestCase):
                 final = line
             if isinstance(end, str) and isinstance(line, bytes):
                 end = end.encode('ascii')
-            info = big.LineInfo(lines, line, line_number, column_number, end=end, **kwargs)
+            info = big.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
             return (info, final)
 
         lines = big.lines("a\nb\nc\nd\ne\n")
@@ -4012,8 +4015,8 @@ for x in range(5): # this is a comment
         def assert_line_reconstitutes_properly(i):
             for t in i:
                 info, line = t
-                reconstituted_line = info.leading + line + info.trailing
-                self.assertEqual(info.line, reconstituted_line)
+                reconstituted_line = info.leading + line + info.trailing + info.end
+                self.assertEqual(info.line, reconstituted_line, f"failed to reconstitute line {info.line_number}: info={info} line={line!r}")
                 yield t
 
         def test(lines, expected, *, tab_width=8):
@@ -4048,7 +4051,7 @@ for x in range(5): # this is a comment
                     end = b'\n'
                 else:
                     end = '\n'
-            return big.text.LineInfo(lines, line, line_number, column_number, end=end, **kwargs)
+            return big.text.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
 
 
         lines = """
@@ -4204,12 +4207,21 @@ outdent
         with self.assertRaises(ValueError):
             next(big.lines([ ('a', 'b', 'c')]))
 
+        with self.assertRaises(ValueError):
+            next(big.lines([ 'x', 'y', 'z' ], separators=('y',)))
+
         with self.assertRaises(TypeError):
             next(big.lines("", line_number=math.pi))
         with self.assertRaises(TypeError):
             next(big.lines("", column_number=math.pi))
         with self.assertRaises(TypeError):
             next(big.lines("", tab_width=math.pi))
+
+        with self.assertRaises(ValueError):
+            list(big.lines_filter_line_comment_lines("", []))
+        with self.assertRaises(TypeError):
+            list(big.lines_filter_line_comment_lines("", math.pi))
+
 
         li = big.lines('')
         with self.assertRaises(TypeError):
@@ -4224,11 +4236,14 @@ outdent
             next(big.LineInfo(li, '', 1, 1, trailing=math.pi))
         with self.assertRaises(TypeError):
             next(big.LineInfo(li, '', 1, 1, end=math.pi))
-
-        with self.assertRaises(ValueError):
-            list(big.lines_filter_line_comment_lines("", []))
         with self.assertRaises(TypeError):
-            list(big.lines_filter_line_comment_lines("", math.pi))
+            next(big.LineInfo(li, '', 1, 1, indent=math.pi))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, indent=None))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, indent='    '))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, match=3))
 
         ## test kwargs
         lines = big.lines('', quark=22)
@@ -4243,6 +4258,7 @@ outdent
         info = big.LineInfo(lines, '', 1, 1, indent=0)
         lines_repr = repr(lines)
         self.assertEqual(repr(info), f"LineInfo(lines={lines_repr}, line_number=1, column_number=1)")
+
 
     def test_int_to_words(self):
         # confirm that flowery has a default of True
@@ -5049,6 +5065,7 @@ outdent
             '1000000000000000000000000000000000000000000000000000000000000000000000000000',
             '1000000000000000000000000000000000000000000000000000000000000000000000000000',
             )
+
 
     def test_encode_strings(self):
         sentinel = object()

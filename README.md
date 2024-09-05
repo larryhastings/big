@@ -191,7 +191,7 @@ And here are five little functions/classes I use all the time:
 
 [`default_clock()`](#default_clock)
 
-[`Delimiter(open, close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
+[`Delimiter(close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
 
 [`dispatch(state_manager='state_manager', *, prefix='', suffix='')`](#dispatchstate_managerstate_manager--prefix-suffix)
 
@@ -1265,6 +1265,10 @@ and also how many spaces to indent each time we enter a subsystem.
 <dl><dd>
 
 Resets the log to its initial state.
+After resetting the log, the log is
+empty except for the initial `"log start"`
+message, the elapsed time is zero, and
+the log has not "entered" any subsystems.
 </dd></dl>
 
 ## `big.scheduler`
@@ -2499,17 +2503,6 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 
 A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
 
-`s` can be `str`, `bytes`, or any iterable of `str` or `bytes`.
-
-If `s` is neither `str` nor `bytes`, `s` must be an iterable;
-`lines` yields successive elements of `s` as lines.  All objects
-yielded by this iterable should be homogeneous, either `str` or `bytes`.
-
-If `s` is `str` or `bytes`, and `separators` is `None`, `lines`
-will split `s` at line boundaries and yield those lines, including
-empty lines.  If `separators` is not `None`, it must be an iterable
-of strings of the same type as `s`; `lines` will split `s` using
-[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse).
 
 When iterated over, yields 2-tuples:
 
@@ -2517,37 +2510,81 @@ When iterated over, yields 2-tuples:
      (info, line)
 ```
 
-`info` is a `LineInfo` object, which contains three fields by
-default:
+where `info` is a `LineInfo` object, and `line` is a `str` or `bytes`.
 
-* `line` - the original line, never modified
-* `line_number` - the line number of this line, starting at the
-  `line_number` passed in and adding 1 for each successive line
-* `column_number` - the column this line starts on,
-  starting at the `column_number` passed in, and adjusted when
-  characters are removed from the beginning of `line`
-* `end` - the end-of-line string stripped from the end of
-  this line, if there was one
+`s` can be `str`, `bytes`, or any iterable of `str` or `bytes`.
 
-The `tab_width` keyword-only parameter is an integer, representing
-how many spaces wide a tab character should be.  It isn't used by
-`lines` itself; instead, it's stored internally, and may be used by
-lines modifier functions (e.g. `lines_convert_tabs_to_spaces`,
-`lines_strip_indent`).  Similarly, all keyword arguments passed
-in via `kwargs` are stored internally and can be accessed by
-user-defined lines modifier functions.
+If s is neither str nor bytes, s must be an iterable;
+lines yields successive elements of s as lines.  All objects
+yielded by this iterable should be homogeneous, either str or bytes.
+
+`separators` is either `None` or an iterable of separator strings,
+as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
+it will be split using `multisplit`, using these separators.  If
+`separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
+`s` will be split at linebreak characters.
+
+`line_number` is the starting line number given to the first `LineInfo`
+object.  This number is then incremented for every subsequent line.
+
+`column_number` is the starting column number given to every `LineInfo`
+object.  This number represents the leftmost column of every line.
+
+`tab_width` isn't used by lines itself, but is stored internally and
+may be used by other lines modifier functions (e.g. `lines_strip_indent`,
+`lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
+in via kwargs are stored internally and can be accessed by user-defined
+lines modifier functions.
+
+You can pass in an instance of a subclass of `bytes` or `str`
+for `s` and elements of `separators`, but the base class
+for both must be the same (`str` or `bytes`).  `lines` will
+only yield `str` or `bytes` objects for `line`.
+
+Composable with all the `lines_` modifier functions in the `big.text` module.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `LineInfo(line, line_number, column_number, **kwargs)`
+#### `LineInfo(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`
 
 <dl><dd>
 
-The first object yielded by a
+The first object in the 2-tuple yielded by a
 [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 iterator, containing metadata about the line.
+Every parameter to the constructor is stored as
+an attribute of the new `LineInfo` object using
+the same identifier.
+
+`line` is the original unmodified line, split
+from the original `s` input to `lines`.  Note
+that `line` includes the trailing newline character,
+if any.
+
+`line_number` is the line number of this line.
+`
+`column_number` is the starting column of the
+accompanying `line` string (the second entry
+in the 2-tuple yielded by `lines`).
+
+`leading` and `trailing` are strings that have
+been stripped from the beginning or end of the
+original `line`, if any.  (Not counting the
+line-terminating linebreak character.)
+
+`end` is the linebreak character that terminated
+the current line, if any.
+
+`indent` is the indent level of the current line,
+represented as an integer.  See `lines_strip_indent`.
+If the indent level hasn't been measured yet this
+should be `0`.
+
+`match` is the `re.Match` object that matched this
+line, if any.  See `lines_grep`.
+
 You can add your own fields by passing them in
 via `**kwargs`; you can also add new attributes
 or modify existing attributes as needed from
@@ -2555,6 +2592,45 @@ inside a "lines modifier" function.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+</dd></dl>
+
+#### `LineInfo.clip_leading(line, s)`
+
+<dl><dd>
+
+Clip the leading substring `s` from `line`.
+
+`s` may be either a string (`str` or `bytes`) or an `int`.
+If `s` is a string, it must match the leading substring
+of `line` you wish clipped.  If `s` is an `int`, it should
+representing the number of characters you want clipped
+from the beginning of `s`.
+
+Returns `line` with `s` clipped; also appends
+the clipped portion to `self.leading`, and updates
+`self.column_number` to represent the column number
+where `line` now starts.  (If the clipped portion of
+`line` contains tabs, it's detabbed using `lines.tab_width`
+and the `detab` method on the clipped substring before it
+is measured.)
+
+</dd></dl>
+
+#### `LineInfo.clip_trailing(line, s)`
+
+<dl><dd>
+
+Clip the trailing substring `s` from `line`.
+
+`s` may be either a string (`str` or `bytes`) or an `int`.
+If `s` is a string, it must match the trailing substring
+of `line` you wish clipped.  If `s` is an `int`, it should
+representing the number of characters you want clipped
+from the end of `s`.
+
+Returns `line` with `s` clipped; also appends
+the clipped portion to `self.trailing`.
+
 </dd></dl>
 
 #### `lines_convert_tabs_to_spaces(li)`
@@ -2640,6 +2716,14 @@ For more information, see the deep-dive on
 A lines modifier function.  Strips trailing whitespace from the
 lines of a "lines iterator".
 
+`separators` is an iterable of separators, like the argument
+to `multistrip`.  The default value is `None`, which means
+`lines_rstrip` strips all trailing whitespace characters.
+
+All characters removed are clipped to `info.trailing`
+as appropriate.  If the line is non-empty before stripping, and
+empty after stripping, the entire line is clipped to `info.trailing`.
+
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
@@ -2676,6 +2760,32 @@ to `multistrip`.  The default value is `None`, which means
 All characters are clipped to `info.leading` and `info.trailing`
 as appropriate.  If the line is non-empty before stripping, and
 empty after stripping, the entire line is clipped to `info.trailing`.
+
+For more information, see the deep-dive on
+[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+</dd></dl>
+
+#### `lines_strip_indent(li)`
+
+<dl><dd>
+
+A lines modifier function.  Strips leading whitespace and tracks
+the indent level.
+
+The indent level is stored in the `LineInfo` object's attribute
+`indent`.  `indent` is an integer, the ordinal number of the current
+indent; if the text has been indented three times, `indent` will be 3.
+
+Strips any leading whitespace from the line, updating the `LineInfo`
+attributes `leading` and `column_number` as needed.
+
+Uses an intentionally simple algorithm.
+Only understands tab and space characters as indent characters.
+Internally detabs to spaces first for consistency, using the
+`tab_width` passed in to lines.
+
+You can only dedent out to a previous indent.
+Raises `IndentationError` if there's an illegal dedent.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
@@ -2718,31 +2828,6 @@ and
   handles comment characters anywhere in the line, although it can ignore
   comments inside quoted strings.  It always yields the line, whether or
   not it's truncated the line.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip_indent(li)`
-
-<dl><dd>
-
-A lines modifier function.  Automatically measures and strips indents.
-
-Sets two new fields on the associated `LineInfo` object for every line:
-
-* `indent` - an integer indicating how many indents it's observed
-* `leading` - the leading whitespace string that was removed
-
-Also updates LineInfo.column_number as needed.
-
-Uses an intentionally simple algorithm.
-Only understands tab and space characters as indent characters.
-Internally detabs to spaces first for consistency, using the
-`tab_width` passed in to lines.
-
-You can only dedent out to a previous indent.
-Raises `IndentationError` if there's an illegal dedent.
 
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
@@ -5663,47 +5748,74 @@ in the **big** test suite.
 
 *2024/09/05*
 
-Lots of changes this time!  Sorted by function/class name.
+Lots of changes this time!  Most of 'em in the `big.text`
+module, but plenty of other modules are involved too.
 
-**big** has a new module: `deprecated`.  Deprecated versions of
-functions and classes are moved into here.  Note that the contents
-of `deprecated` are not automatically imported into `big.all`.
+**big** even has a new module: `deprecated`.  Deprecated
+functions and classes get moved into this module.  Note that
+the contents of `deprecated` are not automatically imported
+into `big.all`.
 
-(Also, updated copyright notices to 2024.)
-
------
-
-Here's a list of all the functions/classes with breaking changes:
-
-> `Delimiter`
->
-> `LineInfo`
->
-> `lines_strip_line_comments`
->
-> `split_delimiters`
->
-> `split_quoted_strings`
+</dd></dl>
 
 -----
 
-Here's a list of all the renamed functions:
+<dl><dd>
 
-> `lines_filter_comment_lines` -> `lines_filter_line_comment_lines`
->
-> `lines_strip_comments` -> `lines_strip_line_comments`
->
-> `parse_delimiters` -> `split_delimiters`
+The following functions and classes have breaking changes:
+
+<dl><dd>
+
+`Delimiter`
+
+`LineInfo`
+
+`lines_strip_line_comments`
+
+`split_delimiters`
+
+`split_quoted_strings`
+
+</dd></dl>
+
+</dd></dl>
 
 -----
 
-Here's a list of all the new functions:
+<dl><dd>
 
-> `combine_splits`
->
-> `encode_strings`
->
-> `split_title_case`
+These functions have been renamed:
+
+<dl><dd>
+
+`lines_filter_comment_lines` -> `lines_filter_line_comment_lines`
+
+`lines_strip_comments` -> `lines_strip_line_comments`
+
+`parse_delimiters` -> `split_delimiters`
+
+
+</dd></dl>
+
+</dd></dl>
+
+-----
+
+<dl><dd>
+
+**big** has three new functions:
+
+<dl><dd>
+
+`combine_splits`
+
+`encode_strings`
+
+`split_title_case`
+
+</dd></dl>
+
+</dd></dl>
 
 -----
 
@@ -5748,6 +5860,46 @@ Example:
 
 </dd></dl>
 
+#### `Delimiter`
+
+> This API has breaking changes.
+
+<dl><dd>
+
+`Delimiter` is a simple data class, representing information about
+delimiters to `split_delimiters` (previously `parse_delimiters`).
+`split_delimiters` has changed, and some of those changes are
+reflected in the `Delimiter` object; also, some changes to `Delimiter`
+are simply better API choices.
+
+The old `Delimiter` object is deprecated but still available,
+as `big.deprecated.Delimiter`.  It should only be used with
+`big.deprecated.parse_delimiters`, which is also deprecated.
+`big.deprecated.Delimiter` will be removed when
+`big.deprecated.parse_delimiters` is removed, which will be
+no sooner than September 2025.
+
+Changes:
+* The first argument to the old `Delimiter` object was `open`,
+  and was stored as the `open` attribute.  These have both been
+  completely removed.  Now, the "open delimiter" is specified
+  as a key in a dictionary of delimiters, mapping open delimiters
+  to `Delimiter` objects.
+* The old `Delimiter` object had a boolean `backslash` attribute;
+  if it was True, that delimiter allows escaping using a backslash.
+  Now `Delimiter` has an `escape=c` parameter and attribute,
+  where `c` is the escape character you want to use inside that
+  set of delimiters.
+* `Delimiter` also now has two new attributes, `quoting` and
+  `multiline`.  These default to `False` and `True` respectively;
+  you can specify values for these with keyword-only arguments
+  to the constructor.
+* The new `Delimiter` object is read-only after construction,
+  and is hashable.
+
+</dd></dl>
+
+
 #### `encode_strings`
 
 <dl><dd>
@@ -5762,7 +5914,7 @@ or `str` object.  Also, now explicitly supports `set`.
 
 <dl><dd>
 
-Minor change to behavior.  If the `o` you pass in is a `float`,
+Minor behavior change.  If the `o` you pass in is a `float`,
 or can be converted to `float` (but couldn't be converted directly
 to an `int`), `get_int_or_float` will experimentally convert that
 `float` to an `int`.  If the resulting `int` compares equal to that
@@ -5770,11 +5922,12 @@ to an `int`), `get_int_or_float` will experimentally convert that
 
 For example, `get_int_or_float("13.5")` still returns `13.5`
 (a `float`), but `get_int_or_float("13.0")` now returns `13`
-(an `int`).
+(an `int`).  (Previously, `get_int_or_float("13.0")` would
+have returned `13.0`.)
 
-This better represents the stated purpose of the function;
-it prefers ints to floats.  And since the int and float are
-interchangable I assert this is totally backwards compatible.
+This better represents the stated aesthetic of the function--it
+prefers ints to floats.  And since the int is exactly equal to
+the float, I assert this is completely backwards compatible.
 
 </dd></dl>
 
@@ -5853,6 +6006,25 @@ dynamically.  Now all fields are pre-added.  (This makes
 the CPython 3.13 runtime happier; it really wants you to
 set *all* your class's attributes in its `__init__`.)
 
+Minor breaking change: the original string stored in the
+`line` attribute now includes the linebreak character, if any.
+This means concatenating all the `info.line` strings
+will reconstruct the original `s` passed in to `lines`.
+
+New feature: while some methods used to update the `leading`
+attribute when they clipped leading text from the line,
+the "lines modifiers" are now very consistent about updating
+`leading`, and the new symmetrical attribute `trailing`.
+
+New feature: `LineInfo` now has an `end` attribute,
+which contains the end-of-line character that ended this line.
+
+These three attributes allow us to assert a new invariant:
+as long as you _modify_ the contents of `line` (e.g.
+turning tabs into spaces),
+
+    info.leading + line + info.trailing + info.end == info.line
+
 `LineInfo` objects now always have these attributes:
   * `lines`, which contains the base lines iterator.
   * `line`, which contains the original unmodified line.
@@ -5880,13 +6052,14 @@ set *all* your class's attributes in its `__init__`.)
 `LineInfo` has two new methods: `clip_leading`
 and `clip_trailing`.  These methods clip a leading or
 trailing substring from the current `line`, and transfer
-it to the relevant field in `LineInfo`, maintaining all
-the guaranteed invariants, and updating all related `LineInfo`
-fields (like `column_number`).
+it to the relevant field in `LineInfo` (either `leading` or
+`trailing`).  `clip_leading` also updates the `column_number`
+attribute.
 
-Conceptually, "clip" is different from "strip", in that "strip"
-removes things and throws them away, whereas "clip" removes things
-and puts them somewhere else.
+The name "clip" was chosen deliberately to be distinct from "strip".
+"strip" functions on strings remove substrings and throws them away;
+my "clip" functions on strings removes substrings and puts them
+somewhere else.
 
 </dd></dl>
 
@@ -5925,6 +6098,12 @@ This function has been renamed `lines_strip_line_comments` and
 rewritten, see below.  The old deprecated version will be
 available at `big.deprecated.lines_strip_comments` until at
 least September 2025.
+
+Note that the old version of `line_strip_comments` still uses
+the current version of `LineInfo`, so use of this deprecated
+function is still exposed to those breaking changes.
+(For example, `LineInfo.line` now includes the linebreak character
+that terminated the current line, if any.)
 
 </dd></dl>
 
@@ -6029,13 +6208,13 @@ including one minor semantic change.
 Cleaned up `Scheduler._next`, the internal method call
 that implements the heart of the scheduler.  The only externally
 visible change: the previous version would call `sleep(0)` every
-time it yielded an event.  On modern operating systems this usually
+time it yielded an event.  On modern operating systems this should
 yields the rest of the current thread's current time slice back
-to the OS's scheduler; this can make multitasking smoother,
+to the OS's scheduler.  This can make multitasking smoother,
 particularly in Python programs.  But this is too opinionated for
-library code--if you want a `sleep(0)` there you can call it yourself
-when the `Scheduler` object yields to you.  I've restructured the
-code and eliminated this extraneous `sleep(0)`.
+library code--if you want a `sleep(0)` there, by golly, you can
+call that yourself when the `Scheduler` object yields to you.
+I've restructured the code and eliminated this extraneous `sleep(0)`.
 
 Also, rewrote big chunks of the test suite (`tests/test_scheduler.py`).
 The multithreaded tests are now much better synchronized, while
@@ -6068,7 +6247,8 @@ Changes:
   raise `ValueError`.)  This includes quote marks; if you
   don't want quoted strings to span multiple lines, it's up
   to you to detect it and react (e.g. raise an exception).
-* `parse_delimiters` manually parsed the input string
+* The internal implementation has changed completely.
+  `parse_delimiters` manually parsed the input string
   character by character.  `split_delimiters` uses `multisplit`,
   so it zips past the uninteresting characters and only examines
   the delimiters and escape characters.  It's always faster,
@@ -6077,20 +6257,8 @@ Changes:
   close delimiters, and the escape string may now all be
   any nonzero length.  (In the face of ambiguity,
   `split_delimiters` will always choose the longer delimiter.)
-* The old `Delimiter` object used with `parse_delimiters`
-  has a boolean `backslash` attribute; if it was True, that
-  delimiter allows escaping using a backslash.  The new
-  `Delimiter` class used with `split_delimiters` replaces that
-  with an `escape=c` attribute, where `c` is the escape
-  character you want to use with that set of delimiters.
-  All the predefined `Delimiter` values have been updated
-  to match.
-* As mentioned above, the new `Delimiter` object doesn't
-  have an `open` attribute.  The open delimiter is the key
-  in the `delimiters` dict, mapping to the appropriate
-  `Delimiter` object.
-* The new `Delimiter` object is read-only after construction.
 
+See also changes to `Delimiter`.
 
 </dd></dl>
 
@@ -6189,6 +6357,9 @@ the `StateMachine` API leaves locking up to you.)
 
 _p.s. I'm getting close to declaring big as being version 1.0._
 _I don't want to do it until I'm done revising the APIs._
+
+_p.p.s. Updated copyright notices to 2024._
+
 
 </dd></dl>
 

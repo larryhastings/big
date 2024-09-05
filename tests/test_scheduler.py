@@ -103,14 +103,33 @@ class ScheduleTesterBase(unittest.TestCase):
     @BoundInnerClass
     class MockTimeThread:
         """
-        This is a
-        This class is used in conjunction with the MockRegulator
-        for simulated time.
+        This object facilitates testing the Scheduler object
+        with a MockRegulator.  MockRegulator uses simulated
+        time rather than actual wall clock time.  That's good
+        for testing; it helps prevent race conditions during
+        testing, and the test can run at full CPU speed rather
+        than waiting for arbitrary amounts.
 
-        It runs an independent thread with its own work queue.
-        Start and stop this thread with the "start" and "stop"
-        methods.  Queue work with the "block", "schedule", and
-        "advance" methods.
+        The problem is: how do you advance the clock of the
+        MockRegulator?  MockTimeThread will do that for you.
+        It creates your test Scheduler object for you, configured
+        to use a MockRegulator for time.  It also creates a worker
+        thread which injects time into the Scheduler for you.
+
+        You send the worker thread instructions on what to do,
+        then run your tests with the Scheduler on the "main"
+        thread.
+
+        Start and stop the worker thread with the "start" and
+        "stop" methods.  Queue work for the worker thread with
+        the "wait", "schedule", and "advance" methods.  The
+        main thread can wait until the worker thread has finished
+        all its work with the "flush" method.
+
+        The only methods on this object called from the worker
+        thread are those that start with a single underscore
+        ("_thread" and "_wait").  All other methods are called
+        from the main thread.
         """
 
         def __init__(self, test_case):
@@ -142,14 +161,16 @@ class ScheduleTesterBase(unittest.TestCase):
 
         def _wait(self):
             """
-            Block until the main thread
-            is waiting for the next event.
+            Called by the worker thread.
 
-            (Technically, block until at least one thread called
-            sleep on our mock regulator.)
+            Block until the main thread is running the Scheduler object
+            and waiting for the next event.
+
+            (Technically, this method blocks until at least one thread
+            has called sleep on our mock regulator.)
 
             Uses a busy-wait rather than properly sleeping.
-            This is only test code, and this version is easy
+            This is only test code--and this version was easy
             to get right.
             """
             r = self.scheduler.regulator
@@ -157,11 +178,11 @@ class ScheduleTesterBase(unittest.TestCase):
                 time.sleep(0.001)
 
         def wait(self):
-            "Tell the worker thread to call self._wait()."
+            "Tell the worker thread to block until the main thread is asleep."
             self.queue.put(self._wait)
 
         def flush(self):
-            "Wait until all tasks currently in the worker thread queue have been completed."
+            "Block until all tasks currently in the worker thread queue have been completed."
             event = threading.Event()
             self.queue.put(event.set)
             event.wait()
@@ -173,13 +194,21 @@ class ScheduleTesterBase(unittest.TestCase):
             self.queue.put(e)
 
         def advance(self, t):
-            "Tell the worker thread to advance the scheduler's MockRegulator by t."
+            "Tell the worker thread to advance the scheduler's MockRegulator by time t."
             self.queue.put(t)
 
         def assert_ready(self, *events):
             """
+            Asserts that a list of events are currently ready, and are yielded
+            by the Schedule object in a specific order.
+
+            Pass in one or more events; assert_ready will block until one event
+            is ready, then assert that all events passed in are ready, in that order.
+
             It's legal to call assert_ready with no arguments,
-            in which case it just checks that no events are waiting.
+            in which case it asserts that no events are waiting.
+
+            Uses unittest.assertEqual.
             """
 
             # if we expect at least one event,
