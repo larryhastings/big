@@ -33,7 +33,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import big
 
-__all__ = []
+__all__ = ['_license']
 
 from . import boundinnerclass
 __all__.extend(boundinnerclass.__all__)
@@ -81,3 +81,12 @@ from .text import *
 from . import time
 __all__.extend(time.__all__)
 from .time import *
+
+__version__ = big.__version__
+__all__.append('__version__')
+
+VersionTuple = big.VersionTuple
+__all__.append('VersionTuple')
+
+__version_tuple__ = big.__version_tuple__
+__all__.append('__version_tuple__')
