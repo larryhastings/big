@@ -2220,7 +2220,7 @@ deep-dive.
 
 <dl><dd>
 
-Equivalent to [`bytes_linebreaks`](#bytes_linebreaks) without `'\r\n'`.
+Equivalent to [`bytes_linebreaks`](#bytes_linebreaks) with `'\r\n'` removed.
 
 </dd></dl>
 
@@ -2228,7 +2228,8 @@ Equivalent to [`bytes_linebreaks`](#bytes_linebreaks) without `'\r\n'`.
 <dl><dd>
 
 A tuple of `bytes` objects, representing every line-breaking whitespace
-character recognized by the Python `bytes` object.
+character recognized by the Python `bytes` object.  (`bytes.isspace`,
+`bytes.split`, etc will tell you which characters are considered whitespace...)
 
 Useful as a `separator` argument for **big** functions that accept one,
 e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
@@ -2497,56 +2498,6 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 </dd></dl>
 
 
-#### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
-
-<dl><dd>
-
-A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
-
-
-When iterated over, yields 2-tuples:
-
-```
-     (info, line)
-```
-
-where `info` is a `LineInfo` object, and `line` is a `str` or `bytes`.
-
-`s` can be `str`, `bytes`, or any iterable of `str` or `bytes`.
-
-If s is neither str nor bytes, s must be an iterable;
-lines yields successive elements of s as lines.  All objects
-yielded by this iterable should be homogeneous, either str or bytes.
-
-`separators` is either `None` or an iterable of separator strings,
-as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
-it will be split using `multisplit`, using these separators.  If
-`separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
-`s` will be split at linebreak characters.
-
-`line_number` is the starting line number given to the first `LineInfo`
-object.  This number is then incremented for every subsequent line.
-
-`column_number` is the starting column number given to every `LineInfo`
-object.  This number represents the leftmost column of every line.
-
-`tab_width` isn't used by lines itself, but is stored internally and
-may be used by other lines modifier functions (e.g. `lines_strip_indent`,
-`lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
-in via kwargs are stored internally and can be accessed by user-defined
-lines modifier functions.
-
-You can pass in an instance of a subclass of `bytes` or `str`
-for `s` and elements of `separators`, but the base class
-for both must be the same (`str` or `bytes`).  `lines` will
-only yield `str` or `bytes` objects for `line`.
-
-Composable with all the `lines_` modifier functions in the `big.text` module.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
 #### `LineInfo(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`
 
 <dl><dd>
@@ -2575,7 +2526,9 @@ original `line`, if any.  (Not counting the
 line-terminating linebreak character.)
 
 `end` is the linebreak character that terminated
-the current line, if any.
+the current line, if any.  If the `s` passed in to
+`lines` is an iterator yielding strings, `end`
+will always be an empty string.
 
 `indent` is the indent level of the current line,
 represented as an integer.  See `lines_strip_indent`.
@@ -2632,6 +2585,62 @@ Returns `line` with `s` clipped; also appends
 the clipped portion to `self.trailing`.
 
 </dd></dl>
+
+
+#### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
+
+<dl><dd>
+
+A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
+
+
+When iterated over, yields 2-tuples:
+
+```
+     (info, line)
+```
+
+where `info` is a `LineInfo` object, and `line` is a `str` or `bytes`.
+
+`s` can be `str`, `bytes`, or an iterable.
+
+If `s` is neither `str` nor `bytes`, `s` must be an iterable.
+The iterable should either yield individual strings, which is the
+line, or it should yield a tuple containing two strings, in which case
+the strings should be the line and the line-terminating newline respectively.
+All "string" objects yielded by this iterable should be homogeneous,
+either `str` or `bytes`.
+
+`separators` should either be `None` or an iterable of separator strings,
+as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
+it will be split using `multisplit`, using these separators.  If
+`separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
+`s` will be split at linebreak characters.  (If `s` is neither `str` nor `bytes`,
+`separators` must be `None`.)
+
+`line_number` is the starting line number given to the first `LineInfo`
+object.  This number is then incremented for every subsequent line.
+
+`column_number` is the starting column number given to every `LineInfo`
+object.  This number represents the leftmost column of every line.
+
+`tab_width` isn't used by lines itself, but is stored internally and
+may be used by other lines modifier functions (e.g. `lines_strip_indent`,
+`lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
+in via kwargs are stored internally and can be accessed by user-defined
+lines modifier functions.
+
+You can pass in an instance of a subclass of `bytes` or `str`
+for `s` and elements of `separators`, but the base class
+for both must be the same (`str` or `bytes`).  `lines` will
+only yield `str` or `bytes` objects for `line`.
+
+Composable with all the `lines_` modifier functions in the `big.text` module.
+
+For more information, see the deep-dive on
+[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+</dd></dl>
+
 
 #### `lines_convert_tabs_to_spaces(li)`
 
@@ -5095,11 +5104,10 @@ if you need functionality
 Note that if you write your own lines modifier function,
 and it removes text from the beginning the line, you must
 update `column_number` in the `LineInfo` object manually--it
-doesn't happen automatically.  Note that you should always
-*add to* `column_number`, don't just set it.  (A previous
-lines modifier might have already incremented it.)  That's
-best practice for any field in `LineInfo`; you should amend
-it, rather than set it outright.
+doesn't happen automatically.  The easiest way to handle this
+is also the best way: whenever clipping text from the beginning
+or end of the line, use the `clip_leading` and `clip_trailing`
+methods on the `LineInfo` object.
 
 Speaking of best practices for lines modifier functions,
 it's also best practice to *modify* the *existing*
@@ -5120,7 +5128,7 @@ That is, you can recreate the original line by concatenating
 the "leading" string, the modified line, the "trailing" string,
 and the "end" string.
 
-However, this is no longer true when using lines modifiers that
+Of course, this won't be true if you use lines modifiers that
 replace characters in the line.  For example, `lines_convert_tabs_to_spaces`
 replaces tab characters with one or more space characters.
 If the original line contains tabs, obviously the above invariant
@@ -5746,21 +5754,16 @@ in the **big** test suite.
 
 <dl><dd>
 
-*2024/09/05*
+*2024/09/06*
 
-Lots of changes this time!  Most of 'em in the `big.text`
-module, but plenty of other modules are involved too.
+Lots of changes this time!  Most of 'em are in the `big.text`
+module, particularly the `lines` and _lines modifier_
+functions.  But plenty of other modules got in on the fun too.
 
 **big** even has a new module: `deprecated`.  Deprecated
 functions and classes get moved into this module.  Note that
 the contents of `deprecated` are not automatically imported
 into `big.all`.
-
-</dd></dl>
-
------
-
-<dl><dd>
 
 The following functions and classes have breaking changes:
 
@@ -5778,32 +5781,21 @@ The following functions and classes have breaking changes:
 
 </dd></dl>
 
-</dd></dl>
-
------
-
-<dl><dd>
 
 These functions have been renamed:
 
 <dl><dd>
 
-`lines_filter_comment_lines` -> `lines_filter_line_comment_lines`
+`lines_filter_comment_lines` is now `lines_filter_line_comment_lines`
 
-`lines_strip_comments` -> `lines_strip_line_comments`
+`lines_strip_comments` is now `lines_strip_line_comments`
 
-`parse_delimiters` -> `split_delimiters`
-
-
-</dd></dl>
+`parse_delimiters` is now `split_delimiters`
 
 </dd></dl>
 
------
 
-<dl><dd>
-
-**big** has three new functions:
+Finally, **big** has three new functions:
 
 <dl><dd>
 
@@ -5887,8 +5879,8 @@ Changes:
   to `Delimiter` objects.
 * The old `Delimiter` object had a boolean `backslash` attribute;
   if it was True, that delimiter allows escaping using a backslash.
-  Now `Delimiter` has an `escape=c` parameter and attribute,
-  where `c` is the escape character you want to use inside that
+  Now `Delimiter` has an `escape` parameter and attribute,
+  specifying the escape string you want to use inside that
   set of delimiters.
 * `Delimiter` also now has two new attributes, `quoting` and
   `multiline`.  These default to `False` and `True` respectively;
@@ -5964,10 +5956,10 @@ now enforces that single-quoted strings can't span lines,
 and multi-quoted strings must be closed before the end of
 the last line.
 
-Minor optimization: for every line, it used to `lstrip` the line,
-then use a regular expression to see if the line started with one
-of the comment characters.  Now the regular expression skips the
-leading whitespace automatically.
+Minor optimization: for every line, it used to `lstrip` a copy of
+the line, then use a regular expression to see if the line started
+with one of the comment characters.  Now the regular expression
+itself skips past any leading whitespace.
 
 </dd></dl>
 
