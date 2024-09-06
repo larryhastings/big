@@ -3570,6 +3570,7 @@ to determine what are upper- and lower-case
 characters.  This means it only recognizes the ASCII
 upper- and lower-case letters for bytes strings.
 
+</dd></dl>
 
 #### `str_linebreaks`
 
