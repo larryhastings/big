@@ -2760,13 +2760,23 @@ class lines:
 
         When iterated over, yields 2-tuples:
             (info, line)
-        where info is a LineInfo object, and line is a str or bytes.
+        where info is a LineInfo object, and line is a str or bytes object.
 
-        "s" can be str, bytes, or any iterable of str or bytes.
+        s can be str, bytes, or an iterable.
 
-        If s is neither str nor bytes, s must be an iterable;
-        lines yields successive elements of s as lines.  All objects
-        yielded by this iterable should be homogeneous, either str or bytes.
+        If s is neither str nor bytes, s must be an iterable.
+        The iterable should either yield individual strings, which is the
+        line, or it should yield a tuple containing two strings, in which case
+        the strings should be the line and the line-terminating newline respectively.
+        All "string" objects yielded by this iterable should be homogeneous,
+        either str or bytes.
+
+        `separators` should either be `None` or an iterable of separator strings,
+        as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
+        it will be split using `multisplit`, using these separators.  If
+        `separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
+        `s` will be split at linebreak characters.  (If `s` is neither `str` nor `bytes`,
+        `separators` must be `None`.)
 
         separators is either None or an iterable of separator strings,
         as per the separators argument to multisplit.  If s is str or bytes,

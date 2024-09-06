@@ -183,6 +183,8 @@ And here are five little functions/classes I use all the time:
 
 [`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf)
 
+[`combine_splits(s, *split_arrays)`](#combine_splitss-split_arrays)
+
 [`CycleError()`](#cycleerror)
 
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
@@ -191,7 +193,7 @@ And here are five little functions/classes I use all the time:
 
 [`default_clock()`](#default_clock)
 
-[`Delimiter(close, *, backslash=False, nested=True)`](#delimiteropen-close--backslashfalse-nestedtrue)
+[`Delimiter(close, *, escape='', multiline=True, quoting=False)`](#delimiterclose--escape-multilinetrue-quotingfalse)
 
 [`dispatch(state_manager='state_manager', *, prefix='', suffix='')`](#dispatchstate_managerstate_manager--prefix-suffix)
 
@@ -245,25 +247,29 @@ And here are five little functions/classes I use all the time:
 
 [`linebreaks_without_crlf`](#linebreaks_without_crlf)
 
+[`LineInfo(lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+
 [`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
 [`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
 
-[`lines_filter_comment_lines(li, comment_separators)`](#lines_filter_comment_linesli-comment_separators)
+[`lines_filter_empty_lines(li)`](#lines_filter_empty_linesli)
+
+[`lines_filter_line_comment_lines(li, comment_separators)`](#lines_filter_line_comment_linesli-comment_separators)
 
 [`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
 
-[`lines_grep(li, pattern, *, invert=False, flags=0)`](#lines_grepli-pattern--invertfalse-flags0)
+[`lines_grep(li, pattern, *, invert=False, flags=0, match='match')`](#lines_grepli-pattern--invertfalse-flags0)
 
-[`lines_rstrip(li)`](#lines_rstripli)
+[`lines_rstrip(li, separators=None)`](#lines_rstripli-separatorsnone)
 
-[`lines_sort(li, *, reverse=False)`](#lines_sortli--reversefalse)
+[`lines_sort(li, *, key=None, reverse=False)`](#lines_sortli--keynone-reversefalse)
 
-[`lines_strip(li)`](#lines_stripli)
-
-[`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_commentsli-comment_separators--quotes--backslash-triple_quotestrue)
+[`lines_strip(li, separators=None)`](#lines_stripli-separatorsnone)
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
+
+[`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
 
 [`Log(clock=None)`](#log-clocknone)
 
@@ -285,7 +291,7 @@ And here are five little functions/classes I use all the time:
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
 
-[`parse_delimiters(s, delimiters=None)`](#parse_delimiterss-delimitersNone)
+[`split_delimiters(s, delimiters={...}, *, state=())`](#split_delimiterss-delimiters--state)
 
 [`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
 
@@ -331,9 +337,11 @@ And here are five little functions/classes I use all the time:
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
-[`split_quoted_strings(s, quotes=('"', "'"), *, escape="\\", state='')`](#split_quoted_stringss-quotes---escape-state)
+[`split_quoted_strings(s, quotes=('"', "'"), *, escape='\\', multiline_quotes=(), state='')`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+
+[`split_title_case(s, *, split_allcaps=True)`](split_title_cases--split_allcapstrue)
 
 [`State()`](#state)
 
@@ -2282,7 +2290,9 @@ characters from `s`.  `''.join(split_array)` must recreate `s`.
 in the split arrays, and makes no attempt to infer
 stripped characters.  (So, don't use the string's `.split`
 method if you want to use `combine_splits`.  Instead, consider
-big's `multisplit` with `keep=True` or `keep=ALTERNATING`.)
+big's
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+with `keep=True` or `keep=ALTERNATING`.)
 
 </dd></dl>
 
@@ -2291,7 +2301,7 @@ big's `multisplit` with `keep=True` or `keep=ALTERNATING`.)
 <dl><dd>
 
 Class representing a delimiter for
-`split_delimiters`.
+[`split_delimiters`](#split_delimiterss-delimiters--state).
 
 `close` is the closing delimiter character.  It must be a valid
 string or bytes object, and cannot be a backslash ('"\\"' or `b"\\"`).
@@ -2498,7 +2508,7 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 </dd></dl>
 
 
-#### `LineInfo(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`
+#### `LineInfo(lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`
 
 <dl><dd>
 
@@ -2531,7 +2541,7 @@ the current line, if any.  If the `s` passed in to
 will always be an empty string.
 
 `indent` is the indent level of the current line,
-represented as an integer.  See `lines_strip_indent`.
+represented as an integer.  See [`lines_strip_indent`](#lines_strip_indentli).
 If the indent level hasn't been measured yet this
 should be `0`.
 
@@ -2600,7 +2610,9 @@ When iterated over, yields 2-tuples:
      (info, line)
 ```
 
-where `info` is a `LineInfo` object, and `line` is a `str` or `bytes`.
+where `info` is a
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+object, and `line` is a `str` or `bytes` object.
 
 `s` can be `str`, `bytes`, or an iterable.
 
@@ -2618,14 +2630,16 @@ it will be split using `multisplit`, using these separators.  If
 `s` will be split at linebreak characters.  (If `s` is neither `str` nor `bytes`,
 `separators` must be `None`.)
 
-`line_number` is the starting line number given to the first `LineInfo`
+`line_number` is the starting line number given to the first
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
 object.  This number is then incremented for every subsequent line.
 
-`column_number` is the starting column number given to every `LineInfo`
+`column_number` is the starting column number given to every
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
 object.  This number represents the leftmost column of every line.
 
 `tab_width` isn't used by lines itself, but is stored internally and
-may be used by other lines modifier functions (e.g. `lines_strip_indent`,
+may be used by other lines modifier functions (e.g. [`lines_strip_indent`](#lines_strip_indentli),
 `lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
 in via kwargs are stored internally and can be accessed by user-defined
 lines modifier functions.
@@ -2654,7 +2668,25 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_filter_comment_lines(li, comment_separators)`
+#### `lines_filter_empty_lines(li)`
+
+<dl><dd>
+
+A lines modifier function.  Filters out the empty lines
+of a "lines iterator".
+
+Preserves the line numbers.  If lines 0 through 2 are empty,
+line 3 is `'a'``, line 4 is empty, and line 5 is `'b'``, this will yield:
+```
+    (LineInfo(line='a', line_number=3), 'a')
+    (LineInfo(line='b', line_number=5), 'b')
+```
+
+For more information, see the deep-dive on
+[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
+</dd></dl>
+
+#### `lines_filter_line_comment_lines(li, comment_separators)`
 
 <dl><dd>
 
@@ -2664,15 +2696,15 @@ first non-whitespace characters appear in the iterable of
 `comment_separators` strings passed in.
 
 What's the difference between
-[`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
 and
-[`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)?
+`lines_filter_line_comment_lines`?
 
-* [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)
+* `lines_filter_line_comment_lines`
   only recognizes lines that *start* with a comment separator
   (ignoring leading whitespace).  Also, it filters out those
   lines completely, rather than modifying the line.
-* [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+* [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
   handles comment characters anywhere in the line, although it can ignore
   comments inside quoted strings.  It truncates the line but still always
   yields the line.
@@ -2696,13 +2728,14 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_grep(li, pattern, *, invert=False, flags=0)`
+#### `lines_grep(li, pattern, *, invert=False, flags=0, match='match')`
 
 <dl><dd>
 
 A lines modifier function.  Only yields lines
 that match the regular expression `pattern`.
 (Filters out lines that don't match `pattern`.)
+Stores the resulting `re.Match` object in `info.match`.
 
 `pattern` can be `str`, `bytes`, or an `re.Pattern` object.
 If `pattern` is not an `re.Pattern` object, it's compiled
@@ -2711,6 +2744,13 @@ with `re.compile(pattern, flags=flags)`.
 If `invert` is true, returns the opposite--filters
 out lines that match `pattern`.
 
+The match parameter specifies the
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+attribute name to
+write to.  By default it writes to `info.match`; you can specify
+any valid identifier, and it will instead write the `re.Match`
+object (or `None`) to the identifier you specify.
+
 For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 
@@ -2718,7 +2758,7 @@ For more information, see the deep-dive on
 `re._pattern_type`.)
 </dd></dl>
 
-#### `lines_rstrip(li)`
+#### `lines_rstrip(li, separators=None)`
 
 <dl><dd>
 
@@ -2781,11 +2821,14 @@ For more information, see the deep-dive on
 A lines modifier function.  Strips leading whitespace and tracks
 the indent level.
 
-The indent level is stored in the `LineInfo` object's attribute
+The indent level is stored in the
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+object's attribute
 `indent`.  `indent` is an integer, the ordinal number of the current
 indent; if the text has been indented three times, `indent` will be 3.
 
-Strips any leading whitespace from the line, updating the `LineInfo`
+Strips any leading whitespace from the line, updating the
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
 attributes `leading` and `column_number` as needed.
 
 Uses an intentionally simple algorithm.
@@ -2825,15 +2868,15 @@ marker inside a quoted string without closing ending the string.
 If false, there is no escape string.
 
 What's the difference between
-[`lines_strip_line_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+`lines_strip_line_comments`
 and
-[`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)?
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)?
 
-* [`lines_filter_comment_lines`](#lines_filter_comment_linesli-comment_separators)
+* [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
   only recognizes lines that *start* with a comment separator
   (ignoring leading whitespace).  Also, it filters out those lines
   completely, rather than modifying the line.
-* [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+* `lines_strip_line_comments`
   handles comment characters anywhere in the line, although it can ignore
   comments inside quoted strings.  It always yields the line, whether or
   not it's truncated the line.
@@ -3446,7 +3489,7 @@ Note:
 * `split_quoted_strings` only supports the opening and
   closing markers for a string being the same string.
   If you need the opening and closing markers to be
-  different strings, use `split_delimiters`.
+  different strings, use [`split_delimiters`](#split_delimiterss-delimiters--state).
 
 </dd></dl>
 
@@ -3941,7 +3984,8 @@ which also take this same `separators` arguments.  There are also
 other **big** functions that take a `separators` argument; for
 consistency's sakes, the parameter name always has the word
 `separators` in it.
-(For example, `comment_separators` for `lines_filter_comment_lines`.)
+(For example, `comment_separators` for
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators).)
 
 ### Demonstrations of each `multisplit` keyword-only parameter
 
@@ -4610,8 +4654,8 @@ All four of these are tuples containing whitespace characters:
   `big.linebreaks` contains just the line-breaking
   whitespace characters.
 * **big** also has equivalents for working with `bytes`
-  objects: [`big.bytes_whitespace`](#bytes_whitespace)
-  and [`big.bytes_linebreaks`,](#bytes_linebreaks)
+  objects: [`bytes_whitespace`](#bytes_whitespace)
+  and [`bytes_linebreaks`,](#bytes_linebreaks)
   respectively.
 
 Apart from exceptionally rare occasions, these are all you'll ever need.
@@ -5025,11 +5069,12 @@ encoded as the second word in the function name
   will only yield a line if it isn't empty.
 * `lines_strip_` functions may remove one or
   more substrings from the line.  For example,
-  [`lines_strip_indent(li)`](#lines_strip_indentli)
+  [`lines_strip_indent`](#lines_strip_indentli)
   strips the leading whitespace from a line before yielding
   it.  (Whenever a lines modifier removes leading text from a line,
-  it will add a `leading` field to the accompanying `LineInfo` object
-  containing the removed substring, and will also update the
+  it will add a `leading` field to the accompanying
+  [`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+  object containing the removed substring, and will also update the
   `column_number` of the line to reflect the new starting column.)
 * `lines_convert_` functions means this lines modifier may change one
   or more substrings in the line.  For example,
@@ -5103,10 +5148,15 @@ if you need functionality
 
 Note that if you write your own lines modifier function,
 and it removes text from the beginning the line, you must
-update `column_number` in the `LineInfo` object manually--it
+update `column_number` in the
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+object manually--it
 doesn't happen automatically.  The easiest way to handle this
 is also the best way: whenever clipping text from the beginning
-or end of the line, use the `clip_leading` and `clip_trailing`
+or end of the line, use the
+[`clip_leading`](#lineinfoclip_leadingline-s)
+and
+[`clip_trailing`](#lineinfoclip_trailingline-s)
 methods on the `LineInfo` object.
 
 Speaking of best practices for lines modifier functions,
@@ -5114,11 +5164,15 @@ it's also best practice to *modify* the *existing*
 `LineInfo` object that was yielded to you, rather than
 throwing it away, creating a new one, and yielding that
 instead.  Previous lines modifier iterators may have added
-fields to the `LineInfo` that you'd to preserve.
+fields to the
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+that you'd to preserve.
 
 ### leading + line + trailing + end
 
-Generally speaking, `LineInfo` objects obey an invariant.
+Generally speaking,
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+objects obey an invariant.
 For any `(info, line)` pair yielded by `lines` or a lines
 modifier:
 
@@ -5769,15 +5823,15 @@ The following functions and classes have breaking changes:
 
 <dl><dd>
 
-`Delimiter`
+[`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse)
 
-`LineInfo`
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
 
-`lines_strip_line_comments`
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
 
-`split_delimiters`
+[`split_delimiters`](#split_delimiterss-delimiters--state)
 
-`split_quoted_strings`
+[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
 
 </dd></dl>
 
@@ -5786,11 +5840,11 @@ These functions have been renamed:
 
 <dl><dd>
 
-`lines_filter_comment_lines` is now `lines_filter_line_comment_lines`
+`lines_filter_comment_lines` is now [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
 
-`lines_strip_comments` is now `lines_strip_line_comments`
+`lines_strip_comments` is now [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
 
-`parse_delimiters` is now `split_delimiters`
+`parse_delimiters` is now [`split_delimiters`](#split_delimiterss-delimiters--state)
 
 </dd></dl>
 
@@ -5799,11 +5853,11 @@ Finally, **big** has three new functions:
 
 <dl><dd>
 
-`combine_splits`
+[`combine_splits`](#combine_splitss-split_arrays)
 
-`encode_strings`
+[`encode_strings`](#encode_stringso--encodingascii)
 
-`split_title_case`
+[`split_title_case`](split_title_cases--split_allcapstrue)
 
 </dd></dl>
 
@@ -5827,8 +5881,11 @@ For some reason, Python's `bytes` object only supports two:
     \n \r
 
 I have no idea why this is.  We might fix it.  And if we do,
-**big** is ready.  It now calculates `bytes_linebreaks` and
-`bytes_linebreaks_without_crlf` on the fly to agree with Python.
+**big** is ready.  It now calculates
+[`bytes_linebreaks`](#bytes_linebreaks)
+and
+[`bytes_linebreaks_without_crlf`](#bytes_linebreaks_without_crlf)
+on the fly to agree with Python.
 If either (or both) work as newline characters for the `splitlines`
 method on a `bytes` object, they'll automatically be inserted
 into these iterables of bytes linebreaks.
@@ -5859,7 +5916,9 @@ Example:
 <dl><dd>
 
 `Delimiter` is a simple data class, representing information about
-delimiters to `split_delimiters` (previously `parse_delimiters`).
+delimiters to
+[`split_delimiters`](#split_delimiterss-delimiters--state)
+ (previously `parse_delimiters`).
 `split_delimiters` has changed, and some of those changes are
 reflected in the `Delimiter` object; also, some changes to `Delimiter`
 are simply better API choices.
@@ -5898,7 +5957,7 @@ Changes:
 
 Slightly liberalized the types it accepts.  It previously
 required `o` to be a collection; now `o` can be a `bytes`
-or `str` object.  Also, now explicitly supports `set`.
+or `str` object.  Also, it now explicitly supports `set`.
 
 </dd></dl>
 
@@ -5951,7 +6010,8 @@ eventually be removed, but not before September 2025.
 
 New name for `lines_filter_comment_lines`.
 
-Correctness improvements: `lines_filter_line_comment_lines`
+Correctness improvements:
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
 now enforces that single-quoted strings can't span lines,
 and multi-quoted strings must be closed before the end of
 the last line.
@@ -5972,7 +6032,7 @@ the lines yielded.  It now writes the result to `info.match`.
 (If you pass in `invert=True` to `lines_grep`, `lines_grep`
 still writes to the `match` attribute--but it always writes `None`.)
 
-If you want to write the `Match` object to another attribute,
+If you want to write the `re.Match` object to another attribute,
 pass in the name of that attribute to the keyword-only
 parameter `match`.
 
@@ -5984,7 +6044,9 @@ parameter `match`.
 
 <dl><dd>
 
-Breaking change: the `LineInfo` constructor has a
+Breaking change: the
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+constructor has a
 new `lines` positional parameter, added *in front of*
 the existing positional parameters.  This new first argument
 should be the  `lines` iterator that yielded this
@@ -5992,7 +6054,9 @@ should be the  `lines` iterator that yielded this
 (Why this change?  The `lines` object contains information
 needed by the lines modifiers, for example `tab_width`.)
 
-Minor optimization: `LineInfo` objects previously had many
+Minor optimization:
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+objects previously had many
 optional fields, which might or might not be added
 dynamically.  Now all fields are pre-added.  (This makes
 the CPython 3.13 runtime happier; it really wants you to
@@ -6008,7 +6072,9 @@ attribute when they clipped leading text from the line,
 the "lines modifiers" are now very consistent about updating
 `leading`, and the new symmetrical attribute `trailing`.
 
-New feature: `LineInfo` now has an `end` attribute,
+New feature:
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+now has an `end` attribute,
 which contains the end-of-line character that ended this line.
 
 These three attributes allow us to assert a new invariant:
@@ -6017,7 +6083,8 @@ turning tabs into spaces),
 
     info.leading + line + info.trailing + info.end == info.line
 
-`LineInfo` objects now always have these attributes:
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+objects now always have these attributes:
   * `lines`, which contains the base lines iterator.
   * `line`, which contains the original unmodified line.
   * `line_number`, which contains the line number of
@@ -6041,10 +6108,13 @@ turning tabs into spaces),
   * `match`, which contains a `Match` object if this line
     was matched with a regular expression, and `None` otherwise.
 
-`LineInfo` has two new methods: `clip_leading`
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+has two new methods: `clip_leading`
 and `clip_trailing`.  These methods clip a leading or
 trailing substring from the current `line`, and transfer
-it to the relevant field in `LineInfo` (either `leading` or
+it to the relevant field in
+[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+(either `leading` or
 `trailing`).  `clip_leading` also updates the `column_number`
 attribute.
 
@@ -6056,13 +6126,18 @@ somewhere else.
 </dd></dl>
 
 
-#### `lines_strip` and `lines_rstrip`
+#### `lines_rstrip` and `lines_strip`
 
 <dl><dd>
 
-New feature: `lines_strip` and `lines_rstrip` now accept a
+New feature:
+[`lines_rstrip`](#lines_rstripli-separatorsnone)
+and
+[`lines_strip`](#lines_stripli-separatorsnone)
+now both accept a
 `separators` argument; this is an iterable of separators,
-like the argument to `multisplit`.
+like the argument to
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse).
 The default value of `None` preserves the previous behavior,
 stripping whitespace.
 
@@ -6072,7 +6147,9 @@ stripping whitespace.
 
 <dl><dd>
 
-New feature: `lines_sort` now accepts a `key` parameter,
+New feature:
+[`lines_sort`](#lines_sortli--keynone-reversefalse)
+now accepts a `key` parameter,
 which is used as the `key` argument for `list.sort`.
 The value passed in to `key` is the `(info, line)` tuple
 yielded by the upstream iterator.  The default value preserves
@@ -6092,7 +6169,9 @@ available at `big.deprecated.lines_strip_comments` until at
 least September 2025.
 
 Note that the old version of `line_strip_comments` still uses
-the current version of `LineInfo`, so use of this deprecated
+the current version of
+[`LineInfo`,](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+so use of this deprecated
 function is still exposed to those breaking changes.
 (For example, `LineInfo.line` now includes the linebreak character
 that terminated the current line, if any.)
@@ -6103,7 +6182,9 @@ that terminated the current line, if any.)
 
 <dl><dd>
 
-Bugfix: `lines_strip_indent` previously required
+Bugfix:
+[`lines_strip_indent`](#lines_strip_indentli)
+previously required
 whitespace-only lines to obey the indenting rules, which was
 a mistake.  My intention was always for `lines_strip_indent`
 to behave like Python, and that includes not really caring
@@ -6123,7 +6204,8 @@ behavior is how you'd intuitively expect it to work.)
 
 <dl><dd>
 
-`lines_strip_line_comments` is the new name for the old
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+is the new name for the old
 `lines_strip_comments` lines modifier function.  It's also
 been completely rewritten.
 
@@ -6138,14 +6220,17 @@ Changes:
 * The `backslash` parameter has been renamed to `escape`.
 * The `rstrip` parameter has been removed.  If you need to
   rstrip the line after stripping the comment, wrap your
-  `lines_strip_line_comments` call with a `lines_rstrip` call.
+  `lines_strip_line_comments` call with a
+  [`lines_rstrip`](#lines_rstripli-separatorsnone)
+  call.
 * The old function didn't enforce that strings shouldn't
   span lines--single-quoted and triple-quoted strings behaved
   identically.  The new version raises `SyntaxError` if quoted
   strings using non-multiline quote marks contain newlines.
 
 (`lines_strip_line_comments` has always been implemented using
-`split_quoted_strings`; this is why it now supports multicharacter
+[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state);
+this is why it now supports multicharacter
 quote marks and escape strings.  It also benefits from the
 new optimizations in `split_quoted_strings`.)
 
@@ -6156,7 +6241,9 @@ new optimizations in `split_quoted_strings`.)
 
 <dl><dd>
 
-Minor optimizations.  `multisplit` used to locally define a
+Minor optimizations.
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+used to locally define a
 new generator function, then call it and return the generator.
 I promoted the generator function to module level, which means
 we no longer rebind it each time `multisplit` is called.  As
@@ -6182,7 +6269,9 @@ result to avoid needless reversing.
 
 <dl><dd>
 
-This function has been renamed `split_delimiters` and rewritten,
+This function has been renamed
+[`split_delimiters`](#split_delimiterss-delimiters--state)
+and rewritten,
 see below.  The old version is still available, using the name
 `big.deprecated.parse_delimiters` module, and will be available
 until at least September 2025.
@@ -6222,7 +6311,8 @@ removed most of them.
 
 > This API has breaking changes.
 
-`split_delimiters` is the new name for the old `parse_delimiters`
+[`split_delimiters`](#split_delimiterss-delimiters--state)
+is the new name for the old `parse_delimiters`
 function.  The function has also been completely re-tooled and
 re-written.
 
@@ -6241,7 +6331,8 @@ Changes:
   to you to detect it and react (e.g. raise an exception).
 * The internal implementation has changed completely.
   `parse_delimiters` manually parsed the input string
-  character by character.  `split_delimiters` uses `multisplit`,
+  character by character.  `split_delimiters` uses
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse),
   so it zips past the uninteresting characters and only examines
   the delimiters and escape characters.  It's always faster,
   except for some trivial calls (which are fast enough anyway).
@@ -6260,7 +6351,8 @@ See also changes to `Delimiter`.
 
 > This API has breaking changes.
 
-`split_quoted_strings` has been completely re-tooled and
+[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+has been completely re-tooled and
 re-written.  The new API is simpler, easier to understand,
 and conceptually clarified.  It's a major upgrade!
 
@@ -6301,7 +6393,9 @@ Changes:
   `state`, which sets the initial state of quoting.
 * Thd old implementation of `split_quoted_string` used a
   hand-coded parser, manually analyzing each character in
-  the input text.  Now it uses `multisplit` to only examine
+  the input text.  Now it uses
+  [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse),
+  so it only bothers to examine
   the interesting substrings.  `multisplit` has a large
   startup cost the first time you use a particular set of
   iterators, but this information is cached for subsequent calls.
@@ -6321,7 +6415,9 @@ Changes:
 
 <dl><dd>
 
-New function.  Splits a string at word boundaries,
+New function.
+[`split_title_case`](split_title_cases--split_allcapstrue)
+splits a string at word boundaries,
 assuming the string is in "TitleCase".
 
 </dd></dl>
@@ -6560,7 +6656,7 @@ Extremely minor release.  No new features or bug fixes.
 *released 2023/05/19*
 
 * Added
-  [`parse_delimiters`](#parse_delimiterss-delimitersNone)
+  `parse_delimiters` (ed: now [`split_delimiters`](#split_delimiterss-delimiters--state))
   and
   [`Delimiter`.](#delimiteropen-close--backslashfalse-nestedtrue)
 </dd></dl>
@@ -6877,7 +6973,7 @@ Extremely minor release.  No new features or bug fixes.
   `lines_filter_contains`,
   `lines_filter_grep`,
   and
-  [`lines_sort`](#lines_sortli--reversefalse).
+  [`lines_sort`.](#lines_sortli--keynone-reversefalse)
 * [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
   now accepts `str` or `bytes`.  Also added the `apostrophes` and
   `double_quotes` arguments.
@@ -6913,9 +7009,9 @@ Extremely minor release.  No new features or bug fixes.
 * Added the new [`itertools`](#bigitertools) module, which so far only contains
   [`PushbackIterator`](#pushbackiteratoriterablenone).
 * Added
-  [`lines_strip_comments`](#lines_strip_commentsli-comment_separators--quotes--backslash-rstriptrue-triple_quotestrue)
+  `lines_strip_comments` [ed: now [`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-))]
   and
-  [`split_quoted_strings`](#split_quoted_stringss-quotes---triple_quotestrue-backslash)
+  [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
   to the
   [`text`](#bigtext)
   module.
