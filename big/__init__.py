@@ -32,3 +32,31 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 __version__ = "0.12"
+
+class VersionTuple(tuple):
+    @property
+    def major(self):
+        return self[0]
+
+    @property
+    def minor(self):
+        return self[1]
+
+    @property
+    def micro(self):
+        return self[2]
+
+    @property
+    def releaselevel(self):
+        return self[3]
+
+    @property
+    def release_level(self):
+        return self[3]
+
+    @property
+    def serial(self):
+        return self[4]
+
+
+__version_tuple__ = VersionTuple((0, 12, 0, "final", 0))

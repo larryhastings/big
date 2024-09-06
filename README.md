@@ -5921,9 +5921,9 @@ Example:
 
 #### `Delimiter`
 
-> This API has breaking changes.
-
 <dl><dd>
+
+> This API has breaking changes.
 
 `Delimiter` is a simple data class, representing information about
 delimiters to
@@ -6002,9 +6002,9 @@ Minor updates to the documentation and to the text of some exceptions.
 
 #### `LineInfo`
 
-> This API has breaking changes.
-
 <dl><dd>
+
+> This API has breaking changes.
 
 Breaking change: the
 [`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
@@ -6107,9 +6107,9 @@ eventually be removed, but not before September 2025.
 
 #### `lines_filter_line_comment_lines`
 
-> This API has breaking changes.
-
 <dl><dd>
+
+> This API has breaking changes.
 
 New name for `lines_filter_comment_lines`.
 
@@ -6216,9 +6216,9 @@ behavior is how you'd intuitively expect it to work.)
 
 #### `lines_strip_line_comments`
 
-> This API has breaking changes.
-
 <dl><dd>
+
+> This API has breaking changes.
 
 [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
 is the new name for the old
