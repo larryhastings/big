@@ -5850,7 +5850,7 @@ These functions have been renamed:
 </dd></dl>
 
 
-Finally, **big** has three new functions:
+**big** has three new functions:
 
 <dl><dd>
 
@@ -5864,7 +5864,8 @@ Finally, **big** has three new functions:
 
 </dd></dl>
 
------
+Finally, here's an in-depth description of all changes
+in **big** 0.12, sorted by API name.
 
 #### `bytes_linebreaks` and `bytes_linebreaks_without_crlf`
 
