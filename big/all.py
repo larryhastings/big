@@ -8,7 +8,7 @@ Think big!
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -42,6 +42,9 @@ from .boundinnerclass import *
 from . import builtin
 __all__.extend(builtin.__all__)
 from .builtin import *
+
+from . import deprecated
+# we DON'T splat all the symbols from deprecated into big.all!
 
 from . import file
 __all__.extend(file.__all__)
@@ -78,4 +81,3 @@ from .text import *
 from . import time
 __all__.extend(time.__all__)
 from .time import *
-

@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -119,13 +119,24 @@ class BigTests(unittest.TestCase):
         self.assertEqual(big.get_float(None), None)
         self.assertEqual(big.get_float("abc"), "abc")
 
-    def test_prefer_int_to_float(self):
+    def test_get_int_or_float(self):
         sentinel = object()
-        self.assertEqual(big.get_int_or_float(0,      sentinel), 0)
-        self.assertEqual(big.get_int_or_float("0",    sentinel), 0)
+        self.assertEqual(     big.get_int_or_float(0,       sentinel), 0)
+        self.assertIsInstance(big.get_int_or_float(0,       sentinel), int)
+        self.assertEqual(     big.get_int_or_float("0",     sentinel), 0)
+        self.assertIsInstance(big.get_int_or_float("0",     sentinel), int)
 
-        self.assertEqual(big.get_int_or_float(0.0,    sentinel), 0.0)
-        self.assertEqual(big.get_int_or_float("0.0",  sentinel), 0.0)
+        self.assertEqual(     big.get_int_or_float(12345,   sentinel), 12345)
+        self.assertIsInstance(big.get_int_or_float(12345,   sentinel), int)
+        self.assertEqual(     big.get_int_or_float("12345", sentinel), 12345)
+        self.assertIsInstance(big.get_int_or_float("12345", sentinel), int)
+
+        self.assertEqual(     big.get_int_or_float(0.0,     sentinel), 0)
+        self.assertIsInstance(big.get_int_or_float("0.0",   sentinel), int)
+        self.assertEqual(     big.get_int_or_float(3.5,     sentinel), 3.5)
+        self.assertIsInstance(big.get_int_or_float("3.5",   sentinel), float)
+        self.assertEqual(     big.get_int_or_float(123.0,   sentinel), 123)
+        self.assertIsInstance(big.get_int_or_float("123.0", sentinel), int)
 
         self.assertEqual(big.get_int_or_float("abc",  sentinel), sentinel)
         self.assertEqual(big.get_int_or_float("3j",   sentinel), sentinel)

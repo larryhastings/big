@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -100,19 +100,30 @@ def get_int_or_float(o, default=_sentinel):
     """
     Converts o into a number, preferring an int to a float.
 
-    If o is already an int or float, returns o unchanged.  Otherwise,
-    tries int(o).  If that conversion succeeds, returns the result.
-    Otherwise, tries float(o).  If that conversion succeeds, returns
-    the result.  Otherwise returns the default value.  If you don't
+    If o is already an int, return o unchanged.
+    If o is already a float, if int(o) == o, return int(o),
+      otherwise return o.
+    Otherwise, tries int(o).  If that conversion succeeds,
+    returns the result.
+    Failing that, tries float(o).  If that conversion succeeds,
+    returns the result.
+    If all else fails, returns the default value.  If you don't
     pass in an explicit default value, the default value is o.
     """
-    if isinstance(o, (int, float)):
+    if isinstance(o, int):
+        return o
+    if isinstance(o, float):
+        int_o = int(o)
+        if int_o == o:
+            return int_o
         return o
     try:
         return int(o)
     except (TypeError, ValueError):
         try:
-            return float(o)
+            # if you pass in the *string* "0.0",
+            # this will return 0, not 0.0.
+            return get_int_or_float(float(o))
         except (TypeError, ValueError):
             if default != _sentinel:
                 return default

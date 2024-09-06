@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -90,6 +90,10 @@ class Log:
     def reset(self):
         """
         Resets the log to its initial state.
+        After resetting the log, the log is
+        empty except for the initial "log start"
+        message, the elapsed time is zero, and
+        the log has not "entered" any subsystems.
         """
         self.start = self.clock()
         self.stack = []
@@ -104,8 +108,8 @@ class Log:
         The subsystem parameter should be a string
         describing the subsystem.
 
-        This is really just a presentation
-        thing; all subsequent logged entries will be indented
+        This is really just a presentation thing;
+        all subsequent logged entries will be indented
         until you make the corresponding `log.exit()` call.
 
         You may nest subsystems as deeply as you like.

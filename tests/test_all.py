@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -31,6 +31,7 @@ bigtestlib.preload_local_big()
 for test_module in """
     test_boundinnerclass
     test_builtin
+    test_deprecated
     test_file
     test_graph
     test_heap

@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -33,6 +33,7 @@ import itertools
 import math
 import re
 import sys
+import types
 import unittest
 
 
@@ -60,12 +61,15 @@ try:
 except ImportError: # pragma: no cover
     have_regex = False
 
+
 def unchanged(o):
     return o
 
 def to_bytes(o): # pragma: no cover
     if o is None:
         return None
+    if isinstance(o, bytes):
+        return o
     if isinstance(o, str):
         return o.encode('ascii')
     if isinstance(o, list):
@@ -74,12 +78,25 @@ def to_bytes(o): # pragma: no cover
         return tuple(to_bytes(x) for x in o)
     if isinstance(o, set):
         return set(to_bytes(x) for x in o)
+    if isinstance(o, dict):
+        return {to_bytes(k): to_bytes(v) for k, v in o.items()}
     if isinstance(o, re_Pattern):
         flags = o.flags
         if flags & re.UNICODE:
             flags = flags - re.UNICODE
-        o = re.compile(to_bytes(o.pattern), flags=flags)
+        return re.compile(to_bytes(o.pattern), flags=flags)
+    if isinstance(o, big.Delimiter):
+        return big.Delimiter(
+            close=to_bytes(o.close),
+            escape=to_bytes(o.escape),
+            multiline=o.multiline,
+            quoting=o.quoting,
+            )
     return o
+
+
+_iterate_over_bytes = big.text._iterate_over_bytes
+
 
 #
 # known_separators & printable_separators lets error messages
@@ -105,13 +122,6 @@ for symbol in """
     big.ascii_whitespace_without_crlf
     big.ascii_linebreaks
     big.ascii_linebreaks_without_crlf
-
-    # deprecated
-
-    big.utf8_whitespace
-    big.utf8_whitespace_without_dos
-    big.utf8_newlines
-    big.utf8_newlines_without_dos
 
 """.strip().split('\n'):
     symbol = symbol.strip()
@@ -157,61 +167,10 @@ def finditer_group0(i):
 
 
 
-def toy_multisplit_original(s, separators): # pragma: no cover
-    """
-    The original toy version of multisplit.
-    I keep it around as a *third* implementation of multisplit,
-    to make sure all three agree.  (The new toy_multisplit
-    is usually faster though.)
-
-    s is str or bytes.
-    separators is str or bytes, or an iterable of str or bytes.
-
-    Returns a list equivalent to
-        list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
-
-    (Doesn't support any other arguments--maxsplit etc.)
-    """
-
-    segments = []
-    word = []
-
-    if isinstance(s, bytes):
-        empty = b''
-    else:
-        empty = ''
-
-    if isinstance(separators, (str, bytes)):
-        separators = (separators,)
-    # assert empty not in separators
-
-    def flush_word():
-        segments.append(empty.join(word))
-        word.clear()
-
-    while s:
-        longest_separator_length = 0
-        longest_separator = None
-        for sep in separators:
-            length = len(sep)
-            if s.startswith(sep) and (length > longest_separator_length):
-                longest_separator = sep
-                longest_separator_length = length
-        if longest_separator:
-            flush_word()
-            segments.append(longest_separator)
-            s = s[longest_separator_length:]
-            continue
-        word.append(s[:1])
-        s = s[1:]
-    flush_word()
-
-    return segments
-
-
 def toy_multisplit(s, separators):
     """
-    A toy version of multisplit.
+    A toy version of multisplit, used by the test suite
+    to validate that multisplit is working correctly.
 
     s is a str or bytes.
     separators is a str or iterable of str,
@@ -222,9 +181,10 @@ def toy_multisplit(s, separators):
 
     (Doesn't support any other arguments--maxsplit etc.)
 
-    This is second version of toy_multisplit, a needless
-    (but fun to write) optimized improvement over the original,
-    toy_multisplit_original (lovingly preserved above for posterity).
+    This is my second version of toy_multisplit, a needless
+    (but fun to write) optimized improvement over the original.
+    (You'll find toy_multisplit_original later in the file,
+    lovingly preserved for posterity.)
 
     toy_multisplit is *usually* faster than toy_multisplit_original,
     and it's *way* faster when there are lots of separators--or exactly
@@ -329,10 +289,13 @@ def toy_multisplit(s, separators):
 
     return segments
 
+
 def toy_multisplit_reverse(s, separators):
     """
-    A toy version of multisplit, in reverse mode.
+    A toy version of multisplit in reverse mode.
     (A slightly-hacked version of toy_multisplit.)
+    Like toy_multisplit, used by the test suite
+    to verify that multisplit is working correctly.
 
     s is a str or bytes.
     separators is a str or iterable of str,
@@ -441,6 +404,57 @@ def toy_multisplit_reverse(s, separators):
     return segments
 
 
+def toy_multisplit_original(s, separators): # pragma: no cover
+    """
+    The original toy version of multisplit.
+    I keep it around as a *third* implementation of multisplit,
+    to make sure all three agree.  (The new toy_multisplit
+    is usually faster though.)
+
+    s is str or bytes.
+    separators is str or bytes, or an iterable of str or bytes.
+
+    Returns a list equivalent to
+        list(big.multisplit(s, separators, keep=ALTERNATING, separate=True))
+
+    (Doesn't support any other arguments--maxsplit etc.)
+    """
+
+    segments = []
+    word = []
+
+    if isinstance(s, bytes):
+        empty = b''
+    else:
+        empty = ''
+
+    if isinstance(separators, (str, bytes)):
+        separators = (separators,)
+    # assert empty not in separators
+
+    def flush_word():
+        segments.append(empty.join(word))
+        word.clear()
+
+    while s:
+        longest_separator_length = 0
+        longest_separator = None
+        for sep in separators:
+            length = len(sep)
+            if s.startswith(sep) and (length > longest_separator_length):
+                longest_separator = sep
+                longest_separator_length = length
+        if longest_separator:
+            flush_word()
+            segments.append(longest_separator)
+            s = s[longest_separator_length:]
+            continue
+        word.append(s[:1])
+        s = s[1:]
+    flush_word()
+
+    return segments
+
 
 
 class BigTextTests(unittest.TestCase):
@@ -535,30 +549,6 @@ class BigTextTests(unittest.TestCase):
         form_feed_and_vertical_tab = set('\f\v')
         self.assertEqual(set(big.ascii_linebreaks), decode_byteses(observed_bytes_linebreaks) | form_feed_and_vertical_tab)
         self.assertEqual(set(big.ascii_linebreaks_without_crlf), decode_byteses(observed_bytes_linebreaks_without_crlf) | form_feed_and_vertical_tab)
-
-        # now test the deprecated utf-8 variants!
-        # they should match... python str, sigh.
-        # (principle of least surprise.)
-        utf8_whitespace = big.encode_strings(big.str_whitespace, 'utf-8')
-        self.assertEqual(set(big.utf8_whitespace), set(utf8_whitespace))
-        utf8_whitespace_without_dos = big.encode_strings(big.str_whitespace_without_crlf, 'utf-8')
-        self.assertEqual(set(big.utf8_whitespace_without_dos), set(utf8_whitespace_without_dos))
-        utf8_newlines = big.encode_strings(big.str_linebreaks, 'utf-8')
-        self.assertEqual(set(big.utf8_newlines), set(utf8_newlines))
-        utf8_newlines_without_dos = big.encode_strings(big.str_linebreaks_without_crlf, 'utf-8')
-        self.assertEqual(set(big.utf8_newlines_without_dos), set(utf8_newlines_without_dos))
-
-        # test that the compatibility layer for the old "newlines" names is correct
-        self.assertEqual(big.newlines, big.str_linebreaks)
-        self.assertEqual(big.newlines_without_dos, big.str_linebreaks_without_crlf)
-        self.assertEqual(big.ascii_newlines, big.bytes_linebreaks)
-        self.assertEqual(big.ascii_newlines_without_dos, big.bytes_linebreaks_without_crlf)
-        self.assertEqual(big.utf8_newlines, big.encode_strings(big.linebreaks, 'utf-8'))
-        self.assertEqual(big.utf8_newlines_without_dos, big.encode_strings(big.linebreaks_without_crlf, 'utf-8'))
-
-        # and for my final trick: test the cached reversed builtin separators!
-        for forwards, backwards in big.text._reversed_builtin_separators.items():
-            self.assertEqual(set(backwards), set(big.text._multisplit_reversed(forwards)), f"failed on {printable_separators(forwards)}")
 
     def test_reversed_re_finditer(self):
         # Cribbed off the test suite from the 'regex' package
@@ -1114,12 +1104,12 @@ class BigTextTests(unittest.TestCase):
         The second of *seven* multisplit test suites.
         (multisplit has the biggest test suite in all of big.  it's called 105k times!)
 
-        This tests that multisplit, toy_multisplit,
-        toy_multisplit_reverse, and toy_multisplit_original
-        all agree.
+        This tests that multisplit(reverse=False), toy_multisplit, and
+        toy_multisplit_original all agree, and that
+        multisplit(reverse=True) and toy_multisplit_reverse also agree.
 
         (In a later test suite, we use the toy_multisplit*
-        functions to test multisplit.)
+        functions to predict the output multisplit should give us.)
         """
         want_prints = False
         # want_prints = True
@@ -1545,7 +1535,7 @@ class BigTextTests(unittest.TestCase):
 
         multisplit_tester() then independently computes what the output
         *should* be, given those inputs, and confirms that multisplit()
-        returned the correct output.
+        indeed returned that output.
         """
 
         def multisplit_tester(s, separators=None):
@@ -2021,7 +2011,7 @@ class BigTextTests(unittest.TestCase):
 
     def test_multipartition(self):
         def test_multipartition(s, separator, count, expected, *, reverse=False):
-            for _ in range(2):
+             for _ in range(2):
                 if _ == 1:
                     # encode!
                     s = s.encode('ascii')
@@ -2091,7 +2081,6 @@ class BigTextTests(unittest.TestCase):
             big.multipartition("a x x b y y c", (" x ", " y "), -1)
 
 
-
     def test_wrap_words(self):
         def test(words, expected, margin=79):
             got = big.wrap_words(words, margin)
@@ -2119,6 +2108,7 @@ class BigTextTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             big.wrap_words([])
+
 
     def test_split_text_with_code(self):
         def test(s, expected, **kwargs):
@@ -2171,6 +2161,7 @@ class BigTextTests(unittest.TestCase):
             big.split_text_with_code("howdy.\n\vwhat's this?")
         with self.assertRaises(RuntimeError):
             big.split_text_with_code("howdy.\n    for a in \v range(30):\n        print(a)")
+
 
     def test_merge_columns(self):
         def test(columns, expected, **kwargs):
@@ -2272,7 +2263,6 @@ class BigTextTests(unittest.TestCase):
             )
 
 
-
     def test_text_pipeline(self):
         def test(columns, expected):
             for i in range(2):
@@ -2354,6 +2344,276 @@ class BigTextTests(unittest.TestCase):
             '    -v|--verbose        Causes the program to produce more output.  Specifying it\n                        multiple times raises the volume of output.'
         )
 
+
+    def test_split_title_case(self):
+
+        def alternate_split_title_case(s, *, split_allcaps=True):
+            """
+            Alternate implementation of split_title_case,
+            used for testing.
+            """
+            if not s:
+                yield s
+                return
+
+            if isinstance(s, bytes):
+                empty_join = b''.join
+                i = _iterate_over_bytes(s)
+            else:
+                empty_join = ''.join
+                i = iter(s)
+
+            word = []
+            append = word.append
+            pop = word.pop
+            clear = word.clear
+
+            previous_was_lower = False
+            upper_counter = 0
+
+            for c in i:
+                is_upper = c.isupper()
+                is_lower = c.islower()
+                # print(f"{c=} {is_upper=} {is_lower=} {upper_counter=} {previous_was_lower=} {split_allcaps=}")
+                if is_upper:
+                    if previous_was_lower:
+                        if word:
+                            yield empty_join(word)
+                            clear()
+                        previous_was_lower = False
+                    if split_allcaps:
+                        upper_counter += 1
+                else:
+                    if is_lower:
+                        if upper_counter > 1:
+                            assert word
+                            popped = pop()
+                            if word:
+                                yield empty_join(word)
+                                clear()
+                            append(popped)
+                    upper_counter = 0
+                    previous_was_lower = is_lower
+                append(c)
+                continue
+            if word:
+                yield empty_join(word)
+                clear()
+
+        def test(s, **kw):
+            expected = list(alternate_split_title_case(s, **kw))
+            got = list(big.split_title_case(s, **kw))
+            self.assertEqual(expected, got)
+
+            b = s.encode('ascii')
+            bytes_expected = list(alternate_split_title_case(b, **kw))
+            bytes_got = list(big.split_title_case(b, **kw))
+            self.assertEqual(bytes_expected, bytes_got)
+
+        self.assertIsInstance(big.split_title_case('HowdyFolks'), types.GeneratorType)
+
+        test('')
+        test('     ')
+        test(' 333    ')
+        test('ThisIsATitleCaseString')
+        test('YoursTrulyJohnnyDollar_1975-03-15 - TheMysteriousMaynardMatter.MP3')
+
+        test('oneOfTheGoodOnes')
+        test('aRoadLessTraveled')
+
+        test("Can'tComplain")
+
+        test("NOTHINGInTheWORLD")
+        test("NOTHINGInTheWORLD", split_allcaps=False)
+
+        test("WhenIWasATeapot", split_allcaps=False)
+        test("WhenIWasATeapot", split_allcaps=True)
+
+
+    def test_combine_splits(self):
+
+        # that's right! this is the maximum possible integer.
+        # there are literally no integers greater than this number.
+        INT_MAX = 2**256
+        # p.s. shhhhh, don't tell him
+
+        def original_combine_splits(s, *splits):
+            "Alternate implementation of combine_splits, used for testing."
+            # Measure the strings in the split arrays.
+            # (Ignore empty split arrays, and ignore empty splits.)
+            split_lengths = [ [ len(_) for _ in split  if _ ] for split in splits  if split ]
+
+            def combine_splits(s, split_lengths):
+                split_lengths_pop = split_lengths.pop
+
+                drops = []
+                drops_append = drops.append
+                drops_pop = drops.pop
+
+                while len(split_lengths) >= 2:
+                    # print(combined, s)
+                    # for _ in split_lengths:
+                    #     print("   ", _)
+                    smallest = INT_MAX
+                    smallest_index = None
+
+                    for i, lengths in enumerate(split_lengths):
+                        length = lengths[0]
+                        if smallest > length:
+                            smallest = length
+                            smallest_index = i
+
+                    assert smallest != INT_MAX
+
+                    yield s[:smallest]
+                    s = s[smallest:]
+
+                    for i, lengths in enumerate(split_lengths):
+                        length = lengths[0]
+                        if length == smallest:
+                            lengths.pop(0)
+                            if not lengths:
+                                drops_append(i)
+                        else:
+                            lengths[0] = length - smallest
+
+                    while drops:
+                        x = split_lengths_pop(drops_pop())
+                        assert not x
+
+                if split_lengths:
+                    start = end = 0
+                    for index in split_lengths[0]:
+                        end += index
+                        yield s[start:end]
+                        start += index
+                    s = s[end:]
+
+                if s:
+                    yield s
+
+            return combine_splits(s, split_lengths)
+
+
+        def sorting_combine_splits(s, *splits):
+            "Alternate implementation of combine_splits, used for testing."
+
+            index_0 = lambda x: x[0]
+
+            # In case an entry in the split arrays is a generator, convert it to a list.
+            split_lengths = [ list(split) for split in splits ]
+            # Measure the strings in the split arrays.
+            # (Remove empty split arrays, and ignore empty splits.)
+            split_lengths = [ [ len(_) for _ in split  if _ ] for split in splits  if split ]
+            split_lengths.sort(key=index_0)
+
+            def combine_splits(s, split_lengths, index_0):
+                split_lengths_pop = split_lengths.pop
+                # split_lengths_remove = split_lengths.remove
+
+                drops = []
+                drops_append = drops.append
+                drops_pop = drops.pop
+
+                if len(split_lengths) >= 2:
+                    while True:
+                        smallest = split_lengths[0]
+                        index = smallest[0]
+
+                        yield s[:index]
+                        s = s[index:]
+
+                        re_sort = False
+                        for i, lengths in enumerate(split_lengths):
+                            length = lengths[0]
+                            # print("  >>", length, lengths)
+                            if length == index:
+                                re_sort = True
+                                lengths.pop(0)
+                                if not lengths:
+                                    drops_append(i)
+                            else:
+                                lengths[0] = length - index
+
+                        while drops:
+                            x = split_lengths_pop(drops_pop())
+                            assert not x
+                        if len(split_lengths) < 2:
+                            break
+                        if re_sort:
+                            split_lengths.sort(key=index_0)
+
+                if split_lengths:
+                    start = end = 0
+                    for index in split_lengths[0]:
+                        end += index
+                        yield s[start:end]
+                        start += index
+                    s = s[end:]
+
+                if s:
+                    yield s
+
+            return combine_splits(s, split_lengths, index_0)
+
+        def test(s, *split_arrays):
+            # convert split_arrays into lists, just in case one is an iterator
+            # (we'll test an iterator by hand later)
+            split_arrays = [list(_) for _ in split_arrays]
+
+            original_result = list(original_combine_splits(s, *split_arrays))
+            sorting_result = list(sorting_combine_splits(s, *split_arrays))
+            self.assertEqual(original_result, sorting_result)
+            expected = original_result
+
+            got = list(big.combine_splits(s, *split_arrays))
+            self.assertEqual(expected, got)
+
+            bytes_s = s.encode('ascii')
+            bytes_split_arrays = [ [_.encode('ascii') for _ in l] for l in split_arrays ]
+            bytes_expected = [_.encode('ascii') for _ in expected]
+
+            bytes_got = list(big.combine_splits(bytes_s, *bytes_split_arrays))
+            self.assertEqual(bytes_expected, bytes_got)
+
+        self.assertIsInstance(big.combine_splits('abc', ['a', 'bc'], ['ab', 'c']), types.GeneratorType)
+
+        s  = 'abcdefghijklmnopq'
+        s1 = [ 'ab', 'cde', 'fghi', 'jklmnop', 'q' ]
+        s2 = [ 'abcde', 'fghi', 'jk', 'lmnopq' ]
+        s3 = [ 'abcdefghi', 'jklmn', 'opq' ]
+
+        # should split after B E I K N P
+        test(s, s1, s2, s3)
+
+        test(s + "rstuvwxyz", s1, s2, s3)
+
+        s = "aa bb cc dd ee"
+        test(s,
+            big.multisplit(s, keep=big.ALTERNATING),
+            ["aa b", "b cc d", "d ee"],
+            )
+
+        s = "aa bb cc dd ee ff"
+        test(s,
+            s.split(),
+            ["aa bb cc dd ee f", "f"],
+            )
+
+        with self.assertRaises(ValueError):
+            list(big.combine_splits("a b c d e",
+                ["a ", "b "],
+                ["a b c d ", "e f g ", "h "],
+                ))
+
+        with self.assertRaises(ValueError):
+            list(big.combine_splits("a b c d e",
+                ["a ", "b "],
+                ["a b c d ", "e f g ", "h "],
+                ["a b c ", "d e f ", "g h "],
+                ))
+
+
     def test_gently_title(self):
         def test(s, expected, test_ascii=True, apostrophes=None, double_quotes=None):
             result = big.gently_title(s, apostrophes=apostrophes, double_quotes=double_quotes)
@@ -2398,7 +2658,6 @@ class BigTextTests(unittest.TestCase):
             big.gently_title("the \"string's\" the thing", double_quotes=(b'"',))
         with self.assertRaises(TypeError):
             big.gently_title("the \"string's\" the thing", apostrophes=(b"'",), double_quotes=(b'"',))
-
 
         with self.assertRaises(TypeError):
             big.gently_title(b"the \"string's\" the thing", apostrophes=big.apostrophes)
@@ -2503,7 +2762,7 @@ class BigTextTests(unittest.TestCase):
         string_with_em_space = "ab\u2003cd"
         result = "ab cd"
         self.assertEqual(big.normalize_whitespace("ab\u2003cd"), result)
-        self.assertEqual(big.normalize_whitespace("ab\u2003cd".encode('utf-8'), big.utf8_whitespace), result.encode('utf-8'))
+        self.assertEqual(big.normalize_whitespace("ab\u2003cd".encode('utf-8'), big.encode_strings(big.unicode_whitespace, 'utf-8')), result.encode('utf-8'))
 
         with self.assertRaises(ValueError):
             big.normalize_whitespace("a b c d   e", separators='')
@@ -2514,54 +2773,339 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.normalize_whitespace(b"a b c d   e", separators=[])
 
+
     def test_split_quoted_strings(self):
         def test(s, expected, **kwargs):
             got = list(big.split_quoted_strings(s, **kwargs))
-            self.assertEqual(got, expected)
 
-            got = list(big.split_quoted_strings(s.encode('ascii'), **kwargs))
-            self.assertEqual(got, [(b, s.encode('ascii')) for b, s in expected])
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+            # if all arguments are str, let's convert to bytes and run another
+            if not (isinstance(s, str) and all(isinstance(value, str) for value in kwargs.values())):
+                return
+
+            # convert everybody to ascii
+            kwargs = {k: to_bytes(v) for k, v in kwargs.items()}
+
+            got = list(big.split_quoted_strings(to_bytes(s), **kwargs))
+            expected = to_bytes(expected)
+            self.assertEqual(expected, got)
 
         test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
             [
-                (False, 'hey there '),
-                (True, '"this is quoted"'),
-                (False, ' an empty quote: '),
-                (True, "''"),
-                (False, ' this is not quoted '),
-                (True, "'this is more quoted'"),
-                (False, ' '),
-                (True, '"here\'s quoting a quote mark: \\" wow!"'),
-                (False, ' this is working!'),
+                ('',  'hey there ',                             ''),
+                ('"', 'this is quoted',                         '"'),
+                ('',  ' an empty quote: ',                      ''),
+                ("'", "",                                       "'"),
+                ('',  ' this is not quoted ',                   ''),
+                ("'", "this is more quoted",                    "'"),
+                ('',  ' ',                                      ''),
+                ('"', 'here\'s quoting a quote mark: \\" wow!', '"'),
+                ('',  ' this is working!',                      ''),
             ])
 
-        test('''here is triple quoted: """i am triple quoted.""" wow!  again: """triple quoted here. "quotes in quotes" empty: "" done.""" phew!''',
+        test('''here is triple quoted: """i am triple quoted.""" wow!  again: """triple quoted here. "quotes in quotes" empty: "" quoted triple quote: \\""" done.""" phew!''',
             [
-                (False, 'here is triple quoted: '),
-                (True, '"""i am triple quoted."""'),
-                (False, ' wow!  again: '),
-                (True, '"""triple quoted here. "quotes in quotes" empty: "" done."""'),
-                (False, ' phew!'),
-            ])
-
-        test('''test turning off quoted strings.  """howdy doodles""" it kinda works anyway!''',
-            [
-                (False, 'test turning off quoted strings.  '),
-                (True, '""'),
-                (True, '"howdy doodles"'),
-                (True, '""'),
-                (False, ' it kinda works anyway!'),
+                ('',    'here is triple quoted: ',                                ''),
+                ('"""', 'i am triple quoted.',                                    '"""'),
+                ('',    ' wow!  again: ',                                         ''),
+                ('"""', 'triple quoted here. "quotes in quotes" empty: "" quoted triple quote: \\""" done.', '"""'),
+                ('',    ' phew!',                                                 ''),
             ],
-            triple_quotes=False)
+            quotes = ('"', "'", '"""',))
 
-    def test_parse_delimiters(self):
+        test('''test without multiline quotes.  """howdy doodles""" it kinda works anyway!''',
+            [
+                ('',  'test without multiline quotes.  ', ''),
+                ('"', '',                                   '"'),
+                ('"', 'howdy doodles',                      '"'),
+                ('"', '',                                   '"'),
+                ('',  ' it kinda works anyway!',            ''),
+            ],
+            )
+
+        test("a b c' x y z 'd e f'",
+            [
+                ("",  'a b c', "'"),
+                ("",  ' x y z ', ""),
+                ("'", 'd e f', "'"),
+            ],
+            state="'"
+            )
+
+        # let's get weird!
+        test("abc\ndef\nghi",
+            [
+                ("",   'abc', ""),
+                ("\n", 'def', "\n"),
+                ("",   'ghi', ""),
+            ],
+            quotes=("\n",)
+            )
+
+        test("abc'qxqqxx'qqq'def",
+            [
+                ("",   'abc',        ""),
+                ("'",  "qxqqxx'qqq", "'"),
+                ("",   'def',        ""),
+            ],
+            escape="xx"
+            )
+
+        test("abc^Sqxqq^X^Sqqq^Sdef^Qghi^Q",
+            [
+                ("",    'abc',         ""),
+                ("^S",  "qxqq^X^Sqqq", "^S"),
+                ("",    'def',         ""),
+                ("^Q",  'ghi',         "^Q"),
+            ],
+            quotes=('^S', '^Q',), escape="^X"
+            )
+
+        test("abc'qxqqxx\\'qqq'def",
+            [
+                ("",   'abc',        ""),
+                ("'",  "qxqqxx\\",   "'"),
+                ("",   'qqq',        ""),
+                ("'",  'def',        ""),
+            ],
+            escape=""
+            )
+
+        test("abcd' efg 'hgi",
+            [
+                ("",   'abcd',  "'"),
+                ("",   " efg ", ""),
+                ("'",  'hgi',   ""),
+            ],
+            state="'"
+            )
+
+        # test auto-converting _sqs_quotes_str
+        test(b"abcd",
+            [
+                (b"",  b'abcd',  b""),
+            ],
+            quotes=big.text._sqs_quotes_str
+            )
+
+        # test auto-converting _sqs_quotes_bytes
+        test("abcd",
+            [
+                ("",  'abcd',  ""),
+            ],
+            quotes=big.text._sqs_quotes_bytes
+            )
+
+        # test auto-converting _sqs_escape_str
+        test(b"abcd",
+            [
+                (b"",  b'abcd',  b""),
+            ],
+            escape=big.text._sqs_escape_str,
+            multiline_quotes=None,
+            )
+
+        # test auto-converting _sqs_escape_bytes
+        test("abcd",
+            [
+                ("",  'abcd',  ""),
+            ],
+            escape=big.text._sqs_escape_bytes
+            )
+
+        # quotes and multiline_quotes are both empty
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=(),
+                multiline_quotes=(),
+                )
+
+        # type mismatch, s is str and quotes are bytes
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=(b'"', b"'", b"'''"),
+                )
+
+        # type mismatch, s is bytes and quotes are str
+        with self.assertRaises(TypeError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                quotes=('"', "'", "'''"),
+                )
+
+        # type mismatch, s is str and multiline_quotes are bytes
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=(b'<<', b">>", b"^^^"),
+                )
+
+        # type mismatch, s is bytes and multiline_quotes are str
+        with self.assertRaises(TypeError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", "^^^"),
+                )
+
+        # type mismatch, s is str and escape is bytes
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                escape=b'x'
+                )
+
+        # type mismatch, s is bytes and escape is str
+        with self.assertRaises(TypeError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                escape='x'
+                )
+
+        # value error, empty quotes str
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=('"', "'", ""),
+                )
+
+        # value error, empty quotes bytes
+        with self.assertRaises(ValueError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                quotes=(b'"', b"'", b""),
+                )
+
+        # empty string in multiline_quotes str
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", ""),
+                )
+
+        # empty string in multiline_quotes bytes
+        with self.assertRaises(ValueError):
+            test(b"a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=(b'<<', b">>", b""),
+                )
+
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                state='"""'
+                )
+
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                state='Q'
+                )
+
+        with self.assertRaises(TypeError):
+            test("a b c' x y z 'd e f'",
+                [],
+                state=b"'"
+                )
+
+        # repeated markers in quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                quotes=('"', "'", '"'),
+                )
+
+        # repeated markers in multiline_quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", '<<'),
+                )
+
+        # marker appears in both quotes and multiline_quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', ">>", '"'),
+                )
+
+        # marker appears in both quotes and multiline_quotes
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                multiline_quotes=('<<', "'", '"'),
+                )
+
+        # initial state is not a quote marker
+        with self.assertRaises(ValueError):
+            test("a b c' x y z 'd e f'",
+                [],
+                state="Z"
+                )
+
+        # newlines and multiline_quotes
+        with self.assertRaises(SyntaxError):
+            test('abc "def\nghi" jkl',
+                [],
+                )
+        with self.assertRaises(SyntaxError):
+            test('abc "defghi" "jk\nl',
+                [],
+                )
+
+        test('abc """def\nghi""" jkl',
+            [('', 'abc ', ''), ('"""', 'def\nghi', '"""'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        test('abc """def\vghi""" jkl',
+            [('', 'abc ', ''), ('"""', 'def\vghi', '"""'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        # the exotic Unicode paragraph separator!
+        # note: this test will automatically skip trying the bytes version.
+        test('abc """def\u2029ghi""" jkl',
+            [('', 'abc ', ''), ('"""', 'def\u2029ghi', '"""'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        test('abc "def ghi" jkl',
+            [('', 'abc ', ''), ('"', 'def ghi', '"'), ('', ' jkl', '')],
+            multiline_quotes=('"""',)
+            )
+
+        # can't have the same mark in both quotes and multiline_quotes
+        with self.assertRaises(ValueError):
+            test('abc "def\nghi" jkl',
+                [],
+                multiline_quotes=('"',)
+                )
+
+
+    def test_split_delimiters(self):
 
         self.maxDiff = 2**32
 
-        def test(s, expected, *, delimiters=None):
+        D = big.Delimiter
+
+        def test(s, expected, *, delimiters=big.split_delimiters_default_delimiters, state=()):
             empty = ''
             for i in range(2):
-                got = tuple(big.parse_delimiters(s, delimiters=delimiters))
+                got = tuple(big.split_delimiters(s, delimiters=delimiters, state=state))
 
                 flattened = []
                 for t in got:
@@ -2569,12 +3113,27 @@ class BigTextTests(unittest.TestCase):
                 s2 = empty.join(flattened)
                 self.assertEqual(s, s2)
 
+                if 0:
+                    import pprint
+                    print("\n\n")
+                    print("-"*72)
+                    print("expected:")
+                    pprint.pprint(expected)
+                    print("\n\n")
+                    print("got:")
+                    pprint.pprint(got)
+                    print("\n\n")
+
                 self.assertEqual(expected, got)
 
                 if not i:
                     s = to_bytes(s)
                     expected = to_bytes(expected)
                     empty = b''
+                    if state:
+                        state = to_bytes(state)
+                    if delimiters:
+                        delimiters = to_bytes(delimiters)
 
         test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
             (
@@ -2587,6 +3146,7 @@ class BigTextTests(unittest.TestCase):
                 ('1:2, 3:4',          '', '}'),
                 ('',                  '', ')'),
             ),
+            delimiters=big.split_delimiters_default_delimiters_bytes, # test default
             )
 
         test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
@@ -2623,6 +3183,181 @@ class BigTextTests(unittest.TestCase):
                 ('',   '', ']'),
                 ('!',  '',  ''),
             ),
+            delimiters=None,
+            )
+
+        # test state
+        test('x"], foo);}',
+            (
+                ('x',     '', '"'),
+                ('',      '', ']'),
+                (', foo', '', ')'),
+                (';',     '', '}'),
+            ), state='{(["')
+
+        with self.assertRaises(ValueError):
+            test('abc', None, state='[{"(')
+
+        with self.assertRaises(ValueError):
+            test('abc', None, state='{(x[')
+
+        # test escapes
+        test(r"foo('ab\'cd')",
+            (
+                ( 'foo',    '(', '' ),
+                ( '',       "'", '' ),
+                (r"ab\'cd", '',  "'"),
+                ( '',       '',  ')'),
+            ),
+            )
+
+        test(r'foo("ab\"cd")',
+            (
+                ( 'foo',    '(', '' ),
+                ( '',       '"', '' ),
+                (r'ab\"cd', '',  '"'),
+                ( '',       '',  ')'),
+            ),
+            )
+
+        # single-quoted strings by default don't allow newlines inside
+        with self.assertRaises(SyntaxError):
+            test('foo("ab\ncd")', [])
+        with self.assertRaises(SyntaxError):
+            test("foo('ab\ncd')", [])
+        # but the others delimiters permit it
+        test(r'foo([{ab\ncd}])',
+            (
+                ( 'foo',    '(', '' ),
+                ( '',       '[', '' ),
+                ( '',       '{', '' ),
+                (r'ab\ncd', '',  '}'),
+                ( '',       '',  ']'),
+                ( '',       '',  ')'),
+            ))
+
+        # test multi-character delimiters and escape
+        test(r'abc^Sdef<<gh><i>>klm^Xno**^Xp*^Xqrs^Qtuv<<wxy>>z',
+            (
+                ('abc',      '^S', ''),
+                ('def',      '<<', ''),
+                ('gh><i',    '',   '>>'),
+                ('klm',      '^X', ''),
+                ('no**^Xp*', '',   '^X'),
+                ('qrs',      '',   '^Q'),
+                ('tuv',      '<<', ''),
+                ('wxy',      '',   '>>'),
+                ('z',        '',   ''),
+                ),
+            delimiters = {
+                '^S': D('^Q'),
+                '<<': D('>>'),
+                '^X': D('^X', escape='**', quoting=True),
+                },
+            )
+
+        # torture test time!
+        # split_delimiters uses multisplit, which always returns
+        # the largest delimiter.  but what if we have delimiters
+        # that are substrings of other delimiters?  what if we
+        # have delimiters that overlap?  multisplit is greedy,
+        # it will always want to split on the larger string.
+
+        # torture test #1:
+        # current close delimiter is a prefix of another delimiter.
+        cruel_delimiters_1 = {
+            '(': D(')'),
+            '[': D(']'),
+            '[(': D(')]'),
+        }
+        #          vv -- multisplit will split here
+        test('a[b(c)]',
+            #      ^ --- but really we want to split here
+            #       ^ -- and here
+            (
+                ('a', '[', ''),
+                ('b', '(', ''),
+                ('c', '',  ')'),
+                ('',  '',  ']'),
+                ),
+            delimiters = cruel_delimiters_1,
+            )
+
+        # torture test #2:
+        # current escape string is a prefix of another delimiter.
+        cruel_delimiters_2 = {
+            '(': D(')', escape=']', quoting=True),
+            '[': D(']'),
+            '[(': D(')]'),
+        }
+        #          vv -- multisplit will split here
+        test('a[b(c]))]',
+            #      ^ --- but really we want to split here
+            #       ^ -- and here
+            (
+                ('a',   '[', ''),
+                ('b',   '(', ''),
+                ('c])', '',  ')'),
+                ('',    '',  ']'),
+                ),
+            delimiters = cruel_delimiters_2,
+            )
+
+        # torture test #3:
+        # we have a set of quoting delimiters, and
+        # random garbage that happens to combine with
+        # our close delimiter to form another overlapping
+        # delimiter.
+        cruel_delimiters_3 = {
+            '(': D(')'),
+            '[(': D(')]'),
+            '<[': D(']>', quoting=True, escape='**'),
+        }
+        #         vv --- multisplit will split here
+        test('a<[b)]>',
+            #     ^ ---- but really we want to split here
+            #      ^^ -- and here
+            (
+                ('a',  '<[', ''),
+                ('b)', '',   ']>'),
+                ),
+            delimiters = cruel_delimiters_3,
+            )
+
+        # torture test #4:
+        # we want to escape our ending quote mark,
+        # followed by another
+        cruel_delimiters_4 = {
+            '<': D('>', quoting=True, escape='\\'),
+            '<<': D('>>'),
+        }
+        #          vv --- multisplit will split here
+        test('a<b\\>>',
+            #      ^ --- but really we want to split here
+            #       ^ -- and here
+            (
+                ('a',    '<', ''),
+                ('b\\>', '',   '>'),
+                ),
+            delimiters = cruel_delimiters_4,
+            )
+
+        # torture test #5:
+        # our current escape string is the prefix of
+        # another delimiter
+        cruel_delimiters_5 = {
+            '<': D('>', quoting=True, escape='\\'),
+            'Q': D('\\>'),
+        }
+        #        vvv --- multisplit will split here
+        test('a<b\\>>',
+            #    ^^ ---- but really we want to split here
+            #      ^ -- and here
+            (
+                ('a',    '<', ''),
+                ('b\\>', '',   '>'),
+                ),
+            delimiters = cruel_delimiters_5,
             )
 
         with self.assertRaises(ValueError):
@@ -2633,57 +3368,132 @@ class BigTextTests(unittest.TestCase):
             test('a(3}', None)
 
         with self.assertRaises(ValueError):
-            test('delimiters is empty', None, delimiters=[])
-        with self.assertRaises(ValueError):
-            test('delimiter is abc (huh!)', None, delimiters=['()', 'abc'])
+            test('delimiters is empty', None, delimiters={})
         with self.assertRaises(TypeError):
-            test('delimiters contains 3', None, delimiters=['{}', 3])
+            test('delimiter is abc (huh!)', None, delimiters={'a': 'abc'})
+        with self.assertRaises(TypeError):
+            test('str/bytes mismatch', None, delimiters={'a': big.Delimiter(close=b'b')})
+        with self.assertRaises(TypeError):
+            test('str/bytes mismatch', None, delimiters={'a': big.Delimiter(close='x', escape=b'b', quoting=True)})
+        with self.assertRaises(TypeError):
+            test('bytes/str mismatch', None, delimiters={b'a': big.Delimiter(close='b')})
+        with self.assertRaises(TypeError):
+            test('bytes/str mismatch', None, delimiters={b'a': big.Delimiter(close=b'x', escape='b', quoting=True)})
         with self.assertRaises(ValueError):
-            test('delimiters contains a <backslash>', None, delimiters=['<>', '\\/'])
+            test('no delimiters?!', None, delimiters={})
         with self.assertRaises(ValueError):
-            test('delimiters contains <angle> <brackets> <twice>', None, delimiters=['<>', '<>'])
+            test(b'no delimiters?!', None, delimiters={})
+        with self.assertRaises(ValueError):
+            test('open delimiters is a <backslash>', None, delimiters={'\\': big.Delimiter(close='z')})
+        with self.assertRaises(ValueError):
+            test(b'open delimiters is a bytes <backslash>', None, delimiters={b'\\': big.Delimiter(close=b'z')})
+        with self.assertRaises(ValueError):
+            test('close delimiter is a <backslash>', None, delimiters={'z': big.Delimiter(close='\\')})
+        with self.assertRaises(ValueError):
+            test('delimiters contains <angle> <brackets> as both open and close delimiters', None, delimiters={'<': big.Delimiter(close='x'), '>': big.Delimiter(close='<')})
+        with self.assertRaises(ValueError):
+            test('delimiters contains <angle> <brackets> as both open and close delimiters', None, delimiters={'<': big.Delimiter(close='>'), 'x': big.Delimiter(close='<'), '{': big.Delimiter(close='}'), 'q': big.Delimiter(close='{')})
+        with self.assertRaises(ValueError):
+            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=True, escape='')})
+        with self.assertRaises(ValueError):
+            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
+        with self.assertRaises(ValueError):
+            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
+
+        with self.assertRaises(SyntaxError):
+            test('by default quote marks are now single-line only "ab\n", test 1, complete quoted string', None, )
+        with self.assertRaises(SyntaxError):
+            test('by default quote marks are now single-line only "ab\n, test 2, unterminated quoted string', None, )
+        with self.assertRaises(SyntaxError):
+            test('text ends with "escape string\\', None, )
+
+        # testing on the Delimiter class itself
+        d = big.Delimiter(close='x')
+        self.assertEqual(d, big.Delimiter(d) )
+        d = big.Delimiter(close='q', quoting=True, escape='>')
+        self.assertEqual(d, d.copy() )
+
+        self.assertEqual(
+            repr(big.Delimiter(close='x', escape='y', multiline=False, quoting=True)),
+                    "Delimiter(close='x', escape='y', multiline=False, quoting=True)"
+            )
 
         with self.assertRaises(ValueError):
-            test('unclosed_paren(a[3]', None)
+            D(close='x', escape='', quoting=True, multiline=True)
         with self.assertRaises(ValueError):
-            test('x[3] = unclosed_curly{', None)
+            D(close='x', escape='', quoting=True, multiline=False)
         with self.assertRaises(ValueError):
-            test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
+            D(close='x', escape='z', quoting=False, multiline=True)
         with self.assertRaises(ValueError):
-            test('"unterminated string\\', None)
+            D(close='\\')
         with self.assertRaises(ValueError):
-            test('open_everything( { a[35 "foo', None)
+            D(close=b'\\')
+        # invariant: one of multiline or quoting must be true.
+        with self.assertRaises(ValueError):
+            D(close=')', multiline=False, quoting=False)
+        with self.assertRaises(ValueError):
+            test('abcde', [],
+            delimiters={'\\': D(close='x')},
+            )
 
-        with self.assertRaises(TypeError):
-            big.Delimiter('(', b')')
-        with self.assertRaises(TypeError):
-            big.Delimiter(b'(', ')')
+        # Delimiter objects are now read-only
+        d = D(close='x')
+        with self.assertRaises(AttributeError):
+            d.close = 'y'
+        with self.assertRaises(AttributeError):
+            d.escape = '\\'
+        with self.assertRaises(AttributeError):
+            d.quoting = True
+        with self.assertRaises(AttributeError):
+            d.quoting = True
+
+
 
     def test_lines(self):
         self.maxDiff = 2**32
-        def test(i, expected):
+
+        def assert_lines_reconstitutes_properly(i):
+            for t in i:
+                info, line = t
+                reconstituted_line = info.leading + line + info.trailing + info.end
+                self.assertEqual(info.line, reconstituted_line)
+                yield t
+
+        def test(i, expected, *, test_reconstituted_line=True):
+            # slight hack
+            nonlocal lines
+            for info, line in expected:
+                info.lines = lines
+
             # print("I", i)
+            if test_reconstituted_line:
+                i = assert_lines_reconstitutes_properly(i)
             got = list(i)
-            # print("GOT", got)
-            # print(f"{i == got=}")
-            # print(f"{got == expected=}")
-            # import pprint
-            # print("\n\n")
-            # pprint.pprint(got)
-            # print("\n\n")
-            # pprint.pprint(expected)
-            # print("\n\n")
-            self.assertEqual(got, expected)
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+                for e, g in zip(expected, got):
+                    print(e==g)
+                print("\n\n")
+            self.assertEqual(expected, got)
 
         def L(line, line_number, column_number=1, end='\n', final=None, **kwargs):
             if final is None:
                 final = line
             if isinstance(end, str) and isinstance(line, bytes):
                 end = end.encode('ascii')
-            info = big.LineInfo(line, line_number, column_number, end=end, **kwargs)
+            info = big.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
             return (info, final)
 
-        test(big.lines("a\nb\nc\nd\ne\n"),
+        lines = big.lines("a\nb\nc\nd\ne\n")
+        test(lines,
             [
             L('a', 1, 1),
             L('b', 2, 1),
@@ -2693,24 +3503,65 @@ class BigTextTests(unittest.TestCase):
             L('',  6, 1, end=''),
             ])
 
-        lines = ['first line', '\tsecond line', 'third line']
-        test(big.lines_strip(big.lines(lines)),
+        # you can give lines an iterable of strings,
+        # in which case we don't populate "end".
+        list_of_lines = [
+            'first line',
+            '\tsecond line',
+            'third line',
+            '         ',
+            ''
+            ]
+        lines = big.lines(list_of_lines)
+        test(big.lines_strip(lines),
             [
-            L('first line', 1, 1, end=''),
-            L('\tsecond line', 2, 9, leading='\t', final='second line', end=''),
-            L('third line', 3, 1, end=''),
+            L('first line',    1, 1,                                                          end=''),
+            L('\tsecond line', 2, 9, leading='\t', final='second line',                       end=''),
+            L('third line',    3, 1,                                                          end=''),
+            L('         ',     4, 1,               final='',            trailing='         ', end=''),
+            L('',              5, 1,                                                          end=''),
             ])
 
-        test(big.lines_filter_comment_lines(big.lines("""
+        # or! you can give lines an iterable of 2-tuples of strings,
+        # in which case the first string is the line and the second is the end.
+        list_of_lines = [
+            ('line 1', '\n'),
+            ('hey!  line 2.', '\n'),
+            ('the only line with the word eggplant! line 3!', '\n'),
+            ('the final line, line 4.', '')
+            ]
+        lines = big.lines(list_of_lines)
+        test(big.lines_grep(lines, 'eggplant', invert=True),
+            [
+            L('line 1', 1, 1),
+            L('hey!  line 2.', 2, 1),
+            L('the final line, line 4.', 4, 1, end=''),
+            ])
+
+        # test lines_filter_line_comment_lines
+        # note, slight white box testing here:
+        # lines_filter_line_comment_lines has different approaches
+        # for one comment marker vs more than one.  so, test both.
+
+        lines = big.lines(b"a\n# ignored\n  # also ignored\n d")
+        test(big.lines_filter_line_comment_lines(lines, b'#'),
+            [
+            L(b'a',  1),
+            L(b' d', 4, end=b''),
+            ]
+            )
+
+        lines = big.lines("""
     # comment
     a = b
     // another comment
     c = d
     / not a comment
     /// is a comment!
-    ## another comment!
+## another comment!
     #! a third comment!
-""".lstrip('\n')), ('#', '//')),
+""".lstrip('\n'))
+        test(big.lines_filter_line_comment_lines(lines, ('#', '//')),
             [
             L('    a = b',           2, 1),
             L('    c = d',           4, 1),
@@ -2718,14 +3569,27 @@ class BigTextTests(unittest.TestCase):
             L('',                    9, 1, end=''),
             ])
 
-        test(big.lines_filter_comment_lines(big.lines(b"a\n# ignored\n c"), b'#'),
+        # minor regression test--
+        # I noticed this was broken right before release
+        lines = big.lines(b"""
+    # comment
+    a = b
+    // another comment
+    c = d
+    / not a comment
+    /// is a comment!
+## another comment!
+    #! a third comment!
+""".lstrip(b'\n'))
+        test(big.lines_filter_line_comment_lines(lines, (b'#', b'//')),
             [
-            L(b'a',  1),
-            L(b' c', 3, end=b''),
-            ]
-            )
+            L(b'    a = b',           2, 1),
+            L(b'    c = d',           4, 1),
+            L(b'    / not a comment', 5, 1),
+            L(b'',                    9, 1, end=b''),
+            ])
 
-        test(big.lines_containing(big.lines("""
+        lines = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -2733,7 +3597,8 @@ they don't have to be fancy.
 simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
-"""[1:]), "egg"),
+"""[1:])
+        test(big.lines_containing(lines, "egg"),
             [
                 L('i like eggs.', 3, 1),
                 L('simple scrambled eggs are just fine.', 5, 1),
@@ -2741,7 +3606,7 @@ whoops, I meant, negatory.
             ]
             )
 
-        test(big.lines_containing(big.lines("""
+        lines = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -2749,7 +3614,8 @@ they don't have to be fancy.
 simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
-"""[1:]), "egg", invert=True),
+"""[1:])
+        test(big.lines_containing(lines, "egg", invert=True),
             [
                 L('hello yolks', 1, 1),
                 L('what do you have to say, champ?', 2, 1),
@@ -2760,28 +3626,28 @@ whoops, I meant, negatory.
             )
 
         _sentinel = object()
-        def test_and_remove_lineinfo_match(i, substring, *, invert=False):
+        def test_and_remove_lineinfo_match(i, substring, *, invert=False, match='match'):
             l = []
             for t in i:
                 info, line = t
 
-                match = getattr(info, "match", _sentinel)
-                self.assertNotEqual(match, _sentinel)
+                m = getattr(info, match, _sentinel)
+                self.assertNotEqual(m, _sentinel)
 
                 if invert:
-                    self.assertIsNone(match)
+                    self.assertIsNone(m)
                     self.assertNotIn(substring, line)
                 else:
-                    self.assertIsInstance(match, re_Match)
+                    self.assertIsInstance(m, re_Match)
                     self.assertIn(substring, line)
 
                 # now remove the match object for easier testing
-                del info.match
+                setattr(info, match, None)
                 l.append(t)
             return l
 
 
-        i = big.lines_grep(big.lines("""
+        lines = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -2789,7 +3655,8 @@ they don't have to be fancy.
 simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
-"""[1:]), "eg+")
+"""[1:])
+        i = assert_lines_reconstitutes_properly(big.lines_grep(lines, "eg+"))
         got = test_and_remove_lineinfo_match(i, "eg")
         test(got,
             [
@@ -2800,7 +3667,7 @@ whoops, I meant, negatory.
             ]
             )
 
-        i = big.lines_grep(big.lines("""
+        lines = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -2808,18 +3675,32 @@ they don't have to be fancy.
 simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
-"""[1:]), "eg+", invert=True)
-        got = test_and_remove_lineinfo_match(i, "eg", invert=True)
+"""[1:])
+        i = assert_lines_reconstitutes_properly(big.lines_grep(lines, "eg+", invert=True, match='quixote'))
+        got = test_and_remove_lineinfo_match(i, "eg", invert=True, match='quixote')
         test(got,
             [
-                L('hello yolks', 1, 1),
-                L('what do you have to say, champ?', 2, 1),
-                L("they don't have to be fancy.", 4, 1),
-                L('', 8, 1, end=''),
+                L('hello yolks', 1, 1, quixote=None),
+                L('what do you have to say, champ?', 2, 1, quixote=None),
+                L("they don't have to be fancy.", 4, 1, quixote=None),
+                L('', 8, 1, end='', quixote=None),
             ]
             )
 
-        test(big.lines_sort(big.lines("""
+        with self.assertRaises(ValueError):
+            lines = big.lines("""
+hello yolks
+what do you have to say, champ?
+i like eggs.
+they don't have to be fancy.
+simple scrambled eggs are just fine.
+neggatory!
+whoops, I meant, negatory.
+"""[1:])
+            i = big.lines_grep(lines, "eg+", invert=True, match='not a valid identifier')
+
+
+        lines = big.lines("""
 cormorant
 firefox
 alligator
@@ -2828,7 +3709,8 @@ elephant
 giraffe
 barracuda
 hummingbird
-"""[1:-1])),
+"""[1:-1])
+        test(big.lines_sort(lines),
             [
                 L('alligator', 3),
                 L('barracuda', 7),
@@ -2841,7 +3723,7 @@ hummingbird
             ]
             )
 
-        test(big.lines_sort(big.lines("""
+        lines = big.lines("""
 cormorant
 firefox
 alligator
@@ -2850,7 +3732,8 @@ elephant
 giraffe
 barracuda
 hummingbird
-"""[1:-1]), reverse=True),
+"""[1:-1])
+        test(big.lines_sort(lines, reverse=True),
             [
                 L('hummingbird', 8, end=''),
                 L('giraffe', 6),
@@ -2863,93 +3746,254 @@ hummingbird
             ]
             )
 
-        test(big.lines_rstrip(big.lines(
+        lines = big.lines("""
+cormorant
+firefox
+alligator
+diplodocus
+elephant
+giraffe
+barracuda
+hummingbird
+"""[1:-1])
+        test(big.lines_sort(lines, key=lambda t:t[1][1:]), # sort by second letter onward
+            [
+                L('barracuda', 7),
+                L('diplodocus', 4),
+                L('giraffe', 6),
+                L('firefox', 2),
+                L('elephant', 5),
+                L('alligator', 3),
+                L('cormorant', 1),
+                L('hummingbird', 8, end=''),
+            ]
+            )
+
+        lines = big.lines(
 "    a = b  \n"
 "    c = d     \n"
-)),
+)
+        test(big.lines_rstrip(lines),
             [
             L('    a = b  ',    1, 1, final='    a = b', trailing='  '),
             L('    c = d     ', 2, 1, final='    c = d', trailing='     '),
             L('',               3, 1, end=''),
             ])
 
-        test(big.lines_strip(big.lines(
-"    a = b  \n"
-"    c = d     \n"
-)),
+        lines = big.lines(
+"QXYXYQa = bXY\n"
+"XYQQXYXYc = dQQQQ\n"
+)
+        test(big.lines_rstrip(lines, separators=('Q', 'XY')),
             [
-            L('    a = b  ',    1, 5, leading='    ', final='a = b', trailing='  '),
-            L('    c = d     ', 2, 5, leading='    ', final='c = d', trailing='     '),
-            L('',               3, 1, end=''),
+            L('QXYXYQa = bXY',     1, 1, final='QXYXYQa = b', trailing='XY'),
+            L('XYQQXYXYc = dQQQQ', 2, 1, final='XYQQXYXYc = d', trailing='QQQQ'),
+            L('',                  3, 1, end=''),
             ])
 
-        test(big.lines_filter_empty_lines(big.lines("""
+        lines = big.lines(
+"    a = b  \n"
+"      c = d     \n"
+"   \n"
+)
+        test(big.lines_strip(lines),
+            [
+            L('    a = b  ',      1, 5, leading='    ',   final='a = b', trailing='  '),
+            L('      c = d     ', 2, 7, leading='      ', final='c = d', trailing='     '),
+            L('   ',              3, 1,                   final='',      trailing='   '),
+            L('',                 4, 1, end=''),
+            ])
+
+        lines = big.lines(
+"QXYXYQa = bXY\n"
+"XYQQXYXYc = dQQQQ\n"
+'QXYQQXYXYQ\n'
+)
+        test(big.lines_strip(lines, separators=('Q', 'XY')),
+            [
+            L('QXYXYQa = bXY',     1, 7, leading='QXYXYQ',   final='a = b', trailing='XY'),
+            L('XYQQXYXYc = dQQQQ', 2, 9, leading='XYQQXYXY', final='c = d', trailing='QQQQ'),
+            L('QXYQQXYXYQ',        3, 1,                     final='',      trailing='QXYQQXYXYQ'),
+            L('',                  4, 1, end=''),
+            ])
+
+        # test funny separators for lines_strip,
+        # *and* multiple calls to clip_leading and clip_trailing
+        li = lines = big.text.lines('xxxA B C Dyyy\nyyyE F G Hzzz\nxyzI J K Lyzx')
+        li = big.text.lines_strip(li, ('x', '?'))
+        li = big.text.lines_strip(li, ('y', '!'))
+        li = big.text.lines_strip(li, ('z', '.'))
+        test(li,
+            [
+            L('xxxA B C Dyyy', 1, 4, leading='xxx', final='A B C D',  trailing='yyy'),
+            L('yyyE F G Hzzz', 2, 4, leading='yyy', final='E F G H',  trailing='zzz'),
+            L('xyzI J K Lyzx', 3, 4, leading='xyz', final='I J K Ly', trailing='zx', end=''),
+            ]
+            )
+
+
+        lines = big.lines("""
 
     a = b
 
 
     c = d
 
-"""[1:])),
+"""[1:])
+        test(big.lines_filter_empty_lines(lines),
             [
             L('    a = b', 2, 1),
             L('    c = d', 5, 1),
             ])
 
-        test(big.lines_convert_tabs_to_spaces(big.lines(
+        lines = big.lines(
             "\tfirst line\n"
             "\t\tsecond line\n"
             "  \tthird line\n",
-            tab_width=8)),
+            tab_width=8)
+        test(big.lines_convert_tabs_to_spaces(lines),
             [
                 L("\tfirst line", 1, 1,    final="        first line"),
                 L("\t\tsecond line", 2, 1, final="                second line"),
                 L("  \tthird line", 3, 1,  final="        third line"),
                 L("", 4, 1, end=''),
-            ])
+            ], test_reconstituted_line=False)
 
-        test(big.lines_strip_comments(big.lines("""
-for x in range(5): # this is a comment
+        lines = big.lines("""
+for x in range(5): # this is my exciting comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
     print(no_comments_or_quotes_on_this_line)
-"""[1:]), ("#", "//")),
+"""[1:])
+        test(big.lines_strip_line_comments(lines, ("#", "//")),
             [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, comment='# this is a comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1, comment=''),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, comment='# this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1, comment=''),
-                L(line='', line_number=5, column_number=1, comment='', end=''),
+                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing='# this is my exciting comment', final='for x in range(5): '),
+                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
+                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing='# this "comment" is useless', final='    print("") '),
+                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
+                L(line='', line_number=5, column_number=1, end=''),
+            ])
+
+        lines = big.lines("""
+for x in range(5): # this is my exciting comment
+    print("# this is quoted", x)
+    print("") # this "comment" is useless
+    print(no_comments_or_quotes_on_this_line)
+"""[1:])
+        test(big.lines_rstrip(big.lines_strip_line_comments(lines, ("#", "//"))),
+            [
+                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing=' # this is my exciting comment', final='for x in range(5):'),
+                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
+                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
+                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
+                L(line='', line_number=5, column_number=1, end=''),
+            ])
+
+        # test multiline
+        lines = big.lines("""
+for x in range(5): # this is my exciting comment
+    print('''
+    this is a multiline string
+    does this line have a comment? # no!
+    ''') # but here's a comment
+    print("just checking, # here too") # here is another comment
+"""[1:])
+        test(big.lines_strip_line_comments(lines, ("#",), multiline_quotes=("'''",)),
+            [
+                L(line_number=1, column_number=1,
+                    line ='for x in range(5): # this is my exciting comment',
+                    final='for x in range(5): ',
+                    trailing='# this is my exciting comment',),
+                L(line_number=2, column_number=1,
+                    line ="    print('''",
+                    final="    print('''"),
+                L(line_number=3, column_number=1,
+                    line ="    this is a multiline string",
+                    final="    this is a multiline string"),
+                L(line_number=4, column_number=1,
+                    line ="    does this line have a comment? # no!",
+                    final="    does this line have a comment? # no!"),
+                L(line_number=5, column_number=1,
+                    line="    ''') # but here's a comment",
+                    trailing="# but here's a comment",
+                    final="    ''') ",
+                    ),
+                L(line_number=6, column_number=1,
+                    line='    print("just checking, # here too") # here is another comment',
+                    trailing="# here is another comment",
+                    final='    print("just checking, # here too") '),
+                L(line_number=7, column_number=1,
+                    line='',
+                    end=''),
             ])
 
         # don't get alarmed!  we intentionally break quote characters in this test.
-        test(big.lines_strip_comments(big.lines("""
+        lines = big.lines("""
 for x in range(5): # this is a comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
     print(no_comments_or_quotes_on_this_line)
-"""[1:]), ("#", "//"), quotes=None),
+"""[1:])
+        test(big.lines_strip_line_comments(lines, ("#", "//"), quotes=None),
             [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, comment='# this is a comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1, comment='# this is quoted", x)', final='    print("'),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, comment='# this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1, comment=''),
-                L(line='', line_number=5, column_number=1, comment='', end=''),
+                L(  line_number=1, column_number=1,
+                    line='for x in range(5): # this is a comment',
+                    trailing='# this is a comment',
+                    final='for x in range(5): '),
+                L(  line_number=2, column_number=1,
+                    line='    print("# this is quoted", x)',
+                    trailing='# this is quoted", x)',
+                    final='    print("'),
+                L(  line_number=3, column_number=1,
+                    line='    print("") # this "comment" is useless',
+                    trailing='# this "comment" is useless',
+                    final='    print("") '),
+                L(  line_number=4, column_number=1,
+                    line='    print(no_comments_or_quotes_on_this_line)'),
+                L(  line_number=5, column_number=1,
+                    line='',
+                    end=''),
             ])
 
+        # invalid quotes
         with self.assertRaises(ValueError):
-            test(big.lines_strip_comments(big.lines("a\nb\n"), None), [])
+            test(big.lines_strip_line_comments(big.lines("a\nb\n"), None), [])
 
-        test(big.lines_strip_comments(big.lines(b"a\nb# ignored\n c"), b'#'),
+        # unterminated single-quotes across lines
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar\n' bat 'zzz'"), ("#", '//',)), [])
+
+        # check that the exception has the right column number
+        sentinel = object()
+        result = sentinel
+        try:
+            # this should throw an exception, result should not be written to here.
+            result = list(big.lines_strip_line_comments(big.lines("\nfoo\nbar 'bat' baz 'cinco\n' doodle 'zzz'"), ("#", '//',)))
+        except SyntaxError as e:
+            self.assertTrue(str(e).startswith("Line 3 column 15:"))
+            self.assertTrue(str(e).endswith("'"))
+        self.assertEqual(result, sentinel)
+
+        # unterminated single-quotes at the end
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar' bat 'zzz"), ("#", '//',)), [])
+
+        # unterminated triple-quotes at the end
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar' bat '''zzz\nmore lines here\nwait what's happening?"), ("#", '//',), multiline_quotes=("'''",)), [])
+
+        lines = big.lines(b"a\nb# ignored\n c")
+        test(big.lines_strip_line_comments(lines, b'#'),
             [
-            L(b'a', 1, comment=b''),
-            L(b'b# ignored', 2, 1, comment=b'# ignored', final=b'b'),
-            L(b' c', 3, comment=b'', end=b''),
+            L(b'a', 1),
+            L(b'b# ignored', 2, 1, trailing=b'# ignored', final=b'b'),
+            L(b' c', 3, end=b''),
             ]
             )
 
 
-        test(big.lines_filter_empty_lines(big.lines_filter_comment_lines(big.lines_strip(big.lines(
+
+        lines = big.lines(
 "   \n" +
 "    a = b \n" +
 "   \n" +
@@ -2957,7 +4001,8 @@ for x in range(5): # this is a comment
 "    \n" +
 "    \n" +
 "    c = d  \n" +
-"     \n")), '#')),
+"     \n")
+        test(big.lines_filter_empty_lines(big.lines_filter_line_comment_lines(big.lines_strip(lines), '#')),
             [
             L('    a = b ',  2, 5, leading='    ', trailing=' ', final='a = b'),
             L('    c = d  ', 7, 5, leading='    ', trailing='  ', final='c = d'),
@@ -2967,19 +4012,46 @@ for x in range(5): # this is a comment
     def test_lines_strip_indent(self):
         self.maxDiff = 2**32
 
+        def assert_line_reconstitutes_properly(i):
+            for t in i:
+                info, line = t
+                reconstituted_line = info.leading + line + info.trailing + info.end
+                self.assertEqual(info.line, reconstituted_line, f"failed to reconstitute line {info.line_number}: info={info} line={line!r}")
+                yield t
+
         def test(lines, expected, *, tab_width=8):
-            got = list(big.lines_strip_indent(big.lines(lines, tab_width=tab_width)))
-            self.assertEqual(got, expected)
+            if not isinstance(lines, types.GeneratorType):
+                lines = big.lines(lines, tab_width=tab_width)
+            i = assert_line_reconstitutes_properly(big.lines_strip_indent(lines))
+            got = list(i)
+
+            # fixup lines objects
+            for pair in expected:
+                info, line = pair
+                info.lines = lines
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
 
         _sentinel = object()
 
-        def LineInfo(line, line_number, column_number, end=_sentinel, **kwargs):
+        def LineInfo(lines, line, line_number, column_number, end=_sentinel, **kwargs):
             if end is _sentinel:
                 if isinstance(line, bytes):
                     end = b'\n'
                 else:
                     end = '\n'
-            return big.text.LineInfo(line, line_number, column_number, end=end, **kwargs)
+            return big.text.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
 
 
         lines = """
@@ -2997,40 +4069,41 @@ outdent
   new indent
 outdent
 """
+        # LineInfo really only needs the lines object to know the tab width
+        li = big.text.lines('')
 
         expected = [
-            (LineInfo(line='', line_number=1, column_number=1, indent=0, leading=''),
+            (LineInfo(li, line='', line_number=1, column_number=1, indent=0, leading=''),
                 ''),
-            (LineInfo(line='left margin', line_number=2, column_number=1, indent=0, leading=''),
+            (LineInfo(li, line='left margin', line_number=2, column_number=1, indent=0, leading=''),
                 'left margin'),
-            (LineInfo(line='if 3:', line_number=3, column_number=1, indent=0, leading=''),
+            (LineInfo(li, line='if 3:', line_number=3, column_number=1, indent=0, leading=''),
                 'if 3:'),
-            (LineInfo(line='    text', line_number=4, column_number=5, indent=1, leading='    '),
+            (LineInfo(li, line='    text', line_number=4, column_number=5, indent=1, leading='    '),
                 'text'),
-            (LineInfo(line='else:', line_number=5, column_number=1, indent=0, leading=''),
+            (LineInfo(li, line='else:', line_number=5, column_number=1, indent=0, leading=''),
                 'else:'),
-            (LineInfo(line='    if 1:', line_number=6, column_number=5, indent=1, leading='    '),
+            (LineInfo(li, line='    if 1:', line_number=6, column_number=5, indent=1, leading='    '),
                 'if 1:'),
-            (LineInfo(line='          other text', line_number=7, column_number=11, indent=2, leading='          '),
+            (LineInfo(li, line='          other text', line_number=7, column_number=11, indent=2, leading='          '),
                 'other text'),
-            (LineInfo(line='          other text', line_number=8, column_number=11, indent=2, leading='          '),
+            (LineInfo(li, line='          other text', line_number=8, column_number=11, indent=2, leading='          '),
                 'other text'),
-            (LineInfo(line='    more text', line_number=9, column_number=5, indent=1, leading='    '),
+            (LineInfo(li, line='    more text', line_number=9, column_number=5, indent=1, leading='    '),
                 'more text'),
-            (LineInfo(line='      different indent', line_number=10, column_number=7, indent=2, leading='      '),
+            (LineInfo(li, line='      different indent', line_number=10, column_number=7, indent=2, leading='      '),
                 'different indent'),
-            (LineInfo(line='    outdent', line_number=11, column_number=5, indent=1, leading='    '),
+            (LineInfo(li, line='    outdent', line_number=11, column_number=5, indent=1, leading='    '),
                 'outdent'),
-            (LineInfo(line='outdent', line_number=12, column_number=1, indent=0, leading=''),
+            (LineInfo(li, line='outdent', line_number=12, column_number=1, indent=0, leading=''),
                 'outdent'),
-            (LineInfo(line='  new indent', line_number=13, column_number=3, indent=1, leading='  '),
+            (LineInfo(li, line='  new indent', line_number=13, column_number=3, indent=1, leading='  '),
                 'new indent'),
-            (LineInfo(line='outdent', line_number=14, column_number=1, indent=0, leading=''),
+            (LineInfo(li, line='outdent', line_number=14, column_number=1, indent=0, leading=''),
                 'outdent'),
-            (LineInfo(line='', line_number=15, column_number=1, indent=0, leading='', end=''),
+            (LineInfo(li, line='', line_number=15, column_number=1, indent=0, leading='', end=''),
                 ''),
             ]
-
         test(lines, expected)
 
 
@@ -3047,23 +4120,23 @@ outdent
         )
 
         expected = [
-            (LineInfo(line='left margin',
+            (LineInfo(li, line='left margin',
                 line_number=1, column_number=1, indent=0, leading=''),
                 'left margin'),
-            (LineInfo(line='\teight',
+            (LineInfo(li, line='\teight',
                 line_number=2, column_number=9, indent=1, leading='\t'),
                 'eight'),
-            (LineInfo(line='  \t    twelve',
+            (LineInfo(li, line='  \t    twelve',
                 line_number=3, column_number=13, indent=2, leading='  \t    '),
                 'twelve'),
-            (LineInfo(line='        eight is enough',
+            (LineInfo(li, line='        eight is enough',
                 line_number=4, column_number=9, indent=1, leading='        '),
                 'eight is enough'),
-            (LineInfo(line='    ',
-                line_number=5, column_number=1, indent=1, leading='    '),
+            (LineInfo(li, line='    ',
+                line_number=5, column_number=5, indent=0, leading='    '),
                 ''),
-            (LineInfo(line='',
-                line_number=6, column_number=1, indent=1, leading='', end=''),
+            (LineInfo(li, line='',
+                line_number=6, column_number=1, indent=0, leading='', end=''),
                 '')
             ]
 
@@ -3078,17 +4151,17 @@ outdent
             )
 
         expected = [
-            (LineInfo(line=b'left margin', line_number=1, column_number=1, indent=0, leading=b''),
+            (LineInfo(li, line=b'left margin', line_number=1, column_number=1, indent=0, leading=b''),
                 b'left margin'),
-            (LineInfo(line=b'\tfour', line_number=2, column_number=5, indent=1, leading=b'\t'),
+            (LineInfo(li, line=b'\tfour', line_number=2, column_number=5, indent=1, leading=b'\t'),
                 b'four'),
-            (LineInfo(line=b'  \t    eight', line_number=3, column_number=9, indent=2, leading=b'  \t    '),
+            (LineInfo(li, line=b'  \t    eight', line_number=3, column_number=9, indent=2, leading=b'  \t    '),
                 b'eight'),
-            (LineInfo(line=b'  \t\tfigure eight is double four', line_number=4, column_number=9, indent=2, leading=b'  \t\t'),
+            (LineInfo(li, line=b'  \t\tfigure eight is double four', line_number=4, column_number=9, indent=2, leading=b'  \t\t'),
                 b'figure eight is double four'),
-            (LineInfo(line=b'    figure four is half of eight', line_number=5, column_number=5, indent=1, leading=b'    '),
+            (LineInfo(li, line=b'    figure four is half of eight', line_number=5, column_number=5, indent=1, leading=b'    '),
                 b'figure four is half of eight'),
-            (LineInfo(line=b'', line_number=6, column_number=1, indent=1, leading=b'', end=b''),
+            (LineInfo(li, line=b'', line_number=6, column_number=1, indent=0, leading=b'', end=b''),
                 b'')]
 
         test(lines, expected, tab_width=4)
@@ -3122,8 +4195,10 @@ outdent
         with self.assertRaises(IndentationError):
             test(lines, [], tab_width=4)
 
-        with self.assertRaises(ValueError):
-            test("first line\n  \u3000  second line\nthird line\n", [])
+        # with self.assertRaises(ValueError):
+        #     test("first line\n  \u3000  second line\nthird line\n", [])
+
+
 
     def test_lines_misc(self):
         ## error handling
@@ -3132,6 +4207,9 @@ outdent
         with self.assertRaises(ValueError):
             next(big.lines([ ('a', 'b', 'c')]))
 
+        with self.assertRaises(ValueError):
+            next(big.lines([ 'x', 'y', 'z' ], separators=('y',)))
+
         with self.assertRaises(TypeError):
             next(big.lines("", line_number=math.pi))
         with self.assertRaises(TypeError):
@@ -3139,36 +4217,48 @@ outdent
         with self.assertRaises(TypeError):
             next(big.lines("", tab_width=math.pi))
 
-        with self.assertRaises(TypeError):
-            big.LineInfo(math.pi, 1, 1)
-        with self.assertRaises(TypeError):
-            big.LineInfo('', math.pi, 1)
-        with self.assertRaises(TypeError):
-            big.LineInfo('', 1, math.pi)
-        with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, leading=math.pi))
-        with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, trailing=math.pi))
-        with self.assertRaises(TypeError):
-            next(big.LineInfo('', 1, 1, end=math.pi))
-
         with self.assertRaises(ValueError):
-            list(big.lines_filter_comment_lines("", []))
+            list(big.lines_filter_line_comment_lines("", []))
         with self.assertRaises(TypeError):
-            list(big.lines_filter_comment_lines("", math.pi))
+            list(big.lines_filter_line_comment_lines("", math.pi))
+
+
+        li = big.lines('')
+        with self.assertRaises(TypeError):
+            big.LineInfo(li, math.pi, 1, 1)
+        with self.assertRaises(TypeError):
+            big.LineInfo(li, '', math.pi, 1)
+        with self.assertRaises(TypeError):
+            big.LineInfo(li, '', 1, math.pi)
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, leading=math.pi))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, trailing=math.pi))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, end=math.pi))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, indent=math.pi))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, indent=None))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, indent='    '))
+        with self.assertRaises(TypeError):
+            next(big.LineInfo(li, '', 1, 1, match=3))
 
         ## test kwargs
-        i = big.lines('', quark=22)
-        self.assertTrue(hasattr(i, 'quark'))
-        self.assertEqual(getattr(i, 'quark'), 22)
+        lines = big.lines('', quark=22)
+        self.assertTrue(hasattr(lines, 'quark'))
+        self.assertEqual(getattr(lines, 'quark'), 22)
 
-        info = big.LineInfo('', 1, 1, quark=35)
+        info = big.LineInfo(lines, '', 1, 1, quark=35)
         self.assertTrue(hasattr(info, 'quark'))
         self.assertEqual(getattr(info, 'quark'), 35)
 
         ## repr
-        li = big.LineInfo('', 1, 1, indent=0)
-        self.assertEqual(repr(li), "LineInfo(line_number=1, column_number=1)")
+        info = big.LineInfo(lines, '', 1, 1, indent=0)
+        lines_repr = repr(lines)
+        self.assertEqual(repr(info), f"LineInfo(lines={lines_repr}, line_number=1, column_number=1)")
+
 
     def test_int_to_words(self):
         # confirm that flowery has a default of True
@@ -3976,6 +5066,7 @@ outdent
             '1000000000000000000000000000000000000000000000000000000000000000000000000000',
             )
 
+
     def test_encode_strings(self):
         sentinel = object()
         def test(o, expected, *, encoding=sentinel):
@@ -3985,9 +5076,15 @@ outdent
                 got = big.encode_strings(o, encoding)
             self.assertEqual(got, expected)
 
-        test(['a', 'b', 'c'], [b'a', b'b', b'c'])
-        test(('x', 'y', 'z'), (b'x', b'y', b'z'))
-        test({'ab': 'cd', 'ef': 'gh'}, {b'ab': b'cd', b'ef': b'gh'})
+        test(['a', 'b', 'c'], [b'a', b'b', b'c']) # list
+        test(('x', 'y', 'z'), (b'x', b'y', b'z')) # tuple
+        test({'x', 'y', 'z'}, {b'x', b'y', b'z'}) # set
+        test({'ab': 'cd', 'ef': 'gh'}, {b'ab': b'cd', b'ef': b'gh'}) # dict
+
+        test([{ 'ab': ( 'cd',  'ef'),  'gh': { 'ij',  'kl'},  'mn': [ 'op', b'qr', { 'st':  'uv'}, ( 'wx',), { 'yz',} ]}],
+             [{b'ab': (b'cd', b'ef'), b'gh': {b'ij', b'kl'}, b'mn': [b'op', b'qr', {b'st': b'uv'}, (b'wx',), {b'yz',} ]}],
+             ) # super bombad nested stuffs
+
 
         class SubclassOfList(list):
             pass
@@ -3996,11 +5093,18 @@ outdent
 
         test(('x', 'y', 'z', "\N{PILE OF POO}"), (b'x', b'y', b'z', b'\xf0\x9f\x92\xa9'), encoding='utf-8')
 
-        with self.assertRaises(TypeError):
-            big.encode_strings('abcde')
+        test('abcde', b'abcde')
+        test('ijklm 🐿️', b'ijklm \xf0\x9f\x90\xbf\xef\xb8\x8f', encoding="utf-8")
+        with self.assertRaises(UnicodeEncodeError):
+            test('ijklm 🐿️', b'')
+        test(b'wxyz', b'wxyz')
 
         with self.assertRaises(TypeError):
-            big.encode_strings('ijklm', encoding="utf-8")
+            class Foo:
+                def __init__(self, x):
+                    self.x = x
+            foo = Foo('abc')
+            test(foo, None)
 
 
 def run_tests():

@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2023 Larry Hastings
+Copyright 2022-2024 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -46,8 +46,8 @@ class Heap:
     Specifics:
         * Use Heap.append to add a value to the heap.
         * Use Heap.extend to add multiple values to the heap.
-        * Use Heap.popleft to remove the earliest value from the heap.
-        * Use Heap[0] to peek at the earliest value on the heap.
+        * Use Heap.popleft to remove the first value from the heap.
+        * Use Heap[0] to peek at the first value on the heap.
     """
     def __init__(self, i=None):
         if not i:
@@ -119,7 +119,7 @@ class Heap:
 
     def __getitem__(self, item):
         if not isinstance(item, (int, slice)):
-            raise TypeError(f"Heap only supports int and slice indices")
+            raise TypeError(f"heap only supports indexing with int and slice")
         if isinstance(item, slice):
             if item.step in (None, 1):
                 length = len(self._queue)
@@ -159,7 +159,7 @@ class Heap:
 
         def __next__(self):
             if self._version != self._heap._version:
-                raise RuntimeError("Heap changed during iteration")
+                raise RuntimeError("heap modified during iteration")
             if not self._copy:
                 raise StopIteration
             return heappop(self._copy)
