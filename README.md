@@ -259,7 +259,7 @@ And here are five little functions/classes I use all the time:
 
 [`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
 
-[`lines_grep(li, pattern, *, invert=False, flags=0, match='match')`](#lines_grepli-pattern--invertfalse-flags0)
+[`lines_grep(li, pattern, *, invert=False, flags=0, match='match')`](#lines_grepli-pattern--invertfalse-flags0-matchmatch)
 
 [`lines_rstrip(li, separators=None)`](#lines_rstripli-separatorsnone)
 
@@ -290,8 +290,6 @@ And here are five little functions/classes I use all the time:
 [`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
 
 [`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
-
-[`split_delimiters(s, delimiters={...}, *, state=())`](#split_delimiterss-delimiters--state)
 
 [`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
 
@@ -337,11 +335,13 @@ And here are five little functions/classes I use all the time:
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
+[`split_delimiters(s, delimiters={...}, *, state=())`](#split_delimiterss-delimiters--state)
+
 [`split_quoted_strings(s, quotes=('"', "'"), *, escape='\\', multiline_quotes=(), state='')`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
 
 [`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
 
-[`split_title_case(s, *, split_allcaps=True)`](split_title_cases--split_allcapstrue)
+[`split_title_case(s, *, split_allcaps=True)`](#split_title_cases--split_allcapstrue)
 
 [`State()`](#state)
 
@@ -2546,7 +2546,7 @@ If the indent level hasn't been measured yet this
 should be `0`.
 
 `match` is the `re.Match` object that matched this
-line, if any.  See `lines_grep`.
+line, if any.  See [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch).
 
 You can add your own fields by passing them in
 via `**kwargs`; you can also add new attributes
@@ -5081,11 +5081,11 @@ encoded as the second word in the function name
   `lines_convert_tabs_to_spaces` changes tab characters
   to space characters in any lines it processes.
 
-(**big** isn't strict about these category names though.
+(**big** isn't strictly consistent about these category names though.
 For example,
-[`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
+[`lines_containing`](#lines_containingli-s--invertfalse)
 and
-[`lines_grep(li, pattern, *, invert=False, flags=0)`](#lines_grepli-pattern--invertfalse-flags0)
+[`lines_grep`](#lines_grepli-pattern--invertfalse-flags0)
 are obviously "filter" modifiers, but their names
 don't start with `lines_filter_`.)
 
@@ -5990,54 +5990,6 @@ Minor updates to the documentation and to the text of some exceptions.
 
 </dd></dl>
 
-#### `lines_filter_comment_lines`
-
-<dl><dd>
-
-`lines_filter_comment_lines` has been renamed to
-`lines_filter_line_comment_lines`.  For backwards compatibility,
-the function
-is also available under the old name; this old name will
-eventually be removed, but not before September 2025.
-
-</dd></dl>
-
-#### `lines_filter_line_comment_lines`
-
-> This API has breaking changes.
-
-<dl><dd>
-
-New name for `lines_filter_comment_lines`.
-
-Correctness improvements:
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
-now enforces that single-quoted strings can't span lines,
-and multi-quoted strings must be closed before the end of
-the last line.
-
-Minor optimization: for every line, it used to `lstrip` a copy of
-the line, then use a regular expression to see if the line started
-with one of the comment characters.  Now the regular expression
-itself skips past any leading whitespace.
-
-</dd></dl>
-
-#### `lines_grep`
-
-<dl><dd>
-
-New feature: `lines_grep` has always used `re.search` to examine
-the lines yielded.  It now writes the result to `info.match`.
-(If you pass in `invert=True` to `lines_grep`, `lines_grep`
-still writes to the `match` attribute--but it always writes `None`.)
-
-If you want to write the `re.Match` object to another attribute,
-pass in the name of that attribute to the keyword-only
-parameter `match`.
-
-</dd></dl>
-
 #### `LineInfo`
 
 > This API has breaking changes.
@@ -6125,6 +6077,54 @@ somewhere else.
 
 </dd></dl>
 
+#### `lines_filter_comment_lines`
+
+<dl><dd>
+
+`lines_filter_comment_lines` has been renamed to
+`lines_filter_line_comment_lines`.  For backwards compatibility,
+the function
+is also available under the old name; this old name will
+eventually be removed, but not before September 2025.
+
+</dd></dl>
+
+#### `lines_filter_line_comment_lines`
+
+> This API has breaking changes.
+
+<dl><dd>
+
+New name for `lines_filter_comment_lines`.
+
+Correctness improvements:
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
+now enforces that single-quoted strings can't span lines,
+and multi-quoted strings must be closed before the end of
+the last line.
+
+Minor optimization: for every line, it used to `lstrip` a copy of
+the line, then use a regular expression to see if the line started
+with one of the comment characters.  Now the regular expression
+itself skips past any leading whitespace.
+
+</dd></dl>
+
+#### `lines_grep`
+
+<dl><dd>
+
+New feature: [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch)
+has always used `re.search` to examine
+the lines yielded.  It now writes the result to `info.match`.
+(If you pass in `invert=True` to `lines_grep`, `lines_grep`
+still writes to the `match` attribute--but it always writes `None`.)
+
+If you want to write the `re.Match` object to another attribute,
+pass in the name of that attribute to the keyword-only
+parameter `match`.
+
+</dd></dl>
 
 #### `lines_rstrip` and `lines_strip`
 
@@ -6422,15 +6422,17 @@ assuming the string is in "TitleCase".
 
 </dd></dl>
 
-### StateMachine
+### StateManager
 
 <dl><dd>
 
-Small performance upgrade for `StateMachine` observers.
-`StateMachine` always uses a copy of the observer
+Small performance upgrade for
+[`StateManager`.](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+observers.
+`StateManager` always uses a copy of the observer
 list (specifically, a tuple) when calling the observers; this
 means it's safe to modify the observer list at any time.
-`StateMachine` used to always make a fresh copy every time you
+`StateManager` used to always make a fresh copy every time you
 called an event; now it uses a cached copy, and only recomputes
 the tuple when the observer list changes.
 
@@ -6439,7 +6441,7 @@ from one thread while also dispatching events in another.
 Your program won't crash, but the list of observers called
 may be unpredictable based on which thread wins or loses the
 race.  But this has always been true.  As with many libraries,
-the `StateMachine` API leaves locking up to you.)
+the `StateManager` API leaves locking up to you.)
 
 </dd></dl>
 
@@ -6960,7 +6962,7 @@ Extremely minor release.  No new features or bug fixes.
   `lines_filter_contains` is now 
   [`lines_containing`](#lines_containingli-s--invertfalse),
   and `lines_filter_grep` is now
-  [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0).
+  [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch).
 </dd></dl>
 
 #### 0.6.7
