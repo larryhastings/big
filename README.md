@@ -4745,7 +4745,7 @@ is unambiguous: these characters are *not whitespace.*  And yet Python's
 "Unicode object" behaves as if they are.  So I'd say this is a bug;
 Python's Unicode object should implement what the Unicode standard says.
 
-> It seems that the C library used by GCC and clang on my laptop
+> It seems that the C library used by GCC and clang on my workstation
 > agree.  I wrote a quick C program to print out what characters
 > are and aren't whitespace, according to the C function isspace().
 > It seems the C library agrees with Unicode: it doesn't consider
@@ -4771,6 +4771,35 @@ Python's Unicode object should implement what the Unicode standard says.
 >              }
 >              return 0;
 >      }
+>
+> Here's its output on my workstation:
+>     isspace table.
+>     Add the row and column numbers together (in hex).
+>
+>          | 0 1 2 3 4 5 6 7 8 9 a b c d e f
+>     -----+--------------------------------
+>     0x00 | n n n n n n n n n Y Y Y Y Y n n
+>     0x10 | n n n n n n n n n n n n n n n n
+>     0x20 | Y n n n n n n n n n n n n n n n
+>     0x30 | n n n n n n n n n n n n n n n n
+>     0x40 | n n n n n n n n n n n n n n n n
+>     0x50 | n n n n n n n n n n n n n n n n
+>     0x60 | n n n n n n n n n n n n n n n n
+>     0x70 | n n n n n n n n n n n n n n n n
+>     0x80 | n n n n n n n n n n n n n n n n
+>     0x90 | n n n n n n n n n n n n n n n n
+>     0xa0 | n n n n n n n n n n n n n n n n
+>     0xb0 | n n n n n n n n n n n n n n n n
+>     0xc0 | n n n n n n n n n n n n n n n n
+>     0xd0 | n n n n n n n n n n n n n n n n
+>     0xe0 | n n n n n n n n n n n n n n n n
+>     0xf0 | n n n n n n n n n n n n n n n n
+>
+> 0x1c through 0x1f are represented by the last four `n` characters on
+> the second line, the `0x10` line.  The fact that they're `n`s tells you
+> that this C standard library doesn't consider those characters to be
+> whitespace.
+
 
 Like many bugs, this one has lingered for a long time.  The behavior
 is present in Python 2, there's
