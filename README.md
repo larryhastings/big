@@ -135,6 +135,8 @@ And here are five little functions/classes I use all the time:
 
 ### Modules
 
+<dl><dd>
+
 [`big.all`](#`bigall`)
 
 [`big.boundinnerclass`](#`bigboundinnerclass`)
@@ -164,6 +166,8 @@ And here are five little functions/classes I use all the time:
 [`big.time`](#bigtime)
 
 [`big.version`](#bigversion)
+
+</dd></dl>
 
 ### Functions, classes, and values
 
@@ -420,6 +424,8 @@ And here are five little functions/classes I use all the time:
 [`unicode_whitespace`](#unicode_whitespace)
 
 [`unicode_whitespace_without_crlf`](#unicode_whitespace_without_crlf)
+
+[`Version(s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None)`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
 
 [`whitespace`](#whitespace)
 
@@ -1295,6 +1301,25 @@ empty except for the initial `"log start"`
 message, the elapsed time is zero, and
 the log has not "entered" any subsystems.
 </dd></dl>
+
+## `big.metadata`
+
+<dl><dd>
+
+Contains metadata about **big** itself.
+
+</dd></dl>
+
+#### `metadata.version`
+
+<dl><dd>
+
+A
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+object representing the current version of **big**.
+
+</dd></dl>
+
 
 ## `big.scheduler`
 
@@ -3952,7 +3977,9 @@ When constructing a `Version` by passing in a string `s`, the string must confor
 where square brackets denote optional substrings and names in angle brackets represent parameterized
 substrings:
 
->      [<epoch>!]<major>(.<minor_etc>)*[<release_level>[<serial>]][.post<post>][.dev<dev>][+<local>]
+```
+[<epoch>!]<major>(.<minor_etc>)*[<release_level>[<serial>]][.post<post>][.dev<dev>][+<local>]
+```
 
 All fields should be non-negative integers except for:
 
@@ -4015,7 +4042,9 @@ post
 
 A non-negative `int` or `None`.  Represents "post-releases", extremely minor releases made after a release:
 
->    Version(release=(1, 3, 5)) < Version(release=(1, 3, 5), post=1)
+```
+Version(release=(1, 3, 5)) < Version(release=(1, 3, 5), post=1)
+```
 
 </dd><dt>
 
@@ -4027,7 +4056,9 @@ A non-negative `int` or `None`.  Represents an under-development release.  Highe
 later releases, but any release where `dev` is not `None` comes *before* any release where `dev` is `None`.
 In other words:
 
->    Version(release=(1, 3, 5), dev=34) < Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
+```
+Version(release=(1, 3, 5), dev=34) < Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
+```
 
 </dd><dt>
 
@@ -6056,18 +6087,20 @@ There's sadly one breaking change.
 
 <dl><dd>
 
+New package.
 A package containing metadata about **big** itself.
 Currently only contains one thing: *version*.
 
 </dd></dl>
 
-#### big.metadata.version
+#### big.version
 
 <dl><dd>
 
-A `Version` object representing the current version of **big**.
+New package.  A package for working with version information.
 
 </dd></dl>
+
 
 #### `lines_strip_line_comments`
 
@@ -6078,7 +6111,8 @@ A `Version` object representing the current version of **big**.
 The default value for `quotes` has changed.  Now it's
 what it should always have been: empty.  No quote marks
 are defined by default, which means the default behavior of
-`lines_strip_line_comments` is now to simply truncate the line
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+is now to simply truncate the line
 at the leftmost comment marker.
 
 Processing quote marks by default was *always* too opinionated
@@ -6092,14 +6126,27 @@ this will only cause smiles, and no teeth-gnashing.
 
 </dd></dl>
 
-#### `class Version`
+#### metadata.version
 
 <dl><dd>
 
-New API.  `Version` represents a version number.  You can
+New value.  A
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+object representing the current version of **big**.
+
+</dd></dl>
+
+#### `Version`
+
+<dl><dd>
+
+New class.
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+represents a version number.  You can
 construct them from [PEP 440](https://peps.python.org/pep-0440/)-compliant
 version strings, or specify them using keyword-only parameters.
-`Version` objects are immutable, ordered, and hashable.
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+objects are immutable, ordered, and hashable.
 
 </dd></dl>
 
