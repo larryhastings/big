@@ -90,7 +90,7 @@ _re_parse_version = re.compile(VERSION_PATTERN, re.VERBOSE | re.IGNORECASE).matc
 
 del VERSION_PATTERN
 
-_re_is_valid_local_segment = re.compile("^[a-z0-9]+$").match
+_re_is_valid_local_segment = re.compile("^[A-Za-z0-9]+$").match
 
 
 

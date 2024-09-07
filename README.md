@@ -4014,6 +4014,8 @@ expression.
       the equivalent part of a version string) are stripped.
     * Abbreviations and alternate names for `release_level` are
       normalized.
+* Don't tell anybody, but, you can also pass in a
+  `sys.version_info` object into the constructor instead of a string.
 
 When constructing a `Version` by passing in a string `s`, the string must conform to this scheme,
 where square brackets denote optional substrings and names in angle brackets represent parameterized
