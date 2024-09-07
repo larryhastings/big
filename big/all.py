@@ -66,6 +66,9 @@ from . import log
 __all__.extend(log.__all__)
 from .log import *
 
+from . import metadata
+# we DON'T splat all symbols from metadata into big.all, either.
+
 from . import scheduler
 __all__.extend(scheduler.__all__)
 from .scheduler import *
@@ -82,11 +85,10 @@ from . import time
 __all__.extend(time.__all__)
 from .time import *
 
+from . import version
+__all__.extend(version.__all__)
+from .version import *
+
 __version__ = big.__version__
 __all__.append('__version__')
 
-VersionTuple = big.VersionTuple
-__all__.append('VersionTuple')
-
-__version_tuple__ = big.__version_tuple__
-__all__.append('__version_tuple__')

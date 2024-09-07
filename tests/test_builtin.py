@@ -162,22 +162,6 @@ class BigTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             uncallable('a')
 
-    def test_big_package_itself(self):
-        self.assertTrue(big.__version__)
-        self.assertIsInstance(big.__version__, str)
-
-        vt = big.__version_tuple__
-        self.assertTrue(vt)
-        self.assertIsInstance(vt, big.VersionTuple)
-        self.assertEqual(len(vt), 5)
-
-        self.assertEqual(vt[0], vt.major)
-        self.assertEqual(vt[1], vt.minor)
-        self.assertEqual(vt[2], vt.micro)
-        self.assertEqual(vt[3], vt.releaselevel)
-        self.assertEqual(vt[3], vt.release_level)
-        self.assertEqual(vt[4], vt.serial)
-
 
 
 def run_tests():

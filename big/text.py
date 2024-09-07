@@ -2025,6 +2025,8 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
         if quotes in (_sqs_quotes_str, None):
             quotes = _sqs_quotes_bytes
         else:
+            if isinstance(quotes, bytes):
+                quotes = tuple(_iterate_over_bytes(quotes))
             for q in quotes:
                 if not isinstance(q, s_type):
                     raise TypeError(f"values in quotes must match s (str or bytes), not {q!r}")
@@ -2033,6 +2035,8 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
         if escape in (_sqs_escape_str, None):
             escape = _sqs_escape_bytes
         if multiline_quotes:
+            if isinstance(multiline_quotes, bytes):
+                multiline_quotes = tuple(_iterate_over_bytes(multiline_quotes))
             for q in multiline_quotes:
                 if not isinstance(q, s_type):
                     raise TypeError(f"values in multiline_quotes must match s (str or bytes), not {q!r}")
@@ -3234,7 +3238,7 @@ _lines_strip_line_comments = lines_strip_line_comments
 
 @_export
 def lines_strip_line_comments(li, line_comment_markers, *,
-    quotes=('"', "'"), escape='\\', multiline_quotes=None):
+    escape='\\', quotes=(), multiline_quotes=()):
     """
     A lines modifier function.  Strips line comments from the lines
     of a "lines iterator".  Line comments are substrings beginning
@@ -3249,31 +3253,31 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     starting at the beginning of the leftmost line comment marker
     found on that line.
 
+    If both quotes and multiline_quotes are false (the default),
+    comment characters will be active anywhere in any line.
+
     If quotes is true, it must be an iterable of quote marker
     strings, length 1 or more.  lines_strip_line_comments will
-    parse the line using big's split_quoted_strings function,
-    and ignore comment characters inside quoted strings.  If
-    quotes is false, quote characters are ignored and
-    comment characters will be active anywhere in any line.
-    By default quotes is the tuple ("'", '"').  Quoted strings
-    delimited by markers in quotes may not span lines; if a
-    line ends with an unterminated quoted string,
-    lines_strip_line_comments will raise a SyntaxError.
-
-    If escape is true, it must be a string.  This string
-    will "escape" (quote) quote markers, as per backslash
-    inside strings in Python.  The default value for
-    escape is "\\".
+    parse the line using big's split_quoted_strings function
+    and ignore comment characters inside quoted strings.  Quoted
+    strings may not span lines; if a line ends with an unterminated
+    quoted string, lines_strip_line_comments will raise a SyntaxError.
 
     If multiline_quotes is true, it must be an iterable of
-    quote marker strings, length 1 or more.  (By default
-    multiline_quotes is an empty string.)  There must
-    be no quote markers in common between quotes and
-    multiline_quotes.  Quoted strings enclosed in multiline
-    quotes may span multiple lines; quoted strings enclosed
-    in (conventional) quotes are not allowed to.  If the last
-    line yielded by the upstream iterator ends with an unterminated
-    multiline string, lines_strip_line_comments will raise a SyntaxError.
+    quote marker strings, length 1 or more.  Quoted strings
+    enclosed in multiline quotes may span multiple lines;
+    quoted strings enclosed in (conventional) quotes are not
+    permitted to.  If the last line yielded by the upstream
+    iterator ends with an unterminated multiline string,
+    lines_strip_line_comments will raise a SyntaxError.
+
+    There must be no quote markers in common between quotes and
+    multiline_quotes.
+
+    If escape is true, it must be a string.  This string
+    will "escape" (quote) quote markers, either multiline
+    or non-multiline, as per backslash inside strings in Python.
+    The default value for escape is "\\".
 
     What's the difference between lines_strip_line_comments and
     lines_filter_comment_lines?
@@ -3288,30 +3292,46 @@ def lines_strip_line_comments(li, line_comment_markers, *,
 
     Composable with all the lines_ modifier functions in the big.text module.
     """
+
+    # check line_comment_markers
     if not line_comment_markers:
-        raise ValueError("illegal line_comment_markers, must be an iterable containing at least one line comment marker string (str or bytes)")
-
-    if isinstance(line_comment_markers, bytes):
+        bad_value = True
+    elif isinstance(line_comment_markers, bytes):
+        bad_value = False
         line_comment_markers = _iterate_over_bytes(line_comment_markers)
-        line_comment_markers_is_bytes = True
-    else:
-        line_comment_markers_is_bytes = isinstance(line_comment_markers[0], bytes)
-    line_comment_markers = tuple(line_comment_markers)
-
-    if line_comment_markers_is_bytes:
+        is_bytes = True
         empty = b''
     else:
-        empty = ''
-    empty_join = empty.join
+        is_bytes = isinstance(line_comment_markers[0], bytes)
+        if is_bytes:
+            bad_value = False
+            empty = b''
+        else:
+            bad_value = not isinstance(line_comment_markers[0], str)
+            empty = ''
+    if bad_value:
+        raise ValueError(f"line comment markers must be str, bytes, or an non-empty iterable of str or bytes, not {line_comment_markers!r}")
 
-    line_comment_pattern = __separators_to_re(line_comment_markers, separators_is_bytes=line_comment_markers_is_bytes, separate=True, keep=True)
-    re_line_comment = re.compile(line_comment_pattern)
-    line_comment_splitter = re_line_comment.split
+    # use split_quoted_string to validate quotes, multiline_quotes, and escape, if specified
+    not_empty = quotes or multiline_quotes
+    if not_empty:
+        if isinstance(not_empty, bytes):
+            test_text = b'x'
+        # if not_empty is not bytes, it's safe to index into
+        elif isinstance(not_empty[0], bytes):
+            test_text = b'x'
+        else:
+            test_text = 'x'
 
-    if not multiline_quotes:
-        multiline_quotes = ()
+        # don't iterate! just throw the iterator away.
+        # split_quoted_strings validates the inputs immediately,
+        # and there's no point in calling the iterator.
+        split_quoted_strings(test_text, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
 
-    return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, empty_join)
+    line_comment_pattern = __separators_to_re(tuple(line_comment_markers), separators_is_bytes=is_bytes, separate=True, keep=True)
+    line_comment_splitter = re.compile(line_comment_pattern).split
+
+    return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, empty.join)
 
 
 
