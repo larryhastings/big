@@ -4773,6 +4773,7 @@ Python's Unicode object should implement what the Unicode standard says.
 >      }
 >
 > Here's its output on my workstation:
+>
 >     isspace table.
 >     Add the row and column numbers together (in hex).
 >
