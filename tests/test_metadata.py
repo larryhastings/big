@@ -27,24 +27,26 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
+import big.all as big
+import unittest
 
-for test_module in """
-    test_boundinnerclass
-    test_builtin
-    test_deprecated
-    test_file
-    test_graph
-    test_heap
-    test_itertools
-    test_log
-    test_metadata
-    test_scheduler
-    test_state
-    test_text
-    test_time
-    test_version
-""".strip().split():
-    module = __import__(test_module)
-    module.run_tests()
 
-bigtestlib.finish()
+class BigTestVersion(unittest.TestCase):
+
+    def test_metadata(self):
+        self.assertTrue(big.__version__)
+        self.assertIsInstance(big.__version__, str)
+
+        vt = big.metadata.version
+        self.assertTrue(vt)
+        self.assertIsInstance(vt, big.version.Version)
+        self.assertEqual(vt, big.version.Version(big.__version__))
+        self.assertEqual(str(vt), big.__version__)
+
+
+def run_tests():
+    bigtestlib.run(name="big.metadata", module=__name__)
+
+if __name__ == "__main__": # pragma: no cover
+    run_tests()
+    bigtestlib.finish()

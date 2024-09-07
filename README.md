@@ -133,19 +133,9 @@ And here are five little functions/classes I use all the time:
 
 # Index
 
-### Functions, classes, values, and modules
+### Modules
 
 <dl><dd>
-
-[`accessor(attribute='state', state_manager='state_manager')`](#accessorattributestate-state_managerstate_manager)
-
-[`ascii_linebreaks`](#ascii_linebreaks)
-
-[`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf)
-
-[`ascii_whitespace`](#ascii_whitespace)
-
-[`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
 
 [`big.all`](#`bigall`)
 
@@ -165,6 +155,8 @@ And here are five little functions/classes I use all the time:
 
 [`big.log`](#biglog)
 
+[`big.metadata`](#bigmetadata)
+
 [`big.scheduler`](#bigscheduler)
 
 [`big.state`](#bigstate)
@@ -172,6 +164,24 @@ And here are five little functions/classes I use all the time:
 [`big.text`](#bigtext)
 
 [`big.time`](#bigtime)
+
+[`big.version`](#bigversion)
+
+</dd></dl>
+
+### Functions, classes, and values
+
+<dl><dd>
+
+[`accessor(attribute='state', state_manager='state_manager')`](#accessorattributestate-state_managerstate_manager)
+
+[`ascii_linebreaks`](#ascii_linebreaks)
+
+[`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf)
+
+[`ascii_whitespace`](#ascii_whitespace)
+
+[`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
@@ -415,6 +425,8 @@ And here are five little functions/classes I use all the time:
 
 [`unicode_whitespace_without_crlf`](#unicode_whitespace_without_crlf)
 
+[`Version(s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None)`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+
 [`whitespace`](#whitespace)
 
 [`whitespace_without_crlf`](#whitespace_without_crlf)
@@ -447,17 +459,24 @@ And here are five little functions/classes I use all the time:
 
 ## `big.all`
 
+<dl><dd>
+
 This submodule doesn't define any of its own symbols.  Instead, it
 imports every other submodule in **big**, and uses `import *` to
 import every symbol from every other submodule, too.  Every
 public symbol in **big** is available in `big.all`.
 
+</dd></dl>
 
 ## `big.boundinnerclass`
+
+<dl><dd>
 
 Class decorators that implement bound inner classes.  See the
 [**Bound inner classes**](#bound-inner-classes)
 deep-dive for more information.
+
+</dd></dl>
 
 #### `BoundInnerClass(cls)`
 
@@ -515,6 +534,8 @@ class ***S*** *must* be decorated with either
 
 ## `big.builtin`
 
+<dl><dd>
+
 Functions for working with builtins.  (Named `builtin` to avoid a
 name collision with the `builtins` module.)
 
@@ -533,6 +554,8 @@ always handle, and you won't ever have to return an error.
 The functions in this sub-module are designed to always work.  None of
 them should ever raise an exception--no matter *what* nonsense you pass in.
 (But don't take that as a challenge!)
+
+</dd></dl>
 
 #### `get_float(o, default=_sentinel)`
 
@@ -609,6 +632,8 @@ and `False` if it can't.
 
 ## `big.deprecated`
 
+<dl><dd>
+
 Old versions of functions (and classes) from **big**.  These
 versions are deprecated, either because the name was changed,
 or the semantics were changed, or both.
@@ -618,10 +643,15 @@ automatically imported into `big.all`.  (`big.all` does import
 the `deprecated` submodule, it just doesn't `from deprected import *`
 all the symbols.)
 
+</dd></dl>
 
 ## `big.file`
 
+<dl><dd>
+
 Functions for working with files, directories, and I/O.
+
+</dd></dl>
 
 #### `fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`
 
@@ -823,6 +853,8 @@ that are permitted.
 
 ## `big.graph`
 
+<dl><dd>
+
 A drop-in replacement for Python's
 [`graphlib.TopologicalSorter`](https://docs.python.org/3/library/graphlib.html#graphlib.TopologicalSorter)
 with an enhanced API.  This version of `TopologicalSorter` allows modifying the
@@ -830,6 +862,8 @@ graph at any time, and supports multiple simultaneous *views,* allowing
 iteration over the graph more than once.
 
 See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) deep-dive for more information.
+
+</dd></dl>
 
 #### `CycleError()`
 
@@ -984,8 +1018,12 @@ forgetting all "ready" and "done" state.
 
 ## `big.heap`
 
+<dl><dd>
+
 Functions for working with heap objects.
 Well, just one heap object really.
+
+</dd></dl>
 
 #### `Heap(i=None)`
 
@@ -1094,8 +1132,12 @@ of the heap, in sorted order.
 
 ## `big.itertools`
 
+<dl><dd>
+
 Functions and classes for working with iteration.
 Only one entry so far.
+
+</dd></dl>
 
 #### `PushbackIterator(iterable=None)`
 
@@ -1141,9 +1183,13 @@ iterator it wraps when this internal stack is empty.
 
 ## `big.log`
 
+<dl><dd>
+
 A simple and lightweight logging class, useful for performance analysis.
 Not intended as a full-fledged logging facility like Python's
 [`logging`](https://docs.python.org/3/library/logging.html) module.
+
+</dd></dl>
 
 #### `default_clock()`
 
@@ -1283,7 +1329,28 @@ message, the elapsed time is zero, and
 the log has not "entered" any subsystems.
 </dd></dl>
 
+## `big.metadata`
+
+<dl><dd>
+
+Contains metadata about **big** itself.
+
+</dd></dl>
+
+#### `metadata.version`
+
+<dl><dd>
+
+A
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+object representing the current version of **big**.
+
+</dd></dl>
+
+
 ## `big.scheduler`
+
+<dl><dd>
 
 A replacement for Python's `sched.scheduler` object,
 adding full threading support and a modern Python interface.
@@ -1324,6 +1391,8 @@ with `sched.scheduler`.  In particular, **big** reimplements the
 relevant parts of the `sched.scheduler` test suite, ensuring
 `Scheduler` will never trip over the problems discovered
 by `sched.scheduler` over its lifetime.
+
+</dd></dl>
 
 #### `Event(scheduler, event, time, priority, sequence)`
 
@@ -1540,6 +1609,8 @@ designed for use in multithreaded programs.
 
 ## `big.state`
 
+<dl><dd>
+
 Library code for working with simple state machines.
 
 There are lots of popular Python libraries for implementing
@@ -1587,6 +1658,7 @@ kind of state machine you like!)
   to a new state, and
 * safety mechanisms to catch bugs and prevent design mistakes.
 
+</dd></dl>
 
 #### Recommended best practices
 
@@ -2098,6 +2170,8 @@ There are only two types of illegal state transitions:
 
 ## `big.text`
 
+<dl><dd>
+
 Functions for working with text strings.  There are
 several families of functions inside the `text` module;
 for a higher-level view of those families, read the
@@ -2143,6 +2217,8 @@ are of the same type.
 Subclasses of `str` and `bytes` will also work; anywhere you
 should pass in a `str`, you can also pass in a subclass of
 `str`, and likewise for `bytes`.
+
+</dd></dl>
 
 #### `ascii_linebreaks`
 
@@ -3761,9 +3837,13 @@ For more information, see the deep-dive on
 
 ## `big.time`
 
+<dl><dd>
+
 Functions for working with time.  Currently deals specifically
 with timestamps.  The time functions in **big** are designed
 to make it easy to use best practices.
+
+</dd></dl>
 
 #### `date_ensure_timezone(d, timezone)`
 
@@ -3881,6 +3961,167 @@ If `want_microseconds` is `None` (the default), the timestamp
 ends with microseconds if the type of `t` can represent
 fractional seconds: a float, a `datetime` object, or the
 value `None`.
+</dd></dl>
+
+## `big.version`
+
+<dl><dd>
+
+Support for version metadata objects.
+
+</dd></dl>
+
+#### `Version(s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None)`
+
+<dl><dd>
+
+Constructs a `Version` object, which represents a version number.
+
+You may define the version one of two ways:
+
+* by passing in a version string to the `s` positional parameter.
+  Example: `Version("1.3.5rc3")`
+* by passing in keyword-only arguments setting the specific fields of the version.
+  Example: `Version(release=(1, 3, 5), release_level="rc", serial=3)`
+
+**big**'s `Version` objects conform to the [PEP 440](https://peps.python.org/pep-0440/)
+version scheme, parsing version strings using that PEP's official regular
+expression.
+
+`Version` objects support the following features:
+* They're immutable once constructed.
+* They support the following read-only properties:
+    * `epoch`
+    * `release`
+    * `major` (`release[0]`)
+    * `minor` (a safe version of `release[1]`)
+    * `micro` (a safe version of `release[2]`)
+    * `release_level`
+    * `serial`
+    * `post`
+    * `dev`
+    * `local`
+* `Version` objects are hashable.
+* `Version` objects support ordering and comparison; you can ask if two `Version`
+  objects are equal, or if one is less than the other.
+* `repr()` on a `Version` object returns a string that could be used
+  to reconstruct the object.  `str()` on a `Version` object returns
+  a version string that, if passed in to the `Version` constructor,
+  would recreate the `Version` object.
+* `Version` objects normalize themselves at initialization time:
+    * Leading zeroes on version numbers are stripped.
+    * Trailing zeroes in `release` (and trailing `.0` strings in
+      the equivalent part of a version string) are stripped.
+    * Abbreviations and alternate names for `release_level` are
+      normalized.
+* Don't tell anybody, but, you can also pass a `sys.version_info`
+  object into the constructor instead of a version string.
+
+When constructing a `Version` by passing in a string `s`, the string must conform to this scheme,
+where square brackets denote optional substrings and names in angle brackets represent parameterized
+substrings:
+
+```
+[<epoch>!]<major>(.<minor_etc>)*[<release_level>[<serial>]][.post<post>][.dev<dev>][+<local>]
+```
+
+All fields should be non-negative integers except for:
+
+* `<major>(.<minor_etc>)*` is meant to connote a conventional dotted version number, like `1.2` or `1.5.3.8`.
+   This section can contain only numeric digits and periods (`'.'`).
+   You may have as few or as many periods as you prefer.  Trailing `.0` entries will be stripped.
+* `<release_level>` can only be be one of the following strings:
+   * `a`, meaning an *alpha* release,
+   * `b`, meaning a *beta* release, or
+   * `rc`, meaning a *release candidate*.
+   For a final release, skip the `release_level` (and the `serial`).
+* `<local>` represents an arbitrary sequence of alphanumeric characters punctuated by periods.
+
+Alternatively, you can construct a `Version` object by passing in these keyword-only arguments:
+
+<dl><dt>
+
+`epoch`
+
+</dt><dd>
+
+A non-negative `int` or `None`.  Represents an "epoch" of version numbers.  A version number
+with a higher "epoch" is always a later release, regardless of all other fields.
+
+</dd><dt>
+
+`release`
+
+</dt><dd>
+
+A tuple containing one or more non-negative integers.  Represents the conventional part
+of the version number; the version string `1.3.8` would translate to `Version(release=(1, 3, 8))`.
+
+</dd><dt>
+
+`release_level`
+
+</dt><dd>
+
+A `str` or `None`.  If it's a `str`, it must be one of the following strings:
+
+   * `a`, meaning an *alpha* release,
+   * `b`, meaning a *beta* release, or
+   * `rc`, meaning a *release candidate*.
+
+</dd><dt>
+
+`serial`
+
+</dt><dd>
+
+A non-negative `int` or `None`.  Represents how many releases there have been at this `release_level`.
+(The name is taken from [Python's `sys.version_info`](https://docs.python.org/3/library/sys.html#sys.version_info).)
+
+</dd><dt>
+
+`post`
+
+</dt><dd>
+
+A non-negative `int` or `None`.  Represents "post-releases", extremely minor releases made after a release:
+
+```
+Version(release=(1, 3, 5)) < Version(release=(1, 3, 5), post=1)
+```
+
+</dd><dt>
+
+`dev`
+
+</dt><dd>
+
+A non-negative `int` or `None`.  Represents an under-development release.  Higher `dev` numbers represent
+later releases, but any release where `dev` is not `None` comes *before* any release where `dev` is `None`.
+In other words:
+
+```
+Version(release=(1, 3, 5), dev=34) < Version(release=(1, 3, 5), dev=35)
+Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
+```
+
+</dd><dt>
+
+`local`
+
+</dt><dd>
+
+A `tuple` of one or more `str` objects containing only oner or more
+["alnum"](https://docs.python.org/3/library/stdtypes.html#str.isalnum)
+characters,
+or `None`.  Represents a purely local version number,
+allowing for minor build and patch differences
+but with no API or ABI changes.
+
+
+</dd></dl>
+
+
 </dd></dl>
 
 
@@ -5876,6 +6117,88 @@ in the **big** test suite.
 
 
 ## Release history
+
+#### 0.12.1
+
+*2024/09/07*
+
+<dl><dd>
+
+In fine **big** tradition, here's an update published
+immediately after a big release.
+
+Surprisingly, even though this is only a small update,
+it still adds *two* new packages to **big**: *metadata* and *version*.
+
+There's sadly one breaking change.
+
+#### `big.metadata`
+
+<dl><dd>
+
+New package.
+A package containing metadata about **big** itself.
+Currently only contains one thing: *version*.
+
+</dd></dl>
+
+#### `big.version`
+
+<dl><dd>
+
+New package.  A package for working with version information.
+
+</dd></dl>
+
+
+#### `lines_strip_line_comments`
+
+<dl><dd>
+
+> This API has breaking changes.
+
+The default value for `quotes` has changed.  Now it's
+what it should always have been: empty.  No quote marks
+are defined by default, which means the default behavior of
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+is now to simply truncate the line
+at the leftmost comment marker.
+
+Processing quote marks by default was *always* too opinionated
+for this function.  Consider: having `'` active as a quote
+marker meant that single-quotes need to be balanced,
+
+>    which means you can't process a line like this that only has one.
+
+Wish I'd figured this out before the release yesterday!  Hopefully
+this will only cause smiles, and no teeth-gnashing.
+
+</dd></dl>
+
+#### `metadata.version`
+
+<dl><dd>
+
+New value.  A
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+object representing the current version of **big**.
+
+</dd></dl>
+
+#### `Version`
+
+<dl><dd>
+
+New class.
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+represents a version number.  You can
+construct them from [PEP 440](https://peps.python.org/pep-0440/)-compliant
+version strings, or specify them using keyword-only parameters.
+[`Version`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+objects are immutable, ordered, and hashable.
+
+</dd></dl>
+
 
 #### 0.12
 
