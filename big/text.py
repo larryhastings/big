@@ -136,10 +136,17 @@ str_whitespace = (
     '\f'    , #    12 - 0x000c - form feed
     '\r'    , #    13 - 0x000d - carriage return
     '\r\n'  , # bonus! the classic DOS newline sequence!
+
+    ###################################################
+    ## Note: Unicode doesn't consider these next four
+    ## ASCII "separator" characters to be whitespace!
+    ## (I agree, I think this is a Python bug.)
+    ###################################################
     '\x1c'  , #    28 - 0x001c - file separator
     '\x1d'  , #    29 - 0x001d - group separator
     '\x1e'  , #    30 - 0x001e - record separator
     '\x1f'  , #    31 - 0x001f - unit separator
+
     ' '     , #    32 - 0x0020 - space
     '\x85'  , #   133 - 0x0085 - next line
     '\xa0'  , #   160 - 0x00a0 - non-breaking space
@@ -169,16 +176,23 @@ whitespace = str_whitespace
 _export_name('whitespace_without_crlf')
 whitespace_without_crlf = str_whitespace_without_crlf
 
+# Whitespace as defined by Unicode.  The same as Python's definition,
+# except we remove the four ASCII separator characters.
 _export_name('unicode_whitespace')
 unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
 _export_name('unicode_whitespace_without_crlf')
 unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
 
+# Whitespace as defined by ASCII.  The same as Unicode,
+# but only within the first 128 code points.
+# Note: these are still *str* objects.
 _export_name('ascii_whitespace')
 ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
 _export_name('ascii_whitespace_without_crlf')
 ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
 
+# Whitespace as defined by the Python bytes object.
+# Bytes objects, using the ASCII encoding.
 _export_name('bytes_whitespace')
 bytes_whitespace = encode_strings(ascii_whitespace)
 _export_name('bytes_whitespace_without_crlf')
@@ -217,18 +231,27 @@ linebreaks = str_linebreaks
 _export_name('linebreaks_without_crlf')
 linebreaks_without_crlf = str_linebreaks_without_crlf
 
+# Whitespace as defined by Unicode.  The same as Python's definition,
+# except we again remove the four ASCII separator characters.
 _export_name('unicode_linebreaks')
 unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
 _export_name('unicode_linebreaks_without_crlf')
 unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
 
+# Linebreaks as defined by ASCII.  The same as Unicode,
+# but only within the first 128 code points.
+# Note: these are still *str* objects.
 _export_name('ascii_linebreaks')
 ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
 _export_name('ascii_linebreaks_without_crlf')
 ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
 
+# Whitespace as defined by the Python bytes object.
+# Bytes objects, using the ASCII encoding.
+#
 # Notice that bytes_linebreaks doesn't contain \v or \f.
-# This is so big agrees with Python itself.
+# That's because the Python bytes object doesn't consider those
+# to be linebreak characters.
 #
 #    >>> define is_newline_str(c): return len( ("a"+c+"x").splitlines() ) > 1
 #    >>> is_newline_str('\n')
@@ -250,12 +273,12 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 #    >>> is_newline_byte(b'\v')
 #    False
 #
-# however! with defensive programming, in case this changes in the future
+# However! with defensive programming, in case this changes in the future
 # (as it should!), big will automatically still agree with Python.
 #
-# p.s. you have to put characters around the linebreak character,
-# because str.splitlines (and bytes.splitlines) rstrips the linebreak
-# characters before it splits, sigh.
+# p.s. in the above code examples, you have to put characters around the
+# linebreak character, because str.splitlines (and bytes.splitlines)
+# rstrips the string of linebreak characters before it splits lines, sigh.
 
 _export_name('bytes_linebreaks')
 bytes_linebreaks = (

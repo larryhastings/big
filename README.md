@@ -4744,6 +4744,34 @@ or down or both; these don't move the cursor at all.
 is unambiguous: these characters are *not whitespace.*  And yet Python's
 "Unicode object" behaves as if they are.  So I'd say this is a bug;
 Python's Unicode object should implement what the Unicode standard says.
+
+> It seems that the C library used by GCC and clang on my laptop
+> agree.  I wrote a quick C program to print out what characters
+> are and aren't whitespace, according to the C function isspace().
+> It seems the C library agrees with Unicode: it doesn't consider
+> the four ASCII separator characters to be whitespace.
+>
+> Here's the program, in case you want to try it yourself.
+>
+>      #include <stdio.h>
+>      #include <ctype.h>
+>
+>      int main(int c, char *a[]) {
+>              int i;
+>              printf("\nisspace table.\nAdd the row and column numbers together (in hex).\n\n");
+>              printf("     | 0 1 2 3 4 5 6 7 8 9 a b c d e f\n");
+>              printf("-----+--------------------------------\n");
+>              for (i = 0 ; i < 256 ; i++) {
+>                      char *message = isspace(i) ? "Y" : "n";
+>                      if ((i % 16) == 0)
+>                              printf("0x%02x |", i);
+>                      printf(" %s", message);
+>                      if ((i % 16) == 15)
+>                              printf("\n");
+>              }
+>              return 0;
+>      }
+
 Like many bugs, this one has lingered for a long time.  The behavior
 is present in Python 2, there's
 [a ten-year-old issue on the Python issue tracker about this,](https://github.com/python/cpython/issues/62436)
@@ -4895,14 +4923,20 @@ Next are two values that start with `unicode_`:
 and
 [`unicode_linebreaks`.](#unicode_linebreaks)
 These contain all the whitespace characters
-defined in the Unicode standard.
+defined in the Unicode standard.  They're the
+same as the `str_` tuples except we remove the
+four ASCII separator characters.
 
 Third, two values that start with `ascii_`:
 [`ascii_whitespace`](#ascii_whitespace)
 and
 [`ascii_linebreaks`.](#ascii_linebreaks)
 These contain all the whitespace characters
-defined in ASCII.
+defined in ASCII.  (Note that these contain
+`str` objects, not `bytes` objects.)  They're
+the same as the `unicode_` tuples, except we
+throw away all characters with a code point
+higher than 127.
 
 Fourth, two values that start with `bytes_`:
 [`bytes_whitespace`](#bytes_whitespace)
@@ -4910,6 +4944,10 @@ and
 [`bytes_linebreaks`.](#bytes_linebreaks)
 These contain all the whitespace characters
 recognized by the Python `bytes` object.
+These tuples contain `bytes` objects, encoded
+using the `ascii` encoding.  The list of
+characters is distinct from the other sets
+of tuples, and was derived as described above.
 
 Finally we have the two tuples that lack a prefix:
 [`whitespace`](#whitespace)
@@ -4917,7 +4955,7 @@ and
 [`linebreaks`.](#linebreaks)
 These are the tuples you should use most of the time,
 and several **big** functions use them as default values.
-These are identical to `str_whitespace` and
+These are simply copies of `str_whitespace` and
 `str_linebreaks` respectively.
 
 (**big** actually defines an *additional* ten tuples,
@@ -4930,8 +4968,8 @@ ASCII characters--or sequences of ASCII characters--to
 represent "go to the next line" in text files.  Here are the
 most popular conventions:
 
-    \n    - UNIX, Amiga
-    \r    - Mac OS (before OS X), many 8-bit computers
+    \n    - UNIX, Amiga, macOS 10+
+    \r    - macOS 9 and earlier, many 8-bit computers
     \r\n  - Windows, DOS
 
 (There are a couple more conventions, and a lot more history,
@@ -6465,6 +6503,10 @@ _p.s. I'm getting close to declaring big as being version 1.0._
 _I don't want to do it until I'm done revising the APIs._
 
 _p.p.s. Updated copyright notices to 2024._
+
+_p.p.p.s. Yet again I thank Eric V. Smith for his willingness to humor me
+in my how-many-parameters-could-dance-on-the-head-of-a-pin API theological
+discussions._
 
 
 </dd></dl>
