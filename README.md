@@ -4109,8 +4109,12 @@ Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
 
 </dt><dd>
 
-A `tuple` of one or more `str` objects, or `None`.  Represents a purely local version number,
-minor build and patch differences but with no API or ABI changes.
+A `tuple` of one or more `str` objects containing only oner or more
+["alnum"](https://docs.python.org/3/library/stdtypes.html#str.isalnum)
+characters,
+or `None`.  Represents a purely local version number,
+allowing for minor build and patch differences
+but with no API or ABI changes.
 
 
 </dd></dl>

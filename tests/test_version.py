@@ -287,6 +287,10 @@ class BigTestVersion(unittest.TestCase):
             V(local=("a", 33), release=(1, 3, 5))
         with self.assertRaises(ValueError):
             V(local=("a", '', 'c'), release=(1, 3, 5))
+        with self.assertRaises(ValueError):
+            V(local=("a", '33!', 'c'), release=(1, 3, 5))
+        with self.assertRaises(ValueError):
+            V(local=("a", ' 33', 'c'), release=(1, 3, 5))
 
         with self.assertRaises(ValueError):
             V("1.3.5", epoch=1)

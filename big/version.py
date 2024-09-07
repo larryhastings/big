@@ -90,6 +90,8 @@ _re_parse_version = re.compile(VERSION_PATTERN, re.VERBOSE | re.IGNORECASE).matc
 
 del VERSION_PATTERN
 
+_re_is_valid_local_segment = re.compile("^[a-z0-9]+$").match
+
 
 
 class Version:
@@ -139,8 +141,8 @@ class Version:
             if not ((dev is None) or (isinstance(dev, int) and (dev >= 0))):
                 raise ValueError(f"dev must be non-negative int or None, not {dev!r}")
 
-            if not ((local is None) or (isinstance(local, tuple) and local and all(isinstance(element, str) and element for element in local))):
-                raise ValueError(f"local must be None or a tuple of length 1+ containing only non-empty strings, not {local!r}")
+            if not ((local is None) or (isinstance(local, tuple) and local and all(isinstance(element, str) and element and _re_is_valid_local_segment(element) for element in local))):
+                raise ValueError(f"local must be None or a tuple of length 1+ containing only non-empty strings of letters and digits, not {local!r}")
 
         else:
             if (
