@@ -534,6 +534,8 @@ class ***S*** *must* be decorated with either
 
 ## `big.builtin`
 
+<dl><dd>
+
 Functions for working with builtins.  (Named `builtin` to avoid a
 name collision with the `builtins` module.)
 
@@ -552,6 +554,8 @@ always handle, and you won't ever have to return an error.
 The functions in this sub-module are designed to always work.  None of
 them should ever raise an exception--no matter *what* nonsense you pass in.
 (But don't take that as a challenge!)
+
+</dd></dl>
 
 #### `get_float(o, default=_sentinel)`
 
@@ -628,6 +632,8 @@ and `False` if it can't.
 
 ## `big.deprecated`
 
+<dl><dd>
+
 Old versions of functions (and classes) from **big**.  These
 versions are deprecated, either because the name was changed,
 or the semantics were changed, or both.
@@ -637,10 +643,15 @@ automatically imported into `big.all`.  (`big.all` does import
 the `deprecated` submodule, it just doesn't `from deprected import *`
 all the symbols.)
 
+</dd></dl>
 
 ## `big.file`
 
+<dl><dd>
+
 Functions for working with files, directories, and I/O.
+
+</dd></dl>
 
 #### `fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`
 
@@ -842,6 +853,8 @@ that are permitted.
 
 ## `big.graph`
 
+<dl><dd>
+
 A drop-in replacement for Python's
 [`graphlib.TopologicalSorter`](https://docs.python.org/3/library/graphlib.html#graphlib.TopologicalSorter)
 with an enhanced API.  This version of `TopologicalSorter` allows modifying the
@@ -849,6 +862,8 @@ graph at any time, and supports multiple simultaneous *views,* allowing
 iteration over the graph more than once.
 
 See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) deep-dive for more information.
+
+</dd></dl>
 
 #### `CycleError()`
 
@@ -1003,8 +1018,12 @@ forgetting all "ready" and "done" state.
 
 ## `big.heap`
 
+<dl><dd>
+
 Functions for working with heap objects.
 Well, just one heap object really.
+
+</dd></dl>
 
 #### `Heap(i=None)`
 
@@ -1113,8 +1132,12 @@ of the heap, in sorted order.
 
 ## `big.itertools`
 
+<dl><dd>
+
 Functions and classes for working with iteration.
 Only one entry so far.
+
+</dd></dl>
 
 #### `PushbackIterator(iterable=None)`
 
@@ -1160,9 +1183,13 @@ iterator it wraps when this internal stack is empty.
 
 ## `big.log`
 
+<dl><dd>
+
 A simple and lightweight logging class, useful for performance analysis.
 Not intended as a full-fledged logging facility like Python's
 [`logging`](https://docs.python.org/3/library/logging.html) module.
+
+</dd></dl>
 
 #### `default_clock()`
 
@@ -1323,6 +1350,8 @@ object representing the current version of **big**.
 
 ## `big.scheduler`
 
+<dl><dd>
+
 A replacement for Python's `sched.scheduler` object,
 adding full threading support and a modern Python interface.
 
@@ -1362,6 +1391,8 @@ with `sched.scheduler`.  In particular, **big** reimplements the
 relevant parts of the `sched.scheduler` test suite, ensuring
 `Scheduler` will never trip over the problems discovered
 by `sched.scheduler` over its lifetime.
+
+</dd></dl>
 
 #### `Event(scheduler, event, time, priority, sequence)`
 
@@ -1578,6 +1609,8 @@ designed for use in multithreaded programs.
 
 ## `big.state`
 
+<dl><dd>
+
 Library code for working with simple state machines.
 
 There are lots of popular Python libraries for implementing
@@ -1625,6 +1658,7 @@ kind of state machine you like!)
   to a new state, and
 * safety mechanisms to catch bugs and prevent design mistakes.
 
+</dd></dl>
 
 #### Recommended best practices
 
@@ -2136,6 +2170,8 @@ There are only two types of illegal state transitions:
 
 ## `big.text`
 
+<dl><dd>
+
 Functions for working with text strings.  There are
 several families of functions inside the `text` module;
 for a higher-level view of those families, read the
@@ -2181,6 +2217,8 @@ are of the same type.
 Subclasses of `str` and `bytes` will also work; anywhere you
 should pass in a `str`, you can also pass in a subclass of
 `str`, and likewise for `bytes`.
+
+</dd></dl>
 
 #### `ascii_linebreaks`
 
@@ -3799,9 +3837,13 @@ For more information, see the deep-dive on
 
 ## `big.time`
 
+<dl><dd>
+
 Functions for working with time.  Currently deals specifically
 with timestamps.  The time functions in **big** are designed
 to make it easy to use best practices.
+
+</dd></dl>
 
 #### `date_ensure_timezone(d, timezone)`
 
@@ -4006,7 +4048,7 @@ with a higher "epoch" is always a later release, regardless of all other fields.
 
 </dd><dt>
 
-release
+`release`
 
 </dt><dd>
 
@@ -4015,7 +4057,7 @@ of the version number; the version string `1.3.8` would translate to `Version(re
 
 </dd><dt>
 
-release_level
+`release_level`
 
 </dt><dd>
 
@@ -4027,7 +4069,7 @@ A `str` or `None`.  If it's a `str`, it must be one of the following strings:
 
 </dd><dt>
 
-serial
+`serial`
 
 </dt><dd>
 
@@ -4036,7 +4078,7 @@ A non-negative `int` or `None`.  Represents how many releases there have been at
 
 </dd><dt>
 
-post
+`post`
 
 </dt><dd>
 
@@ -4048,7 +4090,7 @@ Version(release=(1, 3, 5)) < Version(release=(1, 3, 5), post=1)
 
 </dd><dt>
 
-dev
+`dev`
 
 </dt><dd>
 
@@ -4057,12 +4099,13 @@ later releases, but any release where `dev` is not `None` comes *before* any rel
 In other words:
 
 ```
-Version(release=(1, 3, 5), dev=34) < Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
+Version(release=(1, 3, 5), dev=34) < Version(release=(1, 3, 5), dev=35)
+Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
 ```
 
 </dd><dt>
 
-local
+`local`
 
 </dt><dd>
 
@@ -6083,7 +6126,7 @@ it still adds *two* new packages to **big**: *metadata* and *version*.
 
 There's sadly one breaking change.
 
-#### big.metadata
+#### `big.metadata`
 
 <dl><dd>
 
@@ -6093,7 +6136,7 @@ Currently only contains one thing: *version*.
 
 </dd></dl>
 
-#### big.version
+#### `big.version`
 
 <dl><dd>
 
@@ -6126,7 +6169,7 @@ this will only cause smiles, and no teeth-gnashing.
 
 </dd></dl>
 
-#### metadata.version
+#### `metadata.version`
 
 <dl><dd>
 
