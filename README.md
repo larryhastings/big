@@ -2933,14 +2933,21 @@ the rest of the line should be ignored; `lines_strip_line_comments`
 truncates the line at the beginning of the leftmost comment
 separator.
 
+`line_comment_markers` should be an iterable of line comment
+marker strings.  These are strings that denote a "line comment",
+which is to say, a comment that starts at that marker and extends
+to the end of the line.
+
 By default, `quotes` and `multiline_quotes` are both false,
 in which case `lines_strip_line_comments` will truncate each
-line at the leftmost comment marker and yield
+line, starting at the leftmost comment marker, and yield
 the resulting line.  If the line doesn't contain any comment
 markers, `lines_strip_line_comments` will yield it unchanged.
 
 If `quotes` is true, it must be an iterable of quote characters.
-`lines_strip_line_comments` will parse the line and ignore comment
+`lines_strip_line_comments` will parse the line using **big**'s
+[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+function and ignore comment
 markers inside quoted strings.  Quote marks must be balanced; if you
 open a quoted string, you must close it.  If a line ends with an
 quoted string still open, `lines_strip_line_comments` will raise
