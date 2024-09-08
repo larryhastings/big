@@ -283,7 +283,7 @@ And here are five little functions/classes I use all the time:
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
-[`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+[`lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotes-quotes)
 
 [`Log(clock=None)`](#log-clocknone)
 
@@ -2923,7 +2923,7 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_strip_line_comments(li, line_comment_markers, *, escape='\\', multiline_quotes=None, quotes=('"', "'"))`
+#### `lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`
 
 <dl><dd>
 
@@ -2933,14 +2933,22 @@ the rest of the line should be ignored; `lines_strip_line_comments`
 truncates the line at the beginning of the leftmost comment
 separator.
 
+By default, `quotes` and `multiline_quotes` are both false,
+in which case `lines_strip_line_comments` will truncate each
+line at the leftmost comment marker and yield
+the resulting line.  If the line doesn't contain any comment
+markers, `lines_strip_line_comments` will yield it unchanged.
+
 If `quotes` is true, it must be an iterable of quote characters.
 `lines_strip_line_comments` will parse the line and ignore comment
-characters inside quoted strings.  If a line ends with an unterminated
-quoted string, `lines_strip_line_comments` will raise `SyntaxError`.
+markers inside quoted strings.  Quote marks must be balanced; if you
+open a quoted string, you must close it.  If a line ends with an
+quoted string still open, `lines_strip_line_comments` will raise
+`SyntaxError`.
 
 `multiline_quotes` is similar to `quotes`, except quoted strings are
-permitted to span lines.  If the iterator stops iteration with an
-unterminated multiline quoted string, `lines_strip_line_comments`
+permitted to span lines.  If the iterator stops iteration with a
+multiline quoted string still open, `lines_strip_line_comments`
 will raise `SyntaxError`.
 
 `escape` specifies an escape string to allow having the closing quote
