@@ -127,6 +127,7 @@ class BigTestVersion(unittest.TestCase):
 
     def test_comparison(self):
 
+        # here's a list of version, already in sorted order.
         sorted_versions = [
             V('1.0a1'),
             V('1.0a2.dev456'),
@@ -153,15 +154,24 @@ class BigTestVersion(unittest.TestCase):
             V('2!0.0.0.0.0.1'),
             ]
 
-        for delta in (1, 2, 3, 5, 7):
-            for i in range(len(sorted_versions) - delta):
-                self.assertLess(sorted_versions[i], sorted_versions[i + delta])
+        # first--let's test round-tripping through repr!
+        for v in sorted_versions:
+            r = repr(v)
+            v2 = eval(r)
+            self.assertEqual(v, v2)
 
+        # check that the first version is < every other version in the list
         v1 = sorted_versions[0]
         for v2 in sorted_versions[1:]:
             self.assertLess(v1, v2)
 
-        # scramble with a couple fixed seeds
+        # check transitivity: every version is < the entry that is <delta> ahead in the list
+        for delta in (1, 2, 3, 5, 7):
+            for i in range(len(sorted_versions) - delta):
+                self.assertLess(sorted_versions[i], sorted_versions[i + delta])
+
+        # scramble a copy of the array, using a couple fixed seeds,
+        # then sort it and confirm that the array is identical to the original (sorted) array
         for seed in (
             'seed1',
             'seed2',

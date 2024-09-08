@@ -4019,10 +4019,9 @@ expression.
 * `Version` objects are hashable.
 * `Version` objects support ordering and comparison; you can ask if two `Version`
   objects are equal, or if one is less than the other.
-* `repr()` on a `Version` object returns a string that could be used
-  to reconstruct the object.  `str()` on a `Version` object returns
-  a version string that, if passed in to the `Version` constructor,
-  would recreate the `Version` object.
+* `str()` on a `Version` object returns a normalized version string
+  for that version.  `repr()` on a `Version` object returns a string that,
+  if `eval`'d, reconstructs that object.
 * `Version` objects normalize themselves at initialization time:
     * Leading zeroes on version numbers are stripped.
     * Trailing zeroes in `release` (and trailing `.0` strings in
@@ -4126,9 +4125,8 @@ Version(release=(1, 3, 5), dev=35) < Version(release=(1, 3, 5))
 
 </dt><dd>
 
-A `tuple` of one or more `str` objects containing only oner or more
-["alnum"](https://docs.python.org/3/library/stdtypes.html#str.isalnum)
-characters,
+A `tuple` of one or more `str` objects containing only one or more
+alphanumeric characters
 or `None`.  Represents a purely local version number,
 allowing for minor build and patch differences
 but with no API or ABI changes.
