@@ -269,7 +269,7 @@ And here are five little functions/classes I use all the time:
 
 [`lines_filter_empty_lines(li)`](#lines_filter_empty_linesli)
 
-[`lines_filter_line_comment_lines(li, comment_separators)`](#lines_filter_line_comment_linesli-comment_separators)
+[`lines_filter_line_comment_lines(li, comment_markers)`](#lines_filter_line_comment_linesli-comment_markers)
 
 [`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
 
@@ -283,7 +283,7 @@ And here are five little functions/classes I use all the time:
 
 [`lines_strip_indent(li)`](#lines_strip_indentli)
 
-[`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+[`lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
 
 [`Log(clock=None)`](#log-clocknone)
 
@@ -2766,7 +2766,7 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_filter_line_comment_lines(li, comment_separators)`
+#### `lines_filter_line_comment_lines(li, comment_markers)`
 
 <dl><dd>
 
@@ -2776,7 +2776,7 @@ first non-whitespace characters appear in the iterable of
 `comment_separators` strings passed in.
 
 What's the difference between
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
 and
 `lines_filter_line_comment_lines`?
 
@@ -2784,8 +2784,8 @@ and
   only recognizes lines that *start* with a comment separator
   (ignoring leading whitespace).  Also, it filters out those
   lines completely, rather than modifying the line.
-* [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
-  handles comment characters anywhere in the line, although it can ignore
+* [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+  handles comment markers anywhere in the line, and it can also ignore
   comments inside quoted strings.  It truncates the line but still always
   yields the line.
 
@@ -2923,7 +2923,7 @@ For more information, see the deep-dive on
 [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 </dd></dl>
 
-#### `lines_strip_line_comments(li, line_comment_markers, *, escape='\\', multiline_quotes=None, quotes=('"', "'"))`
+#### `lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`
 
 <dl><dd>
 
@@ -2933,14 +2933,29 @@ the rest of the line should be ignored; `lines_strip_line_comments`
 truncates the line at the beginning of the leftmost comment
 separator.
 
+`line_comment_markers` should be an iterable of line comment
+marker strings.  These are strings that denote a "line comment",
+which is to say, a comment that starts at that marker and extends
+to the end of the line.
+
+By default, `quotes` and `multiline_quotes` are both false,
+in which case `lines_strip_line_comments` will truncate each
+line, starting at the leftmost comment marker, and yield
+the resulting line.  If the line doesn't contain any comment
+markers, `lines_strip_line_comments` will yield it unchanged.
+
 If `quotes` is true, it must be an iterable of quote characters.
-`lines_strip_line_comments` will parse the line and ignore comment
-characters inside quoted strings.  If a line ends with an unterminated
-quoted string, `lines_strip_line_comments` will raise `SyntaxError`.
+`lines_strip_line_comments` will parse the line using **big**'s
+[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+function and ignore comment
+markers inside quoted strings.  Quote marks must be balanced; if you
+open a quoted string, you must close it.  If a line ends with an
+quoted string still open, `lines_strip_line_comments` will raise
+`SyntaxError`.
 
 `multiline_quotes` is similar to `quotes`, except quoted strings are
-permitted to span lines.  If the iterator stops iteration with an
-unterminated multiline quoted string, `lines_strip_line_comments`
+permitted to span lines.  If the iterator stops iteration with a
+multiline quoted string still open, `lines_strip_line_comments`
 will raise `SyntaxError`.
 
 `escape` specifies an escape string to allow having the closing quote
@@ -2950,14 +2965,14 @@ If false, there is no escape string.
 What's the difference between
 `lines_strip_line_comments`
 and
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)?
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)?
 
-* [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
+* [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
   only recognizes lines that *start* with a comment separator
   (ignoring leading whitespace).  Also, it filters out those lines
   completely, rather than modifying the line.
 * `lines_strip_line_comments`
-  handles comment characters anywhere in the line, although it can ignore
+  handles comment markers anywhere in the line, and it can even ignore
   comments inside quoted strings.  It always yields the line, whether or
   not it's truncated the line.
 
@@ -4227,11 +4242,9 @@ to `False`.)
 also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
  and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
 which also take this same `separators` arguments.  There are also
-other **big** functions that take a `separators` argument; for
-consistency's sakes, the parameter name always has the word
-`separators` in it.
-(For example, `comment_separators` for
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators).)
+other **big** functions that take a `separators` argument,
+for example `comment_markers` for
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers).)
 
 ### Demonstrations of each `multisplit` keyword-only parameter
 
@@ -6160,7 +6173,7 @@ New package.  A package for working with version information.
 The default value for `quotes` has changed.  Now it's
 what it should always have been: empty.  No quote marks
 are defined by default, which means the default behavior of
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
 is now to simply truncate the line
 at the leftmost comment marker.
 
@@ -6223,7 +6236,7 @@ The following functions and classes have breaking changes:
 
 [`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
 
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
 
 [`split_delimiters`](#split_delimiterss-delimiters--state)
 
@@ -6236,9 +6249,9 @@ These functions have been renamed:
 
 <dl><dd>
 
-`lines_filter_comment_lines` is now [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
+`lines_filter_comment_lines` is now [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
 
-`lines_strip_comments` is now [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+`lines_strip_comments` is now [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
 
 `parse_delimiters` is now [`split_delimiters`](#split_delimiterss-delimiters--state)
 
@@ -6489,8 +6502,8 @@ somewhere else.
 <dl><dd>
 
 `lines_filter_comment_lines` has been renamed to
-`lines_filter_line_comment_lines`.  For backwards compatibility,
-the function
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers).
+For backwards compatibility, the function
 is also available under the old name; this old name will
 eventually be removed, but not before September 2025.
 
@@ -6505,7 +6518,7 @@ eventually be removed, but not before September 2025.
 New name for `lines_filter_comment_lines`.
 
 Correctness improvements:
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_separators)
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
 now enforces that single-quoted strings can't span lines,
 and multi-quoted strings must be closed before the end of
 the last line.
@@ -6570,7 +6583,9 @@ the previous behavior, sorting by the `line` (ignoring the
 
 <dl><dd>
 
-This function has been renamed `lines_strip_line_comments` and
+This function has been renamed
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+and
 rewritten, see below.  The old deprecated version will be
 available at `big.deprecated.lines_strip_comments` until at
 least September 2025.
@@ -6611,7 +6626,7 @@ behavior is how you'd intuitively expect it to work.)
 
 > This API has breaking changes.
 
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-)
+[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
 is the new name for the old
 `lines_strip_comments` lines modifier function.  It's also
 been completely rewritten.
@@ -7422,7 +7437,7 @@ Extremely minor release.  No new features or bug fixes.
 * Added the new [`itertools`](#bigitertools) module, which so far only contains
   [`PushbackIterator`](#pushbackiteratoriterablenone).
 * Added
-  `lines_strip_comments` [ed: now [`lines_strip_line_comments(li, line_comment_markers, *, quotes=('"', "'"), escape='\\', multiline_quotes=None)`](#lines_strip_line_commentsli-line_comment_markers--escape-multiline_quotesnone-quotes-))]
+  `lines_strip_comments` [ed: now [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
   and
   [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
   to the

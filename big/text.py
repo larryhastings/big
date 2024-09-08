@@ -3248,13 +3248,14 @@ def lines_strip_line_comments(li, line_comment_markers, *,
 
     line_comment_markers should be an iterable of line comment
     marker strings.  These are strings that denote a "line comment",
-    which is to say, a comment that extends from the marker to the
-    end of the line.  lines_strip_line_comments truncates each line
-    starting at the beginning of the leftmost line comment marker
-    found on that line.
+    which is to say, a comment that starts at that marker and
+    extends to the end of the line.
 
-    If both quotes and multiline_quotes are false (the default),
-    comment characters will be active anywhere in any line.
+    By default, quotes and multiline_quotes are both false,
+    in which case lines_strip_line_comments will truncate each
+    line, starting at the leftmost comment marker, and yield
+    the resulting line.  If the line doesn't contain any comment
+    markers, lines_strip_line_comments will yield it unchanged.
 
     If quotes is true, it must be an iterable of quote marker
     strings, length 1 or more.  lines_strip_line_comments will
@@ -3280,8 +3281,8 @@ def lines_strip_line_comments(li, line_comment_markers, *,
     The default value for escape is "\\".
 
     What's the difference between lines_strip_line_comments and
-    lines_filter_comment_lines?
-      * lines_filter_comment_lines only recognizes lines that
+    lines_filter_line_comment_lines?
+      * lines_filter_line_comment_lines only recognizes lines that
         *start* with a comment separator (ignoring leading
         whitespace).  Also, it filters out those lines
         completely, rather than modifying the line.
