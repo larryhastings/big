@@ -3865,6 +3865,10 @@ for x in range(5): # this is a comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
     print(no_comments_or_quotes_on_this_line)
+    both//on this line#dawg
+    and#also on this//line
+  torture////1
+ tort-ture######2
 """[1:])
         test(big.lines_strip_line_comments(lines, ("#", "//")),
             [
@@ -3883,6 +3887,26 @@ for x in range(5): # this is a comment
                 L(  line_number=4, column_number=1,
                     line='    print(no_comments_or_quotes_on_this_line)'),
                 L(  line_number=5, column_number=1,
+                    line='    both//on this line#dawg',
+                    trailing='//on this line#dawg',
+                    final='    both',
+                    ),
+                L(  line_number=6, column_number=1,
+                    line='    and#also on this//line',
+                    trailing='#also on this//line',
+                    final='    and',
+                    ),
+                L(  line_number=7, column_number=1,
+                    line='  torture////1',
+                    trailing='////1',
+                    final='  torture',
+                    ),
+                L(  line_number=8, column_number=1,
+                    line=' tort-ture######2',
+                    trailing='######2',
+                    final=' tort-ture',
+                    ),
+                L(  line_number=9, column_number=1,
                     line='',
                     end=''),
             ])
@@ -3908,14 +3932,39 @@ for x in range(5): # this is my exciting comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
     print(no_comments_or_quotes_on_this_line)
+    print("#which is the comment?", w #z )
+    print("//which is the comment?", x // 4Q2 )
+    print("test without whitespace, and extra comment chars 1", y####artie deco )
+    print("test without whitespace, and extra comment chars 2", z///////chinchilla the wookie monster )
 """[1:])
         test(big.lines_rstrip(big.lines_strip_line_comments(lines, ("#", "//"), quotes=('"', "'",))),
             [
-                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing=' # this is my exciting comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
-                L(line='', line_number=5, column_number=1, end=''),
+                L('for x in range(5): # this is my exciting comment', 1, 1,
+                    trailing=' # this is my exciting comment',
+                    final='for x in range(5):',
+                    ),
+                L('    print("# this is quoted", x)', 2, 1),
+                L('    print("") # this "comment" is useless', 3, 1,
+                    trailing=' # this "comment" is useless',
+                    final='    print("")',),
+                L('    print(no_comments_or_quotes_on_this_line)', 4, 1),
+                L('    print("#which is the comment?", w #z )', 5, 1,
+                    trailing=' #z )',
+                    final='    print("#which is the comment?", w',
+                    ),
+                L('    print("//which is the comment?", x // 4Q2 )', 6, 1,
+                    trailing=' // 4Q2 )',
+                    final='    print("//which is the comment?", x',
+                    ),
+                L('    print("test without whitespace, and extra comment chars 1", y####artie deco )', 7, 1,
+                    trailing='####artie deco )',
+                    final='    print("test without whitespace, and extra comment chars 1", y',
+                    ),
+                L('    print("test without whitespace, and extra comment chars 2", z///////chinchilla the wookie monster )', 8, 1,
+                    trailing='///////chinchilla the wookie monster )',
+                    final='    print("test without whitespace, and extra comment chars 2", z',
+                    ),
+                L('', 9, 1, end=''),
             ])
 
         # test multiline
