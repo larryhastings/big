@@ -2944,6 +2944,11 @@ line, starting at the leftmost comment marker, and yield
 the resulting line.  If the line doesn't contain any comment
 markers, `lines_strip_line_comments` will yield it unchanged.
 
+However, the syntax of the text you're parsing might support
+quoted strings, and if so, comment marks in those quoted strings
+should be ignored.  `lines_strip_quoted_strings` supports this
+too, with its `escape`, `quotes`, and `multiline_quotes` parameters.
+
 If `quotes` is true, it must be an iterable of quote characters.
 `lines_strip_line_comments` will parse the line using **big**'s
 [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
