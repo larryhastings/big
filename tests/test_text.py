@@ -62,6 +62,8 @@ except ImportError: # pragma: no cover
     have_regex = False
 
 
+_sentinel = object()
+
 def unchanged(o):
     return o
 
@@ -3452,23 +3454,28 @@ class BigTextTests(unittest.TestCase):
     def test_lines(self):
         self.maxDiff = 2**32
 
-        def assert_lines_reconstitutes_properly(i):
-            for t in i:
-                info, line = t
-                reconstituted_line = info.leading + line + info.trailing + info.end
-                self.assertEqual(info.line, reconstituted_line)
-                yield t
+        def L(li, line_number, column_number, line, end=_sentinel, *, leading=None, trailing=None, original=None, **kwargs):
+            is_bytes = isinstance(line, bytes)
+            empty = b'' if is_bytes else ''
 
-        def test(i, expected, *, test_reconstituted_line=True):
-            # slight hack
-            nonlocal lines
-            for info, line in expected:
-                info.lines = lines
+            if end is _sentinel:
+                end = b'\n' if is_bytes else '\n'
 
-            # print("I", i)
-            if test_reconstituted_line:
-                i = assert_lines_reconstitutes_properly(i)
-            got = list(i)
+            if leading is None:
+                leading = empty
+
+            if trailing is None:
+                trailing = empty
+
+            if original is None:
+                original = leading + line + trailing + end
+
+            return (big.text.LineInfo(li, original, line_number, column_number, end=end, leading=leading, trailing=trailing, **kwargs), line)
+
+        def test(li, expected):
+
+            got = list(li)
+
             if 0:
                 import pprint
                 print("\n\n")
@@ -3482,25 +3489,18 @@ class BigTextTests(unittest.TestCase):
                 for e, g in zip(expected, got):
                     print(e==g)
                 print("\n\n")
+
             self.assertEqual(expected, got)
 
-        def L(line, line_number, column_number=1, end='\n', final=None, **kwargs):
-            if final is None:
-                final = line
-            if isinstance(end, str) and isinstance(line, bytes):
-                end = end.encode('ascii')
-            info = big.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
-            return (info, final)
-
-        lines = big.lines("a\nb\nc\nd\ne\n")
-        test(lines,
+        i = li = big.lines("a\nb\nc\nd\ne\n")
+        test(i,
             [
-            L('a', 1, 1),
-            L('b', 2, 1),
-            L('c', 3, 1),
-            L('d', 4, 1),
-            L('e', 5, 1),
-            L('',  6, 1, end=''),
+            L(li, 1, 1, 'a'),
+            L(li, 2, 1, 'b'),
+            L(li, 3, 1, 'c'),
+            L(li, 4, 1, 'd'),
+            L(li, 5, 1, 'e'),
+            L(li, 6, 1, '', end=''),
             ])
 
         # you can give lines an iterable of strings,
@@ -3512,30 +3512,32 @@ class BigTextTests(unittest.TestCase):
             '         ',
             ''
             ]
-        lines = big.lines(list_of_lines)
-        test(big.lines_strip(lines),
+        i = li = big.lines(list_of_lines)
+        i = big.lines_strip(i)
+        test(i,
             [
-            L('first line',    1, 1,                                                          end=''),
-            L('\tsecond line', 2, 9, leading='\t', final='second line',                       end=''),
-            L('third line',    3, 1,                                                          end=''),
-            L('         ',     4, 1,               final='',            trailing='         ', end=''),
-            L('',              5, 1,                                                          end=''),
+            L(li, 1, 1, 'first line',                        end=''),
+            L(li, 2, 9, 'second line', leading='\t',         end=''),
+            L(li, 3, 1, 'third line',                        end=''),
+            L(li, 4, 1, '',            trailing='         ', end=''),
+            L(li, 5, 1, '',                                  end=''),
             ])
 
         # or! you can give lines an iterable of 2-tuples of strings,
         # in which case the first string is the line and the second is the end.
-        list_of_lines = [
+        list_of_lines_and_eols = [
             ('line 1', '\n'),
             ('hey!  line 2.', '\n'),
             ('the only line with the word eggplant! line 3!', '\n'),
             ('the final line, line 4.', '')
             ]
-        lines = big.lines(list_of_lines)
-        test(big.lines_grep(lines, 'eggplant', invert=True),
+        i = li = big.lines(list_of_lines_and_eols)
+        i = big.lines_grep(i, 'eggplant', invert=True)
+        test(i,
             [
-            L('line 1', 1, 1),
-            L('hey!  line 2.', 2, 1),
-            L('the final line, line 4.', 4, 1, end=''),
+            L(li, 1, 1, 'line 1'),
+            L(li, 2, 1, 'hey!  line 2.'),
+            L(li, 4, 1, 'the final line, line 4.', end=''),
             ])
 
         # test lines_filter_line_comment_lines
@@ -3543,15 +3545,16 @@ class BigTextTests(unittest.TestCase):
         # lines_filter_line_comment_lines has different approaches
         # for one comment marker vs more than one.  so, test both.
 
-        lines = big.lines(b"a\n# ignored\n  # also ignored\n d")
-        test(big.lines_filter_line_comment_lines(lines, b'#'),
+        i = li = big.lines(b"a\n# ignored\n  # also ignored\n d")
+        i = big.lines_filter_line_comment_lines(i, b'#')
+        test(i,
             [
-            L(b'a',  1),
-            L(b' d', 4, end=b''),
+            L(li, 1, 1, b'a'),
+            L(li, 4, 1, b' d', end=b''),
             ]
             )
 
-        lines = big.lines("""
+        i = li = big.lines("""
     # comment
     a = b
     // another comment
@@ -3561,17 +3564,18 @@ class BigTextTests(unittest.TestCase):
 ## another comment!
     #! a third comment!
 """.lstrip('\n'))
-        test(big.lines_filter_line_comment_lines(lines, ('#', '//')),
+        i = big.lines_filter_line_comment_lines(i, ('#', '//'))
+        test(i,
             [
-            L('    a = b',           2, 1),
-            L('    c = d',           4, 1),
-            L('    / not a comment', 5, 1),
-            L('',                    9, 1, end=''),
+            L(li, 2, 1, '    a = b'          ),
+            L(li, 4, 1, '    c = d'          ),
+            L(li, 5, 1, '    / not a comment'),
+            L(li, 9, 1, '',                    end=''),
             ])
 
         # minor regression test--
         # I noticed this was broken right before release
-        lines = big.lines(b"""
+        i = li = big.lines(b"""
     # comment
     a = b
     // another comment
@@ -3581,15 +3585,16 @@ class BigTextTests(unittest.TestCase):
 ## another comment!
     #! a third comment!
 """.lstrip(b'\n'))
-        test(big.lines_filter_line_comment_lines(lines, (b'#', b'//')),
+        i = big.lines_filter_line_comment_lines(i, (b'#', b'//'))
+        test(i,
             [
-            L(b'    a = b',           2, 1),
-            L(b'    c = d',           4, 1),
-            L(b'    / not a comment', 5, 1),
-            L(b'',                    9, 1, end=b''),
+            L(li, 2, 1, b'    a = b'          ),
+            L(li, 4, 1, b'    c = d'          ),
+            L(li, 5, 1, b'    / not a comment'),
+            L(li, 9, 1, b'',                    end=b''),
             ])
 
-        lines = big.lines("""
+        i = li = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -3598,15 +3603,16 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        test(big.lines_containing(lines, "egg"),
+        i = big.lines_containing(i, "egg")
+        test(i,
             [
-                L('i like eggs.', 3, 1),
-                L('simple scrambled eggs are just fine.', 5, 1),
-                L('neggatory!', 6, 1),
+                L(li, 3, 1, 'i like eggs.'),
+                L(li, 5, 1, 'simple scrambled eggs are just fine.'),
+                L(li, 6, 1, 'neggatory!'),
             ]
             )
 
-        lines = big.lines("""
+        i = li = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -3615,17 +3621,21 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        test(big.lines_containing(lines, "egg", invert=True),
+        i = big.lines_containing(i, "egg", invert=True)
+        test(i,
             [
-                L('hello yolks', 1, 1),
-                L('what do you have to say, champ?', 2, 1),
-                L("they don't have to be fancy.", 4, 1),
-                L('whoops, I meant, negatory.', 7, 1),
-                L('', 8, 1, end=''),
+                L(li, 1, 1, 'hello yolks'),
+                L(li, 2, 1, 'what do you have to say, champ?'),
+                L(li, 4, 1, "they don't have to be fancy."),
+                L(li, 7, 1, 'whoops, I meant, negatory.'),
+                L(li, 8, 1, '', end=''),
             ]
             )
 
-        _sentinel = object()
+        # it's hard to create an re.Match object in advance
+        # that will match the one returned by re.match.
+        # so, test for it separately, then remove it from the LineInfo object(s).
+        # (we confirm the line should have a match by testing for the presence of a substring.)
         def test_and_remove_lineinfo_match(i, substring, *, invert=False, match='match'):
             l = []
             for t in i:
@@ -3646,8 +3656,7 @@ whoops, I meant, negatory.
                 l.append(t)
             return l
 
-
-        lines = big.lines("""
+        i = li = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -3656,18 +3665,18 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        i = assert_lines_reconstitutes_properly(big.lines_grep(lines, "eg+"))
+        i = big.lines_grep(i, "eg+")
         got = test_and_remove_lineinfo_match(i, "eg")
         test(got,
             [
-                L('i like eggs.', 3, 1),
-                L('simple scrambled eggs are just fine.', 5, 1),
-                L('neggatory!', 6, 1),
-                L('whoops, I meant, negatory.', 7, 1),
+                L(li, 3, 1, 'i like eggs.'),
+                L(li, 5, 1, 'simple scrambled eggs are just fine.'),
+                L(li, 6, 1, 'neggatory!'),
+                L(li, 7, 1, 'whoops, I meant, negatory.'),
             ]
-            )
+        )
 
-        lines = big.lines("""
+        i = li = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -3676,19 +3685,19 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-        i = assert_lines_reconstitutes_properly(big.lines_grep(lines, "eg+", invert=True, match='quixote'))
+        i = big.lines_grep(i, "eg+", invert=True, match='quixote')
         got = test_and_remove_lineinfo_match(i, "eg", invert=True, match='quixote')
         test(got,
             [
-                L('hello yolks', 1, 1, quixote=None),
-                L('what do you have to say, champ?', 2, 1, quixote=None),
-                L("they don't have to be fancy.", 4, 1, quixote=None),
-                L('', 8, 1, end='', quixote=None),
+                L(li, 1, 1, 'hello yolks', quixote=None),
+                L(li, 2, 1, 'what do you have to say, champ?', quixote=None),
+                L(li, 4, 1, "they don't have to be fancy.", quixote=None),
+                L(li, 8, 1, '', end='', quixote=None),
             ]
             )
 
         with self.assertRaises(ValueError):
-            lines = big.lines("""
+            i = li = big.lines("""
 hello yolks
 what do you have to say, champ?
 i like eggs.
@@ -3697,10 +3706,9 @@ simple scrambled eggs are just fine.
 neggatory!
 whoops, I meant, negatory.
 """[1:])
-            i = big.lines_grep(lines, "eg+", invert=True, match='not a valid identifier')
+            big.lines_grep(i, "eg+", invert=True, match='not a valid identifier')
 
-
-        lines = big.lines("""
+        i = li = big.lines("""
 cormorant
 firefox
 alligator
@@ -3710,20 +3718,21 @@ giraffe
 barracuda
 hummingbird
 """[1:-1])
-        test(big.lines_sort(lines),
+        i = big.lines_sort(i)
+        test(i,
             [
-                L('alligator', 3),
-                L('barracuda', 7),
-                L('cormorant', 1),
-                L('diplodocus', 4),
-                L('elephant', 5),
-                L('firefox', 2),
-                L('giraffe', 6),
-                L('hummingbird', 8, end=''),
+                L(li, 3, 1, 'alligator'),
+                L(li, 7, 1, 'barracuda'),
+                L(li, 1, 1, 'cormorant'),
+                L(li, 4, 1, 'diplodocus'),
+                L(li, 5, 1, 'elephant'),
+                L(li, 2, 1, 'firefox'),
+                L(li, 6, 1, 'giraffe'),
+                L(li, 8, 1, 'hummingbird', end=''),
             ]
             )
 
-        lines = big.lines("""
+        i = li = big.lines("""
 cormorant
 firefox
 alligator
@@ -3733,20 +3742,21 @@ giraffe
 barracuda
 hummingbird
 """[1:-1])
-        test(big.lines_sort(lines, reverse=True),
+        i = big.lines_sort(i, reverse=True)
+        test(i,
             [
-                L('hummingbird', 8, end=''),
-                L('giraffe', 6),
-                L('firefox', 2),
-                L('elephant', 5),
-                L('diplodocus', 4),
-                L('cormorant', 1),
-                L('barracuda', 7),
-                L('alligator', 3),
+                L(li, 8, 1, 'hummingbird', end=''),
+                L(li, 6, 1, 'giraffe'),
+                L(li, 2, 1, 'firefox'),
+                L(li, 5, 1, 'elephant'),
+                L(li, 4, 1, 'diplodocus'),
+                L(li, 1, 1, 'cormorant'),
+                L(li, 7, 1, 'barracuda'),
+                L(li, 3, 1, 'alligator'),
             ]
             )
 
-        lines = big.lines("""
+        i = li = big.lines("""
 cormorant
 firefox
 alligator
@@ -3756,83 +3766,87 @@ giraffe
 barracuda
 hummingbird
 """[1:-1])
-        test(big.lines_sort(lines, key=lambda t:t[1][1:]), # sort by second letter onward
+        i = big.lines_sort(li, key=lambda t:t[1][1:]) # sort by second letter onward
+        test(i,
             [
-                L('barracuda', 7),
-                L('diplodocus', 4),
-                L('giraffe', 6),
-                L('firefox', 2),
-                L('elephant', 5),
-                L('alligator', 3),
-                L('cormorant', 1),
-                L('hummingbird', 8, end=''),
+                L(li, 7, 1, 'barracuda'),
+                L(li, 4, 1, 'diplodocus'),
+                L(li, 6, 1, 'giraffe'),
+                L(li, 2, 1, 'firefox'),
+                L(li, 5, 1, 'elephant'),
+                L(li, 3, 1, 'alligator'),
+                L(li, 1, 1, 'cormorant'),
+                L(li, 8, 1, 'hummingbird', end=''),
             ]
             )
 
-        lines = big.lines(
+        i = li = big.lines(
 "    a = b  \n"
 "    c = d     \n"
 )
-        test(big.lines_rstrip(lines),
+        i = big.lines_rstrip(i)
+        test(i,
             [
-            L('    a = b  ',    1, 1, final='    a = b', trailing='  '),
-            L('    c = d     ', 2, 1, final='    c = d', trailing='     '),
-            L('',               3, 1, end=''),
+            L(li, 1, 1, '    a = b', trailing='  '),
+            L(li, 2, 1, '    c = d', trailing='     '),
+            L(li, 3, 1, '',          end=''),
             ])
 
-        lines = big.lines(
+        i = li = big.lines(
 "QXYXYQa = bXY\n"
 "XYQQXYXYc = dQQQQ\n"
 )
-        test(big.lines_rstrip(lines, separators=('Q', 'XY')),
+        i = big.lines_rstrip(i, separators=('Q', 'XY'))
+        test(i,
             [
-            L('QXYXYQa = bXY',     1, 1, final='QXYXYQa = b', trailing='XY'),
-            L('XYQQXYXYc = dQQQQ', 2, 1, final='XYQQXYXYc = d', trailing='QQQQ'),
-            L('',                  3, 1, end=''),
+            L(li, 1, 1, 'QXYXYQa = b',   trailing='XY'),
+            L(li, 2, 1, 'XYQQXYXYc = d', trailing='QQQQ'),
+            L(li, 3, 1, '',              end=''),
             ])
 
-        lines = big.lines(
+        i = li = big.lines(
 "    a = b  \n"
 "      c = d     \n"
 "   \n"
 )
-        test(big.lines_strip(lines),
+        i = big.lines_strip(i)
+        test(i,
             [
-            L('    a = b  ',      1, 5, leading='    ',   final='a = b', trailing='  '),
-            L('      c = d     ', 2, 7, leading='      ', final='c = d', trailing='     '),
-            L('   ',              3, 1,                   final='',      trailing='   '),
-            L('',                 4, 1, end=''),
+            L(li, 1, 5, 'a = b', leading='    ',   trailing='  '),
+            L(li, 2, 7, 'c = d', leading='      ', trailing='     '),
+            L(li, 3, 1, '',                        trailing='   '),
+            L(li, 4, 1, '', end=''),
             ])
 
-        lines = big.lines(
+        i = li = big.lines(
 "QXYXYQa = bXY\n"
 "XYQQXYXYc = dQQQQ\n"
 'QXYQQXYXYQ\n'
 )
-        test(big.lines_strip(lines, separators=('Q', 'XY')),
+        i = big.lines_strip(i, separators=('Q', 'XY'))
+        test(i,
             [
-            L('QXYXYQa = bXY',     1, 7, leading='QXYXYQ',   final='a = b', trailing='XY'),
-            L('XYQQXYXYc = dQQQQ', 2, 9, leading='XYQQXYXY', final='c = d', trailing='QQQQ'),
-            L('QXYQQXYXYQ',        3, 1,                     final='',      trailing='QXYQQXYXYQ'),
-            L('',                  4, 1, end=''),
+            L(li, 1, 7, 'a = b', leading='QXYXYQ',   trailing='XY'),
+            L(li, 2, 9, 'c = d', leading='XYQQXYXY', trailing='QQQQ'),
+            L(li, 3, 1, '',                          trailing='QXYQQXYXYQ'),
+            L(li, 4, 1, '',      end=''),
             ])
 
         # test funny separators for lines_strip,
         # *and* multiple calls to clip_leading and clip_trailing
-        li = lines = big.text.lines('xxxA B C Dyyy\nyyyE F G Hzzz\nxyzI J K Lyzx')
-        li = big.text.lines_strip(li, ('x', '?'))
-        li = big.text.lines_strip(li, ('y', '!'))
-        li = big.text.lines_strip(li, ('z', '.'))
-        test(li,
+        i = li = lines = big.text.lines('xxxA B C Dyyy\nyyyE F G Hzzz\nxyzI J K Lyzx')
+        i = big.text.lines_strip(i, ('x', '?'))
+        i = big.text.lines_strip(i, ('y', '!'))
+        i = big.text.lines_strip(i, ('z', '.'))
+        test(i,
             [
-            L('xxxA B C Dyyy', 1, 4, leading='xxx', final='A B C D',  trailing='yyy'),
-            L('yyyE F G Hzzz', 2, 4, leading='yyy', final='E F G H',  trailing='zzz'),
-            L('xyzI J K Lyzx', 3, 4, leading='xyz', final='I J K Ly', trailing='zx', end=''),
+            L(li, 1, 4, 'A B C D',  leading='xxx', trailing='yyy'),
+            L(li, 2, 4, 'E F G H',  leading='yyy', trailing='zzz'),
+            L(li, 3, 4, 'I J K Ly', leading='xyz', trailing='zx', end=''),
             ]
             )
 
-
-        lines = big.lines("""
+        i = li = big.lines("""
 
     a = b
 
@@ -3840,27 +3854,29 @@ hummingbird
     c = d
 
 """[1:])
-        test(big.lines_filter_empty_lines(lines),
+        i = big.lines_filter_empty_lines(i)
+        test(i,
             [
-            L('    a = b', 2, 1),
-            L('    c = d', 5, 1),
+            L(li, 2, 1, '    a = b'),
+            L(li, 5, 1, '    c = d'),
             ])
 
-        lines = big.lines(
+        i = li = big.lines(
             "\tfirst line\n"
             "\t\tsecond line\n"
             "  \tthird line\n",
             tab_width=8)
-        test(big.lines_convert_tabs_to_spaces(lines),
+        i = big.lines_convert_tabs_to_spaces(i)
+        test(i,
             [
-                L("\tfirst line", 1, 1,    final="        first line"),
-                L("\t\tsecond line", 2, 1, final="                second line"),
-                L("  \tthird line", 3, 1,  final="        third line"),
-                L("", 4, 1, end=''),
-            ], test_reconstituted_line=False)
+                L(li, 1, 1, "        first line",          original="\tfirst line\n"),
+                L(li, 2, 1, "                second line", original="\t\tsecond line\n"),
+                L(li, 3, 1, "        third line",          original="  \tthird line\n"),
+                L(li, 4, 1, "",                            end=''),
+            ])
 
         # no quote marks defined (the default)
-        lines = big.lines("""
+        i = li = big.lines("""
 for x in range(5): # this is a comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
@@ -3870,64 +3886,38 @@ for x in range(5): # this is a comment
   torture////1
  tort-ture######2
 """[1:])
-        test(big.lines_strip_line_comments(lines, ("#", "//")),
+        i = big.lines_strip_line_comments(i, ("#", "//"))
+        test(i,
             [
-                L(  line_number=1, column_number=1,
-                    line='for x in range(5): # this is a comment',
-                    trailing='# this is a comment',
-                    final='for x in range(5): '),
-                L(  line_number=2, column_number=1,
-                    line='    print("# this is quoted", x)',
-                    trailing='# this is quoted", x)',
-                    final='    print("'),
-                L(  line_number=3, column_number=1,
-                    line='    print("") # this "comment" is useless',
-                    trailing='# this "comment" is useless',
-                    final='    print("") '),
-                L(  line_number=4, column_number=1,
-                    line='    print(no_comments_or_quotes_on_this_line)'),
-                L(  line_number=5, column_number=1,
-                    line='    both//on this line#dawg',
-                    trailing='//on this line#dawg',
-                    final='    both',
-                    ),
-                L(  line_number=6, column_number=1,
-                    line='    and#also on this//line',
-                    trailing='#also on this//line',
-                    final='    and',
-                    ),
-                L(  line_number=7, column_number=1,
-                    line='  torture////1',
-                    trailing='////1',
-                    final='  torture',
-                    ),
-                L(  line_number=8, column_number=1,
-                    line=' tort-ture######2',
-                    trailing='######2',
-                    final=' tort-ture',
-                    ),
-                L(  line_number=9, column_number=1,
-                    line='',
-                    end=''),
+                L(li, 1, 1, 'for x in range(5): ', trailing='# this is a comment',),
+                L(li, 2, 1, '    print("',         trailing='# this is quoted", x)'),
+                L(li, 3, 1, '    print("") ',      trailing='# this "comment" is useless',),
+                L(li, 4, 1, '    print(no_comments_or_quotes_on_this_line)'),
+                L(li, 5, 1, '    both',            trailing='//on this line#dawg'),
+                L(li, 6, 1, '    and',             trailing='#also on this//line'),
+                L(li, 7, 1, '  torture',           trailing='////1'),
+                L(li, 8, 1, ' tort-ture',          trailing='######2'),
+                L(li, 9, 1, '', end=''),
             ])
 
-        lines = big.lines("""
+        # test specifying quotes as a string
+        i = li = big.lines("""
 for x in range(5): # this is my exciting comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
     print(no_comments_or_quotes_on_this_line)
 """[1:])
-        # test specifying quotes as a string
-        test(big.lines_strip_line_comments(lines, ("#", "//"), quotes='"\''),
+        i = big.lines_strip_line_comments(i, ("#", "//"), quotes='"\'')
+        test(i,
             [
-                L(line='for x in range(5): # this is my exciting comment', line_number=1, column_number=1, trailing='# this is my exciting comment', final='for x in range(5): '),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing='# this "comment" is useless', final='    print("") '),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
-                L(line='', line_number=5, column_number=1, end=''),
+                L(li, 1, 1, 'for x in range(5): ', trailing='# this is my exciting comment'),
+                L(li, 2, 1, '    print("# this is quoted", x)'),
+                L(li, 3, 1, '    print("") ', trailing='# this "comment" is useless'),
+                L(li, 4, 1, '    print(no_comments_or_quotes_on_this_line)'),
+                L(li, 5, 1, '', end=''),
             ])
 
-        lines = big.lines("""
+        i = li = big.lines("""
 for x in range(5): # this is my exciting comment
     print("# this is quoted", x)
     print("") # this "comment" is useless
@@ -3937,38 +3927,24 @@ for x in range(5): # this is my exciting comment
     print("test without whitespace, and extra comment chars 1", y####artie deco )
     print("test without whitespace, and extra comment chars 2", z///////chinchilla the wookie monster )
 """[1:])
-        test(big.lines_rstrip(big.lines_strip_line_comments(lines, ("#", "//"), quotes=('"', "'",))),
+        i = big.lines_strip_line_comments(i, ("#", "//"), quotes=('"', "'",))
+        i = big.lines_rstrip(i)
+        test(i,
             [
-                L('for x in range(5): # this is my exciting comment', 1, 1,
-                    trailing=' # this is my exciting comment',
-                    final='for x in range(5):',
-                    ),
-                L('    print("# this is quoted", x)', 2, 1),
-                L('    print("") # this "comment" is useless', 3, 1,
-                    trailing=' # this "comment" is useless',
-                    final='    print("")',),
-                L('    print(no_comments_or_quotes_on_this_line)', 4, 1),
-                L('    print("#which is the comment?", w #z )', 5, 1,
-                    trailing=' #z )',
-                    final='    print("#which is the comment?", w',
-                    ),
-                L('    print("//which is the comment?", x // 4Q2 )', 6, 1,
-                    trailing=' // 4Q2 )',
-                    final='    print("//which is the comment?", x',
-                    ),
-                L('    print("test without whitespace, and extra comment chars 1", y####artie deco )', 7, 1,
-                    trailing='####artie deco )',
-                    final='    print("test without whitespace, and extra comment chars 1", y',
-                    ),
-                L('    print("test without whitespace, and extra comment chars 2", z///////chinchilla the wookie monster )', 8, 1,
-                    trailing='///////chinchilla the wookie monster )',
-                    final='    print("test without whitespace, and extra comment chars 2", z',
-                    ),
-                L('', 9, 1, end=''),
+                L(li, 1, 1, 'for x in range(5):', trailing=' # this is my exciting comment'),
+                L(li, 2, 1, '    print("# this is quoted", x)'),
+                L(li, 3, 1, '    print("")', trailing=' # this "comment" is useless'),
+                L(li, 4, 1, '    print(no_comments_or_quotes_on_this_line)'),
+                L(li, 5, 1, '    print("#which is the comment?", w', trailing=' #z )'),
+                L(li, 6, 1, '    print("//which is the comment?", x', trailing=' // 4Q2 )'),
+                L(li, 7, 1, '    print("test without whitespace, and extra comment chars 1", y', trailing='####artie deco )'),
+                L(li, 8, 1, '    print("test without whitespace, and extra comment chars 2", z', trailing='///////chinchilla the wookie monster )'),
+                L(li, 9, 1, '', end=''),
             ])
 
         # test multiline
-        lines = big.lines("""
+        # test specifying line comment markers as a string, and only one quote mark
+        i = li = big.lines("""
 for x in range(5): # this is my exciting comment
     print('''
     this is a multiline string
@@ -3976,34 +3952,16 @@ for x in range(5): # this is my exciting comment
     ''') > but here's a comment
     print("just checking, # here too") # here is another comment
 """[1:])
-        # test specifying line comment markers as a string, and only one quote mark
-        test(big.lines_strip_line_comments(lines, "#>", quotes='"', multiline_quotes=("'''",)),
+        i = big.lines_strip_line_comments(i, "#>", quotes='"', multiline_quotes=("'''",))
+        test(i,
             [
-                L(line_number=1, column_number=1,
-                    line ='for x in range(5): # this is my exciting comment',
-                    final='for x in range(5): ',
-                    trailing='# this is my exciting comment',),
-                L(line_number=2, column_number=1,
-                    line ="    print('''",
-                    final="    print('''"),
-                L(line_number=3, column_number=1,
-                    line ="    this is a multiline string",
-                    final="    this is a multiline string"),
-                L(line_number=4, column_number=1,
-                    line ="    does this line have a comment? # no!",
-                    final="    does this line have a comment? # no!"),
-                L(line_number=5, column_number=1,
-                    line="    ''') > but here's a comment",
-                    trailing="> but here's a comment",
-                    final="    ''') ",
-                    ),
-                L(line_number=6, column_number=1,
-                    line='    print("just checking, # here too") # here is another comment',
-                    trailing="# here is another comment",
-                    final='    print("just checking, # here too") '),
-                L(line_number=7, column_number=1,
-                    line='',
-                    end=''),
+                L(li, 1, 1, 'for x in range(5): ',                     trailing='# this is my exciting comment',),
+                L(li, 2, 1, "    print('''"),
+                L(li, 3, 1, "    this is a multiline string"),
+                L(li, 4, 1, "    does this line have a comment? # no!"),
+                L(li, 5, 1, "    ''') ",                               trailing="> but here's a comment"),
+                L(li, 6, 1, '    print("just checking, # here too") ', trailing="# here is another comment"),
+                L(li, 7, 1, '', end=''),
             ])
 
         # invalid comment characters
@@ -4033,45 +3991,47 @@ for x in range(5): # this is my exciting comment
         with self.assertRaises(SyntaxError):
             test(big.lines_strip_line_comments(big.lines("foo 'bar' bat '''zzz\nmore lines here\nwait what's happening?"), ("#", '//',), multiline_quotes=("'''",)), [])
 
-        lines = big.lines(b"a\nb# clipped\n c")
-        test(big.lines_strip_line_comments(lines, b'#'),
+        i = li = big.lines(b"a\nb# clipped\n c")
+        i = big.lines_strip_line_comments(i, b'#')
+        test(i,
             [
-            L(b'a', 1),
-            L(b'b# clipped', 2, 1, trailing=b'# clipped', final=b'b'),
-            L(b' c', 3, end=b''),
+            L(li, 1, 1, b'a',),
+            L(li, 2, 1, b'b',  trailing=b'# clipped'),
+            L(li, 3, 1, b' c', end=b''),
             ]
             )
 
-        lines = big.lines(b'a\nb"# ignored"\n c')
-        test(big.lines_strip_line_comments(lines, (b'#',), quotes=(b'"',)),
+        i = li = big.lines(b'a\nb"# ignored"\n c')
+        i = big.lines_strip_line_comments(i, (b'#',), quotes=(b'"',))
+        test(i,
             [
-            L(b'a', 1),
-            L(b'b"# ignored"', 2),
-            L(b' c', 3, end=b''),
+            L(li, 1, 1, b'a'),
+            L(li, 2, 1, b'b"# ignored"'),
+            L(li, 3, 1, b' c', end=b''),
             ]
             )
 
-        lines = big.lines(b'a\nb"# ignored"\n c#lipped')
-        test(big.lines_strip_line_comments(lines, b'#', quotes=b'"'),
+        i = li = big.lines(b'a\nb"# ignored"\n c#lipped')
+        i = big.lines_strip_line_comments(i, b'#', quotes=b'"')
+        test(i,
             [
-            L(b'a', 1),
-            L(b'b"# ignored"', 2),
-            L(b' c#lipped', 3, trailing=b'#lipped', final=b' c', end=b''),
+            L(li, 1, 1, b'a'),
+            L(li, 2, 1, b'b"# ignored"'),
+            L(li, 3, 1, b' c', trailing=b'#lipped', end=b''),
             ]
             )
 
-        lines = big.lines(b'a\nb"# ignored\n" c#lipped')
-        test(big.lines_strip_line_comments(lines, b'#', multiline_quotes=b'"'),
+        i = li = big.lines(b'a\nb"# ignored\n" c#lipped')
+        i = big.lines_strip_line_comments(i, b'#', multiline_quotes=b'"')
+        test(i,
             [
-            L(b'a', 1),
-            L(b'b"# ignored', 2),
-            L(b'" c#lipped', 3, trailing=b'#lipped', final=b'" c', end=b''),
+            L(li, 1, 1, b'a'),
+            L(li, 2, 1, b'b"# ignored'),
+            L(li, 3, 1, b'" c', trailing=b'#lipped', end=b''),
             ]
             )
 
-
-
-        lines = big.lines(
+        i = li = big.lines(
 "   \n" +
 "    a = b \n" +
 "   \n" +
@@ -4080,33 +4040,21 @@ for x in range(5): # this is my exciting comment
 "    \n" +
 "    c = d  \n" +
 "     \n")
-        test(big.lines_filter_empty_lines(big.lines_filter_line_comment_lines(big.lines_strip(lines), '#')),
+        i = big.lines_strip(i)
+        i = big.lines_filter_line_comment_lines(i, '#')
+        i = big.lines_filter_empty_lines(i)
+        test(i,
             [
-            L('    a = b ',  2, 5, leading='    ', trailing=' ', final='a = b'),
-            L('    c = d  ', 7, 5, leading='    ', trailing='  ', final='c = d'),
+            L(li, 2, 5, 'a = b',  leading='    ', trailing=' '),
+            L(li, 7, 5, 'c = d', leading='    ', trailing='  '),
             ])
 
 
     def test_lines_strip_indent(self):
         self.maxDiff = 2**32
 
-        def assert_line_reconstitutes_properly(i):
-            for t in i:
-                info, line = t
-                reconstituted_line = info.leading + line + info.trailing + info.end
-                self.assertEqual(info.line, reconstituted_line, f"failed to reconstitute line {info.line_number}: info={info} line={line!r}")
-                yield t
-
-        def test(lines, expected, *, tab_width=8):
-            if not isinstance(lines, types.GeneratorType):
-                lines = big.lines(lines, tab_width=tab_width)
-            i = assert_line_reconstitutes_properly(big.lines_strip_indent(lines))
-            got = list(i)
-
-            # fixup lines objects
-            for pair in expected:
-                info, line = pair
-                info.lines = lines
+        def test(li, expected):
+            got = list(li)
 
             if 0:
                 import pprint
@@ -4121,15 +4069,23 @@ for x in range(5): # this is my exciting comment
 
             self.assertEqual(expected, got)
 
-        _sentinel = object()
+        def L(li, line_number, column_number, line, end=_sentinel, *, leading=None, trailing=None, original=None, **kwargs):
+            is_bytes = isinstance(line, bytes)
+            empty = b'' if is_bytes else ''
 
-        def LineInfo(lines, line, line_number, column_number, end=_sentinel, **kwargs):
             if end is _sentinel:
-                if isinstance(line, bytes):
-                    end = b'\n'
-                else:
-                    end = '\n'
-            return big.text.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
+                end = b'\n' if is_bytes else '\n'
+
+            if leading is None:
+                leading = empty
+
+            if trailing is None:
+                trailing = empty
+
+            if original is None:
+                original = leading + line + trailing + end
+
+            return (big.text.LineInfo(li, original, line_number, column_number, end=end, leading=leading, trailing=trailing, **kwargs), line)
 
 
         lines = """
@@ -4145,44 +4101,30 @@ else:
     outdent
 outdent
   new indent
-outdent
+qoutdent
 """
-        # LineInfo really only needs the lines object to know the tab width
-        li = big.text.lines('')
+
+        i = li = big.text.lines(lines)
+        i = big.text.lines_strip_indent(li)
 
         expected = [
-            (LineInfo(li, line='', line_number=1, column_number=1, indent=0, leading=''),
-                ''),
-            (LineInfo(li, line='left margin', line_number=2, column_number=1, indent=0, leading=''),
-                'left margin'),
-            (LineInfo(li, line='if 3:', line_number=3, column_number=1, indent=0, leading=''),
-                'if 3:'),
-            (LineInfo(li, line='    text', line_number=4, column_number=5, indent=1, leading='    '),
-                'text'),
-            (LineInfo(li, line='else:', line_number=5, column_number=1, indent=0, leading=''),
-                'else:'),
-            (LineInfo(li, line='    if 1:', line_number=6, column_number=5, indent=1, leading='    '),
-                'if 1:'),
-            (LineInfo(li, line='          other text', line_number=7, column_number=11, indent=2, leading='          '),
-                'other text'),
-            (LineInfo(li, line='          other text', line_number=8, column_number=11, indent=2, leading='          '),
-                'other text'),
-            (LineInfo(li, line='    more text', line_number=9, column_number=5, indent=1, leading='    '),
-                'more text'),
-            (LineInfo(li, line='      different indent', line_number=10, column_number=7, indent=2, leading='      '),
-                'different indent'),
-            (LineInfo(li, line='    outdent', line_number=11, column_number=5, indent=1, leading='    '),
-                'outdent'),
-            (LineInfo(li, line='outdent', line_number=12, column_number=1, indent=0, leading=''),
-                'outdent'),
-            (LineInfo(li, line='  new indent', line_number=13, column_number=3, indent=1, leading='  '),
-                'new indent'),
-            (LineInfo(li, line='outdent', line_number=14, column_number=1, indent=0, leading=''),
-                'outdent'),
-            (LineInfo(li, line='', line_number=15, column_number=1, indent=0, leading='', end=''),
-                ''),
+            L(li,  1,  1, '',                 indent=0),
+            L(li,  2,  1, 'left margin',      indent=0),
+            L(li,  3,  1, 'if 3:',            indent=0),
+            L(li,  4,  5, 'text',             indent=1, leading='    '),
+            L(li,  5,  1, 'else:',            indent=0),
+            L(li,  6,  5, 'if 1:',            indent=1, leading='    '),
+            L(li,  7, 11, 'other text',       indent=2, leading='          '),
+            L(li,  8, 11, 'other text',       indent=2, leading='          '),
+            L(li,  9,  5, 'more text',        indent=1, leading='    '),
+            L(li, 10,  7, 'different indent', indent=2, leading='      '),
+            L(li, 11,  5, 'outdent',          indent=1, leading='    '),
+            L(li, 12,  1, 'outdent',          indent=0),
+            L(li, 13,  3, 'new indent',       indent=1, leading='  '),
+            L(li, 14,  1, 'qoutdent',         indent=0),
+            L(li, 15,  1, '',                 indent=0, end=''),
             ]
-        test(lines, expected)
+        test(i, expected)
 
 
         ##
@@ -4196,29 +4138,19 @@ outdent
         "        eight is enough\n"
         "    \n"
         )
+        i = li = big.lines(lines)
+        i = big.lines_strip_indent(i)
 
         expected = [
-            (LineInfo(li, line='left margin',
-                line_number=1, column_number=1, indent=0, leading=''),
-                'left margin'),
-            (LineInfo(li, line='\teight',
-                line_number=2, column_number=9, indent=1, leading='\t'),
-                'eight'),
-            (LineInfo(li, line='  \t    twelve',
-                line_number=3, column_number=13, indent=2, leading='  \t    '),
-                'twelve'),
-            (LineInfo(li, line='        eight is enough',
-                line_number=4, column_number=9, indent=1, leading='        '),
-                'eight is enough'),
-            (LineInfo(li, line='    ',
-                line_number=5, column_number=5, indent=0, leading='    '),
-                ''),
-            (LineInfo(li, line='',
-                line_number=6, column_number=1, indent=0, leading='', end=''),
-                '')
+            L(li, 1,  1, 'left margin',     indent=0, leading=''),
+            L(li, 2,  9, 'eight',           indent=1, leading='\t'),
+            L(li, 3, 13, 'twelve',          indent=2, leading='  \t    '),
+            L(li, 4,  9, 'eight is enough', indent=1, leading='        '),
+            L(li, 5,  1, '',                indent=0, trailing='    '), # regression test!
+            L(li, 6,  1, '',                indent=0, leading='', end=''),
             ]
 
-        test(lines, expected)
+        test(i, expected)
 
         lines = (
             b"left margin\n"
@@ -4228,53 +4160,50 @@ outdent
             b"    figure four is half of eight\n"
             )
 
-        expected = [
-            (LineInfo(li, line=b'left margin', line_number=1, column_number=1, indent=0, leading=b''),
-                b'left margin'),
-            (LineInfo(li, line=b'\tfour', line_number=2, column_number=5, indent=1, leading=b'\t'),
-                b'four'),
-            (LineInfo(li, line=b'  \t    eight', line_number=3, column_number=9, indent=2, leading=b'  \t    '),
-                b'eight'),
-            (LineInfo(li, line=b'  \t\tfigure eight is double four', line_number=4, column_number=9, indent=2, leading=b'  \t\t'),
-                b'figure eight is double four'),
-            (LineInfo(li, line=b'    figure four is half of eight', line_number=5, column_number=5, indent=1, leading=b'    '),
-                b'figure four is half of eight'),
-            (LineInfo(li, line=b'', line_number=6, column_number=1, indent=0, leading=b'', end=b''),
-                b'')]
+        i = li = big.lines(lines, tab_width=4)
+        i = big.lines_strip_indent(i)
 
-        test(lines, expected, tab_width=4)
+        expected = [
+            L(li, 1, 1, b'left margin',                  indent=0, leading=b''),
+            L(li, 2, 5, b'four',                         indent=1, leading=b'\t'),
+            L(li, 3, 9, b'eight',                        indent=2, leading=b'  \t    '),
+            L(li, 4, 9, b'figure eight is double four',  indent=2, leading=b'  \t\t'),
+            L(li, 5, 5, b'figure four is half of eight', indent=1, leading=b'    '),
+            L(li, 6, 1, b'',                             indent=0, leading=b'', end=b''),
+            ]
+
+        test(i, expected)
 
         ##
         ## test raising for illegal outdents
         ##
 
         # when it's between two existing indents
-        lines = (
+        i = li = big.lines(
             "left margin\n"
             "\tfour\n"
             "  \t    eight\n"
             "      six?!\n"
-            "left margin again\n"
-            )
+            "left margin again\n",
+            tab_width=4)
+        i = big.lines_strip_indent(i)
 
         with self.assertRaises(IndentationError):
-            test(lines, [], tab_width=4)
+            test(i, [])
 
 
         # when it's less than the first indent
-        lines = (
+        i = li = big.lines(
             "left margin\n"
             "\tfour\n"
             "  \t    eight\n"
             "  two?!\n"
-            "left margin again\n"
-            )
+            "left margin again\n",
+            tab_width=4)
+        i = big.lines_strip_indent(i)
 
         with self.assertRaises(IndentationError):
-            test(lines, [], tab_width=4)
-
-        # with self.assertRaises(ValueError):
-        #     test("first line\n  \u3000  second line\nthird line\n", [])
+            test(i, [])
 
 
 

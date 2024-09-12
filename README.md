@@ -6134,6 +6134,29 @@ in the **big** test suite.
 
 ## Release history
 
+#### 0.12.2
+
+*2024/09/11*
+
+<dl><dd>
+
+* A minor semantic change to [`lines_strip_indent`](#lines_strip_indentli):
+  when it encounters a whitespace-only line, it clips the line to *trailing*
+  in the `LineInfo` object.  It used to clip such lines to *leading*.  But this
+  changed `LineInfo.column_number` in a nonsensical way.
+
+  This behavior is policy going forward: if a lines modifer function ever clips
+  the entire line, it must clip it to *trailing* rather than *leading*.  It
+  shouldn't matter one way or another, as whitespace-only lines arguably
+  shouldn't have any explicit semantics.  But it makes intuitive sense to me
+  that their empty line should be at column number 1, rather than 9 or 13
+  or whatnot.  (Especially considering that with `lines_strip_indent` their
+  indent value is synthetic anyway, inferred by looking ahead.)
+
+* Major cleanup to the lines modifier test suites.
+
+</dd></dl>
+
 #### 0.12.1
 
 *2024/09/07*

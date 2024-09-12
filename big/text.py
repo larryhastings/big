@@ -3404,7 +3404,11 @@ def lines_strip_indent(li):
 
         lstripped = line.lstrip()
         if not lstripped:
-            line = info.clip_leading(line, line)
+            # yes, clip *TRAILING*.
+            # When a line is 100% whitespace,
+            # always clip to trailing.
+            # That way you don't change column_number nonsensically.
+            line = info.clip_trailing(line, line)
             blank_lines.append((info, line))
             # print(f"BL+ {info=} {lstripped=}")
             continue
@@ -3479,6 +3483,10 @@ def lines_filter_empty_lines(li):
     line 3 is "a", line 4 is empty, and line 5 is "b", this will yield:
         (line_number=3, "a")
         (line_number=5, "b")
+
+    Doesn't strip whitespace (or anything else).  If you want to filter
+    out lines that only contain whitespace, add lines_rstrip to the chain
+    of lines modifiers before lines_filter_empty_lines.
 
     Composable with all the lines_ modifier functions in the big.text module.
     """
