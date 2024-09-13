@@ -4000,9 +4000,9 @@ Constructs a `Version` object, which represents a version number.
 You may define the version one of two ways:
 
 * by passing in a version string to the `s` positional parameter.
-  Example: `Version("1.3.5rc3")`
+  Example: `Version("1.3.24rc37")`
 * by passing in keyword-only arguments setting the specific fields of the version.
-  Example: `Version(release=(1, 3, 5), release_level="rc", serial=3)`
+  Example: `Version(release=(1, 3, 24), release_level="rc", serial=37)`
 
 **big**'s `Version` objects conform to the [PEP 440](https://peps.python.org/pep-0440/)
 version scheme, parsing version strings using that PEP's official regular

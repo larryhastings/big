@@ -425,11 +425,12 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     if reverse:
         return re_rpartition(s, pattern, count, flags=flags)
 
+    # writing it this way means the extension tuples are precompiled constants
     if isinstance(s, bytes):
-        empty_string = b''
+        empty = b''
         extension = (None, b'')
     else:
-        empty_string = ''
+        empty = ''
         extension = (None, '')
 
     if not isinstance_re_pattern(pattern):
@@ -439,7 +440,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     if count == 1:
         match = pattern.search(s)
         if not match:
-            return (s, None, empty_string)
+            return (s, None, empty)
         before, separator, after = s.partition(match.group(0))
         return (before, match, after)
 
@@ -466,7 +467,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     return tuple(result) + extension
 
 
-# internal iterator function
+# internal generator function
 def reversed_re_finditer(pattern, string):
     # matches are found by re.search *going forwards.*
     # but what we need here is the *reverse* matches.
@@ -491,8 +492,8 @@ def reversed_re_finditer(pattern, string):
 
     # matches and overlapping_matches are lists of 3-tuples of:
     #    (end_pos, -start_pos, match)
-    # if we sort the list, the last element will be the correct
-    # last match in "reverse" order.  see
+    # If we sort one of those lists, the last element will be
+    # the correct last match in "reverse" order.  See
     #    https://en.wikipedia.org/wiki/Schwartzian_transform
     #
     # matches contains the list of matches we got directly from
@@ -701,7 +702,7 @@ _reversed_re_finditer = reversed_re_finditer
 @_export
 def reversed_re_finditer(pattern, string, flags=0):
     """
-    An iterator.  Behaves almost identically to the Python
+    A generator function.  Behaves almost identically to the Python
     standard library function re.finditer, yielding non-overlapping
     matches of "pattern" in "string".  The difference is,
     reversed_re_finditer searches "string" from right to left.
@@ -772,11 +773,13 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
     """
+
+    # writing it this way means the extension tuples are precompiled constants
     if isinstance(s, bytes):
-        empty_string = b''
+        empty = b''
         extension = (b'', None)
     else:
-        empty_string = ''
+        empty = ''
         extension = ('', None)
 
     # optimized fast path for the most frequent use case
@@ -787,7 +790,7 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
             before, separator, after = s.rpartition(match.group(0))
             return (before, match, after)
         except StopIteration:
-            return (empty_string, None, s)
+            return (empty, None, s)
 
     if count == 0:
         return (s,)
@@ -2114,9 +2117,11 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
             s = ', '.join(repr(_) for _ in in_both_quotes_sets)
         raise ValueError(f"{s} appears in both quotes and multiline_quotes")
 
-    # separators is a list, and it also contains the escaped quote marks (if any).
+    # separators is a list containing all quote marks,
     separators = list(quotes_set)
     separators.extend(multiline_quotes_set)
+
+    # and also all escaped quote marks.
     if escape:
         for first_character in {q[0:] for q in quotes}:
             separators.append(escape + first_character)
