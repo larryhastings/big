@@ -2705,7 +2705,9 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 
     (Tip: Use a list as a stack to track the state of split_delimiters.
     Push open delimiters with .append, and pop them with .pop
-    when you encounter the matching close delimiter.)
+    whenever you see a close delimiter.  Since split_delimiters ensures
+    that open and close delimiters match, you don't need to check them
+    yourself!)
 
     Yields 3-tuples containing strings:
 
@@ -2721,9 +2723,10 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 
     You may not specify backslash ('\\\\') as an open delimiter.
 
-    Multiple Delimiters may use the same close delimiter string.
+    Multiple Delimiter objects specified in delimiters may use
+    the same close delimiter string.
 
-    split_delimiters doesn't complain if the string ends with
+    split_delimiters doesn't react if the string ends with
     unterminated delimiters.
 
     See the Delimiter object for how delimiters are defined, and how
@@ -2776,9 +2779,6 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
             raise ValueError(f"delimiter #{i} specified in state is invalid: {delimiter!r}")
 
     return _split_delimiters(s, all_tokens, current, stack, empty, laden, str_or_bytes)
-
-
-
 
 
 

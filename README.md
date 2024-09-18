@@ -3468,11 +3468,11 @@ value matching these pairs of delimiters:
 ```
 
 The first three delimiters allow multiline, disable
-quoting, and have no escape string.  The quote mark
-delimiters enable quoting, disallow multiline, and
-specify their escape string as a single backslash.
-(This default value automatically supports both str
-and bytes.)
+quoting, and have no escape string.  The last two
+(the quote mark delimiters) enable quoting, disallow
+multiline, and specify their escape string as a
+single backslash.  (This default value automatically
+supports both `str` and `bytes`.)
 
 `state` specifies the initial state of parsing. It's an iterable
 of open delimiter strings specifying the initial nested state of
@@ -3482,8 +3482,10 @@ a `'('` and a `'['`, in that order, pass in `['(', '[']`
 to `state`.
 
 (Tip: Use a `list` as a stack to track the state of `split_delimiters`.
-Push open delimiters with `.append`, and pop them with `.pop`
-when you encounter the matching close delimiter.)
+Push open delimiters with `.append`, and pop them off using `.pop`
+whenever you see a close delimiter.  Since `split_delimiters` ensures
+that open and close delimiters match, you don't need to check them
+yourself!)
 
 Yields 3-tuples containing strings:
 
@@ -3501,9 +3503,10 @@ tuple yielded will have empty strings for both `open` and `close`.
 
 You may not specify backslash (`'\\'`) as an open delimiter.
 
-Multiple Delimiters may use the same close delimiter string.
+Multiple `Delimiter` objects specified in `delimiters` may use
+the same close delimiter string.
 
-split_delimiters doesn't complain if the string ends with
+`split_delimiters` doesn't react if the string ends with
 unterminated delimiters.
 
 See the `Delimiter` object for how delimiters are defined, and how
