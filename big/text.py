@@ -2258,60 +2258,70 @@ split_delimiters_default_delimiters_bytes = {
 _export_name('split_delimiters_default_delimiters_bytes')
 
 
-class _DelimiterState:
-    "Data structure representing a delimiter, with precomputed state transitions"
-    def __init__(self, open={}, close=(), escape='', illegal={}, single_line_only=False, clip_and_retry=False):
-        self.open = open
-        self.close = close
-        self.escape = escape
-        # illegal characters in this context.
-        # these are always close delimiters
-        # (apart from the actual close delimiter)
-        # inside a quoting=False open delimiter.
-        # e.g. the string "[foo(]" is invalid,
-        # ']' is an illegal character there.
-        self.illegal = illegal
-        self.single_line_only = single_line_only
-        # if multisplit yields a separator of len > 1
-        # that isn't in open, close, or escape, should
-        # we clip off the first character and recreate
-        # the iterator from that point?
-        self.clip_and_retry = clip_and_retry
+_ACTION_POP = "<action: pop>"
+_ACTION_ESCAPE = "<action: escape>"
+_ACTION_ILLEGAL = "<action: illegal>"
+_ACTION_ILLEGAL_NEWLINE = "<action: illegal newline>"
+_ACTION_FLUSH = "<action: flush>"
+_ACTION_FLUSH_1_AND_RESPLIT = "<action: flush 1 and resplit>"
 
+class _ACTION_TRUNCATE_TO_S_AND_RESPLIT:
+    pass
+
+class _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR(str, _ACTION_TRUNCATE_TO_S_AND_RESPLIT):
     def __repr__(self): # pragma: nocover
-        return f"DelimiterState(open={self.open!r}, close={self.close!r}, escape={self.escape!r}, illegal={self.illegal!r}, single_line_only={self.single_line_only!r}, clip_and_retry={self.clip_and_retry!r})"
+        return f"_ACTION_TRUNCATE_TO_S_AND_RESPLIT({str(self)!r})"
+
+class _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES(bytes, _ACTION_TRUNCATE_TO_S_AND_RESPLIT):
+    def __repr__(self): # pragma: nocover
+        return f"_ACTION_TRUNCATE_TO_S_AND_RESPLIT({bytes(self)!r})"
 
 @functools.lru_cache(maxsize=None)
-def _delimiters_to_state_machine(delimiters, is_bytes):
+def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     """
-    Converts delimiters into a _DelimiterState tree
-    as used by the split_delimiters generator.
-    Returns a 2-tuple:
+    Converts delimiters into data used by the split_delimiters
+    generator function: a graph of interconnected dicts, and a
+    set containing all tokens (suitable for use as a "separators"
+    list for multisplit).  Returns a 2-tuple:
 
         (initial_state, all_tokens)
 
-    where initial_state is the _DelimiterState object for
-    the initial state, and all_tokens is an iterable
-    of all the token strings needed to parse, including open
-    delimimeters, close delimiters, and escape strings.
+    where initial_state is the dict for the initial state and
+    all_tokens is an iterable of all the token strings needed
+    to parse, including open delimimeters, close delimiters,
+    and escape strings.
 
     Because this function is memoized (using functools.lru_cache)
     you must convert delimiters from a dict into a tuple of
-    2-tuples, a la tuple(delimiters.items()).
+    2-tuples.  (dicts aren't hashable.)  Instead of passing
+    in "delimiters", pass in:
+
+         tuple(delimiters.items())
+
+    The state is consumed by the split_delimiters generator, below.
+    See that for details.
     """
     if is_bytes:
         s_type = bytes
         s_type_description = "bytes"
         not_s_type_description = "str"
+        newlines = bytes_linebreaks_without_crlf
+        truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES
+        iterate_over_delimiter = _iterate_over_bytes
     else:
         s_type = str
         s_type_description = "str"
         not_s_type_description = "bytes"
+        newlines = str_linebreaks_without_crlf
+        truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR
+        iterate_over_delimiter = iter
 
     all_closers = set()
     all_openers = set()
     all_escapes = set()
     nested_closers = set()
+    all_newlines = set()
+
     for k, v in delimiters:
         if not isinstance(k, s_type):
             raise TypeError(f"open delimiter {k!r} must be {s_type_description}, not {not_s_type_description}")
@@ -2330,6 +2340,11 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
             assert not v.escape
             nested_closers.add(v.close)
 
+        # if any delimiter disallows newlines, add all newlines to the set of tokens
+        if not (v.multiline or all_newlines):
+            all_newlines = set(newlines)
+
+
     in_both_openers_and_closers = all_openers & nested_closers
     if in_both_openers_and_closers:
         in_both_openers_and_closers = list(in_both_openers_and_closers)
@@ -2340,42 +2355,203 @@ def _delimiters_to_state_machine(delimiters, is_bytes):
             prefix = 'these characters '
         raise ValueError(f"{prefix}{in_both_openers_and_closers!r} cannot be both an opening and closing delimiter")
 
-    all_tokens = all_openers | all_closers | all_escapes
+    all_delimiter_tokens = all_openers | all_closers | all_escapes
+    all_tokens = all_delimiter_tokens | all_newlines
 
-    # the initial state contains all the open delimiters, and doesn't have a close delimiter.
     # all the non-quoting states reuse the same open dictionary.
-    initial_state = _DelimiterState(open={}, close=None, illegal=all_closers, single_line_only=False)
+    # initial_state = _DelimiterState(open={}, close=None, illegal=all_closers, single_line_only=False)
 
-    empty_dict = {}
+    push_delimiters = {}
+
+    non_quoting_default_actions = {token: _ACTION_ILLEGAL for token in all_delimiter_tokens }
+
+    if all_newlines:
+        newlines_are_illegal = {c: _ACTION_ILLEGAL_NEWLINE for c in newlines}
+
+    # list of states that want all the default openers after processing
+    states_that_want_push_delimiters = []
+
+    # the initial state contains all the open delimiters,
+    # isn't quoting, allows multiline, and doesn't have
+    # a close delimiter or an escape string.
+    initial_state = non_quoting_default_actions.copy()
+    states_that_want_push_delimiters.append(initial_state)
+
+    # for every state, representing a delimiter d:
+    #
+    # non-quoting delimiter pairs have illegal strings, invalid delimiters.
+    # e.g. imagine d.open = '(', d.close =')', and d.quoting = False
+    # and another state has delimiters '[(' and ')]'
+    # if we parse
+    #         x[foo( a b c )])
+    # multisplit will      ^^ split here
+    # but we want to split ^ here. so.
+    # for every illegal token t
+    #    for s in (d.close, d.escape) # if d.escape is defined, that is
+    #        if len(t) > len(s) and t.startswith(s)
+    #            action = _ACTION_FLUSH_{CLOSE, ESCAPE}_AND_RESPLIT
+    #            # this behaves like we got delimiter s instead of t from multisplit
+    #            # we re-multisplit after the end of s
+    #
+    # if d.quoting:
+    #    first of all, we still have the same problem as with the previous
+    #    paragraph, except quoting delimiters would flush them, they aren't illegal.
+    #    but we still need to split
+    #
+    #    but also!
+    #    proper markers might be completely *buried inside* otherwise flushed delimiters.
+    #
+    #        e.g. imagine d.open = d.close ='"', and d.quoting = True
+    #        and another state has delimiters '<"<' '>">'
+    #        if we parse
+    #              a b c " d e f <"<"< goo goo >">
+    #        multisplit will     ^^^ split here
+    #        but we should flush ^ this
+    #                        and  ^ handle this.
+    #
+    #    also, the *start* of a proper marker might be consumed by an otherwise flushed delimiter.
+    #
+    #        e.g. imagine d.open = '<(' d.close =')>', and d.quoting = True
+    #        and another state has delimiters '([' '])'
+    #        if we parse
+    #              a b c <( d e f ])>
+    #        multisplit will      ^^^ split here
+    #        but we want to flush ^ this
+    #                         and  ^^ handle this.
+    #
+    #   what we do in these cases is snip off the first character, flush it,
+    #   then re-split (using multisplit) starting after that first character.
+    #
+    #   note that if the same multi-character delimiter *starts with* one delimiter,
+    #   but also contains any overlap with another delimiter, the startswith has
+    #   to take priority.
+    #
+    #       e.g. imagine d.open = '(', d.close=')', d.escape = '[', d.quoting=True
+    #       and another state has delimiters '([' '])'
+    #       for state d, we want '])' to map to "TRUNCATE TO ]", not "FLUSH 1 AND RESPLIT"
+    #
 
     for open, delimiter in delimiters:
-        if not delimiter.quoting:
-            openers = initial_state.open
-            illegal = set(all_closers)
-            illegal.discard(delimiter.close)
+        if delimiter.quoting:
+            state = {}
+            all_delimiter_characters = set(iterate_over_delimiter(delimiter.close))
+            if delimiter.escape:
+                all_delimiter_characters |= set(iterate_over_delimiter(delimiter.escape))
+
         else:
-            openers = illegal = empty_dict
+            # non-quoting delimiter
+            state = non_quoting_default_actions.copy()
+            states_that_want_push_delimiters.append(state)
+            all_delimiter_characters = None
 
-        clip_and_retry = delimiter.quoting
+        delimiters_and_startswith_actions = [ (delimiter.close, truncate_to_s_type(delimiter.close)) ]
+        if delimiter.escape:
+            delimiters_and_startswith_actions.append((delimiter.escape, truncate_to_s_type(delimiter.escape)))
 
-        single_line_only = not delimiter.multiline
+        for t in all_tokens:
+            for s, startswith_action in delimiters_and_startswith_actions:
+                if t != s:
+                    if t.startswith(s):
+                        state[t] = startswith_action
+                        break # breaking here ensures priority of startswith
+                    elif all_delimiter_characters:
+                        t_characters = set(iterate_over_delimiter(t))
+                        if t_characters & all_delimiter_characters:
+                            state[t] = _ACTION_FLUSH_1_AND_RESPLIT
 
-        state = _DelimiterState(
-            open=openers,
-            close=delimiter.close,
-            escape=delimiter.escape,
-            illegal=illegal,
-            single_line_only=single_line_only,
-            clip_and_retry=clip_and_retry)
-        initial_state.open[open] = state
+        if delimiter.quoting and (not delimiter.multiline):
+            state.update(newlines_are_illegal)
+
+        state[delimiter.close] = _ACTION_POP
+
+        if delimiter.escape:
+            state[delimiter.escape] = _ACTION_ESCAPE
+
+        assert open not in push_delimiters
+        push_delimiters[open] = state
+
+    for state in states_that_want_push_delimiters:
+        state.update(push_delimiters)
 
     return initial_state, all_tokens
 
 
-def split_delimiters(text, all_tokens, current, stack, empty, laden):
-    "Internal generator function returned by the real split_delimiters."
+def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_bytes):
+    """
+    Internal generator function returned by the real split_delimiters.
+
+    This function operates by iterating over "text" and reacting to
+    tokens found in "all_tokens".  It splits text using multisplit(),
+    using all_tokens as the separator list, and specifying keep=AS_PAIRS
+    so we can examine the string we split on.  We'll refer to that
+    separator string as the "token" below.
+
+    "current" is a dict mapping tokens to actions.
+        * a dictionary, which indicates "push this dict"
+          (entering new delimiter),
+        * one of the _ACTION_* constants above, or
+        * an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT.
+
+    The _ACTION_* constants above dictate:
+        * _ACTION_POP means pop the current state.
+        * _ACTION_ESCAPE means escape the next character yielded
+          by multisplit.
+        * _ACTION_ILLEGAL_NEWLINE means the token is an illegal
+          newline character.  (The current delimiter doesn't permit
+          embedded newlines.)
+        * _ACTION_ILLEGAL means the token isn't legal here.
+          example: 'foo(abc ] )', the ] is illegal
+        * _ACTION_FLUSH means we are ignoring this token completely,
+          just flush it out as part of the non-separator text.
+        * _ACTION_FLUSH_1_AND_RESPLIT means this token isn't itself
+          one of our current separators, but it contains relevant
+          separator characters.  It might have consumed part or all
+          of an actual token we want to parse.  The easy way to
+          handle this: chop off the first character, flush that out
+          as part of the non-separator text, then "resplit": rerun
+          multisplit() starting at the second character of this
+          separator and proceed from there.  (_ACTION_FLUSH_1_AND_RESPLIT
+          is only used for delimiters with quoting=True.)
+
+    If the entry an instance is an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT,
+    then this token starts with one of our current delimiters (close or escape).
+    The _ACTION_TRUNCATE_TO_S_AND_RESPLIT class is a subclass of either str or
+    bytes, and str(action) or bytes(action) (as appropriate) will convert it back
+    into the relevant delimiter token.  We react as if we received *that* token
+    instead, then "resplit" starting after the delimiter.
+
+    Newlines are also handled using this mechanism.  If the current state
+    is allergic to newline characters, all newline characters will be mapped
+    to _ACTION_ILLEGAL_NEWLINE.  If the current state doesn't care about
+    newline characters, newline characters will be unmapped, which means
+    they get the default action _ACTION_FLUSH.
+    (And, if literally no delimiters have multiline=False in this run,
+    we won't even add the newlines to the list of all tokens!  You don't
+    pay for what you don't use.)
+
+    Why do we have all this _ACTION_*_AND_RESPLIT nonsense?  The
+    straightforward way to implement this would be to "resplit"
+    (re-run multisplit) every time we pushed or popped, changing
+    the separators to just the ones recognized by that state.  But
+    running multisplit has a lot of overhead.  It's cheaper to
+    let multisplit recognize *all* tokens and just cook along
+    yielding everything.  In practice this implementation rarely
+    actually resplits; it's only needed for correctness, to handle
+    ambiguous circumstances with overlapping delimiters.  Which
+    people don't actually do in the real world.  (Do they?)
+
+    (I admit, I haven't tried the straightforward implementation.
+    But I'm pretty convinced multisplit overhead would quickly eat
+    up any performance benefits from the more straightforward
+    implementation and from using a simpler regex with re.split
+    under the covers.  And, as mentioned, in practice we never
+    resplit anyway.)
+    """
+
     push = stack.append
     pop = stack.pop
+
+    open = None
 
     buffer = []
     append = buffer.append
@@ -2383,11 +2559,12 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
 
     join = empty.join
 
-    escaped = ''
+    escaped = empty
 
     consumed = 0
 
     i = multisplit(text, all_tokens, keep=AS_PAIRS, separate=True)
+    resplit = False
 
     while True:
         for s, delimiter in i:
@@ -2395,16 +2572,17 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
                 continue
             if escaped:
                 # either s or delimiter is true
-                escaped = ''
+                escaped = empty
                 if not s:
-                    # must be delimiter
+                    # must be delimiter.
+                    # always flush exactly 1 character of it.
                     consumed += 1
+
                     if len(delimiter) == 1:
                         append(delimiter)
                         continue
 
-                    # only escape the first character of the delimiter
-                    # the rest may be a valid delimiter after all!
+                    # if delimiter is longer than 1 character, resplit.
                     append(delimiter[0:1])
                     i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                     break
@@ -2414,80 +2592,70 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
 
             if not delimiter:
                 # we're done!
+                # on the next iteration, i will be exhausted,
+                # we'll hit the else clause on the for-else loop,
+                # and we'll exit the outer loop too.
                 break
 
-            if current.escape:
-                is_escape = delimiter == current.escape
-                if is_escape:
-                    redo_iterator = False
-                else:
-                    # maybe the delimiter we found *starts* with our close delimiter!
-                    if delimiter.startswith(current.escape):
-                        is_escape = redo_iterator = True
+            action = current.get(delimiter, _ACTION_FLUSH)
 
-                if is_escape:
-                    append(current.escape)
-                    consumed += len(current.escape)
-                    escaped = current.escape
-                    if redo_iterator:
-                        i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
-                        break
-                    continue
-
-            if current.close:
-                is_close = delimiter == current.close
-                if is_close:
-                    redo_iterator = False
-                else:
-                    # maybe the delimiter we found *starts* with our close delimiter!
-                    if delimiter.startswith(current.close):
-                        is_close = redo_iterator = True
-
-                if is_close:
-                    # flush close delimiter
-                    s = join(buffer)
-                    clear()
-                    if s:
-                        # see treatise above
-                        if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
-                            raise SyntaxError(f"unterminated quoted string, {s!r}")
-                    yield s, empty, current.close
-                    consumed += len(current.close)
-
-                    current = pop()
-
-                    if redo_iterator:
-                        i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
-                        break
-
-                    continue
-
-            next = current.open.get(delimiter, None)
-            if next:
+            if isinstance(action, dict):
+                # action is a new state, push it.
                 # flush open delimiter
                 s = join(buffer)
                 clear()
-                # we don't need to test to see if s contains a newline here.
-                # if we have an open delimiter, that means quoting is False.
-                # if quoting is False, multiline must be True.  this is a Delimiter invariant.
                 yield s, delimiter, empty
                 consumed += len(delimiter)
-
-                push(current)
-                current = next
+                # and push
+                push((current, open))
+                open = delimiter
+                current = action
                 continue
 
-            if delimiter in current.illegal:
-                raise ValueError(f"mismatched close delimiter {delimiter!r}")
+            if isinstance(action, _ACTION_TRUNCATE_TO_S_AND_RESPLIT):
+                # convert the action back into the startswith delimiter we want,
+                delimiter = str_or_bytes(action)
+                # look up the actual action we should use to handle that delimiter,
+                action = current.get(delimiter, _ACTION_FLUSH)
+                # assert action is not _ACTION_FLUSH, f"{action!r} is not {_ACTION_FLUSH}, delimiter={delimiter}"
+                # activate resplit,
+                resplit = True
+                # and fall through to the appropriate _ACTION handler.
 
-            if current.clip_and_retry and (len(delimiter) > 1):
+            if action is _ACTION_POP:
+                # flush close delimiter
+                s = join(buffer)
+                clear()
+                yield s, empty, delimiter
+                consumed += len(delimiter)
+                # and pop
+                current, open = pop()
+            elif action is _ACTION_ESCAPE:
+                # escape
+                append(delimiter)
+                escaped = delimiter
+                consumed += len(delimiter)
+            elif action is _ACTION_FLUSH:
+                append(delimiter)
+            elif action is _ACTION_FLUSH_1_AND_RESPLIT:
+                # flush first character of delimiter, and resplit.
                 append(delimiter[0:1])
                 consumed += 1
-                i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
-                break
+                resplit = True
+            elif action is _ACTION_ILLEGAL:
+                # illegal character
+                raise SyntaxError(f"index {consumed}: illegal string {delimiter!r}")
+            elif action is _ACTION_ILLEGAL_NEWLINE:
+                # illegal newline character
+                raise SyntaxError(f"index {consumed}: newline character {delimiter!r} is illegal inside delimiter {open!r}")
+            else: # pragma: nocover
+                # unhandled
+                raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
 
-            append(delimiter)
-            consumed += len(delimiter)
+            if resplit:
+                i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                resplit = False
+                break
         else:
             break
 
@@ -2496,16 +2664,13 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden):
             raise SyntaxError(f"text ends with escape string {escaped!r}")
         s = join(buffer)
         if s:
-            # see treatise above
-            if current.single_line_only and ((len(s.splitlines()) > 1) or (len( (s[-1:] + laden).splitlines()) > 1)):
-                raise SyntaxError(f"unterminated quoted string, {s!r}")
             yield s, empty, empty
 
 
 _split_delimiters = split_delimiters
 
-_split_delimiters_default_delimiters_cache = _delimiters_to_state_machine(tuple(split_delimiters_default_delimiters.items()), False)
-_split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_machine(tuple(split_delimiters_default_delimiters_bytes.items()), True)
+_split_delimiters_default_delimiters_cache = _delimiters_to_state_and_tokens(tuple(split_delimiters_default_delimiters.items()), False)
+_split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_and_tokens(tuple(split_delimiters_default_delimiters_bytes.items()), True)
 
 
 @_export
@@ -2571,6 +2736,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 
     is_bytes = isinstance(s, bytes)
     if is_bytes:
+        str_or_bytes = bytes
         empty = b''
         laden = b'x'
         if delimiters is None:
@@ -2580,6 +2746,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
         elif b'\\' in delimiters:
             raise ValueError("open delimiter must not be b'\\'")
     else:
+        str_or_bytes = str
         empty = ''
         laden = 'x'
         if delimiters is None:
@@ -2590,27 +2757,25 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
             raise ValueError("open delimiter must not be '\\'")
 
     if not initial_state:
-        initial_state, all_tokens = _delimiters_to_state_machine(tuple(delimiters.items()), is_bytes)
+        initial_state, all_tokens = _delimiters_to_state_and_tokens(tuple(delimiters.items()), is_bytes)
 
     stack = []
     push = stack.append
 
     current = initial_state
+    open = None
 
     if state:
-        last_open = ''
-        for open in _iterate_over_bytes(state):
-            # if current.open is false, we must be inside a quoting open delimiter.
-            if not current.open:
-                raise ValueError(f"{open!r} specified in state as being inside a quoting open delimiter {last_open!r}")
-            next = current.open.get(open, None)
-            if next is None:
-                raise ValueError(f"{open!r} specified in state, isn't a defined open delimiter")
-            push(current)
-            current = next
-            last_open = open
+        for i, delimiter in enumerate(_iterate_over_bytes(state)):
+            action = current.get(delimiter, _ACTION_FLUSH)
+            if isinstance(action, dict):
+                push((current, open))
+                current = action
+                continue
 
-    return _split_delimiters(s, all_tokens, current, stack, empty, laden)
+            raise ValueError(f"delimiter #{i} specified in state is invalid: {delimiter!r}")
+
+    return _split_delimiters(s, all_tokens, current, stack, empty, laden, str_or_bytes)
 
 
 

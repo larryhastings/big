@@ -6134,6 +6134,25 @@ in the **big** test suite.
 
 ## Release history
 
+#### 0.12.3
+
+*2024/09/17*
+
+<dl><dd>
+
+Optimized
+[`split_delimiters`](#split_delimiterss-delimiters--state).
+The new version uses a much more efficient internal representation
+of how to react to the various delimiters when processing the text.
+Perfunctory `timeit` experiments suggest this new `split_delimiters`
+is maybe 5-6% faster than it was in 12.2.
+
+Minor breaking change: `split_delimiters` now consistently
+raises `SyntaxError` for mismatched delimiters.  (Previously it
+would sometimes raise `ValueError`.)
+
+</dd></dl>
+
 #### 0.12.2
 
 *2024/09/11*

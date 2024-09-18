@@ -3241,18 +3241,18 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             test("foo('ab\ncd')", [])
         # but the others delimiters permit it
-        test(r'foo([{ab\ncd}])',
+        test('foo([{ab\ncd}])',
             (
-                ( 'foo',    '(', '' ),
-                ( '',       '[', '' ),
-                ( '',       '{', '' ),
-                (r'ab\ncd', '',  '}'),
-                ( '',       '',  ']'),
-                ( '',       '',  ')'),
+                ('foo',    '(', '' ),
+                ('',       '[', '' ),
+                ('',       '{', '' ),
+                ('ab\ncd', '',  '}'),
+                ('',       '',  ']'),
+                ('',       '',  ')'),
             ))
 
         # test multi-character delimiters and escape
-        test(r'abc^Sdef<<gh><i>>klm^Xno**^Xp*^Xqrs^Qtuv<<wxy>>z',
+        test('abc^Sdef<<gh><i>>klm^Xno**^Xp*^Xqrs^Qtuv<<wxy>>z',
             (
                 ('abc',      '^S', ''),
                 ('def',      '<<', ''),
@@ -3310,10 +3310,10 @@ class BigTextTests(unittest.TestCase):
             #      ^ --- but really we want to split here
             #       ^ -- and here
             (
-                ('a',   '[', ''),
-                ('b',   '(', ''),
-                ('c])', '',  ')'),
-                ('',    '',  ']'),
+                ('a',   '[', ''),  # now in '['
+                ('b',   '(', ''),  # now in '('
+                ('c])', '',  ')'), # ] escapes ), and then second ) closes
+                ('',    '',  ']'), # final ] closes
                 ),
             delimiters = cruel_delimiters_2,
             )
@@ -3375,11 +3375,11 @@ class BigTextTests(unittest.TestCase):
             delimiters = cruel_delimiters_5,
             )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SyntaxError):
             test('a[3)', None)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SyntaxError):
             test('a{3]', None)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SyntaxError):
             test('a(3}', None)
 
         with self.assertRaises(ValueError):
