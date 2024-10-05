@@ -84,16 +84,25 @@ class BigTestVersion(unittest.TestCase):
         work("3.4")
 
     def test_version_info(self):
+        # compute a version object from Python's version the easy way
+        easy = V(sys.version_info)
+
+        # now do it the hard way
+        release = [sys.version_info.major, sys.version_info.minor]
+        if sys.version_info.micro:
+            release.append(sys.version_info.micro)
+        release = tuple(release)
+
         kwargs = {}
-        c = sys.version_info.releaselevel[0]
-        if c in 'abc': # pragma: nocover
-            kwargs['release_level'] = c
-            if sys.version_info.serial:
-                kwargs['serial'] = sys.version_info.serial
-        self.assertEqual(
-            V(sys.version_info),
-            V(release=(sys.version_info.major, sys.version_info.minor, sys.version_info.micro), **kwargs)
-            )
+        release_level = big.version._sys_version_info_release_level_normalize.get(sys.version_info.releaselevel, sys.version_info.releaselevel)
+        if release_level: # pragma: nocover
+            kwargs['release_level'] = release_level
+        if sys.version_info.serial: # pragma: nocover
+            kwargs['serial'] = sys.version_info.serial
+
+        hard = V(release=release, **kwargs)
+
+        self.assertEqual(easy, hard)
 
     def test_normalize(self):
         def test(v1, v2):

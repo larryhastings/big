@@ -49,7 +49,8 @@ _release_level_to_integer = {'alpha': -3, 'beta': -2, 'rc': -1, 'final': 0}
 _release_level_to_str = {'alpha': 'a', 'beta': 'b', 'rc': 'rc', 'final': ''}
 
 _sys_version_info_type = type(sys.version_info)
-_sys_version_info_release_level_normalize = { 'alpha': 'a', 'beta': 'b', 'candidate': 'rc', 'final': ''}
+# _sys_version_info_release_level_normalize = { 'alpha': 'a', 'beta': 'b', 'candidate': 'rc', 'final': ''}
+_sys_version_info_release_level_normalize = { 'candidate': 'rc', 'final': ''}
 
 #
 # regular expression is straight out of PEP 440.
@@ -159,7 +160,7 @@ class Version:
             if isinstance(s, _sys_version_info_type):
                 # support the Python sys.version_info object!
                 s2 = f"{s.major}.{s.minor}.{s.micro}"
-                rl = _sys_version_info_release_level_normalize[s.releaselevel]
+                rl = _sys_version_info_release_level_normalize.get(s.releaselevel, s.releaselevel)
                 if rl: # pragma: nocover
                     s2 += rl
                     if s.serial:

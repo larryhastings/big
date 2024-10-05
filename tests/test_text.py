@@ -4281,6 +4281,22 @@ class BigTextTests(unittest.TestCase):
         lines_repr = repr(lines)
         self.assertEqual(repr(info), f"LineInfo(lines={lines_repr}, line_number=1, column_number=1)")
 
+        ## clip
+        def test_clip_leading(line):
+            l_original, end = list(big.multisplit(line, big.linebreaks, keep=big.AS_PAIRS))[0]
+            l = l_original
+            info = big.LineInfo(lines, line, 5, 1, end=end)
+            l = info.clip_leading(l, l_original[:-1])
+            self.assertTrue(l)
+            self.assertNotEqual(info.column_number, 1)
+            l = info.clip_leading(l, l_original[-1])
+            self.assertEqual(l, '')
+            self.assertEqual(info.column_number, 1)
+            self.assertEqual(info.trailing, l_original)
+        test_clip_leading('     ')
+        test_clip_leading('         \n')
+
+
 
     def test_int_to_words(self):
         # confirm that flowery has a default of True
