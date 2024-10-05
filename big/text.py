@@ -2871,6 +2871,7 @@ class LineInfo:
         self.indent = indent
         self.match = match
         self._is_bytes = is_bytes
+        self._empty = empty
         self.__dict__.update(kwargs)
 
     def detab(self, s):
@@ -2894,14 +2895,30 @@ class LineInfo:
         and the detab method on the clipped substring before it
         is measured.)
         """
-        if isinstance(s, int):
-            assert -len(line) <= s < len(line), f"clip_leading s={s!r} index is larger than the length of line={line!r}"
-            s = line[:s]
+        if not isinstance(s, int):
+            # assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
+            i = len(s)
         else:
-            assert line.startswith(s), f"line {line!r} doesn't start with s {s!r}"
-            pass
+            # assert -len(line) <= s < len(line), f"clip_leading s={s!r} index is larger than the length of line={line!r}"
+            i = s
+            s = None
+            l = line
+        line = line[i:]
+        if not line:
+            # if you clip the entire line, we move the entire line into trailing
+            # (minus end)
+            assert self.line.endswith(self.end)
+            empty = self._empty
+            self.column_number -= len(self.leading)
+            if self.end:
+                self.trailing = self.line[:-len(self.end)]
+            else:
+                self.trailing = self.line
+            self.leading = empty
+            return empty
+        if s is None:
+            s = l[:i]
         self.leading += s
-        line = line[len(s):]
         detabbed = self.detab(s)
         length = len(detabbed)
         self.column_number += length
@@ -2920,14 +2937,29 @@ class LineInfo:
         Returns line with s clipped; also prepends
         the clipped portion to self.trailing.
         """
-        if isinstance(s, int):
-            assert -len(line) <= s < len(line), f"clip_trailing s={s!r} index is larger than the length of line={line!r}"
-            s = line[-s:]
+        if not isinstance(s, int):
+            # assert line.endswith(s), f"line {line!r} doesn't end with s {s!r}"
+            i = len(s)
         else:
-            assert line.endswith(s), f"line {line!r} doesn't end with s {s!r}"
-            pass
+            # assert -len(line) <= s < len(line), f"clip_trailing s={s!r} index is larger than the length of line={line!r}"
+            i = s
+            s = None
+            l = line
+        line = line[:-i]
+        if not line:
+            # if you clip the entire line, we move the entire line into trailing (minus end)
+            assert self.line.endswith(self.end)
+            empty = self._empty
+            self.column_number -= len(self.leading)
+            if self.end:
+                self.trailing = self.line[:-len(self.end)]
+            else:
+                self.trailing = self.line
+            self.leading = empty
+            return empty
+        if s is None:
+            s = l[-i:]
         self.trailing = s + self.trailing
-        line = line[:-len(s)]
         return line
 
     def __repr__(self):

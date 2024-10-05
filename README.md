@@ -6137,6 +6137,20 @@ in the **big** test suite.
 
 ## Release history
 
+#### next version (under development)
+
+<dl><dd>
+
+* `LineInfo.clip_leading` and `LineInfo.clip_trailing` now automatically
+  detect if you've clipped the entire line, and if so move all clipped
+  text to `info.trailing` (and adjust the `column_number` accordingly).
+* `LineInfo.clip_leading` and `LineInfo.clip_trailing`: Minor performance
+  upgrade. Previously, if the user passed in the string to clip, they
+  were throwing it away then recreating it.  Now they preserve and use
+  it.
+
+</dd></dl>
+
 #### 0.12.3
 
 *2024/09/17*
