@@ -4271,15 +4271,15 @@ specifying a `maxsplit` of `-1` is equivalent to specifying a `maxsplit` of
 `2` or greater:
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # "maxsplit" defaults to -1
+    >>> list(big.multisplit('apple^banana_cookie', ('_', '^'))) # "maxsplit" defaults to -1
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0))
+    >>> list(big.multisplit('apple^banana_cookie', ('_', '^'), maxsplit=0))
     ['appleXbananaYcookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=1))
+    >>> list(big.multisplit('apple^banana_cookie', ('_', '^'), maxsplit=1))
     ['apple', 'bananaYcookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=2))
+    >>> list(big.multisplit('apple^banana_cookie', ('_', '^'), maxsplit=2))
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3))
+    >>> list(big.multisplit('apple^banana_cookie', ('_', '^'), maxsplit=3))
     ['apple', 'banana', 'cookie']
 ```
 
@@ -4300,9 +4300,9 @@ When `keep` is false, `multisplit` throws away the separator strings;
 they won't appear in the output.
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'))) # "keep" defaults to False
+    >>> list(big.multisplit('apple#banana-cookie', ('#', '-'))) # "keep" defaults to False
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=False))
+    >>> list(big.multisplit('apple-banana#cookie', ('#', '-'), keep=False))
     ['apple', 'banana', 'cookie']
 ```
 
@@ -4310,7 +4310,7 @@ When `keep` is true, `multisplit` keeps the separators, appending them to
 the end of the separated string:
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=True))
+    >>> list(big.multisplit('apple$banana~cookie', ('$', '~'), keep=True))
     ['appleX', 'bananaY', 'cookie']
 ```
 
@@ -4345,17 +4345,17 @@ If the original string starts with a separator, the first 2-tuple will contain
 an empty non-separator string and the separator:
 
 ```Python
-    >>> list(big.multisplit('YappleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
-    [('', 'Y'), ('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+    >>> list(big.multisplit('^apple-banana^cookie', ('-', '^'), keep=big.AS_PAIRS))
+    [('', '^'), ('apple', '-'), ('banana', '^'), ('cookie', '')]
 ```
 
 The last 2-tuple will *always* contain an empty separator string:
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.AS_PAIRS))
-    [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
-    >>> list(big.multisplit('appleXbananaYcookieXXX', ('X', 'Y'), keep=big.AS_PAIRS, strip=True))
-    [('apple', 'X'), ('banana', 'Y'), ('cookie', '')]
+    >>> list(big.multisplit('apple*banana+cookie', ('*', '+'), keep=big.AS_PAIRS))
+    [('apple', '*'), ('banana', '+'), ('cookie', '')]
+    >>> list(big.multisplit('apple*banana+cookie***', ('*', '+'), keep=big.AS_PAIRS, strip=True))
+    [('apple', '*'), ('banana', '+'), ('cookie', '')]
 ```
 
 (This rule means that `AS_PAIRS` always emits an *even* number of strings.
@@ -4393,11 +4393,11 @@ each separated by a zero-length string.  It can be either false or
 true.
 
 ```Python
-    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'))) # separate defaults to False
+    >>> list(big.multisplit('apple=?banana?=?cookie', ('=', '?'))) # separate defaults to False
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=False))
+    >>> list(big.multisplit('apple=?banana?=?cookie', ('=', '?'), separate=False))
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True))
+    >>> list(big.multisplit('apple=?banana?=?cookie', ('=', '?'), separate=True))
     ['apple', '', 'banana', '', '', 'cookie']
 ```
 
@@ -4428,14 +4428,14 @@ By default, `strip` is false, which means it doesn't strip any
 leading or trailing separators:
 
 ```Python
-    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'))) # strip defaults to False
+    >>> list(big.multisplit('%|apple%banana|cookie|%|', ('%', '|'))) # strip defaults to False
     ['', 'apple', 'banana', 'cookie', '']
 ```
 
 Setting `strip` to true strips both leading and trailing separators:
 
 ```Python
-    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=True))
+    >>> list(big.multisplit('%|apple%banana|cookie|%|', ('%', '|'), strip=True))
     ['apple', 'banana', 'cookie']
 ```
 
@@ -4443,9 +4443,9 @@ Setting `strip` to true strips both leading and trailing separators:
 side of the string:
 
 ```Python
-    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=big.LEFT))
+    >>> list(big.multisplit('.?apple.banana?cookie.?.', ('.', '?'), strip=big.LEFT))
     ['apple', 'banana', 'cookie', '']
-    >>> list(big.multisplit('XYappleXbananaYcookieYXY', ('X', 'Y'), strip=big.RIGHT))
+    >>> list(big.multisplit('.?apple.banana?cookie.?.', ('.', '?'), strip=big.RIGHT))
     ['', 'apple', 'banana', 'cookie']
 ```
 
@@ -4457,17 +4457,17 @@ the right side of the string.  Note in this example how the trailing separator
 `Y` isn't stripped from the input string when `maxsplit` is less than `3`.
 
 ```Python
-    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), strip=big.PROGRESSIVE))
+    >>> list(big.multisplit('^apple^banana_cookie_', ('^', '_'), strip=big.PROGRESSIVE))
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=0, strip=big.PROGRESSIVE))
-    ['appleXbananaYcookieY']
-    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=1, strip=big.PROGRESSIVE))
-    ['apple', 'bananaYcookieY']
-    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=2, strip=big.PROGRESSIVE))
-    ['apple', 'banana', 'cookieY']
-    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=3, strip=big.PROGRESSIVE))
+    >>> list(big.multisplit('^apple^banana_cookie_', ('^', '_'), maxsplit=0, strip=big.PROGRESSIVE))
+    ['apple^banana_cookie_']
+    >>> list(big.multisplit('^apple^banana_cookie_', ('^', '_'), maxsplit=1, strip=big.PROGRESSIVE))
+    ['apple', 'banana_cookie_']
+    >>> list(big.multisplit('^apple^banana_cookie_', ('^', '_'), maxsplit=2, strip=big.PROGRESSIVE))
+    ['apple', 'banana', 'cookie_']
+    >>> list(big.multisplit('^apple^banana_cookie_', ('^', '_'), maxsplit=3, strip=big.PROGRESSIVE))
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('XappleXbananaYcookieY', ('X', 'Y'), maxsplit=4, strip=big.PROGRESSIVE))
+    >>> list(big.multisplit('^apple^banana_cookie_', ('^', '_'), maxsplit=4, strip=big.PROGRESSIVE))
     ['apple', 'banana', 'cookie']
 ```
 
@@ -4479,7 +4479,7 @@ the right side of the string.  Note in this example how the trailing separator
 
 `reverse` specifies where `multisplit` starts parsing the string--from
 the beginning, or the end--and in what direction it moves when parsing
-the string--towards the end, or towards the beginning.  It only supports
+the string--towards the end, or towards ^he be^inning_  It o_ly su^port_
 two values: when it's false, `multisplit` starts at the beginning of the
 string, and parses moving to the right (towards the end of the string).
 But when `reverse` is true, `multisplit` starts at the *end* of the
@@ -4492,15 +4492,15 @@ of splits in the string.  When `reverse` is true, the splits are counted
 starting on the right and moving towards the left:
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), reverse=True)) # maxsplit defaults to -1
+    >>> list(big.multisplit('apple-banana|cookie', ('-', '|'), reverse=True)) # maxsplit defaults to -1
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=0, reverse=True))
-    ['appleXbananaYcookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=1, reverse=True))
-    ['appleXbanana', 'cookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=2, reverse=True))
+    >>> list(big.multisplit('apple-banana|cookie', ('-', '|'), maxsplit=0, reverse=True))
+    ['apple-banana|cookie']
+    >>> list(big.multisplit('apple-banana|cookie', ('-', '|'), maxsplit=1, reverse=True))
+    ['apple-banana', 'cookie']
+    >>> list(big.multisplit('apple-banana|cookie', ('-', '|'), maxsplit=2, reverse=True))
     ['apple', 'banana', 'cookie']
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), maxsplit=3, reverse=True))
+    >>> list(big.multisplit('apple-banana|cookie', ('-', '|'), maxsplit=3, reverse=True))
     ['apple', 'banana', 'cookie']
 ```
 
@@ -4516,9 +4516,9 @@ the value of `reverse`.  They produce different results, even though neither
 one uses `maxsplit`.
 
 ```Python
-    >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'))) # reverse defaults to False
-    ['apple', 'Ybanana', 'Ycookie']
-    >>> list(big.multisplit('appleXAYbananaXAYcookie', ('XA', 'AY'), reverse=True))
+    >>> list(big.multisplit('appleXYZbananaXYZcookie', ('XY', 'YZ'))) # reverse defaults to False
+    ['apple', 'Zbanana', 'Zcookie']
+    >>> list(big.multisplit('appleXYZbananaXYZcookie', ('XY', 'YZ'), reverse=True))
     ['appleX', 'bananaX', 'cookie']
 ```
 </dd></dl>
