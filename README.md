@@ -4479,7 +4479,7 @@ the right side of the string.  Note in this example how the trailing separator
 
 `reverse` specifies where `multisplit` starts parsing the string--from
 the beginning, or the end--and in what direction it moves when parsing
-the string--towards the end, or towards ^he be^inning_  It o_ly su^port_
+the string--towards the end, or towards the beginning_  It only supports
 two values: when it's false, `multisplit` starts at the beginning of the
 string, and parses moving to the right (towards the end of the string).
 But when `reverse` is true, `multisplit` starts at the *end* of the
