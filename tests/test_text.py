@@ -2152,12 +2152,12 @@ class BigTextTests(unittest.TestCase):
             ['hey', 'there', 'party', 'people', '\n\n', 'a', 'second', 'paragraph!', '\n\n', 'and', 'a', 'third.'],
             )
         test(
-            "hey there party people\n\nhere, we have a second paragraph.\nwith an internal newline.\n\n    for i in code:\n        print(i)\n\nmore text here? sure seems like it.",
-            ['hey', 'there', 'party', 'people', '\n\n', 'here,', 'we', 'have', 'a', 'second', 'paragraph.', 'with', 'an', 'internal', 'newline.', '\n\n', '    for i in code:', '\n', '        print(i)', '\n\n', 'more', 'text', 'here?', 'sure', 'seems', 'like', 'it.']
+            "hey there party people\n\nhere, we have a second paragraph.\nwith an internal linebreak.\n\n    for i in code:\n        print(i)\n\nmore text here? sure seems like it.",
+            ['hey', 'there', 'party', 'people', '\n\n', 'here,', 'we', 'have', 'a', 'second', 'paragraph.', 'with', 'an', 'internal', 'linebreak.', '\n\n', '    for i in code:', '\n', '        print(i)', '\n\n', 'more', 'text', 'here?', 'sure', 'seems', 'like', 'it.']
             )
         test(
-            "text paragraphs separated by infinite newlines get collapsed to just two newlines.\n\n\n\n\nsee? just two.\n\n\n\n\n\n\n\n\nqed!",
-            ['text', 'paragraphs', 'separated', 'by', 'infinite', 'newlines', 'get', 'collapsed', 'to', 'just', 'two', 'newlines.', '\n\n', 'see?', 'just', 'two.', '\n\n', 'qed!']
+            "text paragraphs separated by infinite linebreaks get collapsed to just two linebreaks.\n\n\n\n\nsee? just two.\n\n\n\n\n\n\n\n\nqed!",
+            ['text', 'paragraphs', 'separated', 'by', 'infinite', 'linebreaks', 'get', 'collapsed', 'to', 'just', 'two', 'linebreaks.', '\n\n', 'see?', 'just', 'two.', '\n\n', 'qed!']
             )
         test(
             "here's some code with a tab.\n\tfor x in range(3):\n\t\tprint(x)\nwelp! that's it for the code.",
@@ -2168,8 +2168,8 @@ class BigTextTests(unittest.TestCase):
             ["here's", 'some', 'code', 'with', 'a', 'tab.', '\n\n', '\tfor x in range(3):', '\n', '\t\tprint(x)', '\n\n', 'welp!', "that's", 'it', 'for', 'the', 'code.'],
             convert_tabs_to_spaces=False)
         test(
-            "this is text, but next is a code paragraph with a lot of internal newlines and stuff.\n\tfor x in range(3):\n\n   \n\n    \t\n\t\tprint(x)\n\t\t\n\n\t\tprint(x*x)\nwelp! that's it for the code.",
-            ['this', 'is', 'text,', 'but', 'next', 'is', 'a', 'code', 'paragraph', 'with', 'a', 'lot', 'of', 'internal', 'newlines', 'and', 'stuff.', '\n\n',
+            "this is text, but next is a code paragraph with a lot of internal linebreaks and stuff.\n\tfor x in range(3):\n\n   \n\n    \t\n\t\tprint(x)\n\t\t\n\n\t\tprint(x*x)\nwelp! that's it for the code.",
+            ['this', 'is', 'text,', 'but', 'next', 'is', 'a', 'code', 'paragraph', 'with', 'a', 'lot', 'of', 'internal', 'linebreaks', 'and', 'stuff.', '\n\n',
             '        for x in range(3):', '\n', '\n', '\n', '\n', '\n', '                print(x)', '\n', '\n', '\n', '                print(x*x)', '\n\n', 'welp!', "that's", 'it', 'for', 'the', 'code.']
             )
         with self.assertRaises(RuntimeError):
@@ -3071,7 +3071,7 @@ class BigTextTests(unittest.TestCase):
                 state="Z"
                 )
 
-        # newlines and multiline_quotes
+        # linebreaks and multiline_quotes
         with self.assertRaises(SyntaxError):
             test('abc "def\nghi" jkl',
                 [],
@@ -3235,7 +3235,7 @@ class BigTextTests(unittest.TestCase):
             ),
             )
 
-        # single-quoted strings by default don't allow newlines inside
+        # single-quoted strings by default don't allow linebreaks inside
         with self.assertRaises(SyntaxError):
             test('foo("ab\ncd")', [])
         with self.assertRaises(SyntaxError):
@@ -3514,6 +3514,23 @@ class BigTextTests(unittest.TestCase):
             L(li, 4, 1, 'd'),
             L(li, 5, 1, 'e'),
             L(li, 6, 1, '', end=''),
+            ])
+
+
+        i = li = big.lines("a\nb\nc\nd\ne\n", clip_linebreaks=False)
+        def fix_linebreak(info_and_line):
+            info, line = info_and_line
+            info.line = info.line[:-1]
+            return info_and_line
+
+        test(i,
+            [
+            fix_linebreak(L(li, 1, 1, 'a\n')),
+            fix_linebreak(L(li, 2, 1, 'b\n')),
+            fix_linebreak(L(li, 3, 1, 'c\n')),
+            fix_linebreak(L(li, 4, 1, 'd\n')),
+            fix_linebreak(L(li, 5, 1, 'e\n')),
+                          L(li, 6, 1, '', end=''),
             ])
 
         # you can give lines an iterable of strings,
@@ -4219,6 +4236,14 @@ class BigTextTests(unittest.TestCase):
 
         with self.assertRaises(IndentationError):
             test(i, [])
+
+        # ensure that lines_strip_indent is an iterator
+        i = li = big.lines("a\nb\nc\nd")
+        i = big.lines_strip_indent(i)
+        try:
+            info, line = next(i)
+        except TypeError: # pragma: nocover
+            self.assertTrue(False, "line_strip_indent did not return an iterator")
 
 
 
@@ -5143,6 +5168,16 @@ class BigTextTests(unittest.TestCase):
                     self.x = x
             foo = Foo('abc')
             test(foo, None)
+
+    def test_format_map(self):
+        d = {'encoding': 'mp3', 'mp3 size': 8228}
+        self.assertEqual(big.format_map("x={{encoding} size}", d), 'x=8228')
+        self.assertEqual(big.format_map("abcde", d), 'abcde')
+        self.assertEqual(big.format_map("a\\{b\\\\cd\\}e", {}), 'a{b\\cd}e')
+        self.assertEqual(big.format_map("j\\\\\\\\\\\\k", {}), 'j\\\\\\k')
+        self.assertEqual(big.format_map("d\\e\\g\\h{q}", {'q':'q'}), 'd\\e\\g\\hq')
+        self.assertEqual(big.format_map("\\{q\\}", {'q':'q'}), '{q}')
+        self.assertEqual(big.format_map("{q\\x}", {'q\\x':'z'}), 'z')
 
 
 def run_tests():
