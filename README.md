@@ -6230,6 +6230,8 @@ in the **big** test suite.
 * Add explicit support (and CI coverage & testing) for Python 3.13.
   (big didn't need any changes, it was already 100% compatible with 3.13.)
 
+<p><font size=1>p.s. 56</font></p>
+
 </dd></dl>
 
 #### 0.12.3
