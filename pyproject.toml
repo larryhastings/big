@@ -31,11 +31,15 @@ dynamic = [
 Source = "https://github.com/larryhastings/big/"
 
 [project.optional-dependencies]
+packaging = [
+    "packaging",
+    ]
 time = [
     "python-dateutil",
     ]
 test = [
     "python-dateutil",
+    "packaging",
     "regex",
     "inflect",
     ]

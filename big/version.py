@@ -37,10 +37,16 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #        https://packaging.python.org/en/latest/specifications/version-specifiers/
 
 
+import functools
 import itertools
 import math
 import re
 import sys
+
+try: # pragma: nocover
+    from packaging.version import Version as _packagingVersion
+except ImportError: # pragma: nocover
+    _packagingVersion = None
 
 
 _release_level_allowed_values = ('alpha', 'beta', 'rc', 'final')
@@ -94,7 +100,7 @@ del VERSION_PATTERN
 _re_is_valid_local_segment = re.compile("^[A-Za-z0-9]+$").match
 
 
-
+@functools.total_ordering
 class Version:
     def __init__(self, s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None):
         """
@@ -166,8 +172,10 @@ class Version:
                     if s.serial:
                         s2 += f"{s.serial}"
                 s = s2
-
-            if not isinstance(s, str):
+            elif _packagingVersion and isinstance(s, _packagingVersion): # pragma: nocover
+                # support the packaging.version.Version object.  embrace and extend!
+                s = str(s)
+            elif not isinstance(s, str):
                 raise ValueError("you must specify either a version string or explicit keyword arguments")
 
             match = _re_parse_version(s)
@@ -308,6 +316,7 @@ class Version:
         if post is None:
             post = -1
         self._tuple = (epoch, release, release_level, serial, post, dev, compare_local)
+        self._format_map = None
 
     def __repr__(self):
         return f"Version({str(self)!r})"
@@ -340,12 +349,47 @@ class Version:
 
         return "".join(text)
 
+    def format(self, s):
+        """
+        Returns a formatted version of s,
+        substituting attributes from self
+        into s using str.format_map.
+
+        For example,
+
+           Version("1.3.5").format('{major}.{minor}')
+
+        returns the string '1.3'.
+        """
+        if self._format_map is None:
+            self._format_map = {
+                "epoch": self._epoch,
+                "release": self._str_release,
+                "major": self.major,
+                "minor": self.minor,
+                "micro": self.micro,
+                "release_level": self._release_level,
+                "serial": self._serial,
+                "post": self._post,
+                "dev": self._dev,
+                "local": self._local,
+            }
+        return s.format_map(self._format_map)
+
     def __eq__(self, other):
-        if not isinstance(other, Version):
+        if isinstance(other, _sys_version_info_type):
+            other = self.__class__(other)
+        elif _packagingVersion and isinstance(other, _packagingVersion): # pragma: no cover
+            other = self.__class__(str(other))
+        elif not isinstance(other, Version):
             return False
         return self._tuple == other._tuple
 
     def __lt__(self, other):
+        if isinstance(other, _sys_version_info_type):
+            other = self.__class__(other)
+        elif _packagingVersion and isinstance(other, _packagingVersion): # pragma: no cover
+            other = self.__class__(str(other))
         if not isinstance(other, Version):
             raise TypeError("'<' not supported between instances of 'Version' and '{type(other)}'")
         return self._tuple < other._tuple

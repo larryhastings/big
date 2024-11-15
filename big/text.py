@@ -38,12 +38,12 @@ import struct
 import sys
 
 
-try:
+try: # pragma: no cover
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
 
-try:
+try: # pragma: no cover
     import regex
     regex_Pattern = regex.Pattern
     def isinstance_re_pattern(o):
@@ -120,7 +120,7 @@ def encode_strings(o, encoding='ascii'):
     return _recursive_encode_strings(o, encoding)
 
 
-# Tuples enumerating all the whitespace and newline characters,
+# Tuples enumerating all the whitespace and linebreak characters,
 # for use with big functions taking "separators" arguments
 # (e.g. lines, multisplit).  For an explanation of what they
 # represent, please see the "Whitespace and line-breaking
@@ -131,11 +131,11 @@ str_whitespace = (
     # char    decimal   hex      identity
     ##########################################
     '\t'    , #     9 - 0x0009 - tab
-    '\n'    , #    10 - 0x000a - newline
+    '\n'    , #    10 - 0x000a - linebreak
     '\v'    , #    11 - 0x000b - vertical tab
     '\f'    , #    12 - 0x000c - form feed
     '\r'    , #    13 - 0x000d - carriage return
-    '\r\n'  , # bonus! the classic DOS newline sequence!
+    '\r\n'  , # bonus! the classic DOS linebreak sequence!
 
     ###################################################
     ## Note: Unicode doesn't consider these next four
@@ -203,11 +203,11 @@ _export_name('str_linebreaks')
 str_linebreaks = (
     # char    decimal   hex      identity
     ##########################################
-    '\n'    , #   10 - 0x000a - newline
+    '\n'    , #   10 - 0x000a - linebreak
     '\v'    , #   11 - 0x000b - vertical tab
     '\f'    , #   12 - 0x000c - form feed
     '\r'    , #   13 - 0x000d - carriage return
-    '\r\n'  , # bonus! the classic DOS newline sequence!
+    '\r\n'  , # bonus! the classic DOS linebreak sequence!
     '\x1c'  , #   28 - 0x001c - file separator
     '\x1d'  , #   29 - 0x001d - group separator
     '\x1e'  , #   30 - 0x001e - record separator
@@ -253,24 +253,24 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 # That's because the Python bytes object doesn't consider those
 # to be linebreak characters.
 #
-#    >>> define is_newline_str(c): return len( ("a"+c+"x").splitlines() ) > 1
-#    >>> is_newline_str('\n')
+#    >>> define is_linebreak_str(c): return len( ("a"+c+"x").splitlines() ) > 1
+#    >>> is_linebreak_str('\n')
 #    True
-#    >>> is_newline_str('\r')
+#    >>> is_linebreak_str('\r')
 #    True
-#    >>> is_newline_str('\f')
+#    >>> is_linebreak_str('\f')
 #    True
-#    >>> is_newline_str('\v')
+#    >>> is_linebreak_str('\v')
 #    True
 #
-#    >>> define is_newline_byte(c): return len( (b"a"+c+b"x").splitlines() ) > 1
-#    >>> is_newline_byte(b'\n')
+#    >>> define is_linebreak_byte(c): return len( (b"a"+c+b"x").splitlines() ) > 1
+#    >>> is_linebreak_byte(b'\n')
 #    True
-#    >>> is_newline_byte(b'\r')
+#    >>> is_linebreak_byte(b'\r')
 #    True
-#    >>> is_newline_byte(b'\f')
+#    >>> is_linebreak_byte(b'\f')
 #    False
-#    >>> is_newline_byte(b'\v')
+#    >>> is_linebreak_byte(b'\v')
 #    False
 #
 # However! with defensive programming, in case this changes in the future
@@ -282,7 +282,7 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 
 _export_name('bytes_linebreaks')
 bytes_linebreaks = (
-    b'\n'    , #   10 0x000a - newline
+    b'\n'    , #   10 0x000a - linebreak
     )
 
 if len(b'x\vx'.splitlines()) == 2: # pragma: nocover
@@ -297,7 +297,7 @@ if len(b'x\fx'.splitlines()) == 2: # pragma: nocover
 
 bytes_linebreaks += (
     b'\r'    , #   13 0x000d - carriage return
-    b'\r\n'  , # bonus! the classic DOS newline sequence!
+    b'\r\n'  , # bonus! the classic DOS linebreak sequence!
     )
 
 _export_name('bytes_linebreaks_without_crlf')
@@ -1374,6 +1374,86 @@ _export_name('utf8_double_quotes')
 
 
 @_export
+def format_map(s, mapping):
+    """
+    An implementation of str.format_map supporting nested replacements.
+
+    Unlike str.format_map, big.format_map allows you to perform string
+    replacements inside of other string replacements:
+
+        big.format_map("{{extension} size}",
+            {'extension': 'mp3', 'mp3 size': 8555})
+
+    returns the string '8555'.
+
+    Another difference between str.format_map and big's format_map
+    is how you escape curly braces.  To produce a '{' or '}' in the
+    output string, add '\\{' or '\\}' respectively.  (To produce a
+    backslash, '\\', you must put *four* backslashes, '\\\\'.)
+
+    See the documentation for str.format_map for more.
+    """
+    if '{' not in s:
+        return s.replace("\\\\", "\\")
+    stack = []
+    words = []
+    append = words.append
+    pop = words.pop
+    empty_join = ''.join
+    saw_backslash = False
+    # print("\n" + s)
+    for s, delimiter in multisplit(s, '{}\\', separate=True, keep=AS_PAIRS):
+        # print(f">> {s=} {delimiter=} {saw_backslash=} {words=}")
+        append(s)
+        if not delimiter:
+            continue
+        if delimiter == '{':
+            if saw_backslash:
+                saw_backslash = False
+                if not s:
+                    append('{')
+                    continue
+                _ = pop()
+                append('\\')
+                append(_)
+            stack.append((words, append, pop))
+            words = []
+            append = words.append
+            pop = words.pop
+        elif delimiter == '}':
+            if saw_backslash:
+                saw_backslash = False
+                if not s:
+                    append('}')
+                    continue
+                _ = pop()
+                append('\\')
+                append(_)
+            e = empty_join(words)
+            expression = f'{{{e}}}'
+            value = expression.format_map(mapping)
+            words, append, pop = stack.pop()
+            append(value)
+        else:
+            # delimiter == \\
+            if saw_backslash:
+                if not s:
+                    append('\\')
+                    saw_backslash = False
+                else:
+                    words.pop()
+                    append('\\')
+                    append(s)
+                    # saw_backslash = True
+            else:
+                saw_backslash = True
+
+    return ''.join(words)
+
+
+
+
+@_export
 def split_title_case(s, *, split_allcaps=True):
     """
     Splits s into words, assuming that
@@ -1827,37 +1907,37 @@ def normalize_whitespace(s, separators=None, replacement=None):
 
 
 ##
-## A short treatise on detecting newlines.
+## A short treatise on detecting linebreaks.
 ##
-## What's the fastest way to detect if a string contains newlines?
+## What's the fastest way to detect if a string contains linebreaks?
 ##
-## I experimented with several approaches, including re.compile(newlines-separated-by-|).search
+## I experimented with several approaches, including re.compile(linebreaks-separated-by-|).search
 ## and brute-force checking with s.find.  These are fast, but there's something even faster.
 ##
 ## Before I answer, let me back up a little.  In big, I want to detect if a string contains
-## newlines in several places--and in every one of these places, I raise an exception if the
-## string contains newlines.  This means that, if the string contains newlines, performance
+## linebreaks in several places--and in every one of these places, I raise an exception if the
+## string contains linebreaks.  This means that, if the string contains linebreaks, performance
 ## is now out the window; we're gonna raise an exception, processing is over, etc etc etc.
 ## Therefore, the only scenario that's relevant to performance is when the string *doesn't*
-## contain newlines.  And what's the fastest way to confirm that a string contains no newlines?
-##         contains_newlines = len( s.splitlines() ) > 1
-## In the case that s doesn't contain any newlines, this allocates a list, then examines every
-## character in s to see if it's a newline.  Once it reaches the end of the list, nope, no newline
+## contain linebreaks.  And what's the fastest way to confirm that a string contains no linebreaks?
+##         contains_linebreaks = len( s.splitlines() ) > 1
+## In the case that s doesn't contain any linebreaks, this allocates a list, then examines every
+## character in s to see if it's a linebreak.  Once it reaches the end of the list, nope, no linebreak
 ## characters detected, so it adds a reference to s to its list and returns the list.  All that
 ## work is done in C.  The only extraneous bit is the list, but that's not really a big deal.
 ##
-## In the case where s does contain newlines, this is going to allocate N strings, where the sum
+## In the case where s does contain linebreaks, this is going to allocate N strings, where the sum
 ## of their lengths is the same as len(s), etc etc.  That's slow.  But we only do that when we're
 ## gonna throw an exception anyway.
 ##
 ## One added benefit of this approach: it works on both str and bytes objects, you don't need to
 ## handle them separately.
 ##
-## Update: OOOOPS! s.splitlines() implicitly does an s.rstrip(newline-characters) before splitting!
+## Update: OOOOPS! s.splitlines() implicitly does an s.rstrip(linebreak-characters) before splitting!
 ## Hooray for special cases breaking the rules!
 ##
 ## So now I have to do this more complicated version:
-##         contains_newlines = (len( s.splitlines() ) > 1) or (len( ( s[-1:] + 'x' ').splitlines() ) > 1)
+##         contains_linebreaks = (len( s.splitlines() ) > 1) or (len( ( s[-1:] + 'x' ').splitlines() ) > 1)
 ## (Why the colon in [-1:] ?  So it works on bytes strings.  yes, we also have to use b'x' then.)
 ##
 
@@ -1956,11 +2036,11 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     it begins a quoted section, which only ends at the
     next occurance of that quote delimiter.  By default,
     quotes is ('"', "'").  (If s is bytes, quotes defaults
-    to (b'"', b"'").)  If a newline character appears inside a
+    to (b'"', b"'").)  If a linebreak character appears inside a
     quoted string, split_quoted_strings will raise SyntaxError.
 
     multiline_quotes is like quotes, except quoted strings
-    using multiline quotes are permitted to contain newlines.
+    using multiline quotes are permitted to contain linebreaks.
     By default split_quoted_strings doesn't define any
     multiline quote marks.
 
@@ -1972,7 +2052,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     defaults to b'\\'.)
 
     multiline_quotes is like quotes, except text inside
-    multiline quotes is permitted to contain newlines.
+    multiline quotes is permitted to contain linebreaks.
     multiline_quotes and quotes must not both contain the
     same string.  By default there are no multiline quotes
     defined.
@@ -2146,7 +2226,7 @@ class Delimiter:
     escape is a string of maximum length 1: if true, when inside this pair of delimiters,
         you can escape the closing delimiter using this string.  When quoting is true,
         escape may not be empty, and when quoting is false escape must be empty.
-    multiline is a boolean: are newline characters permitted inside these delimiters?
+    multiline is a boolean: are linebreak characters permitted inside these delimiters?
         multiline may only be false when quoting is true.
 
     You may not specify backslash ('\\') as an open or close delimiter.
@@ -2261,7 +2341,7 @@ _export_name('split_delimiters_default_delimiters_bytes')
 _ACTION_POP = "<action: pop>"
 _ACTION_ESCAPE = "<action: escape>"
 _ACTION_ILLEGAL = "<action: illegal>"
-_ACTION_ILLEGAL_NEWLINE = "<action: illegal newline>"
+_ACTION_ILLEGAL_LINEBREAK = "<action: illegal linebreak>"
 _ACTION_FLUSH = "<action: flush>"
 _ACTION_FLUSH_1_AND_RESPLIT = "<action: flush 1 and resplit>"
 
@@ -2305,14 +2385,14 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
         s_type = bytes
         s_type_description = "bytes"
         not_s_type_description = "str"
-        newlines = bytes_linebreaks_without_crlf
+        linebreaks = bytes_linebreaks_without_crlf
         truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES
         iterate_over_delimiter = _iterate_over_bytes
     else:
         s_type = str
         s_type_description = "str"
         not_s_type_description = "bytes"
-        newlines = str_linebreaks_without_crlf
+        linebreaks = str_linebreaks_without_crlf
         truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR
         iterate_over_delimiter = iter
 
@@ -2320,7 +2400,7 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     all_openers = set()
     all_escapes = set()
     nested_closers = set()
-    all_newlines = set()
+    all_linebreaks = set()
 
     for k, v in delimiters:
         if not isinstance(k, s_type):
@@ -2340,9 +2420,9 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
             assert not v.escape
             nested_closers.add(v.close)
 
-        # if any delimiter disallows newlines, add all newlines to the set of tokens
-        if not (v.multiline or all_newlines):
-            all_newlines = set(newlines)
+        # if any delimiter disallows linebreaks, add all linebreaks to the set of tokens
+        if not (v.multiline or all_linebreaks):
+            all_linebreaks = set(linebreaks)
 
 
     in_both_openers_and_closers = all_openers & nested_closers
@@ -2356,7 +2436,7 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
         raise ValueError(f"{prefix}{in_both_openers_and_closers!r} cannot be both an opening and closing delimiter")
 
     all_delimiter_tokens = all_openers | all_closers | all_escapes
-    all_tokens = all_delimiter_tokens | all_newlines
+    all_tokens = all_delimiter_tokens | all_linebreaks
 
     # all the non-quoting states reuse the same open dictionary.
     # initial_state = _DelimiterState(open={}, close=None, illegal=all_closers, single_line_only=False)
@@ -2365,8 +2445,8 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
 
     non_quoting_default_actions = {token: _ACTION_ILLEGAL for token in all_delimiter_tokens }
 
-    if all_newlines:
-        newlines_are_illegal = {c: _ACTION_ILLEGAL_NEWLINE for c in newlines}
+    if all_linebreaks:
+        linebreaks_are_illegal = {c: _ACTION_ILLEGAL_LINEBREAK for c in linebreaks}
 
     # list of states that want all the default openers after processing
     states_that_want_push_delimiters = []
@@ -2460,7 +2540,7 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
                             state[t] = _ACTION_FLUSH_1_AND_RESPLIT
 
         if delimiter.quoting and (not delimiter.multiline):
-            state.update(newlines_are_illegal)
+            state.update(linebreaks_are_illegal)
 
         state[delimiter.close] = _ACTION_POP
 
@@ -2476,6 +2556,7 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     return initial_state, all_tokens
 
 
+@_export
 def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_bytes):
     """
     Internal generator function returned by the real split_delimiters.
@@ -2496,9 +2577,9 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
         * _ACTION_POP means pop the current state.
         * _ACTION_ESCAPE means escape the next character yielded
           by multisplit.
-        * _ACTION_ILLEGAL_NEWLINE means the token is an illegal
-          newline character.  (The current delimiter doesn't permit
-          embedded newlines.)
+        * _ACTION_ILLEGAL_LINEBREAK means the token is an illegal
+          linebreak character.  (The current delimiter doesn't permit
+          embedded linebreaks.)
         * _ACTION_ILLEGAL means the token isn't legal here.
           example: 'foo(abc ] )', the ] is illegal
         * _ACTION_FLUSH means we are ignoring this token completely,
@@ -2520,13 +2601,13 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
     into the relevant delimiter token.  We react as if we received *that* token
     instead, then "resplit" starting after the delimiter.
 
-    Newlines are also handled using this mechanism.  If the current state
-    is allergic to newline characters, all newline characters will be mapped
-    to _ACTION_ILLEGAL_NEWLINE.  If the current state doesn't care about
-    newline characters, newline characters will be unmapped, which means
-    they get the default action _ACTION_FLUSH.
+    Linebreaks are also handled using this mechanism.  If the current state
+    is allergic to linebreak characters, all linebreak characters will be
+    mapped to _ACTION_ILLEGAL_LINEBREAK.  If the current state doesn't care
+    about linebreak characters, linebreak characters will be unmapped,
+    which means they get the default action _ACTION_FLUSH.
     (And, if literally no delimiters have multiline=False in this run,
-    we won't even add the newlines to the list of all tokens!  You don't
+    we won't even add the linebreaks to the list of all tokens!  You don't
     pay for what you don't use.)
 
     Why do we have all this _ACTION_*_AND_RESPLIT nonsense?  The
@@ -2645,9 +2726,9 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
             elif action is _ACTION_ILLEGAL:
                 # illegal character
                 raise SyntaxError(f"index {consumed}: illegal string {delimiter!r}")
-            elif action is _ACTION_ILLEGAL_NEWLINE:
-                # illegal newline character
-                raise SyntaxError(f"index {consumed}: newline character {delimiter!r} is illegal inside delimiter {open!r}")
+            elif action is _ACTION_ILLEGAL_LINEBREAK:
+                # illegal linebreak character
+                raise SyntaxError(f"index {consumed}: linebreak character {delimiter!r} is illegal inside delimiter {open!r}")
             else: # pragma: nocover
                 # unhandled
                 raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
@@ -2793,7 +2874,7 @@ class LineInfo:
 
     line is the original unmodified line, split
     from the original s input to lines.  Note
-    that line includes the trailing newline character,
+    that line includes the trailing linebreak character,
     if any.
 
     line_number is the line number of this line.
@@ -2823,7 +2904,7 @@ class LineInfo:
     or modify existing attributes as needed from
     inside a "lines modifier" function.
     """
-    def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs):
+    def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, source='', **kwargs):
         is_str = isinstance(line, str)
         is_bytes = isinstance(line, bytes)
         if is_bytes:
@@ -2870,6 +2951,7 @@ class LineInfo:
         self.end = end
         self.indent = indent
         self.match = match
+        self.source = source
         self._is_bytes = is_bytes
         self._empty = empty
         self.__dict__.update(kwargs)
@@ -2983,7 +3065,7 @@ class LineInfo:
 
 @_export
 class lines:
-    def __init__(self, s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs):
+    def __init__(self, s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, source='', tab_width=8, **kwargs):
         """
         A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
 
@@ -2996,16 +3078,16 @@ class lines:
         If s is neither str nor bytes, s must be an iterable.
         The iterable should either yield individual strings, which is the
         line, or it should yield a tuple containing two strings, in which case
-        the strings should be the line and the line-terminating newline respectively.
+        the strings should be the line and the line-terminating linebreak respectively.
         All "string" objects yielded by this iterable should be homogeneous,
         either str or bytes.
 
-        `separators` should either be `None` or an iterable of separator strings,
-        as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
-        it will be split using `multisplit`, using these separators.  If
-        `separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
-        `s` will be split at linebreak characters.  (If `s` is neither `str` nor `bytes`,
-        `separators` must be `None`.)
+        separators should either be None or an iterable of separator strings,
+        as per the separators argument to multisplit.  If s is str or bytes,
+        it will be split using multisplit, using these separators.  If
+        separators is None--the default--and s is str or bytes, s will be
+        split at linebreak characters.  (If s is neither str nor bytes,
+        separators must be None.)
 
         separators is either None or an iterable of separator strings,
         as per the separators argument to multisplit.  If s is str or bytes,
@@ -3024,6 +3106,11 @@ class lines:
         lines_convert_tabs_to_spaces). Similarly, all keyword arguments passed
         in via kwargs are stored internally and can be accessed by user-defined
         lines modifier functions.
+
+        lines copies the line-breaking character (usually \\n) from each line
+        to info.end. If clip_linebreaks is true (the default), lines will clip
+        the linebreak off the end of each line.  If clip_linebreaks is false,
+        lines will leave the linebreak in place.
 
         You can pass in an instance of a subclass of bytes or str
         for s and elements of separators, but the base class
@@ -3044,6 +3131,8 @@ class lines:
         self.line_number = line_number
         self.column_number = column_number
         self.tab_width = tab_width
+        self.clip_linebreaks = clip_linebreaks
+        self.source = source
 
         is_bytes = isinstance(s, bytes)
         is_str = isinstance(s, str)
@@ -3108,9 +3197,11 @@ class lines:
 
         if self.is_pairs and end:
             original_line = line + end
+            if not self.clip_linebreaks:
+                line = original_line
         else:
             original_line = line
-        return_value = (LineInfo(self, original_line, self.line_number, self.column_number, end=end), line)
+        return_value = (LineInfo(self, original_line, self.line_number, self.column_number, end=end, source=self.source), line)
         self.line_number += 1
         return return_value
 
@@ -3745,13 +3836,13 @@ def wrap_words(words, margin=79, *, two_spaces=True):
                 sentence_ending_punctuation = (b'.', b'?', b'!')
                 two_spaces = b'  '
                 one_space = b' '
-                newline = b'\n'
+                linebreak = b'\n'
             else:
                 empty = lastword = ''
                 sentence_ending_punctuation = ('.', '?', '!')
                 two_spaces = '  '
                 one_space = ' '
-                newline = '\n'
+                linebreak = '\n'
 
         if word.isspace():
             lastword = word
@@ -3770,7 +3861,7 @@ def wrap_words(words, margin=79, *, two_spaces=True):
 
         if (l + len_space + col) > margin:
             if col:
-                text.append(newline)
+                text.append(linebreak)
                 col = 0
         elif col:
             text.append(space)
@@ -3798,14 +3889,14 @@ class _column_wrapper_splitter:
             self.empty = b''
             self.tab_string = b'\t'
             self.space_string = b' '
-            self.newline_string = b'\n'
+            self.linebreak_string = b'\n'
             self.paragraph_string = b'\n\n'
             self.make_iterator = _iterate_over_bytes
         else:
             self.empty = ''
             self.tab_string = '\t'
             self.space_string = ' '
-            self.newline_string = '\n'
+            self.linebreak_string = '\n'
             self.paragraph_string = '\n\n'
             self.make_iterator = iter
         self.tab_width = tab_width
@@ -3832,7 +3923,7 @@ class _column_wrapper_splitter:
 
     def line_break(self):
         # print(f" [  \\n]")
-        self.words.append(self.newline_string)
+        self.words.append(self.linebreak_string)
 
     def paragraph_break(self):
         # print(f" [\\n\\n]")
@@ -3845,7 +3936,7 @@ class _column_wrapper_splitter:
         # first, write aggregates together all consecutive
         # non-line-breaking whitespace characters, which it
         # stores in 'leading'.  if the next character is
-        # a newline, it passes that single newline as 'word'.
+        # a linebreak, it passes that single linebreak as 'word'.
         # otherwise it aggregates all consecutive non-whitespace
         # characters together, and passes those in as 'word'.
         #
@@ -3890,10 +3981,10 @@ class _column_wrapper_splitter:
         leading = self.leading
         word = self.word
         write_word = None
-        write_newline = False
+        write_linebreak = False
         append_c_to_leading = False
         empty = self.empty
-        newline_string = self.newline_string
+        linebreak_string = self.linebreak_string
 
         # print(f"<{c!r}> ", end='')
 
@@ -3905,9 +3996,9 @@ class _column_wrapper_splitter:
             write_word = empty.join(word)
             word.clear()
 
-        if c == newline_string:
+        if c == linebreak_string:
             if write_word:
-                write_newline = True
+                write_linebreak = True
             else:
                 write_word = c
         else:
@@ -3923,9 +4014,9 @@ class _column_wrapper_splitter:
             self.state(l, write_word)
             write_word = None
 
-            if write_newline:
-                self.state(empty, newline_string)
-                write_newline = False
+            if write_linebreak:
+                self.state(empty, linebreak_string)
+                write_linebreak = False
 
         if append_c_to_leading:
             leading.append(c)
@@ -3945,7 +4036,7 @@ class _column_wrapper_splitter:
         after encountering two '\n's in a row after
         a text line.
         """
-        if word == self.newline_string:
+        if word == self.linebreak_string:
             return
         if self.previous_paragraph:
             self.paragraph_break()
@@ -3956,7 +4047,7 @@ class _column_wrapper_splitter:
     state_initial = state_paragraph_start
 
     def state_line_start(self, leading, word):
-        if word == self.newline_string:
+        if word == self.linebreak_string:
             # two '\n's in a row.
             if self.previous_paragraph == _code_paragraph:
                 # we could still be in a code block.
@@ -4004,7 +4095,7 @@ class _column_wrapper_splitter:
         self.state(leading, word)
 
     def state_in_text_line(self, leading, word):
-        if word == self.newline_string:
+        if word == self.linebreak_string:
             self.state = self.state_line_start
             return
         self.emit(word)
@@ -4016,7 +4107,7 @@ class _column_wrapper_splitter:
         self.state(leading, word)
 
     def state_in_code_line(self, leading, word):
-        if word == self.newline_string:
+        if word == self.linebreak_string:
             self.emit(self.empty.join(self.code))
             self.code.clear()
             self.state = self.state_line_start
@@ -4059,7 +4150,7 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
 
     If `allow_code` is true, paragraphs indented by at least
     code_indent spaces will preserve their whitespace:
-    internal whitespace is preserved, and the newline is
+    internal whitespace is preserved, and the linebreak is
     preserved.  (This will preserve the formatting of code
     examples, when these words are rejoined into lines
     by wrap_words.)
@@ -4116,7 +4207,7 @@ def merge_columns(*columns, column_separator=None,
     Each column tuple should contain three items:
         (text, min_width, max_width)
     text should be a single string, either str or bytes,
-    with newline characters separating lines. min_width
+    with linebreak characters separating lines. min_width
     and max_width are the minimum and maximum permissible
     widths for that column, not including the column
     separator (if any).
@@ -4164,11 +4255,11 @@ def merge_columns(*columns, column_separator=None,
     if is_bytes:
         empty = b''
         space = b' '
-        newline = b'\n'
+        linebreak = b'\n'
     else:
         empty = ''
         space = ' '
-        newline = '\n'
+        linebreak = '\n'
 
     if column_separator is None:
         column_separator = space
@@ -4212,7 +4303,7 @@ def merge_columns(*columns, column_separator=None,
         empty_columns.append(max_width * space)
 
         if isinstance(s, (str, bytes)):
-            lines = s.rstrip().split(newline)
+            lines = s.rstrip().split(linebreak)
         else:
             lines = s
         max_lines = max(max_lines, len(lines))
@@ -4228,7 +4319,7 @@ def merge_columns(*columns, column_separator=None,
 
         for line_number, line in enumerate(lines):
             line = line.rstrip()
-            assert not newline in line
+            assert not linebreak in line
             rstripped_lines.append(line)
 
             length = len(line)
@@ -4304,7 +4395,7 @@ def merge_columns(*columns, column_separator=None,
         line = empty.join(line).rstrip()
         lines.append(line)
 
-    text = newline.join(lines)
+    text = linebreak.join(lines)
     return text.rstrip()
 
 @_export

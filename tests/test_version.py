@@ -86,6 +86,13 @@ class BigTestVersion(unittest.TestCase):
     def test_version_info(self):
         # compute a version object from Python's version the easy way
         easy = V(sys.version_info)
+        self.assertEqual(easy, sys.version_info)
+
+        less = V(f"{sys.version_info.major}.{sys.version_info.minor - 1}")
+        self.assertLess(less, sys.version_info)
+
+        greater = V(f"{sys.version_info.major}.{sys.version_info.minor + 1}")
+        self.assertGreater(greater, sys.version_info)
 
         # now do it the hard way
         release = [sys.version_info.major, sys.version_info.minor]
@@ -103,6 +110,20 @@ class BigTestVersion(unittest.TestCase):
         hard = V(release=release, **kwargs)
 
         self.assertEqual(easy, hard)
+
+    def test_packaging_version(self):
+        try: # pragma: nocover
+            from packaging.version import Version as PV
+
+            pv135 = PV('1.3.5')
+            v = V(pv135)
+            self.assertEqual(v, pv135)
+            pv136 = PV('1.3.6')
+            self.assertLess(v, pv136)
+
+        except ImportError: # pragma: nocover
+            pass
+
 
     def test_normalize(self):
         def test(v1, v2):
@@ -226,6 +247,12 @@ class BigTestVersion(unittest.TestCase):
         v = V(s)
         self.assertEqual(s, str(v))
         self.assertEqual("Version('" + s + "')", repr(v))
+
+    def test_format(self):
+        v = V('8!1.0.3rc5.post456.dev34+apple.cart.123')
+        self.assertEqual(v.format('{release}'), '1.0.3')
+        self.assertEqual(v.format('{epoch}'), '8')
+        self.assertEqual(v.format('{release_level}'), 'rc')
 
 
     def test_input_validation(self):

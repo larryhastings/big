@@ -28,8 +28,8 @@ API gotchas fixed, and thoroughly tested with 100% coverage.
 It's the code you *would* have written... if only you had the time.
 It's a real pleasure to use!
 
-**big** requires Python 3.6 or newer.  Its only dependency
-is `python-dateutil`, and that's optional.  
+**big** requires Python 3.6 or newer.  Its only dependencies
+is `python-dateutil`, and that's optional.  The current version is "#0124".
 
 *Think big!*
 
@@ -221,6 +221,8 @@ And here are five little functions/classes I use all the time:
 
 [`file_size(path)`](#file_sizepath)
 
+[`format_map(s, mapping)`](#format_maps-mapping)
+
 [`gently_title(s, *, apostrophes=None, double_quotes=None)`](#gently_titles--apostrophesnone-double_quotesnone)
 
 [`get_float(o, default=_sentinel)`](#get_floato-default_sentinel)
@@ -263,7 +265,7 @@ And here are five little functions/classes I use all the time:
 
 [`LineInfo.clip_trailing(line, s)`](#lineinfoclip_trailingline-s)
 
-[`lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+[`lines(s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
 [`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
 
@@ -426,6 +428,8 @@ And here are five little functions/classes I use all the time:
 [`unicode_whitespace_without_crlf`](#unicode_whitespace_without_crlf)
 
 [`Version(s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None)`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+
+['Version.format(s)'](#versionformats)
 
 [`whitespace`](#whitespace)
 
@@ -2418,12 +2422,37 @@ of one of those.
 
 Encodes every string inside using the encoding
 specified in the _encoding_ parameter, default
-is `'ascii'``.
+is `'ascii'`.
 
 Handles nested containers.
 
 If `o` is of, or contains, a type not listed above,
 raises `TypeError`.
+
+</dd></dl>
+
+#### `format_map(s, mapping)`
+
+<dl><dd>
+An implementation of `str.format_map` supporting *nested replacements.*
+
+Unlike `str.format_map`, big's `format_map` allows you to perform
+string replacements inside of other string replacements:
+
+```Python
+  big.format_map("{{extension} size}",
+      {'extension': 'mp3', 'mp3 size': 8555})
+```
+
+returns the string `'8555'`.
+
+Another difference between `str.format_map` and big's `format_map`
+is how you escape curly braces.  To produce a `'{'` or `'}'` in the
+output string, add `'\{'` or `'\}'` respectively.  (To produce a
+backslash, `'\\'`, you must put *four* backslashes, `'\\\\'`.)
+
+See the documentation for `str.format_map` for more.
+
 </dd></dl>
 
 #### `gently_title(s, *, apostrophes=None, double_quotes=None)`
@@ -2677,7 +2706,7 @@ the clipped portion to `self.trailing`.
 </dd></dl>
 
 
-#### `lines(s, separators=None, *, line_number=1, column_number=1, tab_width=8, **kwargs)`
+#### `lines(s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, tab_width=8, **kwargs)`
 
 <dl><dd>
 
@@ -2723,6 +2752,11 @@ may be used by other lines modifier functions (e.g. [`lines_strip_indent`](#line
 `lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
 in via kwargs are stored internally and can be accessed by user-defined
 lines modifier functions.
+
+`lines` copies the line-breaking character (usually `\n`) from each line
+to `info.end`. If `clip_linebreaks` is true (the default), `lines` will clip
+the line-breaking character off the end of each line.  If `clip_linebreaks`
+is false, `lines` will leave the line-breaking character in place.
 
 You can pass in an instance of a subclass of `bytes` or `str`
 for `s` and elements of `separators`, but the base class
@@ -4037,7 +4071,8 @@ expression.
     * Abbreviations and alternate names for `release_level` are
       normalized.
 * Don't tell anybody, but, you can also pass a `sys.version_info`
-  object into the constructor instead of a version string.
+  object or a `packaging.Version` object into the constructor
+  instead of a version string.
 
 When constructing a `Version` by passing in a string `s`, the string must conform to this scheme,
 where square brackets denote optional substrings and names in angle brackets represent parameterized
@@ -4138,6 +4173,24 @@ alphanumeric characters
 or `None`.  Represents a purely local version number,
 allowing for minor build and patch differences
 but with no API or ABI changes.
+
+
+</dd></dl>
+
+#### `Version.format(s)`
+
+<dl><dd>
+
+Returns a formatted version of `s`, substituting attributes from
+`self` into `s` using `str.format_map`.
+
+For example,
+
+```Python
+    Version("1.3.5").format('{major}.{minor}')
+```
+
+returns the string `'1.3'`.
 
 
 </dd></dl>
@@ -6137,17 +6190,47 @@ in the **big** test suite.
 
 ## Release history
 
-#### next version (under development)
+#### 0.12.4
+
+*2024/11/15*
 
 <dl><dd>
 
+* New function in the `text` module: `format_map`.
+  This works like Python's `str.format_map` method,
+  except it allows nested curly-braces.  Example:
+  `big.format_map("The {extension} file is {{extension} size} bytes.", {'extension': 'mp3', 'mp3 size': 8555})`
+* New method: `Version.format` is like `strftime` but for `Version` objects.
+  You pass in a format string with `Version` attributes in curly braces
+  and it formats the string with values from that `Version` object.
+* The `Version` constructor now accepts a `packaging.Version` object
+  as an initializer.  Embrace and extend!
+* `lines` now takes two new arguments:
+    * `clip_linebreaks`, default is true.
+      If true, it clips the linebreaks off the lines before yielding them,
+      otherwise it doesn't.  (Either way, the linebreaks are still stored
+      in `info.end`.)
+    * `source`, default is an empty string.
+      `source` should represent the source of the line in a
+      meaninful way to the user.  It's stored in the `LinesInfo`
+      objects yielded by `lines`, and should be incorporated into
+      error messages.
 * `LineInfo.clip_leading` and `LineInfo.clip_trailing` now automatically
   detect if you've clipped the entire line, and if so move all clipped
   text to `info.trailing` (and adjust the `column_number` accordingly).
 * `LineInfo.clip_leading` and `LineInfo.clip_trailing`: Minor performance
-  upgrade. Previously, if the user passed in the string to clip, they
-  were throwing it away then recreating it.  Now they preserve and use
-  it.
+  upgrade. Previously, if the user passed in the string to clip, the
+  two functions would throw it away then recreate it.  Now they just use
+  the passed-in string.
+* Changed the word "newline" to "linebreak" everywhere.  They mean the
+  same thing, but the Unicode standard consistently uses the word
+  "linebreak"; I assume the boffins on the committee thought about this
+  a lot and argued and finally settled on this word for good
+  (if unpublished?) reasons.
+* Add explicit support (and CI coverage & testing) for Python 3.13.
+  (big didn't need any changes, it was already 100% compatible with 3.13.)
+
+<p><font size=1>p.s. 56</font></p>
 
 </dd></dl>
 
