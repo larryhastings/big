@@ -29,7 +29,7 @@ It's the code you *would* have written... if only you had the time.
 It's a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  Its only dependencies
-is `python-dateutil`, and that's optional.  The current version is "#0124".
+is `python-dateutil`, and that's optional.  The current version is [0.12.4.](#0124)
 
 *Think big!*
 
