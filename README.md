@@ -28,8 +28,8 @@ API gotchas fixed, and thoroughly tested with 100% coverage.
 It's the code you *would* have written... if only you had the time.
 It's a real pleasure to use!
 
-**big** requires Python 3.6 or newer.  Its only dependency
-is `python-dateutil`, and that's optional.  
+**big** requires Python 3.6 or newer.  Its only dependencies
+is `python-dateutil`, and that's optional.  The current version is "#0124".
 
 *Think big!*
 
@@ -220,6 +220,8 @@ And here are five little functions/classes I use all the time:
 [`file_mtime_ns(path)`](#file_mtime_nspath)
 
 [`file_size(path)`](#file_sizepath)
+
+[`format_map(s, mapping)`](#format_maps-mapping)
 
 [`gently_title(s, *, apostrophes=None, double_quotes=None)`](#gently_titles--apostrophesnone-double_quotesnone)
 
@@ -426,6 +428,8 @@ And here are five little functions/classes I use all the time:
 [`unicode_whitespace_without_crlf`](#unicode_whitespace_without_crlf)
 
 [`Version(s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None)`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
+
+['Version.format(s)'](#versionformats)
 
 [`whitespace`](#whitespace)
 
@@ -6223,6 +6227,8 @@ in the **big** test suite.
   "linebreak"; I assume the boffins on the committee thought about this
   a lot and argued and finally settled on this word for good
   (if unpublished?) reasons.
+* Add explicit support (and CI coverage & testing) for Python 3.13.
+  (big didn't need any changes, it was already 100% compatible with 3.13.)
 
 </dd></dl>
 
