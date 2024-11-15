@@ -38,12 +38,12 @@ import struct
 import sys
 
 
-try:
+try: # pragma: no cover
     from re import Pattern as re_Pattern
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
 
-try:
+try: # pragma: no cover
     import regex
     regex_Pattern = regex.Pattern
     def isinstance_re_pattern(o):

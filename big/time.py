@@ -26,7 +26,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import calendar
 from datetime import date, datetime, timezone
-try:
+try: # pragma: no cover
     import dateutil.parser
     have_dateutils = True
 except ImportError: # pragma: no cover

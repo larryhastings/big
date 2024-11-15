@@ -379,7 +379,7 @@ class Version:
     def __eq__(self, other):
         if isinstance(other, _sys_version_info_type):
             other = self.__class__(other)
-        elif _packagingVersion and isinstance(other, _packagingVersion):
+        elif _packagingVersion and isinstance(other, _packagingVersion): # pragma: no cover
             other = self.__class__(str(other))
         elif not isinstance(other, Version):
             return False
@@ -388,7 +388,7 @@ class Version:
     def __lt__(self, other):
         if isinstance(other, _sys_version_info_type):
             other = self.__class__(other)
-        elif _packagingVersion and isinstance(other, _packagingVersion):
+        elif _packagingVersion and isinstance(other, _packagingVersion): # pragma: no cover
             other = self.__class__(str(other))
         if not isinstance(other, Version):
             raise TypeError("'<' not supported between instances of 'Version' and '{type(other)}'")
