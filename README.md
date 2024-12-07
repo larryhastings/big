@@ -6190,6 +6190,18 @@ in the **big** test suite.
 
 ## Release history
 
+#### next version
+
+*under development, no release date yet*
+
+<dl><dd>
+
+* `PushbackIterator` no longer evaluates the iterator you pass in
+  in a boolean context.  (All we needed to do was compare it to `None`,
+  so now that's all we do.)
+
+</dd></dl>
+
 #### 0.12.4
 
 *2024/11/15*

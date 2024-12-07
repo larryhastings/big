@@ -41,7 +41,7 @@ class PushbackIterator:
     def __next__(self):
         if self.stack:
             return self.stack.pop()
-        if self.i:
+        if self.i is not None:
             try:
                 return next(self.i)
             except:
@@ -57,7 +57,7 @@ class PushbackIterator:
         """
         if self.stack:
             return self.stack.pop()
-        if self.i:
+        if self.i is not None:
             try:
                 return next(self.i)
             except StopIteration:
@@ -67,7 +67,7 @@ class PushbackIterator:
     def __bool__(self):
         if self.stack:
             return True
-        if self.i:
+        if self.i is not None:
             try:
                 o = next(self.i)
                 self.push(o)
