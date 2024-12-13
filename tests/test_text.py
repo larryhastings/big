@@ -3123,10 +3123,13 @@ class BigTextTests(unittest.TestCase):
         D = big.Delimiter
         def SDV(t, o, cl, ch):  return big.SplitDelimitersValue(t, o, cl, ch, 3)
 
-        def test(s, expected, *, delimiters=big.split_delimiters_default_delimiters, state=()):
+        self.assertEqual(repr(SDV('t', 'o', 'cl', 'ch')),
+            "SplitDelimitersValue(text='t', open='o', close='cl', change='ch', yields=3)")
+
+        def test(s, expected, *, delimiters=big.split_delimiters_default_delimiters, state=(), yields=None):
             empty = ''
             for i in range(2):
-                got = tuple(big.split_delimiters(s, delimiters=delimiters, state=state))
+                got = tuple(big.split_delimiters(s, delimiters=delimiters, state=state, yields=yields))
 
                 flattened = []
                 for t in got:
@@ -3423,6 +3426,9 @@ class BigTextTests(unittest.TestCase):
             test('by default quote marks are now single-line only "ab\n, test 2, unterminated quoted string', None, )
         with self.assertRaises(SyntaxError):
             test('text ends with "escape string\\', None, )
+
+        with self.assertRaises(ValueError):
+            test('ab[c(3)]', None, yields=48)
 
         # testing on the Delimiter class itself
         d = big.Delimiter(close='x')
@@ -5305,7 +5311,11 @@ class BigTextTests(unittest.TestCase):
         self.assertEqual(big.format_map("{q\\x}", {'q\\x':'z'}), 'z')
 
     def test_decode_python_script(self):
-        pass
+        # test without either a bom or a PEP 263
+        script = b"print('Hello, world!')\n"
+        self.assertEqual(big.decode_python_script(script), script.decode('ascii'))
+
+        self.assertEqual(big.decode_python_script(script, use_bom=False, use_source_code_encoding=False), script.decode('ascii'))
 
 
 def run_tests():
