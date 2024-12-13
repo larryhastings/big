@@ -28,8 +28,9 @@ API gotchas fixed, and thoroughly tested with 100% coverage.
 It's the code you *would* have written... if only you had the time.
 It's a real pleasure to use!
 
-**big** requires Python 3.6 or newer.  Its only dependencies
-is `python-dateutil`, and that's optional.  The current version is [0.12.4.](#0124)
+**big** requires Python 3.6 or newer.  It has no
+required dependencies (unless you want to run the test suite).
+The current version is [0.12.5.](#0125)
 
 *Think big!*
 
@@ -143,9 +144,9 @@ And here are five little functions/classes I use all the time:
 
 [`big.builtin`](#bigbuiltin)
 
-[`big.file`](#bigfile)
-
 [`big.deprecated`](#bigdeprecated)
+
+[`big.file`](#bigfile)
 
 [`big.graph`](#biggraph)
 
@@ -202,6 +203,8 @@ And here are five little functions/classes I use all the time:
 [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
 
 [`default_clock()`](#default_clock)
+
+[`decode_python_script(script, *, use_bom=True, use_source_code_encoding=True)`](#decode_python_scriptscript--use_bomtrue-use_source_code_encodingtrue)
 
 [`Delimiter(close, *, escape='', multiline=True, quoting=False)`](#delimiterclose--escape-multilinetrue-quotingfalse)
 
@@ -319,6 +322,12 @@ And here are five little functions/classes I use all the time:
 
 [`pushd(directory)`](#pushddirectory)
 
+[`python_delimiters`](#python_delimiters)
+
+[`python_delimiters_version`](#python_delimiters_version)
+
+[`read_python_file(path, *, newline=None, use_bom=True, use_source_code_encoding=True)`](#read_python_filepath--newlinenone-use_bomtrue-use_source_code_encodingtrue)
+
 [`re_partition(text, pattern, count=1, *, flags=0, reverse=False)`](#re_partitiontext-pattern-count1--flags0-reversefalse)
 
 [`re_rpartition(text, pattern, count=1, *, flags=0)`](#re_rpartitiontext-pattern-count1--flags0)
@@ -351,7 +360,7 @@ And here are five little functions/classes I use all the time:
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
-[`split_delimiters(s, delimiters={...}, *, state=())`](#split_delimiterss-delimiters--state)
+[`split_delimiters(s, delimiters={...}, *, state=(), yields=None)`](#split_delimiterss-delimiters--state-yieldsnone)
 
 [`split_quoted_strings(s, quotes=('"', "'"), *, escape='\\', multiline_quotes=(), state='')`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
 
@@ -785,6 +794,26 @@ this won't affect pushd restoring the original current
 working directory upon exiting the nested block.
 
 You can safely nest `with pushd` blocks.
+</dd></dl>
+
+#### `read_python_file(path, *, newline=None, use_bom=True, use_source_code_encoding=True)`
+
+<dl><dd>
+
+Opens, reads, and correctly decodes a Python script from a file.
+
+`path` should specify the filesystem path to the file; it can
+be any object accepted by `builtins.open` (a "path-like object").
+
+Returns a `str` containing the decoded Python script.
+
+Opens the file using `builtins.open`.  The `newline` parameter is
+passed through to that function.
+
+Decodes the script using big's `decode_python_script` function.
+The `use_bom` and `use_source_code_encoding`
+parameters are passed through to that function.
+
 </dd></dl>
 
 #### `safe_mkdir(path)`
@@ -2380,12 +2409,54 @@ with `keep=True` or `keep=ALTERNATING`.)
 
 </dd></dl>
 
+#### `decode_python_script(script, *, use_bom=True, use_source_code_encoding=True)`
+
+<dl><dd>
+
+Correctly decodes a Python script from a bytes string.
+
+`script` should be a `bytes` object containing an encoded Python script.
+
+Returns a `str` containing the decoded Python script.
+
+By default, Python 3 scripts must be encoded using [UTF-8.](https://en.wikipedia.org/wiki/UTF-8)
+(This was established by [PEP 3120.)](https://peps.python.org/pep-3120/)
+Python scripts are allowed to use other encodings, but when they do so
+they must explicitly specify what encoding they used.  Python defines
+two methods for scripts to specify their encoding; `decode_python_script`
+supports both.
+
+The first method uses a ["byte order mark", aka "BOM".](https://en.wikipedia.org/wiki/Byte_order_mark)
+This is a sequence of bytes at the beginning of the file that indicate
+the file's encoding.
+
+If `use_bom` is true (the default), `decode_python_script` will
+recognize a BOM if present, and decode the file using the encoding
+specified by the BOM.  Note that `decode_python_script` removes the BOM
+when it decodes the file.
+
+The second method is called a "source code encoding", and it was defined
+in [PEP 263.](https://peps.python.org/pep-0263/)  This is a "magic comment"
+that must be one of the first two lines of the file.
+
+If `use_source_code_encoding` is true (the default), `decode_python_script`
+will recognize a source code encoding magic comment, and use that to decode
+the file.  (`decode_python_script` leaves the magic comment in place.)
+
+If both these "`use_`" keyword-only parameters are true (the default),
+`decode_python_script` can handle either, both, or neither.  In this case,
+if `script` contains both a BOM *and* a source code encoding magic comment,
+the script will be decoded using the encoding specified by the BOM, and the
+source code encoding must agree with the BOM.
+
+</dd></dl>
+
 #### `Delimiter(close, *, escape='', multiline=True, quoting=False)`
 
 <dl><dd>
 
 Class representing a delimiter for
-[`split_delimiters`](#split_delimiterss-delimiters--state).
+[`split_delimiters`](#split_delimiterss-delimiters--state-yieldsnone).
 
 `close` is the closing delimiter character.  It must be a valid
 string or bytes object, and cannot be a backslash ('"\\"' or `b"\\"`).
@@ -2400,7 +2471,7 @@ When an open delimiter enables quoting, `split_delimiters` will ignore all
 other delimiters in the text until it encounters the matching close delimiter.
 (Single- and double-quotes set this to `True`.)
 
-Currently `escape` and `quoting` must either both be true or both be false.
+If `escape` is true, `quoting` must also be true.
 
 If `multiline` is true, the closing delimiter may be on the current line
 or any subsequent line.  If `multiline` is false, the closing delimiter
@@ -3368,6 +3439,76 @@ normalize_whitespace("   a    b   c") == " a b c"
 ```
 </dd></dl>
 
+
+#### `python_delimiters`
+
+<dl><dd>
+
+A delimiters mapping suitable for use as the `delimiters`
+argument for  [`split_delimiters`](#split_delimiterss-delimiters--state-yieldsnone).
+`python_delimiters` defines *all* the delimiters for Python, and
+is able to correctly split any modern Python text at its delimiter boundaries.
+
+`python_delimiters` changes the rules a little bit for `split_delimiters`:
+
+* When you use `split_delimiters` with `python_delimiters`, it yields *four*
+  values, not three.  The fourth value is `change`.  See `split_delimiters`
+  for more information.
+
+* If you make a copy of `python_delimiters` and modify it, you will break
+  its semantics.  Internally `python_delimiters` is really just a symbolic
+  token, and `split_delimiters` uses a secret, internal-only, manually
+  modified set of delimiters.  This was necessary because the `Delimiters`
+  object isn't sophisticated enough (yet) to express all the semantics
+  needed for `python_delimiters`.
+
+* When you call `split_delimiters` and pass in `python_delimiters`,
+  you *must* include the linebreak characters in the `text` string(s)
+  you pass in.  This is necessary to support the comment delimiter
+  correctly, and to enforce the no-linebreaks-inside-single-quoted-strings rule.
+  If you're using `big.lines` to pre-process a script before passing
+  it in to `split_delimiters`, consider calling it with `clip_linebreaks=False`.
+
+Here's a list of all the delimiters recognized by `python_delimiters`:
+
+* `()`, `{}`, and `[]`.
+* All four string delimiters: `'`, `"`, `'''`, and `"""`.
+* All possible string prefixes, including all valid combinations of
+  `b`, `f`, `r`, and `u`, in both lower and upper case.
+* Inside f-strings:
+    * The quoting markers `{{` and `}}` are passed through in `text`
+      unmodified.
+    * The converter (`!`) and format spec (`:`) inside the curly braces
+      inside an f-string.  These two delimiters are the only two that
+      use the new `change` value yielded by `split_delimiters`.
+* Line comments, which "open" with `#` and "close" with either a
+  linebreak (`\n`) or a carriage return (`\r`).  (Python's
+  "universal newlines" support should mean you won't normally
+  see carriage returns here... unless you specifically permit them.)
+
+See also `python_delimiters_version`.
+
+</dd></dl>
+
+#### `python_delimiters_version`
+
+<dl><dd>
+
+A dictionary mapping strings containing a Python major and minor version to
+`python_delimiters` objects.
+
+By default, `python_delimiters` parses the version of the Python language
+matching the version it's being run under.  If you run Python 3.12, and
+call `big.split_delimiters` and pass in `python_delimiters`, it will split
+delimiters based on Python 3.12.  If you instead wanted to parse using the
+semantics from Python 3.8, you would instead pass in `python_delimiters_version['3.8']`
+as the `delimiters` argument to `split_delimiters`.
+
+There are entries in `python_split_delimiters` for every version of
+Python supported by big (currently 3.6 to 3.13).
+
+</dd></dl>
+
 #### `re_partition(text, pattern, count=1, *, flags=0, reverse=False)`
 
 <dl><dd>
@@ -3481,7 +3622,7 @@ with `re.compile` using the `flags` you passed in.
 `string` should be the same type as `pattern` (or `pattern.pattern`).
 </dd></dl>
 
-#### `split_delimiters(s, delimiters={...}, *, state=())`
+#### `split_delimiters(s, delimiters={...}, *, state=(), yields=None)`
 
 <dl><dd>
 
@@ -3521,23 +3662,80 @@ whenever you see a close delimiter.  Since `split_delimiters` ensures
 that open and close delimiters match, you don't need to check them
 yourself!)
 
-Yields 3-tuples containing strings:
+Yields a object of type `SplitDelimitersValue`.  This object
+contains five fields:
 
-```
-    (text, open, close)
-```
+<dl><dt>
 
-where `text` is the text before the next opening or closing delimiter,
-`open` is the trailing opening delimiter,
-and `close` is the trailing closing delimiter.
-At least one of these three strings will always be non-empty.
-(If `open` is non-empty, `close` will be empty, and vice-versa.)
-If `s` doesn't end with an opening or closing delimiter,  the final
-tuple yielded will have empty strings for both `open` and `close`.
+`text`
 
-You may not specify backslash (`'\\'`) as an open delimiter.
+</dt><dd>
 
-Multiple `Delimiter` objects specified in `delimiters` may use
+A string, the text before the next opening, closing, or changing
+delimiter.
+
+</dd><dt>
+
+`open`
+
+</dt><dd>
+
+A string, the trailing opening delimiter.
+
+</dd><dt>
+
+`close`
+
+</dt><dd>
+
+A string, the trailing closing delimiter.
+
+</dd><dt>
+
+`change`
+
+</dt><dd>
+
+A string, the trailing change delimiter.
+
+</dd><dt>
+
+`yields`
+
+</dt><dd>
+
+An integer, either 3 or 4.
+
+</dd></dl>
+
+
+At least one of the four strings will always be non-empty.
+(Only one of `open`, `close`, and `change` will ever be non-empty in
+a single `SplitDelimitersValue` object.)  If `s` doesn't end with
+an opening or closing delimiter, the final value yielded will
+have empty strings for `open`, `close`, and `change`.
+
+The `yields` parameter to `split_delimiters` affects iteration over
+a `SplitDelimitersValue` object.  `yields` may be None, 3, or 4:
+
+* If `yields` is 3, when iterating over a `SplitDelimitersValue`
+  object, it will yield `text`, `open`, and `close` in that order.
+* If `yields` is 4, when iterating over a `SplitDelimitersValue`
+  object, it will yield `text`, `open`, `close`, and `change` in that order.
+* If yields is `None` (the default), `split_delimiters` will use
+  a value of 4 if its `delimiters` argument is `python_delimiters`,
+  and a value of 3 otherwise.
+
+(The `yields` parameter exists because previously `split_delimiters`
+always yielded an tuple containing three string values.  `python_delimiters`
+required adding the fourth string value, `change`.  Eventually
+`split_delimiters` will always yield an object yielding four values,
+but big is allowing for a transition period to minimize code breakage.
+See the release notes for [big version 0.12.5](#0125) for more information.)
+
+You may not specify backslash ('\\\\') as an open delimiter.
+
+Multiple Delimiter objects specified in delimiters may use
 the same close delimiter string.
 
 `split_delimiters` doesn't react if the string ends with
@@ -6190,15 +6388,139 @@ in the **big** test suite.
 
 ## Release history
 
-#### next version
+#### 0.12.5
 
-*under development, no release date yet*
+*2024/12/13*
 
 <dl><dd>
 
-* `PushbackIterator` no longer evaluates the iterator you pass in
-  in a boolean context.  (All we needed to do was compare it to `None`,
+* Added [`decode_python_script`](#decode_python_scriptscript--use_bomtrue-use_source_code_encodingtrue)
+  to the *big.text* module.
+  `decode_python_script` scans a binary Python script and
+  decodes it to Unicode--correctly.  Python scripts can
+  specify an explicit encoding in two diferent ways:
+  [a Unicode "byte order mark",](https://en.wikipedia.org/wiki/Byte_order_mark)
+  or [a PEP 263 "source file encoding" line.](https://peps.python.org/pep-0263/)
+  `decode_python_script` handles either, both, or neither.
+
+* Added [`read_python_file`](#read_python_filepath--newlinenone-use_bomtrue-use_source_code_encodingtrue)
+  to the *big.file* module.
+  `read_python_file` reads a binary Python file from the
+  filesystem and decodes it using `decode_python_script`.
+
+* Added [`python_delimiters`](#python_delimiters)
+  to the *big.text* module.  This is
+  a new predefined set of delimiters
+  for use with `split_delimeters`, enabling it to correctly
+  process Python scripts.  `python_delimiters` defines *all*
+  delimiters defined by Python, including all *100* possible
+  string delimiters (no kidding!).  If you want to parse the
+  delimiters of Python code, and you don't want to use the
+  Python tokenizer, you should use `python_delimiters`
+  with `split_delimiters`.
+
+  Note that defining `python_delimiters` correctly was difficult,
+  and big's `Delimiters` API isn't expressive enough to
+  express all of Python's semantics.  At this point the
+  `python_delimiters` object doesn't itself actually define all its
+  semantics; rather, at module load time it's compiled into a special
+  internal runtime format which is cached, and then there's
+  manually-written code that tweaks this compiled form so `python_delimiters`
+  can correctly handle Python's special cases.  So, you're encouraged
+  to use `python_delimiters`, but if you modify it and use the
+  modified version, the modified version won't inherit all
+  those tweaks, and will lose the ability to handle many of
+  Python's weirder semantics.
+
+  *Important note:* When you use `python_delimiters`, you *must*
+  include the linebreak characters in the lines you split using
+  `split_delimiters`.  This is necessary to support the comment
+  delimiter correctly, and to enforce the
+  no-linebreaks-inside-single-quoted-strings rule.
+
+  There can be small differences in Python's syntax from one
+  version to another.  `python_delimiters` is therefore
+  version-sensitive, using the semantics appropriate for the
+  version of Python it's being run under.  If you want to
+  parse Python delimiters using the semantics of another version
+  of the language, use instead `python_delimiters_version[s]`
+  where `s` is a string containing the dotted Python major and minor
+  version you want to use, for example `python_delimiters_version["3.10"]`
+  to use Python 3.10 semantics.  (At the moment there are
+  no differences between versions; this is planned for future
+  versions of big.)
+
+* Added [`python_delimiters_version`](#python_delimiters_version)
+  to the *big.text* module.
+  This maps simple Python version strings (`"3.6"`, `"3.13"`)
+  to `python_delimiters` values implementing the semantics
+  for that version.  Currently all the values of this dict
+  are identical, but that should change in the future.
+
+* A breaking API change to [`split_delimiters`](#split_delimiterss-delimiters--state-yieldsnone) is coming.
+
+  `split_delimiters` now yields an object that
+  can yield either three or four values.  Previous to 0.12.5, the
+  `split_delimiters` iterator always yielded a tuple of three values,
+  called `text`, `open`, and `close`.  But `python_delimiters`
+  required adding a fourth value, `change`.
+
+  When `change` is true, we are *changing* from one delimiter to
+  another, *without* entering a new nested delimiter.  The canonical
+  example of this is inside a Python f-string:
+
+      `f"{abc:35}"`
+
+  Here the colon (`:`) is a "change" delimiter.  Inside the curly
+  braces inside the f-string, *before* the colon, the hash character
+  (`#`) acts as a line comment character.  But *after* the colon
+  it's just another character.  We've changed semantics, but we
+  *haven't* pushed a new delimiter pair.  The only way to accurately
+  convey this behavior was to add this new `change` field to the values
+  yielded by `split_delimiters`.
+
+  The goal is to eventually transition to `split_delimiters` yielding
+  all four of these values (`text`, `open`, `close`, and `change`).
+  But this will be a gradual process; as of 0.12.5, existing
+  `split_delimiters` calls will continue to work unchanged.
+
+  `split_delimiters` now yields a custom object, called
+  `SplitDelimitersValue`.  This object is configurable to yield
+  either three or four values.  The rules are:
+
+  * If you pass in `yields=4` to `split_delimiters`,
+    the object it yields will yield four values.
+  * If you pass in `delimiters=python_delimiters` to `split_delimiters`,
+    the object it yields will yield four values.  (`python_delimiters`
+    is new, so any calls using it must be new code, therefore this
+    change won't break existing calls.)
+  * Otherwise,  the object yielded by `split_delimiters` will yield
+    *three* values, as it did in versions prior to 0.12.5.
+
+  `split_delimiters` will eventually change to always yielding
+  four values, but big won't publish this change until at least June 2025.
+  Six months after that change--at least December 2025--big will remove
+  the `yields` parameter to `split_delimiters`.
+
+* Minor semantic improvement:
+  [`PushbackIterator`](#pushbackiteratoriterablenone)
+  no longer
+  evaluates the iterator you pass in in a boolean context.
+  (All we really needed to do was compare it to `None`,
   so now that's all we do.)
+
+* A minor change to the
+  [`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse)
+  object used with
+  `split_delimiters`: previously, the `quoting` and
+  `escape` values had to agree, either both being true
+  or both being false.  However, `python_delimiters`
+  necessitated relaxing this restriction, as there are
+  some delimiters (`!` inside curly braces in an f-string,
+  `:` inside curly braces in an f-string) that are "quoting"
+  but don't have an escape string.  So now, the restriction
+  is simply that if `escape` is true, `quoting` must also
+  be true.
 
 </dd></dl>
 

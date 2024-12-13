@@ -34,6 +34,8 @@ try:
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
 
+from .text import decode_python_script
+
 
 __all__ = []
 
@@ -375,3 +377,31 @@ def translate_filename_to_unix(s):
     if not (isinstance(s, str) and s):
         raise ValueError("filename can't be empty")
     return s.translate(_unix_translation_table)
+
+
+@export
+def read_python_file(path, *,
+    newline=None,
+    use_bom=True,
+    use_source_code_encoding=True):
+    """
+    Opens, reads, and correctly decodes a Python script from a file.
+
+    path should specify the filesystem path to the file; it can
+    be any object accepted by builtins.open (a "path-like object").
+
+    Returns the script as a Unicode string.
+
+    Opens the file using builtins.open.  The newline parameter is
+    passed through to that function.
+
+    Decodes the script using big's decode_python_script function.
+    The use_bom and use_source_code_encoding parameters
+    are passed through to that function.
+    """
+    with open(path, "rb") as f:
+        script = f.read()
+
+    return decode_python_script(script,
+        use_bom=use_bom,
+        use_source_code_encoding=use_source_code_encoding)

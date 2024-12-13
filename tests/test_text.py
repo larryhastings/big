@@ -28,9 +28,12 @@ import bigtestlib
 bigtestlib.preload_local_big()
 
 import big.all as big
+from big.all import lines, python_delimiters, read_python_file, split_delimiters
 import copy
 import itertools
 import math
+import os.path
+import pathlib
 import re
 import sys
 import textwrap
@@ -107,6 +110,8 @@ def to_bytes(o): # pragma: no cover
             multiline=o.multiline,
             quoting=o.quoting,
             )
+    if isinstance(o, big.SplitDelimitersValue):
+        return big.SplitDelimitersValue(to_bytes(o.text), to_bytes(o.open), to_bytes(o.close), to_bytes(o.change), o.yields)
     return o
 
 
@@ -473,6 +478,8 @@ def toy_multisplit_original(s, separators): # pragma: no cover
 
 
 class BigTextTests(unittest.TestCase):
+
+    maxDiff = None
 
     def test_whitespace_and_linebreaks(self):
         # ensure that big.whitespace and big.linebreaks
@@ -3113,9 +3120,8 @@ class BigTextTests(unittest.TestCase):
 
     def test_split_delimiters(self):
 
-        self.maxDiff = 2**32
-
         D = big.Delimiter
+        def SDV(t, o, cl, ch):  return big.SplitDelimitersValue(t, o, cl, ch, 3)
 
         def test(s, expected, *, delimiters=big.split_delimiters_default_delimiters, state=()):
             empty = ''
@@ -3152,51 +3158,51 @@ class BigTextTests(unittest.TestCase):
 
         test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
             (
-                ('a',                '[',  ''),
-                ('x',                 '', ']'),
-                (' = foo',           '(',  ''),
-                ('',                 '"',  ''),
-                ('howdy (folks)\\n',  '', '"'),
-                (', ',               '{',  ''),
-                ('1:2, 3:4',          '', '}'),
-                ('',                  '', ')'),
+                SDV('a',                '[',  '', ''),
+                SDV('x',                 '', ']', ''),
+                SDV(' = foo',           '(',  '', ''),
+                SDV('',                 '"',  '', ''),
+                SDV('howdy (folks)\\n',  '', '"', ''),
+                SDV(', ',               '{',  '', ''),
+                SDV('1:2, 3:4',          '', '}', ''),
+                SDV('',                  '', ')', ''),
             ),
             delimiters=big.split_delimiters_default_delimiters_bytes, # test default
             )
 
         test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
             (
-                ('a', '[',  ''),
-                ('',  '[',  ''),
-                ('',  '[',  ''),
-                ('z',  '', ']'),
-                ('',   '', ']'),
-                ('',   '', ']'),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('q',  '', '}'),
-                ('',   '', '}'),
-                ('',   '', '}'),
-                ('',   '', '}'),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('z',  '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('!',  '',  ''),
+                SDV('a', '[',  '', ''),
+                SDV('',  '[',  '', ''),
+                SDV('',  '[',  '', ''),
+                SDV('z',  '', ']', ''),
+                SDV('',   '', ']', ''),
+                SDV('',   '', ']', ''),
+                SDV('',  '{',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('q',  '', '}', ''),
+                SDV('',   '', '}', ''),
+                SDV('',   '', '}', ''),
+                SDV('',   '', '}', ''),
+                SDV('',  '[',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('',  '[',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('',  '[',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('',  '[',  '', ''),
+                SDV('',  '{',  '', ''),
+                SDV('z',  '', '}', ''),
+                SDV('',   '', ']', ''),
+                SDV('',   '', '}', ''),
+                SDV('',   '', ']', ''),
+                SDV('',   '', '}', ''),
+                SDV('',   '', ']', ''),
+                SDV('',   '', '}', ''),
+                SDV('',   '', ']', ''),
+                SDV('!',  '',  '', ''),
             ),
             delimiters=None,
             )
@@ -3204,10 +3210,10 @@ class BigTextTests(unittest.TestCase):
         # test state
         test('x"], foo);}',
             (
-                ('x',     '', '"'),
-                ('',      '', ']'),
-                (', foo', '', ')'),
-                (';',     '', '}'),
+                SDV('x',     '', '"', ''),
+                SDV('',      '', ']', ''),
+                SDV(', foo', '', ')', ''),
+                SDV(';',     '', '}', ''),
             ), state='{(["')
 
         with self.assertRaises(ValueError):
@@ -3219,19 +3225,19 @@ class BigTextTests(unittest.TestCase):
         # test escapes
         test(r"foo('ab\'cd')",
             (
-                ( 'foo',    '(', '' ),
-                ( '',       "'", '' ),
-                (r"ab\'cd", '',  "'"),
-                ( '',       '',  ')'),
+                SDV( 'foo',    '(', '' , ''),
+                SDV( '',       "'", '' , ''),
+                SDV(r"ab\'cd", '',  "'", ''),
+                SDV( '',       '',  ')', ''),
             ),
             )
 
         test(r'foo("ab\"cd")',
             (
-                ( 'foo',    '(', '' ),
-                ( '',       '"', '' ),
-                (r'ab\"cd', '',  '"'),
-                ( '',       '',  ')'),
+                SDV( 'foo',    '(', '' , ''),
+                SDV( '',       '"', '' , ''),
+                SDV(r'ab\"cd', '',  '"', ''),
+                SDV( '',       '',  ')', ''),
             ),
             )
 
@@ -3243,26 +3249,26 @@ class BigTextTests(unittest.TestCase):
         # but the others delimiters permit it
         test('foo([{ab\ncd}])',
             (
-                ('foo',    '(', '' ),
-                ('',       '[', '' ),
-                ('',       '{', '' ),
-                ('ab\ncd', '',  '}'),
-                ('',       '',  ']'),
-                ('',       '',  ')'),
+                SDV('foo',    '(', '' , ''),
+                SDV('',       '[', '' , ''),
+                SDV('',       '{', '' , ''),
+                SDV('ab\ncd', '',  '}', ''),
+                SDV('',       '',  ']', ''),
+                SDV('',       '',  ')', ''),
             ))
 
         # test multi-character delimiters and escape
         test('abc^Sdef<<gh><i>>klm^Xno**^Xp*^Xqrs^Qtuv<<wxy>>z',
             (
-                ('abc',      '^S', ''),
-                ('def',      '<<', ''),
-                ('gh><i',    '',   '>>'),
-                ('klm',      '^X', ''),
-                ('no**^Xp*', '',   '^X'),
-                ('qrs',      '',   '^Q'),
-                ('tuv',      '<<', ''),
-                ('wxy',      '',   '>>'),
-                ('z',        '',   ''),
+                SDV('abc',      '^S', '',   ''),
+                SDV('def',      '<<', '',   ''),
+                SDV('gh><i',    '',   '>>', ''),
+                SDV('klm',      '^X', '',   ''),
+                SDV('no**^Xp*', '',   '^X', ''),
+                SDV('qrs',      '',   '^Q', ''),
+                SDV('tuv',      '<<', '',   ''),
+                SDV('wxy',      '',   '>>', ''),
+                SDV('z',        '',   '',   ''),
                 ),
             delimiters = {
                 '^S': D('^Q'),
@@ -3290,10 +3296,10 @@ class BigTextTests(unittest.TestCase):
             #      ^ --- but really we want to split here
             #       ^ -- and here
             (
-                ('a', '[', ''),
-                ('b', '(', ''),
-                ('c', '',  ')'),
-                ('',  '',  ']'),
+                SDV('a', '[', '',   ''),
+                SDV('b', '(', '',   ''),
+                SDV('c', '',  ')', ''),
+                SDV('',  '',  ']', ''),
                 ),
             delimiters = cruel_delimiters_1,
             )
@@ -3310,10 +3316,10 @@ class BigTextTests(unittest.TestCase):
             #      ^ --- but really we want to split here
             #       ^ -- and here
             (
-                ('a',   '[', ''),  # now in '['
-                ('b',   '(', ''),  # now in '('
-                ('c])', '',  ')'), # ] escapes ), and then second ) closes
-                ('',    '',  ']'), # final ] closes
+                SDV('a',   '[', '',  ''),  # now in '['
+                SDV('b',   '(', '',  ''),  # now in '('
+                SDV('c])', '',  ')', ''), # ] escapes ), and then second ) closes
+                SDV('',    '',  ']', ''), # final ] closes
                 ),
             delimiters = cruel_delimiters_2,
             )
@@ -3333,8 +3339,8 @@ class BigTextTests(unittest.TestCase):
             #     ^ ---- but really we want to split here
             #      ^^ -- and here
             (
-                ('a',  '<[', ''),
-                ('b)', '',   ']>'),
+                SDV('a',  '<[', '',   ''),
+                SDV('b)', '',   ']>', ''),
                 ),
             delimiters = cruel_delimiters_3,
             )
@@ -3351,8 +3357,8 @@ class BigTextTests(unittest.TestCase):
             #      ^ --- but really we want to split here
             #       ^ -- and here
             (
-                ('a',    '<', ''),
-                ('b\\>', '',   '>'),
+                SDV('a',    '<',  '',  ''),
+                SDV('b\\>', '',   '>', ''),
                 ),
             delimiters = cruel_delimiters_4,
             )
@@ -3369,8 +3375,8 @@ class BigTextTests(unittest.TestCase):
             #    ^^ ---- but really we want to split here
             #      ^ -- and here
             (
-                ('a',    '<', ''),
-                ('b\\>', '',   '>'),
+                SDV('a',    '<', '',   ''),
+                SDV('b\\>', '',   '>', ''),
                 ),
             delimiters = cruel_delimiters_5,
             )
@@ -3409,11 +3415,7 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             test('delimiters contains <angle> <brackets> as both open and close delimiters', None, delimiters={'<': big.Delimiter(close='>'), 'x': big.Delimiter(close='<'), '{': big.Delimiter(close='}'), 'q': big.Delimiter(close='{')})
         with self.assertRaises(ValueError):
-            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=True, escape='')})
-        with self.assertRaises(ValueError):
-            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
-        with self.assertRaises(ValueError):
-            test('quoting and escape must either both be true or both be false 1', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
+            test('if quoting is false, escape must be false', None, delimiters={'<': big.Delimiter(close='x', quoting=False, escape='z')})
 
         with self.assertRaises(SyntaxError):
             test('by default quote marks are now single-line only "ab\n", test 1, complete quoted string', None, )
@@ -3434,11 +3436,9 @@ class BigTextTests(unittest.TestCase):
             )
 
         with self.assertRaises(ValueError):
-            D(close='x', escape='', quoting=True, multiline=True)
-        with self.assertRaises(ValueError):
-            D(close='x', escape='', quoting=True, multiline=False)
-        with self.assertRaises(ValueError):
             D(close='x', escape='z', quoting=False, multiline=True)
+        with self.assertRaises(ValueError):
+            D(close='x', escape='z', quoting=False, multiline=False)
         with self.assertRaises(ValueError):
             D(close='\\')
         with self.assertRaises(ValueError):
@@ -4081,6 +4081,131 @@ class BigTextTests(unittest.TestCase):
             L(li, 7, 5, 'c = d', leading='    ', trailing='  '),
             ])
 
+    def test_python_delimiters_on_big_source_tree(self):
+        big_root = pathlib.Path(sys.argv[0]).absolute().resolve().parent.parent
+        python_delimiters = big.python_delimiters
+        for root, dirs, files in os.walk(big_root):
+            for file in files:
+                if file.endswith(".py"):
+                    path = os.path.join(root, file)
+                    expect_decode_failure = file.startswith("invalid_")
+                    try:
+                        text = read_python_file(path)
+                        self.assertFalse(expect_decode_failure, f"failed on {file}")
+                    except UnicodeDecodeError as e:
+                        self.assertTrue(expect_decode_failure, f"failed on {file}")
+                        continue
+                    state = []
+                    for info, line in lines(text, clip_linebreaks=False):
+                        for text, open, close, change in split_delimiters(line, python_delimiters, state=state):
+                            if open:
+                                state.append(open)
+                            elif close:
+                                state.pop()
+                    self.assertFalse(state)
+
+    def test_python_delimiters_regressions(self):
+        def SDV(t, o, cl, ch): return big.SplitDelimitersValue(t, o, cl, ch, 4)
+
+        def test(s, expected):
+            empty = ''
+            got = tuple(big.split_delimiters(s, python_delimiters))
+
+            flattened = []
+            for t in got:
+                flattened.extend(t)
+            s2 = empty.join(flattened)
+            self.assertEqual(s, s2)
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+        # regression test!  this was broken in 0.12.3 and 0.12.4.
+        # it was fixed in 0.12.5.
+        #
+        # the problem: the ACTION_FLUSH action inside split_delimiters
+        # forgot to add the length of the flushed delimiter to consumed.
+        # so if we had to resplit, we wouldn't resplit where we should--
+        # we'd start a few characters early.
+        #
+        # I'm writing inline comments below to describe what happened
+        # while this was broken.  To recreate the broken behavior,
+        # change the code that handles _ACTION_FLUSH so it *doesn't*
+        # add the length of the flushed delimiter to consumed.
+        # Currently that's done by a line that looks like this:
+        #       consumed += len(delimiter)
+        test("'{}' 'b'\n",
+            (
+                # we see the ' and push the dict that handles single-quote state.
+                # we add the length of open to consumed.
+                SDV('',    "'", '', ''),
+                # consumed=1
+                # stack = [ "'" ]
+
+                # we see the { and say, oh, we ignore that delimiter, flush it.
+                #
+                # we append { to the text but DON'T add len(delimiter) to consumed!
+                # we've already hit our bug!  consumed is now 1 less than it should be.
+                # it should be 2 but it's only 1.
+                # still looking for our close delimiter.
+                #
+                # we see the } and do the same thing--it's a delimiter,
+                # we ignore and flush it, we DON'T add its length to consumed.
+                # consumed is now 2 less than it should be.
+                # it should be 3 but it's only 1.
+                # still looking for our close delimiter.
+                #
+                # we see the ' which is our close delimiter.
+                # we pop back to the default state dict.
+                # we (correctly, for once!) add len(open) to consumed.
+                SDV('{}',  '',  "'", ''),
+                # consumed = 2   BUT IT SHOULD BE 4
+                # stack = []
+
+                # we see the ' and push the dict that handles single-quote state.
+                # we add len(text) and len(open) to consumed.
+                SDV(' ',  "'",  '', ''),
+                # consumed = 4   BUT IT SHOULD BE 6
+                # stack = [ "'" ]
+
+                # we see the b' and oh! we ignore that delimiter, flush it.
+                # since it's a multiple character delimiter, we FLUSH 1 AND RESPLIT.
+                # we flush the first character of the delimiter, "b",
+                # and we return close="'", and we add 2 to consumed.
+                SDV('b',  '',     "'", ''),
+                # consumed = 6   BUT IT SHOULD BE 8
+                # stack = []
+
+                # And here's where we crash.
+                # We resplit, starting at offset 6, which is here
+                #       v
+                # '{}' 'b'\n
+                #         ^
+                # but it SHOULD be here at offset 8.
+                #
+                # So, when we had the bug, here we'd erroneously yield
+                #     ('', "b'", '')
+                # and stack would be [ "b'"]
+                #
+                # And *then* we'd see the newline, and complain because
+                # newline is illegal inside a single-quoted string, kerblam.
+                #
+                # Thank goodness we fixed the bug!  So now we yield the
+                # final, correct value:
+
+                SDV('\n', '', '', ''),
+                ),
+            )
 
     def test_lines_strip_indent(self):
         self.maxDiff = 2**32
@@ -5178,6 +5303,9 @@ class BigTextTests(unittest.TestCase):
         self.assertEqual(big.format_map("d\\e\\g\\h{q}", {'q':'q'}), 'd\\e\\g\\hq')
         self.assertEqual(big.format_map("\\{q\\}", {'q':'q'}), '{q}')
         self.assertEqual(big.format_map("{q\\x}", {'q\\x':'z'}), 'z')
+
+    def test_decode_python_script(self):
+        pass
 
 
 def run_tests():

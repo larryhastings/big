@@ -201,6 +201,20 @@ class BigFileTmpdirTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.translate_filename_to_unix(35)
 
+    def test_read_python_file(self):
+        """
+        read_python_file doesn't need any tests here.
+        It's given a thorough workout elsewhere in the unit test suite:
+                file tests/test_text.py
+            function test_python_delimiters_on_big_source_tree()
+
+        Also, it's a thin wrapper around decode_python_script,
+        which also gets a nice workout:
+                file tests/test_text.py
+            function test_decode_python_script()
+        """
+        pass
+
 
 def run_tests():
     bigtestlib.run(name="big.file", module=__name__)

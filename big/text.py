@@ -2224,8 +2224,9 @@ class Delimiter:
         other delimiters in the text until it encounters the matching close delimiter.
         (Single- and double-quotes set this to True.)
     escape is a string of maximum length 1: if true, when inside this pair of delimiters,
-        you can escape the closing delimiter using this string.  When quoting is true,
-        escape may not be empty, and when quoting is false escape must be empty.
+        you can escape the closing delimiter using this string.  escape can only be true
+        when quoting is true, although escape may always be false (for example,
+        Python's raw strings).
     multiline is a boolean: are linebreak characters permitted inside these delimiters?
         multiline may only be false when quoting is true.
 
@@ -2254,8 +2255,10 @@ class Delimiter:
                 raise ValueError("close delimiter must not be b'\\'")
 
         # they can't both be false, and they can't both be true
-        if bool(escape) != bool(quoting):
-            raise ValueError("quoting and escape mismatch; they must either both be true, or both be false")
+        # if bool(escape) != bool(quoting):
+        #     raise ValueError("quoting and escape mismatch; they must either both be true, or both be false")
+        if bool(escape) and not bool(quoting):
+            raise ValueError("quoting and escape mismatch; if escape is true, quoting must be true")
 
         # if quoting=False, you can only have multiline=True
         if not (quoting or multiline):
@@ -2294,7 +2297,7 @@ class Delimiter:
             )
 
     def __hash__(self):
-        return hash(self._close) ^ hash(self._escape) ^ hash(self._quoting) ^ hash(self._multiline)
+        return hash("Delimiter") ^ hash(self._close) ^ hash(self._escape) ^ hash(self._quoting) ^ hash(self._multiline)
 
     def copy(self):
         return Delimiter(self)
@@ -2344,6 +2347,7 @@ _ACTION_ILLEGAL = "<action: illegal>"
 _ACTION_ILLEGAL_LINEBREAK = "<action: illegal linebreak>"
 _ACTION_FLUSH = "<action: flush>"
 _ACTION_FLUSH_1_AND_RESPLIT = "<action: flush 1 and resplit>"
+_ACTION_PROCESS_1_AND_RESPLIT = "<action: process 1 and resplit>"
 
 class _ACTION_TRUNCATE_TO_S_AND_RESPLIT:
     pass
@@ -2355,6 +2359,11 @@ class _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR(str, _ACTION_TRUNCATE_TO_S_AND_RESPL
 class _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES(bytes, _ACTION_TRUNCATE_TO_S_AND_RESPLIT):
     def __repr__(self): # pragma: nocover
         return f"_ACTION_TRUNCATE_TO_S_AND_RESPLIT({bytes(self)!r})"
+
+class _ACTION_GOTO_STATE(dict):
+    def __repr__(self): # pragma: nocover
+        return f"_ACTION_GOTO_STATE({dict(self)!r})"
+
 
 @functools.lru_cache(maxsize=None)
 def _delimiters_to_state_and_tokens(delimiters, is_bytes):
@@ -2381,6 +2390,8 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     The state is consumed by the split_delimiters generator, below.
     See that for details.
     """
+    delimiters = list(delimiters)
+
     if is_bytes:
         s_type = bytes
         s_type_description = "bytes"
@@ -2400,30 +2411,28 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     all_openers = set()
     all_escapes = set()
     nested_closers = set()
-    all_linebreaks = set()
+    all_linebreaks = set(linebreaks)
 
-    for k, v in delimiters:
-        if not isinstance(k, s_type):
-            raise TypeError(f"open delimiter {k!r} must be {s_type_description}, not {not_s_type_description}")
-        if not isinstance(v, Delimiter):
-            raise TypeError(f"delimiter values must be Delimiter, not {v!r}")
-        if not isinstance(v.close, s_type):
-            raise TypeError(f"close delimiter {v.close!r} must be {s_type_description}, not {not_s_type_description}")
-        all_openers.add(k)
-        all_closers.add(v.close)
-        if not isinstance(v.escape, s_type):
-            raise TypeError(f"Delimiter: escape {v.escape!r} must be {s_type_description}, not {not_s_type_description}")
-        if v.quoting:
-            assert v.escape
-            all_escapes.add(v.escape)
-        else:
-            assert not v.escape
-            nested_closers.add(v.close)
+    for open, delimiter in delimiters:
+        if not isinstance(open, s_type):
+            raise TypeError(f"open delimiter {open!r} must be {s_type_description}, not {not_s_type_description}")
+        if not isinstance(delimiter, Delimiter):
+            raise TypeError(f"delimiter values must be Delimiter or SymbolicDelimiter, not {delimiter!r}")
 
-        # if any delimiter disallows linebreaks, add all linebreaks to the set of tokens
-        if not (v.multiline or all_linebreaks):
-            all_linebreaks = set(linebreaks)
+        all_openers.add(open)
 
+        if isinstance(delimiter, Delimiter):
+            if not isinstance(delimiter.close, s_type):
+                raise TypeError(f"close delimiter {delimiter.close!r} must be {s_type_description}, not {not_s_type_description}")
+            if not isinstance(delimiter.escape, s_type):
+                raise TypeError(f"Delimiter: escape {delimiter.escape!r} must be {s_type_description}, not {not_s_type_description}")
+            all_closers.add(delimiter.close)
+            if delimiter.quoting:
+                if delimiter.escape:
+                    all_escapes.add(delimiter.escape)
+            else:
+                assert not delimiter.escape
+                nested_closers.add(delimiter.close)
 
     in_both_openers_and_closers = all_openers & nested_closers
     if in_both_openers_and_closers:
@@ -2435,27 +2444,30 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
             prefix = 'these characters '
         raise ValueError(f"{prefix}{in_both_openers_and_closers!r} cannot be both an opening and closing delimiter")
 
-    all_delimiter_tokens = all_openers | all_closers | all_escapes
-    all_tokens = all_delimiter_tokens | all_linebreaks
+    all_delimiter_tokens = all_openers | all_closers
+    all_tokens = all_delimiter_tokens | all_escapes | all_linebreaks
 
     # all the non-quoting states reuse the same open dictionary.
     # initial_state = _DelimiterState(open={}, close=None, illegal=all_closers, single_line_only=False)
 
-    push_delimiters = {}
+    delimiters_that_push_a_new_state = {}
 
-    non_quoting_default_actions = {token: _ACTION_ILLEGAL for token in all_delimiter_tokens }
-
-    if all_linebreaks:
-        linebreaks_are_illegal = {c: _ACTION_ILLEGAL_LINEBREAK for c in linebreaks}
+    # "non_quoting_state_with_default_actions" is a base used for
+    # states representing a non-quoting delimiter, where all the
+    # usual state transitions happen.
+    non_quoting_state_with_default_actions = {token: _ACTION_ILLEGAL for token in all_delimiter_tokens }
+    make_linebreaks_illegal = {c: _ACTION_ILLEGAL_LINEBREAK for c in linebreaks}
+    ignore_linebreaks = {c: _ACTION_FLUSH for c in linebreaks}
 
     # list of states that want all the default openers after processing
-    states_that_want_push_delimiters = []
+    states_to_update_with_all_delimiters_that_push = []
 
     # the initial state contains all the open delimiters,
     # isn't quoting, allows multiline, and doesn't have
     # a close delimiter or an escape string.
-    initial_state = non_quoting_default_actions.copy()
-    states_that_want_push_delimiters.append(initial_state)
+    initial_state = non_quoting_state_with_default_actions.copy()
+    initial_state.update(ignore_linebreaks)
+    states_to_update_with_all_delimiters_that_push.append(initial_state)
 
     # for every state, representing a delimiter d:
     #
@@ -2517,11 +2529,10 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
             all_delimiter_characters = set(iterate_over_delimiter(delimiter.close))
             if delimiter.escape:
                 all_delimiter_characters |= set(iterate_over_delimiter(delimiter.escape))
-
         else:
             # non-quoting delimiter
-            state = non_quoting_default_actions.copy()
-            states_that_want_push_delimiters.append(state)
+            state = non_quoting_state_with_default_actions.copy()
+            states_to_update_with_all_delimiters_that_push.append(state)
             all_delimiter_characters = None
 
         delimiters_and_startswith_actions = [ (delimiter.close, truncate_to_s_type(delimiter.close)) ]
@@ -2540,24 +2551,335 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
                             state[t] = _ACTION_FLUSH_1_AND_RESPLIT
 
         if delimiter.quoting and (not delimiter.multiline):
-            state.update(linebreaks_are_illegal)
+            state.update(make_linebreaks_illegal)
+        else:
+            state.update(ignore_linebreaks)
 
         state[delimiter.close] = _ACTION_POP
 
         if delimiter.escape:
             state[delimiter.escape] = _ACTION_ESCAPE
 
-        assert open not in push_delimiters
-        push_delimiters[open] = state
+        assert open not in delimiters_that_push_a_new_state
+        delimiters_that_push_a_new_state[open] = state
 
-    for state in states_that_want_push_delimiters:
-        state.update(push_delimiters)
+    for state in states_to_update_with_all_delimiters_that_push:
+        state.update(delimiters_that_push_a_new_state)
 
     return initial_state, all_tokens
 
 
+"""
+python_delimiters is a dict of delimiters, suitable for use with split_delimiters,
+implementing *all* relevant Python delimiters.  This includes all possible string
+delimiters, including all possible prefixes.
+
+According to the Python documentation:
+
+    https://docs.python.org/3/reference/lexical_analysis.html#string-and-bytes-literals
+
+Python supports four letters as prefixes for strings, in certain combinations.
+Those letters are:
+
+    b - means "bytes string"
+    f - means "f-string"
+    r - means "raw string"
+    u - means "unicode string"
+
+'u' was added in Python 3.2, and 'f' was added in Python 3.6.
+A new one, 't', may be added soon, see PEP 750.
+
+What combinations are valid?  There are some rules:
+    * u cannot be used with any other prefix character.
+    * f cannot be used with b.
+
+Rather than work it out, the easiest way is to just ask Python.
+Here's a short program that tests all possible combinations and
+tells you which ones are valid:
+
+----------------------------------------------------------------------------
+
+all_prefixes = "bfru"
+
+import itertools
+
+print("prefixes = ['']")
+
+for r in range(1, len(all_prefixes) + 1):
+    for p in itertools.permutations(all_prefixes, r):
+        p = ''.join(p)
+        expr = (f"{p}'abc'")
+        try:
+            value = eval(expr)
+            print(f"prefixes.append({p!r})")
+        except SyntaxError:
+            print(f"# invalid: {p}")
+
+----------------------------------------------------------------------------
+
+The list is short, here it is:
+
+prefixes = [
+    '',
+    'b',
+    'f',
+    'r',
+    'u',
+    'br',
+    'fr',
+    'rb',
+    'rf',
+    ]
+
+However, Python allows you to use the upper-case version of
+any letter, in any combination.  So here's the *actual* list.
+
+"""
+
+# This "workspace" is just a convenient way of creating
+# a namespace we can do some work in without cluttering
+# the module's namespace.  We get to use all the symbols
+# we want, and when we're done we just export the symbols
+# we want to keep and throw the rest away.
+class Workspace:
+    all_string_prefixes = [
+        '',
+        'b',
+        'B',
+        'f',
+        'F',
+        'r',
+        'R',
+        'u',
+        'U',
+        'br',
+        'bR',
+        'Br',
+        'BR',
+        'fr',
+        'fR',
+        'Fr',
+        'FR',
+        'rb',
+        'rB',
+        'Rb',
+        'RB',
+        'rf',
+        'rF',
+        'Rf',
+        'RF',
+        ]
+
+    assert sys.version_info.major >= 3
+    pep_701_f_strings_in_the_grammar = (sys.version_info.major > 3) or (sys.version_info.minor >= 12)
+
+    python_delimiters = split_delimiters_default_delimiters.copy()
+
+    # In Python "raw" strings, backslash still escapes a quote character.  This is legal:
+    #     r'abc\'def'
+    # So, for our purposes, the raw prefix doesn't matter.  All we care about is whether or not
+    # it quotes the closing quote mark, and it does.  The same is true for triple-quoted strings;
+    # even in a raw triple-quoted string, you can escape single-quote marks.
+
+    all_four_quotes = ("'", '"', "'''", '"""')
+    all_quote_delimiters = [Delimiter(quotes, escape='\\', multiline=len(quotes) == 3, quoting=True) for quotes in all_four_quotes]
+
+    for prefix in all_string_prefixes:
+        for d in all_quote_delimiters:
+            python_delimiters[prefix + d.close] = d
+
+    # this only works if the lines you parse include the trailing newline characters.
+    python_delimiters['#'] = Delimiter('\n', escape=None, multiline=False, quoting=True)
+
+    _python_delimiters_cache = _delimiters_to_state_and_tokens(tuple(python_delimiters.items()), False)
+
+    # now we're gonna do a little manual surgery
+    # on the computed state transitions for _python_delimiters_cache.
+    # there's no way to express this using the Delimiters API (yet?), sorry.
+    #
+    # the hacks all have to do with { inside f-strings:
+    # * although f-strings are "quoting", { is still active inside.
+    # * however, this version of the { delimiter doesn't allow *nested* { (directly).
+    # * also, {{ and }} is ignored inside f-strings.  this means we have to handle
+    #   these tokens everywhere: inside f-strings, we flush 'em, and everywhere
+    #   else we have to "truncate to the first { and resplit" so they get treated
+    #   like two {'s or two }'s like they should.
+
+    initial_state, all_tokens = _python_delimiters_cache
+
+    # we're gonna add these three tokens.
+    # every state (every dict reachable from initial_state)
+    # needs to have correct actions mapped for these three new tokens.
+    all_tokens.add('{{')
+    all_tokens.add('}}')
+    all_tokens.add(':')
+    all_tokens.add('!')
+
+    # most states will handle {{ and }} by splitting off the
+    # first character and handling that separately,
+    # then (re-)parsing the remaining text starting with the second character.
+    truncate_to_one_lcurly_and_resplit = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR('{')
+    truncate_to_one_rcurly_and_resplit = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR('}')
+
+    initial_state['{{'] = truncate_to_one_lcurly_and_resplit
+    initial_state['}}'] = truncate_to_one_rcurly_and_resplit
+
+    # fstring_lcurly is a special tweaked state
+    # for { inside an f-string.  (*before* the colon or the ending }.)
+    #
+    #        +-- inside an f-string,
+    #        |
+    #        |   +-- inside curly braces,
+    #        |   |
+    #       vv   v
+    # print(f'foo{abc:xyz}')
+    #             ^^^
+    #              |
+    #              +-- the text before the colon or } is in fstring_lcurly.
+    fstring_lcurly = initial_state['{'].copy()
+
+    # fstring_exclamation_mark is a special tweaked state
+    # used after the ! inside the { inside an f-string.
+    #
+    #        +-- inside an f-string,
+    #        |
+    #        |   +-- inside curly braces,
+    #        |   |
+    #        |   |   +-- and after the colon,
+    #        |   |   |
+    #       vv   v   v
+    # print(f'foo{abc!a}')
+    #                ^^
+    #                 |
+    #                 +-- this text here is in state fstring_exclamation_mark.
+    fstring_exclamation_mark = _ACTION_GOTO_STATE()
+    # technically, once we enter this state, the only allowable next characters
+    # are "a", "s", and "r".  after that you must have either ":" or "}".
+    # but we're lazy.  so we just copy the behavior from a quoted string.
+    fstring_exclamation_mark.update(initial_state['"'])
+    # reminder: _ACTION_FLUSH means "this character has no special meaning, add it to 'text' and move on."
+    fstring_exclamation_mark['"'] = _ACTION_FLUSH
+    fstring_exclamation_mark['}}'] = truncate_to_one_rcurly_and_resplit
+    # } should pop out of this state back to the previous nested state.
+    fstring_exclamation_mark['}'] = _ACTION_POP
+
+    # fstring_colon is a special tweaked state used
+    # after the : inside the { inside an f-string.
+    #
+    #        +-- inside an f-string,
+    #        |
+    #        |   +-- inside curly braces,
+    #        |   |
+    #        |   |   +-- and after the colon,
+    #        |   |   |
+    #       vv   v   v
+    # print(f'foo{abc:xyz}')
+    #                 ^^^
+    #                  |
+    #                  +-- this text here is in state fstring_colon.
+    fstring_colon = _ACTION_GOTO_STATE()
+    # this state behaves mostly like a quoted string;
+    # it ignores most delimiters.
+    fstring_colon.update(initial_state['"'])
+    # reminder: _ACTION_FLUSH means "this character has no special meaning, add it to 'text' and move on."
+    fstring_colon['"'] = _ACTION_FLUSH
+    fstring_colon['#'] = _ACTION_FLUSH
+    fstring_colon['\n'] = _ACTION_FLUSH
+    fstring_colon['{{'] = truncate_to_one_lcurly_and_resplit
+    fstring_colon['}}'] = truncate_to_one_rcurly_and_resplit
+    # } should pop out of this state back to the previous nested state.
+    fstring_colon['}'] = _ACTION_POP
+    # { should nest into a normal { state, not this funny f-string one.
+    fstring_colon['{'] = initial_state['{']
+
+    # comment_state is used to handle comments anywhere.
+    # allow \r as well as \n to end a comment.
+    comment_state = initial_state['#']
+    comment_state['\r'] = comment_state['\n']
+
+    # all these tokens are flushed (ignored and appended to 'text')
+    # when inside a state representing being inside a string.
+    tokens_flushed_inside_strings = ('{{', '}}', '#', '\n')
+
+    for open, d in initial_state.items():
+        is_dict = isinstance(d, dict)
+        if is_dict:
+            # *everybody* flushes colon and exclamation mark.
+            # (*except* fstring_curly and fstring_exclamation_mark.
+            # we'll manually fix those after the loop.)
+            d['!'] = d[':'] = _ACTION_FLUSH
+
+        if ('"' in open) or ("'" in open):
+            # it's a state for a string delimiter
+            assert is_dict
+
+            for t in tokens_flushed_inside_strings:
+                d[t] = _ACTION_FLUSH
+
+            if 'f' in open.lower():
+                # this state specifically represents
+                # being inside an f-string delimiter,
+                # use the special state for { inside f-strings.
+                d['{'] = fstring_lcurly
+        elif is_dict:
+            # this delimiter doesn't open a string,
+            # it's some other open delimiter.
+            # (open delimiters are the only guys who get dicts.)
+            d['{{'] = truncate_to_one_lcurly_and_resplit
+            d['}}'] = truncate_to_one_rcurly_and_resplit
+
+    # now fix ! and : just for fstring_lcurly
+    fstring_lcurly['!'] = fstring_exclamation_mark
+    fstring_lcurly[':'] = fstring_colon
+
+    # and fix : for fstring_exclamation_mark.
+    fstring_exclamation_mark[':'] = fstring_colon
+
+
+python_delimiters = Workspace.python_delimiters
+_python_delimiters_cache = Workspace._python_delimiters_cache
+del Workspace
+
+_export_name('python_delimiters')
+
+python_delimiters_version = { f"3.{minor}": python_delimiters for minor in range(6, 14) }
+_export_name('python_delimiters_version')
+
 @_export
-def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_bytes):
+class SplitDelimitersValue:
+    __slots__ = ['text', 'open', 'close', 'change', 'yields']
+
+    def __init__(self, text, open, close, change, yields):
+        self.text = text
+        self.open = open
+        self.close = close
+        self.change = change
+        assert yields in (3, 4)
+        self.yields = yields
+
+    def __repr__(self):
+        return f"SplitDelimitersValue(text={self.text!r}, open={self.open!r}, close={self.close!r}, change={self.change!r}, yields={self.yields!r})"
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, SplitDelimitersValue)
+            and (self.text == other.text)
+            and (self.open == other.open)
+            and (self.close == other.close)
+            and (self.change == other.change)
+            and (self.yields == other.yields)
+            )
+
+    def __iter__(self):
+        yield self.text
+        yield self.open
+        yield self.close
+        if self.yields == 4:
+            yield self.change
+
+
+@_export
+def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_bytes, yields):
     """
     Internal generator function returned by the real split_delimiters.
 
@@ -2572,6 +2894,8 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
           (entering new delimiter),
         * one of the _ACTION_* constants above, or
         * an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT.
+        * an instance of _ACTION_GOTO_STATE, which is a subclass
+          of dict.
 
     The _ACTION_* constants above dictate:
         * _ACTION_POP means pop the current state.
@@ -2594,7 +2918,12 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
           separator and proceed from there.  (_ACTION_FLUSH_1_AND_RESPLIT
           is only used for delimiters with quoting=True.)
 
-    If the entry an instance is an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT,
+    If the entry is an instance of _ACTION_GOTO_STATE, we *switch to* that
+    state, we don't *push* that state.  (It's a horrible hack, to handle
+    : inside f-strings.  Inside { inside an f-string, before the :, #
+    means "line comment", and after the : it's ignored.)
+
+    If the entry is an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT,
     then this token starts with one of our current delimiters (close or escape).
     The _ACTION_TRUNCATE_TO_S_AND_RESPLIT class is a subclass of either str or
     bytes, and str(action) or bytes(action) (as appropriate) will convert it back
@@ -2632,8 +2961,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
     push = stack.append
     pop = stack.pop
 
-    open = None
-
     buffer = []
     append = buffer.append
     clear = buffer.clear
@@ -2643,15 +2970,25 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
     escaped = empty
 
     consumed = 0
+    # print(">> split_delimiters start!")
+    # print(">>", repr(text))
+    # print()
 
     i = multisplit(text, all_tokens, keep=AS_PAIRS, separate=True)
     resplit = False
 
+    # want_debug = False
+    # want_debug = True
+
     while True:
         for s, delimiter in i:
+            # if want_debug:
+            #     print(f">> {s=} {delimiter=}  {[o[1] for o in stack]}")
+            #     print(f">> {consumed:03} {text[consumed:]!r}")
             if not (s or delimiter):
                 continue
             if escaped:
+                # print(f"    {escaped=}")
                 # either s or delimiter is true
                 escaped = empty
                 if not s:
@@ -2660,16 +2997,20 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
                     consumed += 1
 
                     if len(delimiter) == 1:
+                        # print(f"    consume the entire {delimiter=}")
                         append(delimiter)
                         continue
 
                     # if delimiter is longer than 1 character, resplit.
+                    # print(f"    consume the first character of {delimiter=} and resplit at {consumed=}")
                     append(delimiter[0:1])
                     i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                     break
 
-            append(s)
-            consumed += len(s)
+            # print(f"    append {s=} and consume {len(s)} characters")
+            if s:
+                append(s)
+                consumed += len(s)
 
             if not delimiter:
                 # we're done!
@@ -2680,18 +3021,13 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
 
             action = current.get(delimiter, _ACTION_FLUSH)
 
-            if isinstance(action, dict):
-                # action is a new state, push it.
-                # flush open delimiter
-                s = join(buffer)
-                clear()
-                yield s, delimiter, empty
-                consumed += len(delimiter)
-                # and push
-                push((current, open))
-                open = delimiter
-                current = action
-                continue
+            # if want_debug:
+            #     if isinstance(action, _ACTION_GOTO_STATE):
+            #         print(f"    action is _ACTION_GOTO_STATE (goto dict)")
+            #     elif isinstance(action, dict):
+            #         print(f"    action is <action: push dict>")
+            #     else:
+            #         print(f"    {action=}")
 
             if isinstance(action, _ACTION_TRUNCATE_TO_S_AND_RESPLIT):
                 # convert the action back into the startswith delimiter we want,
@@ -2702,38 +3038,69 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
                 # activate resplit,
                 resplit = True
                 # and fall through to the appropriate _ACTION handler.
+                # if want_debug:
+                #     print(f"    new {action=}")
+
+            if isinstance(action, dict):
+                if isinstance(action, _ACTION_GOTO_STATE):
+                    # don't "push" the state, just switch to this state.
+                    # (used for colon inside curly braces inside an f-string.)
+                    # the colon itself doesn't map
+                    s = join(buffer)
+                    clear()
+                    yield SplitDelimitersValue(s, empty, empty, delimiter, yields)
+                    consumed += len(delimiter)
+                    current = action
+                    stack[-1] = (stack[-1][0], delimiter)
+                    continue
+
+                # action is a new state, push it.
+                # flush open delimiter
+                s = join(buffer)
+                clear()
+                yield SplitDelimitersValue(s, delimiter, empty, empty, yields)
+                consumed += len(delimiter)
+                # and push
+                push((current, delimiter))
+                current = action
+                continue
 
             if action is _ACTION_POP:
                 # flush close delimiter
                 s = join(buffer)
                 clear()
-                yield s, empty, delimiter
+                yield SplitDelimitersValue(s, empty, delimiter, empty, yields)
                 consumed += len(delimiter)
                 # and pop
-                current, open = pop()
+                current, _ = pop()
             elif action is _ACTION_ESCAPE:
                 # escape
                 append(delimiter)
                 escaped = delimiter
                 consumed += len(delimiter)
             elif action is _ACTION_FLUSH:
+                # print(f"    flush {delimiter=}")
                 append(delimiter)
+                consumed += len(delimiter)
             elif action is _ACTION_FLUSH_1_AND_RESPLIT:
                 # flush first character of delimiter, and resplit.
                 append(delimiter[0:1])
                 consumed += 1
                 resplit = True
+                # print(f"    flush 1 and resplit.  flushing {delimiter[0:1]}, adding 1 to consumed, now {consumed}, and resplitting.")
             elif action is _ACTION_ILLEGAL:
                 # illegal character
                 raise SyntaxError(f"index {consumed}: illegal string {delimiter!r}")
             elif action is _ACTION_ILLEGAL_LINEBREAK:
                 # illegal linebreak character
-                raise SyntaxError(f"index {consumed}: linebreak character {delimiter!r} is illegal inside delimiter {open!r}")
+                assert stack
+                raise SyntaxError(f"index {consumed}: linebreak character {delimiter!r} is illegal inside delimiter {stack[-1][1]!r}")
             else: # pragma: nocover
                 # unhandled
                 raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
 
             if resplit:
+                # print(f"    resplitting at offset {consumed}, {text[consumed:]!r}")
                 i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                 resplit = False
                 break
@@ -2745,7 +3112,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
             raise SyntaxError(f"text ends with escape string {escaped!r}")
         s = join(buffer)
         if s:
-            yield s, empty, empty
+            yield SplitDelimitersValue(s, empty, empty, empty, yields)
 
 
 _split_delimiters = split_delimiters
@@ -2755,7 +3122,7 @@ _split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_and_toke
 
 
 @_export
-def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state=()):
+def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state=(), yields=None):
     """
     Splits a string s at delimiter substrings.
 
@@ -2790,17 +3157,49 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     that open and close delimiters match, you don't need to check them
     yourself!)
 
-    Yields 3-tuples containing strings:
+    Yields a object of type SplitDelimitersValue.  This object
+    contains five fields:
 
-        (text, open, close)
+        text
+            The text before the next opening, closing, or changing
+            delimiter.
 
-    where text is the text before the next opening or closing delimiter,
-    open is the trailing opening delimiter,
-    and close is the trailing closing delimiter.
+        open
+            The trailing opening delimiter.
+
+        close
+            The trailing closing delimiter.
+
+        change
+            The trailing change delimiter.
+
+        yields
+            The yields value passed in to split_delimiters.
+
     At least one of these three strings will always be non-empty.
-    (If open is non-empty, close will be empty, and vice-versa.)
-    If s doesn't end with an opening or closing delimiter, the final tuple
-    yielded will have empty strings for both open and close.
+    (Only one of open, close, and change will ever be non-empty in
+    a single SplitDelimitersValue object.)  If s doesn't end with
+    an opening or closing delimiter, the final tuple yielded will
+    have empty strings for open, close, and change.
+
+    The yields parameter to split_delimiters affects iteration over
+    a SplitDelimitersValue object.  yields may be None, 3, or 4:
+
+    * If yields is 3, when iterating over a SplitDelimitersValue
+      object, it will yield text, open, and close in that order.
+    * If yields is 4, when iterating over a SplitDelimitersValue
+      object, it will yield text, open, close, and change in that order.
+    * If yields is None, split_delimiters will use a value of 4
+      if the delimiters argument is python_delimiters, and a value
+      of 3 otherwise.
+
+    (The yields parameter exists because previously split_delimiters
+    always yielded an tuple containing three string values.
+    python_delimiters required adding the fourth string value, change.
+    Eventually split_delimiters will always yield an object yielding
+    four values, but big is allowing for a transition period to
+    minimize code breakage.  See the release notes for big version
+    0.12.5 for more information.)
 
     You may not specify backslash ('\\\\') as an open delimiter.
 
@@ -2815,8 +3214,17 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     """
     initial_state = all_tokens = None
 
-    if delimiters in (split_delimiters_default_delimiters, split_delimiters_default_delimiters_bytes):
+    is_python_delimiters = delimiters is python_delimiters
+    if delimiters in (split_delimiters_default_delimiters, split_delimiters_default_delimiters_bytes, python_delimiters):
         delimiters = None
+
+    if yields is None:
+        if is_python_delimiters:
+            yields = 4
+        else:
+            yields = 3
+    elif not yields in (3, 4):
+        raise ValueError("yields must be None, 3, or 4")
 
     is_bytes = isinstance(s, bytes)
     if is_bytes:
@@ -2834,7 +3242,10 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
         empty = ''
         laden = 'x'
         if delimiters is None:
-            initial_state, all_tokens = _split_delimiters_default_delimiters_cache
+            if is_python_delimiters:
+                initial_state, all_tokens = _python_delimiters_cache
+            else:
+                initial_state, all_tokens = _split_delimiters_default_delimiters_cache
         elif not delimiters:
             raise ValueError("invalid delimiters")
         elif '\\' in delimiters:
@@ -2853,13 +3264,13 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
         for i, delimiter in enumerate(_iterate_over_bytes(state)):
             action = current.get(delimiter, _ACTION_FLUSH)
             if isinstance(action, dict):
-                push((current, open))
+                push((current, delimiter))
                 current = action
                 continue
 
             raise ValueError(f"delimiter #{i} specified in state is invalid: {delimiter!r}")
 
-    return _split_delimiters(s, all_tokens, current, stack, empty, laden, str_or_bytes)
+    return _split_delimiters(s, all_tokens, current, stack, empty, laden, str_or_bytes, yields)
 
 
 
@@ -4531,4 +4942,160 @@ def int_to_words(i, flowery=True, ordinal=False):
         strings.insert(0, "negative ")
 
     return "".join(strings)
+
+
+# as per PEP 263
+_python_source_code_encoding_line_bytes_re = re.compile(b"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+_python_source_code_encoding_line_str_re   = re.compile( "^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+
+
+# signatures harvested from
+#     https://en.wikipedia.org/wiki/Byte_order_mark#Byte-order_marks_by_encoding
+# Some of these aren't supported (yet?) by Python.
+# it's fine, we'll just flunk the encode lookup and fail.
+#
+# the signatures are sorted by length, longest first,
+# in case a shorter signature is a subset of a longer one.
+# (I don't think this is currently true, but who can predict--the future!)
+_bom_to_encoding = (
+#   BOM                            : encoding,
+    (b"\x00" b"\x00" b"\xfe" b"\xff", "utf-32-be"),
+    (b"\xff" b"\xfe" b"\x00" b"\x00", "utf-32-le"),
+    (b"\xdd" b"\x73" b"\x66" b"\x73", "utf-ebcdic"),
+    (b"\x84" b"\x31" b"\x95" b"\x33", "gb18030"),
+    (b"\xef" b"\xbb" b"\xbf",         "utf-8"),
+    (b"\x2b" b"\x2f" b"\x76",         "utf-7"),
+    (b"\xf7" b"\x64" b"\x4c",         "utf-1"),
+    (b"\x0e" b"\xfe" b"\xff",         "scsu"),
+    (b"\xfb" b"\xee" b"\x28",         "bocu-1"),
+    (b"\xfe" b"\xff",                 "utf-16-be"),
+    (b"\xff" b"\xfe",                 "utf-16-le"),
+)
+
+
+@_export
+def decode_python_script(script, *,
+    use_bom=True,
+    use_source_code_encoding=True):
+    """
+    Correctly decodes a Python script from a bytes string.
+
+    script should be a bytes object containing an encoded Python script.
+
+    Returns a str containing the decoded Python script.
+
+    By default, Python 3 scripts must be encoded using UTF-8.
+    (This was established by PEP 3120.)
+
+        https://en.wikipedia.org/wiki/UTF-8
+
+    Python scripts are allowed to use other encodings, but when they do so
+    they must explicitly specify what encoding they used.  Python defines
+    two methods for scripts to specify their encoding; decode_python_script
+    supports both.
+
+    The first method uses a "byte order mark", aka "BOM". This is a sequence
+    of bytes at the beginning of the file that indicate the file's encoding.
+
+        https://en.wikipedia.org/wiki/Byte_order_mark
+
+    If use_bom is true (the default), decode_python_script will
+    recognize a BOM if present, and decode the file using the encoding
+    specified by the BOM.  Note that decode_python_script removes the BOM
+    when it decodes the file.
+
+    The second method is called a "source code encoding", and it was defined
+    in PEP 263.  This is a "magic comment" that must be one of the first two
+    lines of the file:
+
+        https://peps.python.org/pep-0263/
+
+    If use_source_code_encoding is true (the default), decode_python_script
+    will recognize a source code encoding magic comment, and use that to decode
+    the file.  (decode_python_script leaves the magic comment in place.)
+
+    If both these "use_" keyword-only parameters are true (the default),
+    decode_python_script can handle either, both, or neither.  In this case,
+    if script contains both a BOM and a source code encoding magic comment,
+    the script will be decoded using the encoding specified by the BOM, and the
+    source code encoding must agree with the BOM.
+    """
+    s = script
+    encoded = True
+
+    ##
+    ## stage 1: use_bom
+    ##
+    if use_bom:
+        bytes_by_length = [b'', script[:1], script[:2], script[:3], script[:4]]
+
+        for bom, bom_encoding in _bom_to_encoding:
+            candidate = bytes_by_length[len(bom)]
+            if candidate == bom:
+                break
+        else:
+            candidate = bom_encoding = None
+
+        assert (bom_encoding is None) or (isinstance(bom_encoding, str) and bom_encoding)
+    else:
+        bom_encoding = None
+
+    if bom_encoding:
+        try:
+            s = script[len(bom):].decode(bom_encoding)
+        except LookupError as e:
+            message = str(e)
+            assert "unknown encoding" in message
+            raise UnicodeDecodeError(bom_encoding, script, 0, len(script), "unknown encoding") from None
+        encoded = False
+        # print(f"decoded! {text!r}")
+
+        linebreak = '\n'
+        encoding_re = _python_source_code_encoding_line_str_re
+    else:
+        linebreak = b'\n'
+        encoding_re = _python_source_code_encoding_line_bytes_re
+
+
+    ##
+    ## stage 2: source_code_encoding
+    ##
+    source_code_encoding = None
+
+    if use_source_code_encoding:
+        lines = s.split(linebreak, 2)
+        for i, line in enumerate(lines):
+            if i == 2:
+                break
+            match = encoding_re.match(line)
+            if match:
+                source_code_encoding = match.group(1)
+
+    if source_code_encoding is not None:
+        assert source_code_encoding # the regular expression should ensure it's never empty
+        if encoded:
+            source_code_encoding = source_code_encoding.decode('ascii')
+
+    if bom_encoding:
+        # script used both a BOM and a source code encoding!  they better agree!
+        if source_code_encoding and (bom_encoding != source_code_encoding.lower()):
+            raise UnicodeDecodeError(source_code_encoding, script, 0, len(script), "source code encoding line doesn't match BOM encoding")
+        encoding = bom_encoding
+    elif source_code_encoding:
+        encoding = source_code_encoding
+    else:
+        encoding = "utf-8"
+
+    # the moment of truth!
+    # (well, unless we already decoded because of a BOM.)
+    if encoded:
+        try:
+            s = script.decode(encoding)
+        except LookupError as e:
+            message = str(e)
+            assert "unknown encoding" in message
+            raise UnicodeDecodeError(encoding, script, 0, len(script), "unknown encoding") from None
+
+    return s
+
 
