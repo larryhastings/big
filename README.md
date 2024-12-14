@@ -6402,7 +6402,7 @@ less than a day after the last big big release.
 * New feature: [`decode_python_script`](#decode_python_scriptscript--newlinenone-use_bomtrue-use_source_code_encodingtrue)
   now supports "universal newlines".  It accepts a new `newline` parameter
   which behaves identically to the `newline` parameter for Python's built-in
-  (`open`)[https://docs.python.org/3/library/functions.html#open] function.
+  [`open`](https://docs.python.org/3/library/functions.html#open) function.
 * Bugfix: The universal newlines support for
   [`read_python_file`](#read_python_filepath--newlinenone-use_bomtrue-use_source_code_encodingtrue)
   was broken in 0.12.5; the `newline` parameter was simply ignored.
