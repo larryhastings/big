@@ -2,3 +2,4 @@
 # and starts with the appropriate BOM.
 
 print('Hello, Beijing!')
+print('Chipmunk 🐿️!')

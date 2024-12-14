@@ -4949,32 +4949,46 @@ _python_source_code_encoding_line_bytes_re = re.compile(b"^[ \t\f]*#.*?coding[:=
 _python_source_code_encoding_line_str_re   = re.compile( "^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
 
 
-# signatures harvested from
+# BOMs were harvested from
 #     https://en.wikipedia.org/wiki/Byte_order_mark#Byte-order_marks_by_encoding
 # Some of these aren't supported (yet?) by Python.
-# it's fine, we'll just flunk the encode lookup and fail.
+# It's fine, we'll just flunk the encode lookup and fail.
 #
-# the signatures are sorted by length, longest first,
-# in case a shorter signature is a subset of a longer one.
-# (I don't think this is currently true, but who can predict--the future!)
+# The signatures are sorted by length, longest first,
+# because a shorter signature might be a prefix of a longer one.
+# For example, the first two bytes of the BOM for utf-32-le
+# are the same as the BOM for utf-16-le.
+
 _bom_to_encoding = (
-#   BOM                            : encoding,
-    (b"\x00" b"\x00" b"\xfe" b"\xff", "utf-32-be"),
-    (b"\xff" b"\xfe" b"\x00" b"\x00", "utf-32-le"),
-    (b"\xdd" b"\x73" b"\x66" b"\x73", "utf-ebcdic"),
-    (b"\x84" b"\x31" b"\x95" b"\x33", "gb18030"),
-    (b"\xef" b"\xbb" b"\xbf",         "utf-8"),
-    (b"\x2b" b"\x2f" b"\x76",         "utf-7"),
-    (b"\xf7" b"\x64" b"\x4c",         "utf-1"),
-    (b"\x0e" b"\xfe" b"\xff",         "scsu"),
-    (b"\xfb" b"\xee" b"\x28",         "bocu-1"),
-    (b"\xfe" b"\xff",                 "utf-16-be"),
-    (b"\xff" b"\xfe",                 "utf-16-le"),
+#   (BOM,                 length, encoding)
+
+    (b"\x00\x00\xfe\xff", 4,      "utf-32-be"),
+    (b"\x84\x31\x95\x33", 4,      "gb18030"),
+    (b"\xdd\x73\x66\x73", 4,      "utf-ebcdic"),
+    (b"\xff\xfe\x00\x00", 4,      "utf-32-le"),
+
+    (b"\x0e\xfe\xff",     3,      "scsu"),
+    (b"\x2b\x2f\x76",     3,      "utf-7"),
+    (b"\xef\xbb\xbf",     3,      "utf-8"),
+    (b"\xf7\x64\x4c",     3,      "utf-1"),
+    (b"\xfb\xee\x28",     3,      "bocu-1"),
+
+    (b"\xfe\xff",         2,      "utf-16-be"),
+    (b"\xff\xfe",         2,      "utf-16-le"),
 )
 
 
+_valid_newline_values = {
+    None:   None,
+    '':     b'',
+    '\n':   b'\n',
+    '\r':   b'\r',
+    '\r\n': b'\r\n',
+    }
+
 @_export
 def decode_python_script(script, *,
+    newline=None,
     use_bom=True,
     use_source_code_encoding=True):
     """
@@ -5019,18 +5033,29 @@ def decode_python_script(script, *,
     if script contains both a BOM and a source code encoding magic comment,
     the script will be decoded using the encoding specified by the BOM, and the
     source code encoding must agree with the BOM.
+
+    The newline parameter supports Python's "universal newlines" convention.
+    This behaves identically to the newline parameter for Python's open()
+    function.
     """
     s = script
     encoded = True
+
+    if not newline in _valid_newline_values:
+        raise ValueError(f"newline must be one of None, '', '\\n', '\\r', or '\\r\\n', not {newline!r}")
 
     ##
     ## stage 1: use_bom
     ##
     if use_bom:
-        bytes_by_length = [b'', script[:1], script[:2], script[:3], script[:4]]
+        # the BOM comparison code relies on _bom_to_encoding
+        # being sorted by length with longer BOMs first.
+        candidate = script
+        candidate_length = len(candidate)
 
-        for bom, bom_encoding in _bom_to_encoding:
-            candidate = bytes_by_length[len(bom)]
+        for bom, bom_length, bom_encoding in _bom_to_encoding:
+            if candidate_length != bom_length:
+                candidate = candidate[:bom_length]
             if candidate == bom:
                 break
         else:
@@ -5050,11 +5075,10 @@ def decode_python_script(script, *,
         encoded = False
         # print(f"decoded! {text!r}")
 
-        linebreak = '\n'
         encoding_re = _python_source_code_encoding_line_str_re
     else:
-        linebreak = b'\n'
         encoding_re = _python_source_code_encoding_line_bytes_re
+        newline = _valid_newline_values[newline]
 
 
     ##
@@ -5063,10 +5087,25 @@ def decode_python_script(script, *,
     source_code_encoding = None
 
     if use_source_code_encoding:
-        lines = s.split(linebreak, 2)
-        for i, line in enumerate(lines):
-            if i == 2:
+        # speed tech:
+        #   try to avoid splitting *all* the lines.
+        #   we only care about the first two.
+        for size in (128, 1024, 4096, None):
+            if size is None:
+                chunk = s
+            else:
+                chunk = s[:size]
+
+            if newline:
+                lines = chunk.split(newline, 2)
+            else:
+                lines = chunk.splitlines()
+                lines = lines[:3]
+
+            if len(lines) > 2:
                 break
+
+        for line in lines:
             match = encoding_re.match(line)
             if match:
                 source_code_encoding = match.group(1)
@@ -5096,6 +5135,10 @@ def decode_python_script(script, *,
             assert "unknown encoding" in message
             raise UnicodeDecodeError(encoding, script, 0, len(script), "unknown encoding") from None
 
-    return s
+    # all we need to do for universal newlines support:
+    # convert \r\n and \r into \n
+    if (newline is None) and ('\r' in s):
+        s = s.replace('\r\n', '\n').replace('\r', '\n')
 
+    return s
 

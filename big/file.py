@@ -392,16 +392,14 @@ def read_python_file(path, *,
 
     Returns the script as a Unicode string.
 
-    Opens the file using builtins.open.  The newline parameter is
-    passed through to that function.
-
     Decodes the script using big's decode_python_script function.
-    The use_bom and use_source_code_encoding parameters
+    The newline, use_bom, and use_source_code_encoding parameters
     are passed through to that function.
     """
     with open(path, "rb") as f:
         script = f.read()
 
     return decode_python_script(script,
+        newline=newline,
         use_bom=use_bom,
         use_source_code_encoding=use_source_code_encoding)

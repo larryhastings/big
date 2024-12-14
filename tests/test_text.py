@@ -4103,12 +4103,21 @@ class BigTextTests(unittest.TestCase):
                         continue
                     state = []
                     for info, line in lines(text, clip_linebreaks=False):
-                        for text, open, close, change in split_delimiters(line, python_delimiters, state=state):
+                        for _, open, close, change in split_delimiters(line, python_delimiters, state=state):
                             if open:
                                 state.append(open)
                             elif close:
                                 state.pop()
                     self.assertFalse(state)
+
+                    # also, all the test files in test_encodings
+                    # contain either a Unicode chipmunk or an ASCII squirrel
+                    if "test_encodings" in str(path):
+                        if "ascii" in str(path):
+                            self.assertIn("Squirrel &o", text, f"Squirrel not found in {path}!")
+                        else:
+                            self.assertIn("Chipmunk 🐿️", text, f"Chipmunk not found in {path}!")
+
 
     def test_python_delimiters_regressions(self):
         def SDV(t, o, cl, ch): return big.SplitDelimitersValue(t, o, cl, ch, 4)
@@ -5311,11 +5320,37 @@ class BigTextTests(unittest.TestCase):
         self.assertEqual(big.format_map("{q\\x}", {'q\\x':'z'}), 'z')
 
     def test_decode_python_script(self):
-        # test without either a bom or a PEP 263
+        # Note: decode_python_script also gets a workout from the
+        # tests for read_python_file.  Which... are actually in this file, tests/test_text.py.
+        # (We test split_delimiters(python_delimiters) by splitting all the Python
+        # scripts that ship with big.)
+
+        # test without either a bom or SCE (source code encoding)
         script = b"print('Hello, world!')\n"
         self.assertEqual(big.decode_python_script(script), script.decode('ascii'))
 
+        # turn off bom and SCE
         self.assertEqual(big.decode_python_script(script, use_bom=False, use_source_code_encoding=False), script.decode('ascii'))
+
+        # test universal newlines
+        line = b's' * 3072
+        script = line + b'\r\n' + line
+        self.assertEqual(big.decode_python_script(script), script.decode('ascii').replace('\r\n', '\n'))
+
+        script = b'first_line=3\r\nsecond_line=4\rthird_line=5\nfourth_line=6\n'
+        decoded = 'first_line=3\nsecond_line=4\nthird_line=5\nfourth_line=6\n'
+        self.assertEqual(big.decode_python_script(script), decoded)
+        self.assertEqual(big.decode_python_script(script, newline=''), script.decode('ascii'))
+        self.assertEqual(big.decode_python_script(script, newline='\n'), script.decode('ascii'))
+        self.assertEqual(big.decode_python_script(script, newline='\r\n'), script.decode('ascii'))
+        self.assertEqual(big.decode_python_script(script, newline='\r'), script.decode('ascii'))
+
+        # we should ignore the inaccurate SCE because we shouldn't break the line there
+        script = b'first_line=3\r# -*- coding: utf-16 -*-\r\nthird_line=5\nfourth_line=6\n'
+        self.assertEqual(big.decode_python_script(script, newline='\n'), script.decode('ascii'))
+
+        with self.assertRaises(ValueError):
+            big.decode_python_script(script, newline='x')
 
 
 def run_tests():

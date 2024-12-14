@@ -30,7 +30,7 @@ It's a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
 required dependencies (unless you want to run the test suite).
-The current version is [0.12.5.](#0125)
+The current version is [0.12.6.](#0126)
 
 *Think big!*
 
@@ -204,7 +204,7 @@ And here are five little functions/classes I use all the time:
 
 [`default_clock()`](#default_clock)
 
-[`decode_python_script(script, *, use_bom=True, use_source_code_encoding=True)`](#decode_python_scriptscript--use_bomtrue-use_source_code_encodingtrue)
+[`decode_python_script(script, *, newline=None, use_bom=True, use_source_code_encoding=True)`](#decode_python_scriptscript--newlinenone-use_bomtrue-use_source_code_encodingtrue)
 
 [`Delimiter(close, *, escape='', multiline=True, quoting=False)`](#delimiterclose--escape-multilinetrue-quotingfalse)
 
@@ -807,11 +807,10 @@ be any object accepted by `builtins.open` (a "path-like object").
 
 Returns a `str` containing the decoded Python script.
 
-Opens the file using `builtins.open`.  The `newline` parameter is
-passed through to that function.
+Opens the file using `builtins.open`.
 
 Decodes the script using big's `decode_python_script` function.
-The `use_bom` and `use_source_code_encoding`
+The `newline`, `use_bom` and `use_source_code_encoding`
 parameters are passed through to that function.
 
 </dd></dl>
@@ -2409,7 +2408,7 @@ with `keep=True` or `keep=ALTERNATING`.)
 
 </dd></dl>
 
-#### `decode_python_script(script, *, use_bom=True, use_source_code_encoding=True)`
+#### `decode_python_script(script, *, newline=None, use_bom=True, use_source_code_encoding=True)`
 
 <dl><dd>
 
@@ -2448,6 +2447,11 @@ If both these "`use_`" keyword-only parameters are true (the default),
 if `script` contains both a BOM *and* a source code encoding magic comment,
 the script will be decoded using the encoding specified by the BOM, and the
 source code encoding must agree with the BOM.
+
+The `newline` parameter supports Python's "universal newlines" convention.
+This behaves identically to the newline parameter for Python's
+[`open()`](https://docs.python.org/3/library/functions.html#open)
+function.
 
 </dd></dl>
 
@@ -6387,6 +6391,25 @@ in the **big** test suite.
 
 
 ## Release history
+
+#### 0.12.6
+
+*2024/12/13*
+
+It's a big release tradition!  Here's another small big release,
+less than a day after the last big big release.
+
+* New feature: [`decode_python_script`](#decode_python_scriptscript--newlinenone-use_bomtrue-use_source_code_encodingtrue)
+  now supports "universal newlines".  It accepts a new `newline` parameter
+  which behaves identically to the `newline` parameter for Python's built-in
+  (`open`)[https://docs.python.org/3/library/functions.html#open] function.
+* Bugfix: The universal newlines support for
+  [`read_python_file`](#read_python_filepath--newlinenone-use_bomtrue-use_source_code_encodingtrue)
+  was broken in 0.12.5; the `newline` parameter was simply ignored.
+  It now works great--it passes `newline` to `decode_python_script`.
+  (Sorry I missed this; I use Linux and don't need to convert newlines.)
+* Added Python 3.13 to the list of supported releases.  It was already
+  supported and tested, it just wasn't listed in the project metadata.
 
 #### 0.12.5
 
