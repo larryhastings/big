@@ -3367,6 +3367,11 @@ class LineInfo:
         self._empty = empty
         self.__dict__.update(kwargs)
 
+    def copy(self):
+        copy = LineInfo('', '', 0, 0)
+        copy.__dict__ = self.__dict__.copy()
+        return copy
+
     def detab(self, s):
         return self.lines.detab(s)
 

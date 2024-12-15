@@ -30,7 +30,7 @@ It's a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
 required dependencies (unless you want to run the test suite).
-The current version is [0.12.6.](#0126)
+The current version is [0.12.7.](#0127)
 
 *Think big!*
 
@@ -267,6 +267,8 @@ And here are five little functions/classes I use all the time:
 [`LineInfo.clip_leading(line, s)`](#lineinfoclip_leadingline-s)
 
 [`LineInfo.clip_trailing(line, s)`](#lineinfoclip_trailingline-s)
+
+[`LineInfo.copy()`](#lineinfocopy)
 
 [`lines(s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
 
@@ -2777,6 +2779,16 @@ from the end of `s`.
 
 Returns `line` with `s` clipped; also appends
 the clipped portion to `self.trailing`.
+
+
+</dd></dl>
+
+#### `LineInfo.copy()`
+
+<dl><dd>
+
+Returns a copy of the `LineInfo` object,
+including all current state (e.g. `leading`, `trailing`).
 
 </dd></dl>
 
@@ -6392,6 +6404,15 @@ in the **big** test suite.
 
 ## Release history
 
+#### 0.12.7
+
+*2024/12/15*
+
+A teeny tiny new feature.
+
+* `LineInfo` now supports a `copy` method, which returns a copy of the `LineInfo`
+  object in its current state.
+
 #### 0.12.6
 
 *2024/12/13*
@@ -6410,6 +6431,8 @@ less than a day after the last big big release.
   (Sorry I missed this; I use Linux and don't need to convert newlines.)
 * Added Python 3.13 to the list of supported releases.  It was already
   supported and tested, it just wasn't listed in the project metadata.
+
+> *Note:* Whoops!  Forgot to ever release 0.12.6 as a package.  Oh well.
 
 #### 0.12.5
 

@@ -3511,6 +3511,10 @@ class BigTextTests(unittest.TestCase):
 
             self.assertEqual(expected, got)
 
+            for info, line in got:
+                copy = info.copy()
+                self.assertEqual(info, copy)
+
         i = li = big.lines("a\nb\nc\nd\ne\n")
         test(i,
             [
@@ -4451,13 +4455,18 @@ class BigTextTests(unittest.TestCase):
             l_original, end = list(big.multisplit(line, big.linebreaks, keep=big.AS_PAIRS))[0]
             l = l_original
             info = big.LineInfo(lines, line, 5, 1, end=end)
+            copy = info.copy()
+            self.assertEqual(info, copy)
             l = info.clip_leading(l, l_original[:-1])
             self.assertTrue(l)
             self.assertNotEqual(info.column_number, 1)
+            self.assertNotEqual(info, copy)
+            copy = info.copy()
             l = info.clip_leading(l, l_original[-1])
             self.assertEqual(l, '')
             self.assertEqual(info.column_number, 1)
             self.assertEqual(info.trailing, l_original)
+            self.assertNotEqual(info, copy)
         test_clip_leading('     ')
         test_clip_leading('         \n')
 
