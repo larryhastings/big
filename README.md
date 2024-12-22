@@ -2268,7 +2268,7 @@ or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functio
 Also contains `'\r\n'`.
 If you don't want to include this string, use [`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf) instead.
 See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -2298,7 +2298,7 @@ or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functio
 Also contains `'\r\n'`.
 If you don't want to include this string, use [`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf) instead.
 See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -2329,7 +2329,7 @@ or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functio
 Also contains `b'\r\n'`.
 If you don't want to include this string, use [`bytes_linebreaks_without_crlf`](#bytes_linebreaks_without_crlf) instead.
 See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -2360,7 +2360,7 @@ or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functio
 Also contains `b'\r\n'`.
 If you don't want to include this string, use [`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf) instead.
 See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -2675,7 +2675,7 @@ e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-fu
 or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -3936,7 +3936,7 @@ e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-fu
 or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -3966,7 +3966,7 @@ e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-fu
 or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -3995,7 +3995,7 @@ e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-fu
 or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -4024,7 +4024,7 @@ e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-fu
 or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -4054,7 +4054,7 @@ e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-fu
 or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
-[**The Unix, Mac, and DOS line-break conventions**](#the-unix-mac-and-dos-line-break-conventions)
+[**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
@@ -5376,12 +5376,13 @@ types in Python don't agree only enhances the mystery.
 ### Line-breaking characters
 
 The situation is slightly worse with line-breaking
-characters. Line-breaking characters are a subset of
-whitespace characters; they're whitespace characters that
-always move the cursor down.  And, as with whitespace
-generally, Python `str` objects don't agree with Unicode
-about what is and is not a line-breaking character,
-and Python `bytes` objects don't agree with either of those.
+characters. Line-breaking characters (aka *linebreaks*)
+are a subset of whitespace characters; they're whitespace
+characters that always move the cursor down to the next
+line.  And, as with whitespace generally, Python `str`
+objects don't agree with Unicode about what is and is
+not a line-breaking character, and Python `bytes` objects
+don't agree with either of those.
 
 Here's the list of all Unicode characters recognized by
 Python `str` objects as line-breaking characters:
@@ -5518,7 +5519,7 @@ These are simply copies of `str_whitespace` and
 (**big** actually defines an *additional* ten tuples,
 as discussed in the very next section.)
 
-### The Unix, Mac, and DOS line-break conventions
+### The Unix, Mac, and DOS linebreak conventions
 
 Historically, different platforms used different
 ASCII characters--or sequences of ASCII characters--to
@@ -5532,33 +5533,73 @@ most popular conventions:
 (There are a couple more conventions, and a lot more history,
 in the [Wikipedia article on newlines.)](https://en.wikipedia.org/wiki/Newline#Representation)
 
-Handling these differing conventions was a stumbling block
-for a long time--both for computer programs, and in the
-daily lives of computer users.  Python went through several
-iterations on how to handle this, eventually settling on
-the ["universal newlines"](https://peps.python.org/pep-0278/)
-support added in Python 2.3.
-These days the world seems to be converging on the UNIX
-standard `'\n'`; Windows supports it, and it's the default
-on every other modern platform.
-So in practice you probably don't have end-of-line conversion
-problems, either.
+Handling these differing conventions was a real mess,
+for a long time--not just for computer programmers, but
+in the daily lives of many computer users.  It was a continual
+problem for software developers back in the 90s, particularly those
+who frequently switched back and forth between the two platforms.
+And it took a long time before software development tooling figured
+out how to seamlessly handle all the newline conventions.
 
-But just in case, **big** has one more trick.  All of
+Python itself went through several iterations on how to handle
+this, eventually implementing
+["universal newlines"](https://peps.python.org/pep-0278/)
+support, added way back in Python 2.3.
+
+These days the world seems to have converged on the UNIX
+standard, `'\n'`; Windows supports it, and it's the default
+on every other modern platform. So in practice these days
+you probably don't have end-of-line conversion problems;
+as long as you're decoding files to Unicode, and you don't
+disable "universal newlines", it probably all works fine
+and you never even noticed.
+
+However!  **big** strives to behave identically to
+Python in every way.  And even today, Python considers
+the DOS linebreak sequence to be *one* linebreak,
+not *two*.
+
+The Python `splitlines` method on a string splits the
+string at linebreaks. And if the `keepends` positional
+parameter is True, it appends the linebreak character(s)
+at the end of each substring.  A quick experiment with
+`splitlines` will show us what Python thinks is and
+isn't a linebreak. Sure enough, `splitlines` considers
+'\n\r' to be two linebreaks, but it treats `\r\n` as a
+*single* linebreak:
+
+```Python
+   ' a \n b \r c \r\n d \n\r e '.splitlines(True)
+```
+produces
+```Python
+   [' a \n', ' b \r', ' c \r\n', ' d \n', '\r', ' e ']
+```
+
+Naturally, if you use **big** to split by lines,
+you get the same result:
+
+```Python
+list(big.multisplit(' a \n b \r c \r\n d \n\r e ', big.linebreaks, separate=True, keep=True))
+```
+
+How do we achieve this?  **big** has one more trick.  All of
 the tuples defined in the previous section--from `whitespace`
-to `ascii_linebreaks`--also contain this string:
+to `ascii_linebreaks`--also contain the DOS linebreak
+convention:
 
     '\r\n'
 
-(The two `bytes_` tuples contain the `bytes` equivalent,
+(The equivalent `bytes_` tuples contain the `bytes` equivalent,
 `b'\r\n`.)
 
-This addition means that, when you use one of these tuples
-with one of the **big** functions that take separators,
-it'll split on `\r\n` as if it was one character.  This
-means that **big** itself should automatically handle
-the DOS and Windows end-of-line character sequence, in
-case one happens to creep into your data.
+Because of this inclusion, when you use one of these tuples
+with one of the **big** functions that take `separators`,
+it'll recognize `\r\n` as if it was one whitespace "character".
+(Just in case one happens to creep into your data.)  And since
+functions like `multisplit` are "greedy", preferring the longest
+matching separator, if the string you're splitting contains
+`'\r\n'`, it'll prefer matching `'\r\n'` to just `'\r'`.
 
 If you don't want this behavior, just add the suffix
 `_without_crlf` to the end of any of the ten tuples,
@@ -5573,22 +5614,35 @@ won't work for you, you can can make your own tuple from scratch,
 or modify an existing tuple to meet your needs.
 
 For example, let's say you need to split a document by
-whitespace, and the document is encoded in [code page 850,
-aka "latin-1".](https://en.wikipedia.org/wiki/Code_page_850)
+whitespace, and the document is encoded in
+[code page 850](https://en.wikipedia.org/wiki/Code_page_850)
+or
+[code page 437.](https://en.wikipedia.org/wiki/Code_page_437)
+(These two code pages are the most common code pages in
+English-speaking countries.)
+
 Normally the easiest thing would be to decode it a `str` object
-using the `'latin-1'` text codec, then operate on it normally.
+using the `'cp850'` or `'cp437'` text codec as appropriate,
+then operate on it normally.
 But you might have reasons why you don't want to decode it--maybe
 the document is damaged and doesn't decode properly, and it's
 easier to work with the encoded bytes than to fix it.  If you
 want to process the text with a **big** function that accepts a
-`separator` argument, you could make your own custom tuple
-of "latin-1" whitespace characters.  "latin-1" has the same
-whitespace characters as ASCII, but adds one more, value 255,
-which is not line-breaking.  So it's easy to make the appropriate
-tuples yourself:
+`separator` argument, you could make your own custom tuples
+of whitespace characters.  These two codepages have the same
+whitespace characters as ASCII, but they both add one more:
+value 255, "non-breaking space", a space character that is
+not line-breaking.  (The intention is, this character should
+behave like a space, except you shouldn't break a line at this
+character when word wrapping.)
 
-    latin_1_whitespace = big.bytes_whitespace + (b'\xff',)
-    latin_1_linebreaks = big.bytes_linebreaks
+It's easy to make the appropriate tuples yourself:
+
+    cp437_linebreaks = cp850_linebreaks = big.bytes_linebreaks
+    cp437_whitespace = cp850_whitespace = big.bytes_whitespace + (b'\xff',)
+
+Those tuples would work fine as the `separators` argument for
+any **big** function that takes one.
 
 What if you want to process a `bytes` object containing
 UTF-8?  That's easy too.  Just convert one of the existing
@@ -5629,6 +5683,10 @@ b'\x01\x01\x02\x01'
 >>> encoded_needle
 b'\x01\x02'
 ```
+
+But you can avoid this problem if you know you're working
+in bytes on two-byte sequences.  Split the bytes string
+into two-byte segments and operate on those.
 
 </dd></dl>
 
