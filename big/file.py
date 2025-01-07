@@ -25,9 +25,13 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import builtins
-import os
-import pathlib
+import fnmatch
+import glob
+import os.path
+from pathlib import Path
 import re
+from stat import S_ISDIR, S_ISREG
+
 
 try:
     from re import Pattern as re_Pattern
@@ -89,7 +93,7 @@ def fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)
     else:
         mode = 'rt'
         separator = '\n'
-    if isinstance(path, pathlib.Path):
+    if isinstance(path, Path):
         f = path.open(mode, encoding=encoding)
     else:
         f = open(path, mode, encoding=encoding)
@@ -162,7 +166,7 @@ def grep(path, pattern, *, encoding=None, enumerate=False, flags=0):
     else:
         mode = 'rt'
         separator = '\n'
-    if isinstance(path, pathlib.Path):
+    if isinstance(path, Path):
         f = path.open(mode, encoding=encoding)
     else:
         f = open(path, mode, encoding=encoding)
@@ -403,3 +407,202 @@ def read_python_file(path, *,
         newline=newline,
         use_bom=use_bom,
         use_source_code_encoding=use_source_code_encoding)
+
+
+
+if os.altsep: # pragma: nocover
+    _os_seps = os.sep + os.altsep
+else:
+    _os_seps = os.sep
+
+_case_sensitive_platform = os.path.normcase('FOo') != os.path.normpath('foo')
+
+@export
+def search_path(paths, extensions=('',),
+    *,
+    case_sensitive=None,
+    preserve_extension=True,
+    want_directories=False,
+    want_files=True,
+    ):
+    """
+    Search a list of directories for a file.  Given a sequence
+    of directories, an optional list of file extensions, and a
+    filename, searches those directories for a file with that
+    name and possibly one of those file extensions.
+
+    search_path accepts the paths and extensions as parameters and
+    returns a "search" function.  The search function accepts one
+    filename parameter and performs the search, returning either the
+    path to the file it found (as a pathlib.Path object) or None.
+    You can reuse the search function to perform as many searches
+    as you like.
+
+    paths should be an iterable of str or pathlib.Path objects
+    representing directories.  These may be relative or absolute
+    paths; relative paths will be relative to the current directory
+    at the time the search function is run.  Specifying a directory
+    that doesn't exist is not an error.
+
+    extensions should be an iterable of str objects representing
+    extensions.  Every non-empty extension specified should start
+    with a period ('.') character (technically "os.extsep").  You
+    may specify at most one empty string in extensions, which
+    represents testing the filename without an additional
+    extension.  By default extensions is the tuple ('',).
+    Extension strings may contain additional period characters
+    after the initial one.
+
+    Shell-style "globbing" isn't supported for any parameter.  Both
+    the filename and the extension strings may contain filesystem
+    globbing characters, but they will only match those literal
+    characters themselves.  ('*' won't match any character, it'll
+    only match a literal '*' in the filename or extension.)
+
+    case_sensitive works like the parameter to pathlib.Path.glob.
+    If case_sensitive is true, files found while searching must
+    match the filename and extension exactly.  If case_sensitive
+    is false, the comparison is done in a case-insensitive manner.
+    If case_sensitive is None (the default), case sensitivity obeys
+    the platform default (as per os.path.normcase).  In practice,
+    only Windows platforms are case-insensitive by convention;
+    all other platforms that support Python are case-sensitive
+    by convention.
+
+    If preserve_extension is true (the default), the search function
+    checks the filename to see if it already ends with one of the
+    extensions.  If it does, the search is restricted to only files
+    with that extension--the other extensions are ignored.  This
+    check obeys the case_sensitive flag; if case_sensitive is None,
+    this comparison is case-insensitive only on Windows.
+
+    want_files and want_directories are boolean values; the search
+    functino will only return that type of file if the corresponding
+    "want_" parameter is true.  You can request files, directories,
+    or both.  (want_files and want_directories can't both be false.)
+    By default, want_files is true and want_directories is false.
+
+    paths and extensions are both tried in order, and the search
+    function returns the first match it finds.  All extensions are
+    tried in a path entry before considering the next path.
+
+    Returns a function:
+        search(filename)
+    which returns either a pathlib.Path object on success or None on
+    failure.
+    """
+
+    if not (want_files or want_directories):
+        raise ValueError("search_path: want_files and want_directories can't both be false")
+
+    paths = [Path(path) for path in paths]
+    if not paths:
+        raise ValueError("search_path: paths must be an iterable of str or pathlib.Path objects")
+
+    extensions = list(extensions)
+    if not extensions:
+        raise ValueError("search_path: extensions must be an iterable of str objects")
+
+    extsep = os.extsep
+
+    cleaned = []
+    not_str = []
+    empty_count = 0
+    doesnt_start_with_extsep = []
+    for ext in extensions:
+        if not isinstance(ext, str):
+            not_str.append(ext)
+            continue
+        if not ext:
+            empty_count += 1
+            continue
+        if not ext.startswith(extsep):
+            doesnt_start_with_extsep.append(ext)
+            continue
+        cleaned.append(ext)
+
+    if empty_count > 1:
+        raise ValueError(f"search_path: extension may contain at most one empty string, not {empty_count}")
+
+    failures = [ext for ext in extensions if (ext and ((not isinstance(ext, str)) or (not ext.startswith(extsep))))]
+    if failures:
+        failures = " ".join(repr(ext) for ext in failures)
+        raise ValueError(f"search_path: every extension must start with {extsep}, not {failures}")
+
+
+    glob_escape = glob.escape
+    if case_sensitive is None:
+        case_sensitive = _case_sensitive_platform
+    else:
+        case_sensitive = bool(case_sensitive)
+        if not case_sensitive:
+            def case_insensitive_glob_escape(s):
+                buffer = []
+                append = buffer.append
+                for c in glob.escape(s):
+                    if not c.isalpha():
+                        append(c)
+                        continue
+                    append('[')
+                    append(c.upper())
+                    append(c.lower())
+                    append(']')
+                return ''.join(buffer)
+            glob_escape = case_insensitive_glob_escape
+
+
+
+    def no_change(s): return s
+    def lower(s): return s.lower()
+    normcase = no_change if case_sensitive else lower
+
+    extensions = [(ext, glob_escape(ext)) if ext else ('', '') for ext in extensions]
+
+    def search(filename):
+        nonlocal extensions
+
+        if filename.endswith(_os_seps):
+            raise ValueError(f'search_path: filename {filename!r} ends with {filename[-1]!r}')
+
+        use_extensions = extensions
+        if preserve_extension:
+            for t in extensions:
+                ext, escaped_ext = t
+                if not ext:
+                    continue
+                if fnmatch.fnmatch(normcase(filename), normcase('*' + escaped_ext)):
+                    # matched! only use this extension.
+                    use_extensions = [t]
+                    assert normcase(filename[-len(ext):]) == normcase(ext), f"{normcase(filename[-len(ext):])!r} != {normcase(ext)!r}"
+                    filename = filename[:-len(ext)]
+                    break
+
+        escaped_filename = glob_escape(str(filename))
+
+        for dir in paths:
+            if not dir.is_dir():
+                continue
+            for ext, escaped_ext in use_extensions:
+                if ext:
+                    filename_glob = escaped_filename + escaped_ext
+                else:
+                    filename_glob = escaped_filename
+                matches = list(dir.glob(filename_glob))
+                if not matches:
+                    continue
+                valid = []
+                for match in matches:
+                    stat = match.stat()
+                    mode = stat.st_mode
+                    if want_files and S_ISREG(mode):
+                        valid.append(match)
+                    elif want_directories and S_ISDIR(mode):
+                        valid.append(match)
+                if len(valid) > 1: # pragma: nocover
+                    # can't test this unless we have a case-sensitive filesystem
+                    valid = ", ".join([repr(str(_)) for _ in valid])
+                    raise ValueError(f"search_path: can't choose between multiple matching paths {valid}")
+                elif valid:
+                    return valid[0]
+        return None
+    return search

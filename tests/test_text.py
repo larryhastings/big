@@ -41,6 +41,7 @@ import types
 import unittest
 
 
+
 try:
     import inflect
     engine = inflect.engine()
@@ -159,7 +160,37 @@ def printable_separators(separators):
 
 class StrSubclass(str):
     def __repr__(self): # pragma: no cover
-        return f"<StrSubclass {str(self)!r}>"
+        return "StrSubclass(" + super().__repr__() + ")"
+
+    def __getitem__(self, index): # pragma: no cover
+        return StrSubclass(super().__getitem__(index))
+
+    def partition(self, sep): # pragma: no cover
+        return StrSubclass(super().partition(sep))
+
+    def rpartition(self, sep): # pragma: no cover
+        return StrSubclass(super().rpartition(sep))
+
+    def split(self, sep): # pragma: no cover
+        return StrSubclass(super().split(sep))
+
+    def rsplit(self, sep): # pragma: no cover
+        return StrSubclass(super().rsplit(sep))
+
+    def strip(self): # pragma: no cover
+        return StrSubclass(super().strip())
+
+    def lstrip(self): # pragma: no cover
+        return StrSubclass(super().strip())
+
+    def rstrip(self): # pragma: no cover
+        return StrSubclass(super().strip())
+
+    def join(self, iterable): # pragma: no cover
+        return StrSubclass(super().join(iterable))
+
+
+
 
 class DifferentStrSubclass(str):
     def __repr__(self): # pragma: no cover
@@ -474,7 +505,6 @@ def toy_multisplit_original(s, separators): # pragma: no cover
     flush_word()
 
     return segments
-
 
 
 class BigTextTests(unittest.TestCase):
@@ -961,6 +991,7 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.multistrip('abcde', ('c', ''))
 
+
     def test_multisplit(self):
         """
         The first of *seven* multisplit test suites.
@@ -968,9 +999,11 @@ class BigTextTests(unittest.TestCase):
 
         This test suite tests basic functionality and type safety.
         """
+
+        def list_multisplit(*a, **kw): return list(big.multisplit(*a, **kw))
+
         for c in (unchanged, to_bytes):
             not_c = to_bytes if (c == unchanged) else unchanged
-            def list_multisplit(*a, **kw): return list(big.multisplit(*a, **kw))
             self.assertEqual(list_multisplit(c('aaaXaaaYaaa'), c('abc'), strip=True ), c(['X', 'Y']))
             self.assertEqual(list_multisplit(c('aaaXaaaYaaa'), c('abc'), strip=False), c(['', 'X', 'Y', '']))
             self.assertEqual(list_multisplit(c('abcXbcaYcba'), c('abc'), strip=True ), c(['X', 'Y']))
@@ -1115,11 +1148,25 @@ class BigTextTests(unittest.TestCase):
             list_multisplit(['a', 'b', 'c'])
         with self.assertRaises(TypeError):
             list_multisplit(['a', 'b', 'c'], 'a')
+        with self.assertRaises(TypeError):
+            list_multisplit('abcde', ('b', 'd', ''))
 
         # regression: if reverse=True and separators was not hashable,
         # multisplit would crash.  fixed in 0.6.17.
         self.assertEqual(list_multisplit('axbyczd', ['x', 'y', 'z'], maxsplit=2, reverse=True), ['axb', 'c', 'd'])
         self.assertEqual(list_multisplit(b'axbyczd', [b'x', b'y', b'z'], maxsplit=2, reverse=True), [b'axb', b'c', b'd'])
+
+        # test that multisplit honors string subclasses
+        SS = StrSubclass
+        for s in big.multisplit(SS('1a2b3c4d5e6'), SS('abcde')):
+            self.assertIsInstance(s, SS)
+
+        for s in big.multisplit(SS('abcdXXabcdabcdYYabcd'), (SS('ab'), SS('cd')), separate=True, strip=False):
+            self.assertIsInstance(s, SS)
+
+        for s, sep in big.multisplit(SS('abcdXXabcdabcdYYabcd'), (SS('ab'), SS('cd')), separate=True, strip=False, keep=big.AS_PAIRS):
+            self.assertIsInstance(s, SS)
+            self.assertIsInstance(sep, SS)
 
     def test_reimplemented_multisplit(self):
         """
@@ -2435,9 +2482,9 @@ class BigTextTests(unittest.TestCase):
         self.assertIsInstance(big.split_title_case('HowdyFolks'), types.GeneratorType)
 
         test('')
+        test('ThisIsATitleCaseString')
         test('     ')
         test(' 333    ')
-        test('ThisIsATitleCaseString')
         test('YoursTrulyJohnnyDollar_1975-03-15 - TheMysteriousMaynardMatter.MP3')
 
         test('oneOfTheGoodOnes')
@@ -3156,7 +3203,9 @@ class BigTextTests(unittest.TestCase):
                     empty = b''
                     if state:
                         state = to_bytes(state)
-                    if delimiters:
+                    if delimiters == big.split_delimiters_default_delimiters:
+                        delimiters = big.split_delimiters_default_delimiters_bytes
+                    elif delimiters:
                         delimiters = to_bytes(delimiters)
 
         test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
@@ -3170,8 +3219,22 @@ class BigTextTests(unittest.TestCase):
                 SDV('1:2, 3:4',          '', '}', ''),
                 SDV('',                  '', ')', ''),
             ),
-            delimiters=big.split_delimiters_default_delimiters_bytes, # test default
             )
+
+        with self.assertRaises(TypeError):
+            test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
+                (
+                    SDV('a',                '[',  '', ''),
+                    SDV('x',                 '', ']', ''),
+                    SDV(' = foo',           '(',  '', ''),
+                    SDV('',                 '"',  '', ''),
+                    SDV('howdy (folks)\\n',  '', '"', ''),
+                    SDV(', ',               '{',  '', ''),
+                    SDV('1:2, 3:4',          '', '}', ''),
+                    SDV('',                  '', ')', ''),
+                ),
+                delimiters=big.split_delimiters_default_delimiters_bytes,
+                )
 
         test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
             (
@@ -3467,6 +3530,14 @@ class BigTextTests(unittest.TestCase):
             d.quoting = True
         with self.assertRaises(AttributeError):
             d.quoting = True
+
+        # test that split_delimiters honors string subclasses
+        SS = StrSubclass
+        for segment, open, close, change in big.split_delimiters(SS('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})'), big.python_delimiters, yields=4):
+            self.assertIsInstance(segment, SS)
+            self.assertIsInstance(open, SS)
+            self.assertIsInstance(close, SS)
+            self.assertIsInstance(change, SS)
 
 
 

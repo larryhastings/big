@@ -25,11 +25,12 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import bigtestlib
-bigtestlib.preload_local_big()
+big_dir = bigtestlib.preload_local_big()
 
 import big.all as big
+import glob
 import os.path
-import pathlib
+from pathlib import Path
 import re
 import shutil
 import tempfile
@@ -65,7 +66,7 @@ class BigFileTests(unittest.TestCase):
             self.assertEqual(big.grep(c(grepfile), c("B"), flags=re.I), c(['bbbb', 'abc', 'BBBB', 'ABC']))
             self.assertEqual(big.grep(c(grepfile), c("b"), flags=re.I, enumerate=True), c([(2, 'bbbb'), (3, 'abc'), (7, 'BBBB'), (8, 'ABC')]))
 
-            p = pathlib.Path(grepfile)
+            p = Path(grepfile)
             self.assertEqual(big.grep(p, c("b")), c(['bbbb', 'abc']))
 
         with self.assertRaises(ValueError):
@@ -80,7 +81,7 @@ class BigFileTests(unittest.TestCase):
             self.assertEqual(big.fgrep(c(grepfile), c("B"), case_insensitive=True), c(['bbbb', 'abc', 'BBBB', 'ABC']))
             self.assertEqual(big.fgrep(c(grepfile), c("b"), enumerate=True), c([(2, 'bbbb'), (3, 'abc')]))
             self.assertEqual(big.fgrep(c(grepfile), c("b"), case_insensitive=True, enumerate=True), c([(2, 'bbbb'), (3, 'abc'), (7, 'BBBB'), (8, 'ABC')]))
-            p = pathlib.Path(grepfile)
+            p = Path(grepfile)
             self.assertEqual(big.fgrep(p, c("b")), c(['bbbb', 'abc']))
 
         with self.assertRaises(ValueError):
@@ -203,7 +204,7 @@ class BigFileTmpdirTests(unittest.TestCase):
 
     def test_read_python_file(self):
         """
-        read_python_file doesn't need any tests here.
+        I don't need to write any read_python_file tests here.
         It's given a thorough workout elsewhere in the unit test suite:
                 file tests/test_text.py
             function test_python_delimiters_on_big_source_tree()
@@ -215,6 +216,171 @@ class BigFileTmpdirTests(unittest.TestCase):
         """
         pass
 
+    def test_search_path(self):
+        # ensure that glob.escape and normcase are composable in either order
+        # (they should be)
+        self.assertEqual(
+            os.path.normcase( glob.escape("AbC*") ),
+            glob.escape( os.path.normcase("AbC*") ),
+            )
+
+        with big.pushd(big_dir / "tests"):
+
+            foo_d   = Path("test_search_path/foo_d_path/foo.d")
+            foo_h   = Path("test_search_path/foo_h_path/foo.h")
+            foo_hpp = Path("test_search_path/foo_h_path/foo.hpp")
+            foobar  = Path("test_search_path/file_without_extension/foobar")
+            mydir   = Path("test_search_path/want_directories/mydir")
+
+            search = big.search_path(
+                ["test_search_path/foo_h_path", "test_search_path/foo_d_path"],
+                ('.D',),
+                preserve_extension=False,
+                case_sensitive=False,
+                want_directories=True,
+                )
+            self.assertEqual(search('nonexists'), None)
+            self.assertEqual(search('foo'), foo_d)
+            self.assertEqual(search('foo.d'), None)
+
+            search = big.search_path(
+                ["test_search_path/foo_h_path", "test_search_path/foo_d_path"],
+                ('', '.D'),
+                preserve_extension=True,
+                case_sensitive=False,
+                want_directories=True,
+                )
+            self.assertEqual(search('foo'), foo_d)
+            self.assertEqual(search('foo.d'), foo_d)
+
+            search = big.search_path(
+                ["test_search_path/foo_h_path", "test_search_path/foo_d_path"],
+                ('.D',),
+                preserve_extension=True,
+                case_sensitive=False,
+                want_directories=True,
+                )
+            self.assertEqual(search('foo'), foo_d)
+            self.assertEqual(search('foo.d'), foo_d)
+
+            search = big.search_path(
+                ["test_search_path/foo_h_path", "test_search_path/foo_d_path"],
+                ('.D',),
+                preserve_extension=True,
+                case_sensitive=False,
+                want_directories=False,
+                )
+            self.assertEqual(search('foo'), None)
+            self.assertEqual(search('foo.d'), None)
+
+            search = big.search_path(
+                ["test_search_path/foo_d_path", "test_search_path/foo_h_path"],
+                ('.H',),
+                preserve_extension=True,
+                case_sensitive=False,
+                want_directories=False,
+                )
+            self.assertEqual(search('foo'), foo_h)
+            self.assertEqual(search('foo.h'), foo_h)
+
+            foo_h = Path("test_search_path/foo_h_path/foo.h")
+            search = big.search_path(
+                ["test_search_path/foo_d_path", "test_search_path/foo_h_path"],
+                ('.H',),
+                preserve_extension=False,
+                case_sensitive=False,
+                want_directories=False,
+                )
+            self.assertEqual(search('foo'), foo_h)
+            self.assertEqual(search('foo.h'), None)
+
+            search = big.search_path(
+                ["test_search_path/foo_d_path", "test_search_path/foo_h_path"],
+                ('.H',),
+                preserve_extension=True,
+                case_sensitive=True,
+                want_directories=False,
+                )
+            self.assertEqual(search('foo'), None)
+            self.assertEqual(search('foo.h'), None)
+
+            search = big.search_path(
+                ["test_search_path/foo_d_path", "test_search_path/foo_h_path"],
+                ('.h',),
+                preserve_extension=True,
+                want_directories=False,
+                )
+            self.assertEqual(search('foo'), foo_h)
+            self.assertEqual(search('foo.h'), foo_h)
+
+            search = big.search_path(
+                ["nonexistent_dir", "test_search_path/foo_d_path", "test_search_path/foo_h_path"],
+                ('.h',),
+                preserve_extension=True,
+                want_directories=True,
+                want_files=False,
+                )
+            self.assertEqual(search('foo'), None)
+            self.assertEqual(search('foo.h'), None)
+
+            search = big.search_path(
+                ["test_search_path/this_file_doesnt_match_anything", "test_search_path/foo_d_path", "test_search_path/foo_h_path"],
+                ('.h', '.hpp'),
+                preserve_extension=True,
+                )
+            self.assertEqual(search('foo'), foo_h)
+            self.assertEqual(search('foo.h'), foo_h)
+            self.assertEqual(search('foo.hpp'), foo_hpp)
+
+            search = big.search_path(
+                ["test_search_path/foo_d_path", "test_search_path/foo_h_path", "test_search_path/file_without_extension"],
+                ('.x', '.xyz', '',),
+                preserve_extension=True,
+                )
+            self.assertEqual(search('foobar'), foobar)
+            self.assertEqual(search('foo.h'), foo_h)
+            self.assertEqual(search('foo.hpp'), foo_hpp)
+
+            search = big.search_path(
+                ["test_search_path/foo_d_path", "test_search_path/want_directories"],
+                ('.x', '.xyz', '',),
+                preserve_extension=True,
+                want_directories=True,
+                want_files=False
+                )
+            self.assertEqual(search('mydir'), mydir)
+            self.assertEqual(search('yourdir'), None)
+
+            with self.assertRaises(ValueError):
+                big.search_path(("a", "b", "c"), want_files=False, want_directories=False)
+            with self.assertRaises(ValueError):
+                big.search_path([])
+            with self.assertRaises(ValueError):
+                big.search_path(("a", "b", "c"), [])
+            with self.assertRaises(ValueError):
+                big.search_path(("a", "b", "c"), ('.a', 33))
+            with self.assertRaises(ValueError):
+                big.search_path(("a", "b", "c"), ('.a', 'bcd'))
+            with self.assertRaises(ValueError):
+                big.search_path(("a", "b", "c"), ('.a', '', '.bcd', ''))
+
+            with self.assertRaises(ValueError):
+                search("foobar/")
+
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                lower = tmp / "filename.h"
+                upper = tmp / "FILENAME.h"
+                big.touch(lower)
+                if not upper.exists():
+                    big.touch(upper)
+
+                    search = big.search_path([tmp], ['.h', ''], case_sensitive=False)
+                    with self.assertRaises(ValueError):
+                        search("fIlEnAmE")
+                    search = big.search_path([tmp], case_sensitive=False)
+                    with self.assertRaises(ValueError):
+                        search("fIlEnAmE.h")
 
 def run_tests():
     bigtestlib.run(name="big.file", module=__name__)

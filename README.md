@@ -360,6 +360,8 @@ And here are five little functions/classes I use all the time:
 
 [`Scheduler.non_blocking()`](#schedulernon_blocking)
 
+[`search_path(paths, extensions=('',), *, case_sensitive=None, preserve_extension=True, want_directories=False, want_files=True)`](#search_pathpaths-extensions---case_sensitivenone-preserve_extensiontrue-want_directoriesfalse-want-filestrue)
+
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
 [`split_delimiters(s, delimiters={...}, *, state=(), yields=None)`](#split_delimiterss-delimiters--state-yieldsnone)
@@ -849,6 +851,83 @@ This function can still fail:
 <dl><dd>
 
 Unlinks `path`, if `path` exists and is a file.
+</dd></dl>
+
+
+#### `search_path(paths, extensions=('',), *, case_sensitive=None, preserve_extension=True, want_directories=False, want_files=True)`
+
+<dl><dd>
+
+Search a list of directories for a file.  Given a sequence
+of directories, an optional list of file extensions, and a
+filename, searches those directories for a file with that
+name and possibly one of those file extensions.
+
+`search_path` accepts the paths and extensions as parameters and
+returns a *search function*.  The search function accepts one
+`filename` parameter and performs the search, returning either the
+path to the file it found (as a `pathlib.Path` object) or `None`.
+You can reuse the search function to perform as many searches
+as you like.
+
+`paths` should be an iterable of `str` or `pathlib.Path` objects
+representing directories.  These may be relative or absolute
+paths; relative paths will be relative to the current directory
+at the time the search function is run.  Specifying a directory
+that doesn't exist is not an error.
+
+`extensions` should be an iterable of `str` objects representing
+extensions.  Every non-empty extension specified should start
+with a period (`'.'`) character (technically `os.extsep`).  You
+may specify at most one empty string in extensions, which
+represents testing the filename without an additional
+extension.  By default `extensions` is the tuple `('',)``.
+Extension strings may contain additional period characters
+after the initial one.
+
+Shell-style "globbing" isn't supported for any parameter.  Both
+the filename and the extension strings may contain filesystem
+globbing characters, but they will only match those literal
+characters themselves.  (`'*'` won't match any character, it'll
+only match a literal `'*'` in the filename or extension.)
+
+`case_sensitive` works like the parameter to `pathlib.Path.glob`.
+If `case_sensitive` is true, files found while searching must
+match the filename and extension exactly.  If `case_sensitive`
+is false, the comparison is done in a case-insensitive manner.
+If `case_sensitive` is `None` (the default), case sensitivity obeys
+the platform default (as per `os.path.normcase`).  In practice,
+only Windows platforms are case-insensitive by convention;
+all other platforms that support Python are case-sensitive
+by convention.
+
+If `preserve_extension` is true (the default), the search function
+checks the filename to see if it already ends with one of the
+extensions.  If it does, the search is restricted to only files
+with that extension--the other extensions are ignored.  This
+check obeys the `case_sensitive` flag; if `case_sensitive` is None,
+this comparison is case-insensitive only on Windows.
+
+`want_files` and `want_directories` are boolean values; the
+search function  will only return that type of file if the
+corresponding *want_* parameter is true.  You can request files,
+directories, or both.  (`want_files` and `want_directories`
+can't both be false.)  By default, `want_files` is true and
+`want_directories` is false.
+
+`paths` and `extensions` are both tried in order, and the search
+function returns the first match it finds.  All extensions are
+tried in a path entry before considering the next path.
+
+Returns a function:
+
+```Python
+    search(filename)
+```
+
+which returns either a `pathlib.Path` object on success or `None`
+on failure.
+
 </dd></dl>
 
 #### `touch(path)`
@@ -3571,6 +3650,14 @@ as the `flags` argument to `re.compile`.
 If `reverse` is true, partitions starting at the right,
 like [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0).
 
+> *Note:* `re_partition` supports partitioning on subclasses
+> of `str` or `bytes`, and the `before` and `after` objects in
+> the tuple returned will be slices of the `text` object.
+> However, the `match` object doesn't honor this this; the objects
+> it returns from e.g. `match.group` will always be of the base
+> type, either `str` or `bytes`.  This isn't fixable, as you can't
+> create `re.Match` objects in Python, nor can you subclass it.
+
 (In older versions of Python, `re.Pattern` was a private type called
 `re._pattern_type`.)
 </dd></dl>
@@ -3617,6 +3704,14 @@ Passing in a `count` of 0 will always return a tuple containing `s`.
 
 If `pattern` is a string, `flags` is passed in
 as the `flags` argument to `re.compile`.
+
+> *Note:* `re_rpartition` supports partitioning on subclasses
+> of `str` or `bytes`, and the `before` and `after` objects in
+> the tuple returned will be slices of the `text` object.
+> However, the `match` object doesn't honor this this; the objects
+> it returns from e.g. `match.group` will always be of the base
+> type, either `str` or `bytes`.  This isn't fixable, as you can't
+> create `re.Match` objects in Python, nor can you subclass it.
 
 (In older versions of Python, `re.Pattern` was a private type called
 `re._pattern_type`.)
@@ -6461,6 +6556,20 @@ in the **big** test suite.
 
 
 ## Release history
+
+#### 0.12.8
+
+*2025/01/06*
+
+* Added `search_path` to the *big.file* module.  `search_path`
+  implements "search path" functionality; given a list of
+  directories, a filename, and optionally a list of file
+  extensions to try, returns the first existing file that matches.
+* `multisplit` and `split_delimiters` now properly support
+  subclasses of `str`. All strings yielded by these functions
+  are now guaranteed to be slices of the original `s` parameter
+  passed in, or otherwise produced by making method calls on the
+  original `s` parameter that return strings.
 
 #### 0.12.7
 

@@ -56,11 +56,11 @@ except ImportError: # pragma: no cover
 
 __all__ = []
 
-def _export_name(s):
+def export_name(s):
     __all__.append(s)
 
-def _export(o):
-    _export_name(o.__name__)
+def export(o):
+    export_name(o.__name__)
     return o
 
 
@@ -97,7 +97,7 @@ def _recursive_encode_strings(o, encoding):
     raise TypeError(f"unhandled type for o {o!r}")
 
 
-@_export
+@export
 def encode_strings(o, encoding='ascii'):
     """
     Converts an object o from str to bytes.
@@ -126,7 +126,7 @@ def encode_strings(o, encoding='ascii'):
 # represent, please see the "Whitespace and line-breaking
 # characters in Python and big" deep-dive in big's README.
 
-_export_name('str_whitespace')
+export_name('str_whitespace')
 str_whitespace = (
     # char    decimal   hex      identity
     ##########################################
@@ -168,38 +168,38 @@ str_whitespace = (
     '\u205f', #  8287 - 0x205f - medium mathematical space
     '\u3000', # 12288 - 0x3000 - ideographic space
     )
-_export_name('str_whitespace_without_crlf')
+export_name('str_whitespace_without_crlf')
 str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
 
-_export_name('whitespace')
+export_name('whitespace')
 whitespace = str_whitespace
-_export_name('whitespace_without_crlf')
+export_name('whitespace_without_crlf')
 whitespace_without_crlf = str_whitespace_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we remove the four ASCII separator characters.
-_export_name('unicode_whitespace')
+export_name('unicode_whitespace')
 unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
-_export_name('unicode_whitespace_without_crlf')
+export_name('unicode_whitespace_without_crlf')
 unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
 
 # Whitespace as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-_export_name('ascii_whitespace')
+export_name('ascii_whitespace')
 ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
-_export_name('ascii_whitespace_without_crlf')
+export_name('ascii_whitespace_without_crlf')
 ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
 # Bytes objects, using the ASCII encoding.
-_export_name('bytes_whitespace')
+export_name('bytes_whitespace')
 bytes_whitespace = encode_strings(ascii_whitespace)
-_export_name('bytes_whitespace_without_crlf')
+export_name('bytes_whitespace_without_crlf')
 bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
 
 
-_export_name('str_linebreaks')
+export_name('str_linebreaks')
 str_linebreaks = (
     # char    decimal   hex      identity
     ##########################################
@@ -223,27 +223,27 @@ str_linebreaks = (
     # Also: welcome, Acorn and RISC OS users!
     # What are you doing here?  You can't run Python 3.6+!
     )
-_export_name('str_linebreaks_without_crlf')
+export_name('str_linebreaks_without_crlf')
 str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
 
-_export_name('linebreaks')
+export_name('linebreaks')
 linebreaks = str_linebreaks
-_export_name('linebreaks_without_crlf')
+export_name('linebreaks_without_crlf')
 linebreaks_without_crlf = str_linebreaks_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we again remove the four ASCII separator characters.
-_export_name('unicode_linebreaks')
+export_name('unicode_linebreaks')
 unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
-_export_name('unicode_linebreaks_without_crlf')
+export_name('unicode_linebreaks_without_crlf')
 unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
 
 # Linebreaks as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-_export_name('ascii_linebreaks')
+export_name('ascii_linebreaks')
 ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
-_export_name('ascii_linebreaks_without_crlf')
+export_name('ascii_linebreaks_without_crlf')
 ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
@@ -280,7 +280,7 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 # linebreak character, because str.splitlines (and bytes.splitlines)
 # rstrips the string of linebreak characters before it splits lines, sigh.
 
-_export_name('bytes_linebreaks')
+export_name('bytes_linebreaks')
 bytes_linebreaks = (
     b'\n'    , #   10 0x000a - linebreak
     )
@@ -300,9 +300,8 @@ bytes_linebreaks += (
     b'\r\n'  , # bonus! the classic DOS linebreak sequence!
     )
 
-_export_name('bytes_linebreaks_without_crlf')
+export_name('bytes_linebreaks_without_crlf')
 bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
-
 
 
 # reverse an iterable thing.
@@ -315,6 +314,8 @@ bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n
 # _multisplit_reversed is an internal function
 # and I've manually checked every call site.
 def _multisplit_reversed(o, name='s'):
+    if isinstance(o, int):
+        return -o # the reverse index!
     if isinstance(o, str):
         if len(o) <= 1:
             return o
@@ -325,7 +326,7 @@ def _multisplit_reversed(o, name='s'):
         return b"".join(o[i:i+1] for i in range(len(o)-1, -1, -1))
     # assert isinstance(o, (list, tuple, set, frozenset))
     t = type(o)
-    return t(_multisplit_reversed(p) for p in o)
+    return t(_multisplit_reversed(p, name) for p in reversed(o))
 
 
 # _reversed_builtin_separators precalculates the reversed versions
@@ -372,7 +373,7 @@ def _re_quote(s):
     return s
 
 
-@_export
+@export
 def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     """
     Like str.partition, but pattern is matched as a regular expression.
@@ -426,12 +427,8 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
         return re_rpartition(s, pattern, count, flags=flags)
 
     # writing it this way means the extension tuples are precompiled constants
-    if isinstance(s, bytes):
-        empty = b''
-        extension = (None, b'')
-    else:
-        empty = ''
-        extension = (None, '')
+    empty = s[-1:-1]
+    extension = (None, empty)
 
     if not isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
@@ -441,8 +438,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
         match = pattern.search(s)
         if not match:
             return (s, None, empty)
-        before, separator, after = s.partition(match.group(0))
-        return (before, match, after)
+        return (s[:match.start(0)], match, s[match.end(0):])
 
     if count == 0:
         return (s,)
@@ -455,15 +451,16 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     matches_iterator = pattern.finditer(s)
 
     try:
+        previous_end = 0
         for remaining in range(count, 0, -1):
             match = next(matches_iterator)
-            before, separator, s = s.partition(match.group(0))
-            extend((before, match))
+            extend((s[previous_end:match.start(0)], match))
+            previous_end = match.end(0)
         extension = ()
     except StopIteration:
         extension *= remaining
 
-    result.append(s)
+    result.append(s[previous_end:])
     return tuple(result) + extension
 
 
@@ -699,7 +696,7 @@ def reversed_re_finditer(pattern, string):
 
 _reversed_re_finditer = reversed_re_finditer
 
-@_export
+@export
 def reversed_re_finditer(pattern, string, flags=0):
     """
     A generator function.  Behaves almost identically to the Python
@@ -719,7 +716,7 @@ def reversed_re_finditer(pattern, string, flags=0):
     return _reversed_re_finditer(pattern, string)
 
 
-@_export
+@export
 def re_rpartition(s, pattern, count=1, *, flags=0):
     """
     Like str.rpartition, but pattern is matched as a regular expression.
@@ -774,21 +771,15 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     re._pattern_type.)
     """
 
-    # writing it this way means the extension tuples are precompiled constants
-    if isinstance(s, bytes):
-        empty = b''
-        extension = (b'', None)
-    else:
-        empty = ''
-        extension = ('', None)
+    empty = s[0:0]
+    extension = (empty, None)
 
     # optimized fast path for the most frequent use case
     if count == 1:
         matches_iterator = reversed_re_finditer(pattern, s, flags)
         try:
             match = next(matches_iterator)
-            before, separator, after = s.rpartition(match.group(0))
-            return (before, match, after)
+            return (s[:match.start(0)], match, s[match.end(0):])
         except StopIteration:
             return (empty, None, s)
 
@@ -802,16 +793,19 @@ def re_rpartition(s, pattern, count=1, *, flags=0):
     extend = result.extend
     matches_iterator = reversed_re_finditer(pattern, s, flags)
 
+    previous_start = len(s)
     try:
         for remaining in range(count, 0, -1):
             match = next(matches_iterator)
-            s, separator, after = s.rpartition(match.group(0))
+            # s, separator, after = s.rpartition(match.group(0))
+            after = s[match.end(0):previous_start]
             extend((after, match))
+            previous_start = match.start(0)
         extension = ()
     except StopIteration:
         extension *= remaining
 
-    result.append(s)
+    result.append(s[:previous_start])
     result.reverse()
     return extension + tuple(result)
 
@@ -854,7 +848,7 @@ def _separators_to_re(separators, separators_is_bytes, separate=False, keep=Fals
 
 
 
-@_export
+@export
 def multistrip(s, separators, left=True, right=True):
     """
     Like str.strip, but supports stripping multiple strings.
@@ -957,40 +951,29 @@ def multistrip(s, separators, left=True, right=True):
 
 # for keep
 AS_PAIRS="AS_PAIRS"
-_export_name(AS_PAIRS)
+export_name(AS_PAIRS)
 ALTERNATING="ALTERNATING"
-_export_name(ALTERNATING)
+export_name(ALTERNATING)
 
 # for strip
 LEFT = "LEFT"
-_export_name(LEFT)
+export_name(LEFT)
 RIGHT = "RIGHT"
-_export_name(RIGHT)
+export_name(RIGHT)
 PROGRESSIVE = "PROGRESSIVE"
-_export_name(PROGRESSIVE)
+export_name(PROGRESSIVE)
 
-def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, is_bytes, separators_to_re_keep):
+def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators):
     if maxsplit == None:
         maxsplit = -1
     elif maxsplit == 0:
         if keep == ALTERNATING:
             yield s
         elif keep == AS_PAIRS:
-            yield (s, empty)
+            yield (s, s[-1:-1])
         else:
             yield s
         return
-
-    # convert maxsplit for use with re.split.
-    #
-    # re.split interprets maxsplit slightly differently:
-    #   its maxsplit==0 means "allow all splits".
-    #   its maxsplit==1 means "only allow one split".
-    #
-    # (re.split doesn't have a way to express
-    #  "don't split" with its maxsplit parameter,
-    #  which is why we handled it already.)
-    re_split_maxsplit = 0 if maxsplit == -1 else maxsplit
 
     if reverse:
         # if reverse is true, when separators overlap,
@@ -999,7 +982,9 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, i
         # Eric Smith had the brainstorm: reverse the string
         # and the separators, split, and reverse the output
         # and the strings in the output.
+        original_s = s
         s = _multisplit_reversed(s, 's')
+
         separators = tuple(separators)
         s2 = _reversed_builtin_separators.get(separators, None)
         if s2 != None:
@@ -1007,9 +992,29 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, i
         else:
             separators = _multisplit_reversed(separators, 'separators')
 
-    pattern = _separators_to_re(separators, is_bytes, keep=separators_to_re_keep, separate=separate)
+    pattern = _separators_to_re(separators, is_bytes, keep=internally_keep_separators, separate=separate)
 
-    l = re.split(pattern, s, re_split_maxsplit)
+    # we write down the lengths, it's easier if we're reversing
+    splits_remaining = maxsplit
+    l = []
+    append = l.append
+    zero_replacement = -len(s) # this reverses properly, 0 doesn't
+    previous_match_end = zero_replacement
+    for match in re.finditer(pattern, s):
+        if not splits_remaining:
+            break
+        start = match.start() or zero_replacement
+        end = match.end() or zero_replacement
+        # segment
+        append((previous_match_end, start))
+        if internally_keep_separators:
+            # separator
+            append((start, end))
+        splits_remaining -= 1
+        previous_match_end = end
+
+    # final segment
+    append((previous_match_end, len(s)))
 
     if strip == PROGRESSIVE:
         # l alternates nonsep and sep strings.
@@ -1026,7 +1031,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, i
         #  ' a b c   '.split(None, maxsplit=3) => ['a', 'b', 'c']
         for i in range(length - 1, 0, -2):
             nonsep = l[i]
-            if nonsep:
+            if nonsep[0] != nonsep[1]:
                 last_non_empty_nonsep = i
                 break
         else:
@@ -1050,38 +1055,44 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, i
     # now we observe and preserve the reversed-ness of the list
     # as appropriate.
 
+    # but wait! there's more!
+    # now that we use re.finditer, we just write down the offsets.
+    # _multisplit_reversed has us covered.
+    #
+    # let's say we write down the tuple (5, 8), meaning we want to
+    # yield the value s[5:8].  but we're in reverse mode, so we
+    # reverse everything with _multisplit_reversed.  well, it
+    # reverses the tuple, but it also *negates the ints*.  so the
+    # tuple becomes (-8, -5), which means we yield s[-8:-5], which
+    # is perfectly the reverse of the offset we wrote down!
+
     if reverse:
         l = _multisplit_reversed(l, 'l')
+        s = original_s
 
-    if not keep:
-        if not reverse:
-            l.reverse()
+    l.reverse()
+
+    if (not keep) or (keep == ALTERNATING):
         while l:
-            yield l.pop()
+            offsets = l.pop()
+
+            o = s[ offsets[0] : offsets[1] ]
+            yield o
         return
 
-    # from here on out, we're 'keep'-ing the separator strings.
+    # from here on out, we're *always* 'keep'-ing the separator strings.
     # (we're returning the separator strings in one form or another.)
 
-    if keep == ALTERNATING:
-        if not reverse:
-            l.reverse()
-        while l:
-            yield l.pop()
-        return
-
     append_empty = (len(l) % 2) == 1
-    if reverse:
-        if append_empty:
-            l.insert(0, empty)
-    else:
-        if append_empty:
-            l.append(empty)
-        l.reverse()
+    if append_empty:
+        l.insert(0, (-1, -1))
 
     previous = None
     while l:
-        o = l.pop()
+        offsets = l.pop()
+
+        o = s[ offsets[0] : offsets[1] ]
+
         if previous is None:
             previous = o
             continue
@@ -1094,7 +1105,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, i
 _multisplit = multisplit
 
 
-@_export
+@export
 def multisplit(s, separators=None, *,
     keep=False,
     maxsplit=-1,
@@ -1230,13 +1241,11 @@ def multisplit(s, separators=None, *,
             if separators_is_str:
                 raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
             check_separators = True
-        empty = b''
         s_type = bytes
     else:
         if separators_is_bytes:
             raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
         check_separators = True
-        empty = ''
         s_type = str
 
     if separators is None:
@@ -1253,8 +1262,10 @@ def multisplit(s, separators=None, *,
         for o in separators:
             if not isinstance(o, s_type):
                 raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
+            if not o:
+                raise TypeError(f"separators cannot contain an empty str/bytes object")
 
-    separators_to_re_keep = keep
+    internally_keep_separators = keep
 
     if strip:
         if strip == PROGRESSIVE:
@@ -1263,7 +1274,7 @@ def multisplit(s, separators=None, *,
             else:
                 left = not reverse
                 right = reverse
-                separators_to_re_keep = True
+                internally_keep_separators = True
         else:
             left = strip != RIGHT
             right = strip != LEFT
@@ -1273,10 +1284,10 @@ def multisplit(s, separators=None, *,
             # this will make us exit the iterator early.
             maxsplit = 0
 
-    return _multisplit(s, separators, keep, maxsplit, reverse, separate, strip, empty, is_bytes, separators_to_re_keep)
+    return _multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators)
 
 
-@_export
+@export
 def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     """
     Like str.partition, but supports partitioning based on multiple separator
@@ -1333,10 +1344,10 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     desired_length = (2 * count) + 1
     result_length = len(result)
     if result_length < desired_length:
-        if isinstance(s, bytes):
-            empty = (b'',)
+        if reverse:
+            empty = (s[0:0],)
         else:
-            empty = ('',)
+            empty = (s[-1:-1],)
         extension = empty * (desired_length - result_length)
         if reverse:
             result = list(extension) + result
@@ -1344,7 +1355,7 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
             result.extend(extension)
     return tuple(result)
 
-@_export
+@export
 def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
@@ -1358,22 +1369,22 @@ def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
 # but that's because ASCII had a limited number of
 # punctuation characters.
 apostrophes = unicode_apostrophes = "'‘’‚‛"
-_export_name('apostrophes')
+export_name('apostrophes')
 double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
-_export_name('double_quotes')
+export_name('double_quotes')
 
 ascii_apostrophes = b"'"
-_export_name('ascii_apostrophes')
+export_name('ascii_apostrophes')
 ascii_double_quotes = b'"'
-_export_name('ascii_double_quotes')
+export_name('ascii_double_quotes')
 
 utf8_apostrophes = apostrophes.encode('utf-8')
-_export_name('utf8_apostrophes')
+export_name('utf8_apostrophes')
 utf8_double_quotes = double_quotes.encode('utf-8')
-_export_name('utf8_double_quotes')
+export_name('utf8_double_quotes')
 
 
-@_export
+@export
 def format_map(s, mapping):
     """
     An implementation of str.format_map supporting nested replacements.
@@ -1453,7 +1464,7 @@ def format_map(s, mapping):
 
 
 
-@_export
+@export
 def split_title_case(s, *, split_allcaps=True):
     """
     Splits s into words, assuming that
@@ -1494,59 +1505,50 @@ def split_title_case(s, *, split_allcaps=True):
     else:
         empty_join = ''.join
         i = iter(s)
+    i = enumerate(i)
 
-    for c in i:
+    for offset, c in i:
         break
     assert c
 
-    word = []
-    append = word.append
-    pop = word.pop
-    clear = word.clear
-
+    word_start = 0
     multiple_uppers = False
 
     while True:
         if c.islower():
-            append(c)
-            for c in i:
+            for offset, c in i:
                 if c.isupper():
-                    yield empty_join(word)
-                    clear()
+                    yield s[word_start:offset]
+                    word_start = offset
                     break
                 if c.islower():
-                    append(c)
                     continue
                 break
             else:
                 break
 
         elif c.isupper():
-            append(c)
             multiple_uppers = False
-            for c in i:
+            for offset, c in i:
                 if c.isupper():
                     multiple_uppers = split_allcaps
-                    append(c)
                     continue
                 if c.islower():
                     if multiple_uppers:
-                        previous = pop()
-                        yield empty_join(word)
-                        clear()
-                        append(previous)
+                        offset -= 1
+                        yield s[word_start:offset]
+                        word_start = offset
                 break
             else:
                 break
         else:
-            append(c)
-            for c in i:
+            for offset, c in i:
                 break
             else:
                 break
 
-    if word:
-        yield empty_join(word)
+    if word_start < offset:
+        yield s[word_start:]
 
 
 def combine_splits(s, split_lengths):
@@ -1617,7 +1619,7 @@ def combine_splits(s, split_lengths):
 
 _combine_splits = combine_splits
 
-@_export
+@export
 def combine_splits(s, *split_arrays):
     """
     Takes a string, and one or more "split arrays",
@@ -1666,7 +1668,7 @@ _default_bytes_is_double_quote = ascii_double_quotes.__eq__
 _str_do_contains = 'DO'.__contains__
 _bytes_do_contains = b'DO'.__contains__
 
-@_export
+@export
 def gently_title(s, *, apostrophes=None, double_quotes=None):
     """
     Uppercase the first character of every word in s,
@@ -1805,9 +1807,13 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
             c = c.upper()
             state = _in_word
         result.append(c)
-    return empty.join(result)
 
-@_export
+    result = empty.join(result)
+    if result == s:
+        return s
+    return result
+
+@export
 def normalize_whitespace(s, separators=None, replacement=None):
     """
     Returns s, but with every run of consecutive
@@ -1873,7 +1879,7 @@ def normalize_whitespace(s, separators=None, replacement=None):
         raise TypeError("replacement must be the same type as s, or None")
 
     if not s:
-        return empty
+        return s
 
     # normalize_whitespace has a fast path for
     # normalizing whitespace on str objects.
@@ -1897,11 +1903,12 @@ def normalize_whitespace(s, separators=None, replacement=None):
         if s[-1:].isspace():
             words.append(empty)
         cleaned = replacement.join(words)
-        return cleaned
-
-    words = list(multisplit(s, separators, keep=False, separate=False, strip=False, reverse=False, maxsplit=-1))
-    cleaned = replacement.join(words)
-    del words
+    else:
+        words = list(multisplit(s, separators, keep=False, separate=False, strip=False, reverse=False, maxsplit=-1))
+        cleaned = replacement.join(words)
+        del words
+    if s == cleaned:
+        return s
     return cleaned
 
 
@@ -2013,7 +2020,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
 _split_quoted_strings = split_quoted_strings
 
 
-@_export
+@export
 def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, multiline_quotes=(), state=''):
     """
     Splits s into quoted and unquoted segments.
@@ -2213,7 +2220,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     return _split_quoted_strings(s, separators, all_quotes_set, quotes_set, multiline_quotes_set, empty, laden, state)
 
 
-@_export
+@export
 class Delimiter:
     """
     Class representing a delimiter for split_delimiters.
@@ -2304,22 +2311,22 @@ class Delimiter:
 
 
 delimiter_parentheses = Delimiter(")")
-_export_name('delimiter_parentheses')
+export_name('delimiter_parentheses')
 
 delimiter_square_brackets = Delimiter("]")
-_export_name('delimiter_square_brackets')
+export_name('delimiter_square_brackets')
 
 delimiter_curly_braces = Delimiter("}")
-_export_name('delimiter_curly_braces')
+export_name('delimiter_curly_braces')
 
 delimiter_angle_brackets = Delimiter(">")
-_export_name('delimiter_angle_brackets')
+export_name('delimiter_angle_brackets')
 
 delimiter_single_quote = Delimiter("'", escape='\\', multiline=False, quoting=True)
-_export_name('delimiter_single_quote')
+export_name('delimiter_single_quote')
 
 delimiter_double_quotes = Delimiter('"', escape='\\', multiline=False, quoting=True)
-_export_name('delimiter_double_quotes')
+export_name('delimiter_double_quotes')
 
 split_delimiters_default_delimiters = {
     '(': delimiter_parentheses,
@@ -2328,7 +2335,7 @@ split_delimiters_default_delimiters = {
     "'": delimiter_single_quote,
     '"': delimiter_double_quotes,
     }
-_export_name('split_delimiters_default_delimiters')
+export_name('split_delimiters_default_delimiters')
 
 
 split_delimiters_default_delimiters_bytes = {
@@ -2338,8 +2345,7 @@ split_delimiters_default_delimiters_bytes = {
     b"'": Delimiter(b"'", escape=b'\\', multiline=False, quoting=True),
     b'"': Delimiter(b'"', escape=b'\\', multiline=False, quoting=True),
     }
-_export_name('split_delimiters_default_delimiters_bytes')
-
+export_name('split_delimiters_default_delimiters_bytes')
 
 _ACTION_POP = "<action: pop>"
 _ACTION_ESCAPE = "<action: escape>"
@@ -2567,6 +2573,8 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
         state.update(delimiters_that_push_a_new_state)
 
     return initial_state, all_tokens
+
+_delimiters_cache = []
 
 
 """
@@ -2840,12 +2848,16 @@ python_delimiters = Workspace.python_delimiters
 _python_delimiters_cache = Workspace._python_delimiters_cache
 del Workspace
 
-_export_name('python_delimiters')
+_delimiters_cache.append(
+    (python_delimiters, _python_delimiters_cache, 4)
+    )
+
+export_name('python_delimiters')
 
 python_delimiters_version = { f"3.{minor}": python_delimiters for minor in range(6, 14) }
-_export_name('python_delimiters_version')
+export_name('python_delimiters_version')
 
-@_export
+@export
 class SplitDelimitersValue:
     __slots__ = ['text', 'open', 'close', 'change', 'yields']
 
@@ -2878,8 +2890,8 @@ class SplitDelimitersValue:
             yield self.change
 
 
-@_export
-def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_bytes, yields):
+@export
+def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yields):
     """
     Internal generator function returned by the real split_delimiters.
 
@@ -2983,7 +2995,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
     while True:
         for s, delimiter in i:
             # if want_debug:
-            #     print(f">> {s=} {delimiter=}  {[o[1] for o in stack]}")
+            #     print(f">> {s=!r} {delimiter=!r}  {[o[1] for o in stack]}")
             #     print(f">> {consumed:03} {text[consumed:]!r}")
             if not (s or delimiter):
                 continue
@@ -3031,7 +3043,9 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
 
             if isinstance(action, _ACTION_TRUNCATE_TO_S_AND_RESPLIT):
                 # convert the action back into the startswith delimiter we want,
-                delimiter = str_or_bytes(action)
+                # being careful to use the original text,
+                delimiter_length = len(str_or_bytes(action))
+                delimiter = delimiter[:delimiter_length]
                 # look up the actual action we should use to handle that delimiter,
                 action = current.get(delimiter, _ACTION_FLUSH)
                 # assert action is not _ACTION_FLUSH, f"{action!r} is not {_ACTION_FLUSH}, delimiter={delimiter}"
@@ -3048,28 +3062,33 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
                     # the colon itself doesn't map
                     s = join(buffer)
                     clear()
-                    yield SplitDelimitersValue(s, empty, empty, delimiter, yields)
+                    s_length = len(s)
+                    s_empty = s[s_length:]
+                    yield SplitDelimitersValue(s, s_empty, s_empty, delimiter, yields)
                     consumed += len(delimiter)
                     current = action
                     stack[-1] = (stack[-1][0], delimiter)
-                    continue
-
-                # action is a new state, push it.
-                # flush open delimiter
-                s = join(buffer)
-                clear()
-                yield SplitDelimitersValue(s, delimiter, empty, empty, yields)
-                consumed += len(delimiter)
-                # and push
-                push((current, delimiter))
-                current = action
-                continue
-
-            if action is _ACTION_POP:
+                else:
+                    # action is a new state, push it.
+                    # flush open delimiter
+                    s = join(buffer)
+                    clear()
+                    delimiter_length = len(delimiter)
+                    delimiter_empty = delimiter[delimiter_length:]
+                    yield SplitDelimitersValue(s, delimiter, delimiter_empty, delimiter_empty, yields)
+                    consumed += len(delimiter)
+                    # and push
+                    push((current, delimiter))
+                    current = action
+            elif action is _ACTION_POP:
                 # flush close delimiter
                 s = join(buffer)
                 clear()
-                yield SplitDelimitersValue(s, empty, delimiter, empty, yields)
+                s_length = len(s)
+                s_empty = s[s_length:]
+                delimiter_length = len(delimiter)
+                delimiter_empty = delimiter[delimiter_length:]
+                yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
                 consumed += len(delimiter)
                 # and pop
                 current, _ = pop()
@@ -3100,7 +3119,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
                 raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
 
             if resplit:
-                # print(f"    resplitting at offset {consumed}, {text[consumed:]!r}")
+                # print(f"#    resplitting at offset {consumed}, {text[consumed:]!r}")
                 i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                 resplit = False
                 break
@@ -3112,16 +3131,25 @@ def split_delimiters(text, all_tokens, current, stack, empty, laden, str_or_byte
             raise SyntaxError(f"text ends with escape string {escaped!r}")
         s = join(buffer)
         if s:
-            yield SplitDelimitersValue(s, empty, empty, empty, yields)
+            s_length = len(s)
+            s_empty = s[s_length:]
+            yield SplitDelimitersValue(s, s_empty, s_empty, s_empty, yields)
 
 
 _split_delimiters = split_delimiters
 
 _split_delimiters_default_delimiters_cache = _delimiters_to_state_and_tokens(tuple(split_delimiters_default_delimiters.items()), False)
+_delimiters_cache.append(
+    (split_delimiters_default_delimiters, _split_delimiters_default_delimiters_cache, 3)
+    )
+
 _split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_and_tokens(tuple(split_delimiters_default_delimiters_bytes.items()), True)
+_delimiters_cache.append(
+    (split_delimiters_default_delimiters_bytes, _split_delimiters_default_delimiters_bytes_cache, 3)
+    )
 
 
-@_export
+@export
 def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state=(), yields=None):
     """
     Splits a string s at delimiter substrings.
@@ -3214,45 +3242,43 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     """
     initial_state = all_tokens = None
 
-    is_python_delimiters = delimiters is python_delimiters
-    if delimiters in (split_delimiters_default_delimiters, split_delimiters_default_delimiters_bytes, python_delimiters):
-        delimiters = None
-
-    if yields is None:
-        if is_python_delimiters:
-            yields = 4
-        else:
-            yields = 3
-    elif not yields in (3, 4):
-        raise ValueError("yields must be None, 3, or 4")
-
     is_bytes = isinstance(s, bytes)
     if is_bytes:
         str_or_bytes = bytes
-        empty = b''
-        laden = b'x'
         if delimiters is None:
-            initial_state, all_tokens = _split_delimiters_default_delimiters_bytes_cache
+            delimiters = split_delimiters_default_delimiters_bytes
         elif not delimiters:
             raise ValueError("invalid delimiters")
         elif b'\\' in delimiters:
             raise ValueError("open delimiter must not be b'\\'")
     else:
         str_or_bytes = str
-        empty = ''
-        laden = 'x'
         if delimiters is None:
-            if is_python_delimiters:
-                initial_state, all_tokens = _python_delimiters_cache
-            else:
-                initial_state, all_tokens = _split_delimiters_default_delimiters_cache
+            delimiters = split_delimiters_default_delimiters
         elif not delimiters:
             raise ValueError("invalid delimiters")
         elif '\\' in delimiters:
             raise ValueError("open delimiter must not be '\\'")
 
+    s_length = len(s)
+    empty = s[s_length:]
+
+    for d, cache, default_yields in _delimiters_cache:
+        if delimiters == d:
+            initial_state, all_tokens = cache
+            if yields is None:
+                yields = default_yields
+            break
+
     if not initial_state:
         initial_state, all_tokens = _delimiters_to_state_and_tokens(tuple(delimiters.items()), is_bytes)
+    assert initial_state
+    assert all_tokens
+
+    if yields is None:
+        yields = 3
+    elif not yields in (3, 4):
+        raise ValueError("yields must be None, 3, or 4")
 
     stack = []
     push = stack.append
@@ -3270,11 +3296,11 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 
             raise ValueError(f"delimiter #{i} specified in state is invalid: {delimiter!r}")
 
-    return _split_delimiters(s, all_tokens, current, stack, empty, laden, str_or_bytes, yields)
+    return _split_delimiters(s, all_tokens, current, stack, empty, str_or_bytes, yields)
 
 
 
-@_export
+@export
 class LineInfo:
     """
     The first object in the 2-tuple yielded by a
@@ -3479,7 +3505,7 @@ class LineInfo:
         return isinstance(other, self.__class__) and (other.__dict__ == self.__dict__)
 
 
-@_export
+@export
 class lines:
     def __init__(self, s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, source='', tab_width=8, **kwargs):
         """
@@ -3621,7 +3647,7 @@ class lines:
         self.line_number += 1
         return return_value
 
-@_export
+@export
 def lines_rstrip(li, separators=None):
     """
     A lines modifier function.  Strips trailing whitespace from the
@@ -3652,7 +3678,7 @@ def lines_rstrip(li, separators=None):
         yield (info, rstripped)
 
 
-@_export
+@export
 def lines_strip(li, separators=None):
     """
     A lines modifier function.  Strips leading and trailing strings
@@ -3727,7 +3753,7 @@ def lines_filter_line_comment_lines(li, match):
 
 _lines_filter_line_comment_lines = lines_filter_line_comment_lines
 
-@_export
+@export
 def lines_filter_line_comment_lines(li, comment_markers):
     """
     A lines modifier function.  Filters out comment lines from the
@@ -3774,7 +3800,7 @@ def lines_filter_line_comment_lines(li, comment_markers):
     return _lines_filter_line_comment_lines(li, match)
 
 
-@_export
+@export
 def lines_containing(li, s, *, invert=False):
     """
     A lines modifier function.  Only yields lines
@@ -3816,7 +3842,7 @@ def lines_grep(li, search, match, invert):
 
 _lines_grep = lines_grep
 
-@_export
+@export
 def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     """
     A lines modifier function.  Only yields lines
@@ -3851,7 +3877,7 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     return _lines_grep(li, search, match, invert)
 
 
-@_export
+@export
 def lines_sort(li, *, key=None, reverse=False):
     """
     A lines modifier function.  Sorts all input lines before yielding them.
@@ -3945,7 +3971,7 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
 
 _lines_strip_line_comments = lines_strip_line_comments
 
-@_export
+@export
 def lines_strip_line_comments(li, line_comment_markers, *,
     escape='\\', quotes=(), multiline_quotes=()):
     """
@@ -4051,7 +4077,7 @@ def lines_strip_line_comments(li, line_comment_markers, *,
 
 
 
-@_export
+@export
 def lines_convert_tabs_to_spaces(li):
     """
     A lines modifier function.  Converts tabs to spaces for the lines
@@ -4063,7 +4089,7 @@ def lines_convert_tabs_to_spaces(li):
         yield (info, info.detab(line))
 
 
-@_export
+@export
 def lines_strip_indent(li):
     """
     A lines modifier function.  Strips leading whitespace and tracks
@@ -4182,7 +4208,7 @@ def lines_strip_indent(li):
             info.indent = 0
             yield pair
 
-@_export
+@export
 def lines_filter_empty_lines(li):
     """
     A lines modifier function.  Filters out the empty lines
@@ -4206,7 +4232,7 @@ def lines_filter_empty_lines(li):
 
 
 
-@_export
+@export
 def wrap_words(words, margin=79, *, two_spaces=True):
     """
     Combines 'words' into lines and returns the result as a string.
@@ -4553,7 +4579,7 @@ class _column_wrapper_splitter:
 
 
 
-@_export
+@export
 def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True):
     """
     Splits the string s into individual words,
@@ -4595,7 +4621,7 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
     return return_value
 
 
-@_export
+@export
 class OverflowStrategy(enum.Enum):
     """
     Enum providing constants to specify how merge_columns
@@ -4608,7 +4634,7 @@ class OverflowStrategy(enum.Enum):
     DELAY_ALL = enum.auto()
     # DELAY_MINIMUM = enum.auto()  # not implemented yet
 
-@_export
+@export
 def merge_columns(*columns, column_separator=None,
     overflow_strategy=OverflowStrategy.RAISE,
     overflow_before=0,
@@ -4814,7 +4840,7 @@ def merge_columns(*columns, column_separator=None,
     text = linebreak.join(lines)
     return text.rstrip()
 
-@_export
+@export
 def int_to_words(i, flowery=True, ordinal=False):
     """
     Converts an integer into the equivalent English string.
@@ -4991,7 +5017,7 @@ _valid_newline_values = {
     '\r\n': b'\r\n',
     }
 
-@_export
+@export
 def decode_python_script(script, *,
     newline=None,
     use_bom=True,
@@ -5039,9 +5065,11 @@ def decode_python_script(script, *,
     the script will be decoded using the encoding specified by the BOM, and the
     source code encoding must agree with the BOM.
 
-    The newline parameter supports Python's "universal newlines" convention.
-    This behaves identically to the newline parameter for Python's open()
-    function.
+    decode_python_script also supports Python's "universal newlines" feature,
+    using the same interface as Python's open() function.  decode_python_script
+    accepts a newlines parameter, which may be None, '\\n', '\\r', or '\\r\\n'.
+    If newlines is None (the default), b'\\r\\n' and b'\\r' in the script are
+    converted to '\\n'.  If newlines is not None, no newline conversion is done.
     """
     s = script
     encoded = True
@@ -5147,3 +5175,5 @@ def decode_python_script(script, *,
 
     return s
 
+del export
+del export_name
