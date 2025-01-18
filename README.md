@@ -30,7 +30,7 @@ It's a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
 required dependencies (unless you want to run the test suite).
-The current version is [0.12.7.](#0127)
+The current version is [0.12.8.](#0128)
 
 *Think big!*
 
