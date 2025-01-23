@@ -998,7 +998,8 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
     splits_remaining = maxsplit
     l = []
     append = l.append
-    zero_replacement = -len(s) # this reverses properly, 0 doesn't
+    len_s = len(s)
+    zero_replacement = -len_s # this reverses properly, 0 doesn't
     previous_match_end = zero_replacement
     for match in re.finditer(pattern, s):
         if not splits_remaining:
@@ -1014,7 +1015,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
         previous_match_end = end
 
     # final segment
-    append((previous_match_end, len(s)))
+    append((previous_match_end, len_s))
 
     if strip == PROGRESSIVE:
         # l alternates nonsep and sep strings.
@@ -1085,7 +1086,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
 
     append_empty = (len(l) % 2) == 1
     if append_empty:
-        l.insert(0, (-1, -1))
+        l.insert(0, (len_s, len_s))
 
     previous = None
     while l:
