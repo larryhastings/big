@@ -8,7 +8,7 @@ Think big!
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2025 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -84,6 +84,10 @@ from .text import *
 from . import time
 __all__.extend(time.__all__)
 from .time import *
+
+from . import types
+__all__.extend(types.__all__)
+from .types import *
 
 from . import version
 __all__.extend(version.__all__)

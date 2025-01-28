@@ -8,7 +8,7 @@ Think big!
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2025 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,4 +30,4 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-__version__ = "0.12.8"
+__version__ = "0.13"

@@ -1,0 +1,822 @@
+#!/usr/bin/env python3
+
+_license = """
+big
+Copyright 2022-2025 Larry Hastings
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+import bigtestlib
+big_dir = bigtestlib.preload_local_big()
+
+import pickle
+import string
+import sys
+import unittest
+
+from big.types import String
+
+
+source = "C:\\AUTOEXEC.BAT"
+source2 = "C:\\HIMEM.SYS"
+first_line_number = 1
+first_column_number = 1
+
+alphabet = String('abcdefghijklmnopqrstuvwxyz', source=source)
+abcde = alphabet[:5]
+fghij = alphabet[5:10]
+himem = String('QEMM\n', source=source2)
+line1 = String('line 1!\n', source=source)
+line2 = String('line 2.\n', source=source, line_number=2)
+words = String('this is a series of words.', source=source)
+tabs  = String('this\tis\ta\tseries\tof\twords\twith\ttabs', source=source)
+leading_and_trailing  = String('            a b c                  ', source=source)
+leading_only  = String('            a b c', source=source)
+trailing_only  = String('a b c            ', source=source)
+
+splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
+
+l2 = String("ab\ncd\nef", source='xz')
+
+
+chipmunk = String('🐿️', source='tic e tac')
+
+
+l = abcde
+
+values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only]
+
+
+class BigStringTests(unittest.TestCase):
+
+    maxDiff = 2**32
+
+    ##
+    ## these methods with a type-sounding name
+    ## assert that the value you pass in for "got"
+    ## is of that specific type, as well as ensuring
+    ## that the value == "expected".
+    ##
+
+    def bool(self, got, expected):
+        self.assertIsInstance(got, bool)
+        self.assertIs(got, expected)
+
+    def bytes(self, got, expected):
+        self.assertIsInstance(got, bytes)
+        self.assertEqual(got, expected)
+
+    def int(self, got, expected):
+        self.assertIsInstance(got, int)
+        self.assertEqual(got, expected)
+
+    def String(self, got, expected):
+        self.assertIsInstance(got, String)
+        self.assertEqual(got, expected)
+
+    line = String
+
+    def str(self, got, expected):
+        self.assertIsInstance(got, str)
+        self.assertNotIsInstance(got, String)
+        self.assertEqual(got, expected)
+
+    ##
+    ## below this comment is a test_ method
+    ## for *every* attribute of a str object,
+    ## as reported by dir('').
+    ##
+    ## if we don't need to test it, I left it
+    ## in, with a comment and a pass statement.
+    ##
+
+    def test___add__(self):
+        self.str(l + " xyz", 'abcde xyz')
+        self.str("boogie " + l, 'boogie abcde')
+
+        self.line(abcde + fghij, alphabet[:10])
+
+    def test___class__(self):
+        self.assertEqual(l.__class__, String)
+
+    def test___contains__(self):
+        # also tests .find and .index and .rfind and .rindex
+
+        for s in ("b", "bc"):
+            self.assertTrue(s in abcde)
+            self.assertGreaterEqual(abcde.find(s), 0)
+            self.assertGreaterEqual(abcde.rfind(s), 0)
+            self.assertGreaterEqual(abcde.index(s), 0)
+            self.assertGreaterEqual(abcde.rindex(s), 0)
+        for s in ("q", "funk"):
+            self.assertFalse(s in abcde)
+            self.assertEqual(abcde.find(s), -1)
+            self.assertEqual(abcde.rfind(s), -1)
+            with self.assertRaises(ValueError):
+                abcde.index(s)
+            with self.assertRaises(ValueError):
+                abcde.rindex(s)
+
+        letters = set(string.ascii_letters) | set(string.punctuation) | set(string.whitespace)
+        for value in values:
+            in_value = set(str(value))
+            not_in_value = letters - in_value
+            for letter in in_value:
+                self.assertTrue(letter in value)
+                self.assertGreaterEqual(value.find(letter), 0)
+                self.assertGreaterEqual(value.rfind(letter), 0)
+                self.assertGreaterEqual(value.index(letter), 0)
+                self.assertGreaterEqual(value.rindex(letter), 0)
+            for letter in not_in_value:
+                self.assertFalse(letter in value)
+                self.assertEqual(value.find(letter), -1)
+                self.assertEqual(value.rfind(letter), -1)
+                with self.assertRaises(ValueError):
+                    value.index(letter)
+                with self.assertRaises(ValueError):
+                    value.rindex(letter)
+
+    def test___delattr__(self):
+        with self.assertRaises(AttributeError):
+            del l.source
+
+    def test___dir__(self):
+        # disabled again, until the interface stabilizes
+        return
+        str_dir = dir('')
+        str_dir.extend(
+            (
+            '__module__',
+            '__radd__',
+            '__slots__',
+            '_add',
+            '_are_contiguous',
+            '_column_number',
+            '_compute_linebreak_offsets',
+            '_first_column_number',
+            '_first_line_number_delta',
+            '_line_number',
+            '_linebreak_offsets',
+            '_source',
+            '_partition',
+            '_split',
+            'bisect',
+            'column_number',
+            'first_column_number',
+            'first_line_number',
+            'line_number',
+            'source',
+            )
+        )
+        str_dir.sort()
+
+        Line_dir = dir(l)
+        Line_dir.sort()
+        self.assertEqual(str_dir, Line_dir)
+
+    def test___doc__(self):
+        self.assertIsInstance(l.__doc__, str)
+        self.assertTrue(l.__doc__)
+
+    def test___eq__(self):
+        self.assertEqual(l, str(l))
+        self.assertEqual(l + 'x', str(l) + 'x')
+
+    def test___format__(self):
+        f = String('{abcde} {line1} {line2}', source=source)
+        got = f.format(abcde=abcde, line1=line1, line2=line2)
+        self.str(got, 'abcde line 1!\n line 2.\n')
+
+    def test___ge__(self):
+        self.assertGreaterEqual(l, str(l))
+        self.assertGreaterEqual(l + 'x', str(l))
+        self.assertGreaterEqual(str(l) + 'x', l)
+
+    def test___getattribute__(self):
+        self.assertEqual(l.source, source)
+        self.assertEqual(l.line_number, first_line_number)
+        self.assertEqual(l.column_number, first_column_number)
+
+        self.assertEqual(line2.source, source)
+        self.assertEqual(line2.line_number, first_line_number + 1)
+        self.assertEqual(line2.column_number, first_column_number)
+
+        self.assertEqual(himem.source, source2)
+        self.assertEqual(himem.line_number, first_line_number)
+        self.assertEqual(himem.column_number, first_column_number)
+
+        with self.assertRaises(AttributeError):
+            print(l.attribute_which_does_not_exist)
+
+    def test___getitem__(self):
+        s = str(abcde)
+        length = len(s)
+        for i in range(-length, length):
+            self.line(abcde[i], String(s[i], source=source, column_number=first_column_number + (i % length)))
+
+        self.line(abcde[1:4], String('bcd', source=source, column_number=first_column_number + 1))
+
+        # regression!
+        last_zero = abcde[len(abcde):len(abcde)]
+        self.assertEqual(last_zero.line_number, 1)
+        self.assertEqual(last_zero.column_number, abcde.first_column_number + len(abcde))
+
+        # *indexing* out of range raises IndexError.
+        with self.assertRaises(IndexError):
+            abcde[-20]
+        with self.assertRaises(IndexError):
+            abcde[33]
+
+        # *sliciing* out of range clamps to allowed range.
+        self.line(abcde[-20:], abcde)
+        self.line(abcde[448:], abcde[length:length])
+
+    def test___getnewargs__(self):
+        # String implements __getnewargs__, it's pickling machinery.
+        for value in values:
+            p = pickle.dumps(value)
+            value2 = pickle.loads(p)
+            self.line(value2, value)
+
+    def test___getstate__(self):
+        # __getstate__ is part of the pickling machinery.
+        # we don't override str.__getstate__, pickling seems to work anyway.
+        pass
+
+    def test___gt__(self):
+        self.assertGreaterEqual(l + 'x', str(l))
+        self.assertGreaterEqual(str(l) + 'x', l)
+
+    def test___hash__(self):
+        # we reuse str.__hash__
+        for value in values:
+            s = str(value)
+            self.assertEqual(hash(value), hash(s))
+
+    def test___init__(self):
+        # don't need to test this special
+        pass
+
+    def test___init_subclass__(self):
+        # oh golly, idk.  don't subclass String, mkay?
+        pass
+
+    def test___iter__(self):
+        for value in values:
+            s = str(value)
+            for i, (a, b) in enumerate(zip(value, s)):
+                self.assertEqual(a, b, f'failed on {value=} {i=} {a=} != {b=}')
+                self.str(b, s[i])
+                self.line(a, value[i])
+
+        # and now, a cool String feature
+        l = String('a\nb\ncde\nf', source='s1')
+        expected = [
+            String('a',  source='s1', line_number=1, column_number=1, offset=0),
+            String('\n', source='s1', line_number=1, column_number=2, offset=1),
+            String('b',  source='s1', line_number=2, column_number=1, offset=2),
+            String('\n', source='s1', line_number=2, column_number=2, offset=3),
+            String('c',  source='s1', line_number=3, column_number=1, offset=4),
+            String('d',  source='s1', line_number=3, column_number=2, offset=5),
+            String('e',  source='s1', line_number=3, column_number=3, offset=6),
+            String('\n', source='s1', line_number=3, column_number=4, offset=7),
+            String('f',  source='s1', line_number=4, column_number=1, offset=8),
+            ]
+        for a, b in zip(l, expected):
+            self.line(a, b)
+
+        l = String('a\nb\ncde\nf', source='s2', line_number=10, column_number=2, first_column_number=2, offset=99)
+        expected = [
+            String('a',  source='s2', line_number=10, column_number=2, offset=99),
+            String('\n', source='s2', line_number=10, column_number=3, offset=100),
+            String('b',  source='s2', line_number=11, column_number=2, offset=101),
+            String('\n', source='s2', line_number=11, column_number=3, offset=102),
+            String('c',  source='s2', line_number=12, column_number=2, offset=103),
+            String('d',  source='s2', line_number=12, column_number=3, offset=104),
+            String('e',  source='s2', line_number=12, column_number=4, offset=105),
+            String('\n', source='s2', line_number=12, column_number=5, offset=106),
+            String('f',  source='s2', line_number=13, column_number=2, offset=107),
+            ]
+        for a, b in zip(l, expected):
+            self.line(a, b)
+
+
+    def test___le__(self):
+        self.assertLessEqual(l, str(l))
+        self.assertLessEqual(l, str(l) + 'x')
+        self.assertLessEqual(str(l), l + 'x')
+
+    def test___len__(self):
+        for value in values:
+            self.int(len(value), len(str(value)))
+
+    def test___lt__(self):
+        self.assertLess(l, str(l) + 'x')
+        self.assertLess(str(l), l + 'x')
+
+    def test___mod__(self):
+        # wow!  crack a window, will ya?
+        f = String('%s %d %f', source=source)
+        got = f % (abcde, 33, 35.5)
+        self.str(got, 'abcde 33 35.500000')
+
+    def test___mul__(self):
+        for value in values:
+            for i in range(6):
+                self.str(value * i, str(value) * i)
+
+    def test___ne__(self):
+        self.assertNotEqual(l, str(l) + 'x')
+        self.assertNotEqual(l + 'x', str(l))
+        self.assertNotEqual(l, 3)
+        self.assertNotEqual(String('3', source='x'), 3)
+
+    def test___new__(self):
+        # don't need to test this
+        pass
+
+    def test___reduce__(self):
+        # part of the pickling machinery, don't touch it!
+        pass
+
+    def test___reduce_ex__(self):
+        # part of the pickling machinery, don't touch it!
+        pass
+
+    def test___repr__(self):
+        for value in values:
+            if value.first_column_number == 1:
+                extra = ''
+            else:
+                extra = f", first_column_number={value.first_column_number}"
+            expected = f"String({repr(str(value))}, source={value.source!r}, line_number={value.line_number}, column_number={value.column_number}{extra})"
+            self.str(repr(value), expected)
+
+    def test___rmod__(self):
+        # I don't know what rmod does.
+        # I mean, I know it's right-side modulus.
+        # but what object X and string S can you define
+        # such that X % S gives you a value?!
+        # it's *not* printf-style formatting.
+        pass
+
+    def test___rmul__(self):
+        for value in values:
+            for i in range(6):
+                self.str(i * value, i * str(value))
+
+    def test___setattr__(self):
+        with self.assertRaises(AttributeError):
+            l.source = '329872389'
+        with self.assertRaises(AttributeError):
+            l.line_number = 329872389
+        with self.assertRaises(AttributeError):
+            l.column_number = 329872389
+        with self.assertRaises(AttributeError):
+            l.first_column_number = 329872389
+
+    def test___sizeof__(self):
+        value = sys.getsizeof(String(''))
+        self.assertIsInstance(value, int)
+        # the size varies from one Python version to the next
+        self.assertGreaterEqual(value, 40)
+
+    def test___str__(self):
+        self.String(abcde, 'abcde')
+
+    def test___subclasshook__(self):
+        # don't need to test this (I hope)
+        pass
+
+    def test_capitalize(self):
+        for value in values:
+            self.str(value.capitalize(), str(value).capitalize())
+
+    def test_casefold(self):
+        for value in values:
+            self.str(value.casefold(), str(value).casefold())
+
+    def test_center(self):
+        for value in values:
+            self.str(value.center(30), str(value).center(30))
+            self.str(value.center(30, 'Z'), str(value).center(30, 'Z'))
+
+    def test_count(self):
+        for value in values:
+            self.int(value.count('e'), str(value).count('e'))
+
+    def test_encode(self):
+        for value in values:
+            self.bytes(value.encode('utf-8'),     str(value).encode('utf-8'))
+            self.bytes(value.encode('ascii'),     str(value).encode('ascii'))
+            self.bytes(value.encode('utf-16'),    str(value).encode('utf-16'))
+            self.bytes(value.encode('utf-16-be'), str(value).encode('utf-16-be'))
+            self.bytes(value.encode('utf-16-le'), str(value).encode('utf-16-le'))
+            self.bytes(value.encode('utf-32'),    str(value).encode('utf-32'))
+            self.bytes(value.encode('utf-32-be'), str(value).encode('utf-32-be'))
+            self.bytes(value.encode('utf-32-le'), str(value).encode('utf-32-le'))
+
+    def test_endswith(self):
+        for value in values:
+            self.bool(value.endswith('f'), str(value).endswith('f'))
+            self.bool(value.endswith('.'), str(value).endswith('.'))
+
+    def test_expandtabs(self):
+        for value in values:
+            tester = self.str if '\t' in value else self.line
+            tester(value.expandtabs(), str(value).expandtabs())
+
+    def test_find(self):
+        # see test___contains__
+        pass
+
+    def test_format(self):
+        # see test___format__
+        pass
+
+    def test_format_map(self):
+        # see test___format__
+        pass
+
+    def test_index(self):
+        # see test___contains__
+        pass
+
+    def test_isalnum(self):
+        testers = "isalnum isalpha isascii isdecimal isdigit isidentifier islower isnumeric isprintable isspace istitle isupper".split()
+        for value in values:
+            for i in range(len(value)):
+                prefix = value[:i]
+                for tester in testers:
+                    self.int(getattr(prefix, tester)(), getattr(str(prefix), tester)())
+        for tester in testers:
+            fn = self.assertTrue if tester == 'isprintable' else self.assertFalse
+            fn(getattr(chipmunk, tester)())
+
+    def test_isalpha(self):
+        # see test_isalnum
+        pass
+
+    def test_isascii(self):
+        # see test_isalnum
+        pass
+
+    def test_isdecimal(self):
+        # see test_isalnum
+        pass
+
+    def test_isdigit(self):
+        # see test_isalnum
+        pass
+
+    def test_isidentifier(self):
+        # see test_isalnum
+        pass
+
+    def test_islower(self):
+        # see test_isalnum
+        pass
+
+    def test_isnumeric(self):
+        # see test_isalnum
+        pass
+
+    def test_isprintable(self):
+        # see test_isalnum
+        pass
+
+    def test_isspace(self):
+        # see test_isalnum
+        pass
+
+    def test_istitle(self):
+        # see test_isalnum
+        pass
+
+    def test_isupper(self):
+        # see test_isalnum
+        pass
+
+    def test_join(self):
+        pass
+
+    def test_ljust(self):
+        pass
+
+    def test_lower(self):
+        for method in "lower upper title".split():
+            for value in values:
+                s = str(value)
+                s_mutated = getattr(s, method)()
+                value_mutated = getattr(value, method)()
+                if s == s_mutated:
+                    self.assertIs(value_mutated, value)
+                else:
+                    self.str(value_mutated, s_mutated)
+
+
+    def test_lstrip(self):
+        # see test_strip
+        pass
+
+    def test_maketrans(self):
+        map = {'a': 'x', 'b': 'y', 'c': 'z', 'd': '1', 'e': '2'}
+        for value in values:
+            s = str(value)
+            table = value.maketrans(map)
+            self.assertEqual(table, s.maketrans(map))
+            self.str(value.translate(table), s.translate(table))
+
+    def test_partition(self):
+        for value in values:
+            # get rid of repeated values
+            chars = []
+            for c in value:
+                if c in chars:
+                    continue
+                chars.append(c)
+            value = String("".join(chars), source="PQ")
+
+            for i, middle in enumerate(value):
+                before = value[:i]
+                after  = value[i+len(middle):]
+                for result in (
+                    value.partition(middle),
+                    value.rpartition(middle),
+                    ):
+                    self.assertEqual(result, (before, middle, after))
+                    b, m, a = result
+                    for which, got, expected in (
+                        ('before', b, before),
+                        ('middle', m, middle),
+                        ('after',  a, after),
+                        ):
+                        self.assertEqual(got.source,              expected.source,              f'failed on {value=} {which}: {got=} {expected=}')
+                        self.assertEqual(got.line_number,         expected.line_number,         f'failed on {value=} {which}: {got=} {expected=}')
+                        self.assertEqual(got.column_number,       expected.column_number,       f'failed on {value=} {which}: {got=} {expected=}')
+                        self.assertEqual(got.first_column_number, expected.first_column_number, f'failed on {value=} {which}: {got=} {expected=}')
+
+        # test overlapping
+        l = String('a . . b . . c . . d . . e', source='smith')
+        sep = ' . '
+
+        partitions = l.partition(sep)
+        self.assertEqual(partitions,
+            (
+            l[:1],
+            l[1:4],
+            l[4:],
+            )
+            )
+        self.assertEqual(partitions[0] + partitions[1] + partitions[2], l)
+        self.assertEqual(String.cat(partitions), l)
+
+        self.assertEqual(l.rpartition(sep),
+            (
+            l[:21],
+            l[21:24],
+            l[24:]
+            )
+            )
+        self.assertEqual(partitions[0] + partitions[1] + partitions[2], l)
+        self.assertEqual(String.cat(partitions), l)
+
+        # test Eric Smith's extension
+
+        self.assertEqual(l.partition(sep, 0), (l,))
+        self.assertIs(l.partition(sep, 0)[0], l)
+        self.assertEqual(l.rpartition(sep, 0), (l,))
+        self.assertIs(l.rpartition(sep, 0)[0], l)
+
+        partitions = l.partition(sep, 6)
+        self.assertEqual(partitions,
+            (
+            l[0:1],   # 'a'
+            l[1:4],   # sep     - split 1
+            l[4:7],   # '. b'
+            l[7:10],  # sep     - split 2
+            l[10:13], # '. c'
+            l[13:16], # sep     - split 3
+            l[16:19], # '. d'
+            l[19:22], # sep     - split 4
+            l[22:25], # '. e'
+            l[25:25], # empty!  - split 5
+            l[25:25], # empty!
+            l[25:25], # empty!  - split 6
+            l[25:25], # empty!
+            )
+            )
+        self.assertEqual(String.cat(partitions), l)
+
+        partitions = l.rpartition(sep, 6)
+        self.assertEqual(partitions,
+            (
+            l[0:0],   # empty!
+            l[0:0],   # empty!  - split 6
+            l[0:0],   # empty!
+            l[0:0],   # empty!  - split 5
+            l[0:3],   # 'a'
+            l[3:6],   # sep     - split 4
+            l[6:9],   # '. b'
+            l[9:12],  # sep     - split 3
+            l[12:15], # '. c'
+            l[15:18], # sep     - split 2
+            l[18:21], # '. d'
+            l[21:24], # sep     - split 1
+            l[24:25], # '. e'
+            )
+            )
+        self.assertEqual(String.cat(partitions), l)
+
+
+
+    def test_removeprefix(self):
+        for value in values:
+            for i in range(len(value)):
+                prefix = value[:i]
+                self.line(value.removeprefix(prefix), str(value).removeprefix(prefix))
+                suffix = value[i:]
+                self.line(value.removesuffix(suffix), str(value).removesuffix(suffix))
+            self.assertIs(value.removeprefix(chipmunk), value)
+            self.assertIs(value.removesuffix(chipmunk), value)
+
+    def test_removesuffix(self):
+        # see test_removeprefix
+        pass
+
+    def test_replace(self):
+        for value in values:
+            for src in "abcde":
+                result = value.replace(src, str(chipmunk))
+                if src in value:
+                    self.str(result, str(value).replace(src, chipmunk))
+                else:
+                    self.assertIs(result, value)
+
+    def test_rfind(self):
+        # see test___contains__
+        pass
+
+    def test_rindex(self):
+        # see test___contains__
+        pass
+
+    def test_rjust(self):
+        pass
+
+    def test_rpartition(self):
+        # see test_partitino
+        pass
+
+    def test_rsplit(self):
+        pass
+
+    def test_rstrip(self):
+        # see test_strip
+        pass
+
+    def test_split(self):
+        for s, sep, result in (
+            ("ab cd ef",                None, [('ab', 0, 1, 1), ('cd', 3, 1, 4), ('ef', 6, 1, 7)]),
+            ("ab\ncd\nef",              None, [('ab', 0, 1, 1), ('cd', 3, 2, 1), ('ef', 6, 3, 1)]),
+            (" ab  \n  cd \n \n    ef", None, [('ab', 1, 1, 2), ('cd', 8, 2, 3), ('ef', 18, 4, 5)]),
+            (" ab x \n x cd\n xx x \n\n \n xef", 'x',
+                [
+                (' ab ',       0, 1, 1),
+                (' \n ',       5, 1, 6),
+                (' cd\n ',     9, 2, 3),
+                ('',          15, 3, 3),
+                (' ',         16, 3, 4),
+                (' \n\n \n ', 18, 3, 6),
+                ('ef',        25, 6, 3),
+                ]),
+            ):
+            source = 'toe'
+            l2 = String(s, source=source)
+            list_split = list(l2.split(sep))
+            for line, r in zip(list_split, result):
+                s2, offset, line_number, column_number = r
+                self.assertEqual(line, s2, f"{line!r} != {r}")
+                self.assertEqual(line.offset, offset, f"{line!r} != {r}")
+                self.assertEqual(line.line_number, line_number, f"{line!r} != {r}")
+                self.assertEqual(line.column_number, column_number, f"{line!r} != {r}")
+
+    def test_splitlines(self):
+        # splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
+        self.assertEqual(list(splitlines_demo.splitlines()), [' a ', ' b ', ' c ', ' d ', '', ' e '])
+        self.assertEqual(list(splitlines_demo.splitlines(True)), [' a \n', ' b \r', ' c \r\n', ' d \n', '\r', ' e '])
+
+        assert splitlines_demo in values
+
+        for value in values:
+            splitted = value.splitlines(True)
+            reconstituted = String.cat(splitted)
+            self.line(reconstituted, value)
+
+    def test_startswith(self):
+        pass
+
+    def test_strip(self):
+        methods = "strip lstrip rstrip".split()
+        for value in values:
+            s = str(value)
+            for method in methods:
+                s_mutated = getattr(s, method)()
+                value_mutated = getattr(value, method)()
+                if s_mutated == s:
+                    self.assertIs(value_mutated, value)
+                else:
+                    # print(f"{value=!r} {method} -> {value_mutated=!r}")
+                    self.line(value_mutated, s_mutated)
+
+    def test_swapcase(self):
+        for value in values:
+            self.str(value.swapcase(), str(value).swapcase())
+
+    def test_title(self):
+        # see test_lower
+        pass
+
+    def test_translate(self):
+        # see test_maketrans
+        pass
+
+    def test_upper(self):
+        # see test_lower
+        pass
+
+    def test_zfill(self):
+        pass
+
+    def test_linebreak_offsets_generation(self):
+        # a String can generate and cache linebreak offsets two different ways:
+        #     * iterating over a String
+        #     * calling split or partition, which call __compute_linebreak_offsets
+        for value in values:
+            s = str(value)
+
+            l_iter = String(s, source="z")
+            self.assertEqual(l_iter._linebreak_offsets, None)
+            [c for c in l_iter]
+            self.assertNotEqual(l_iter._linebreak_offsets, None)
+
+
+            l_compute = String(s, source="z")
+            self.assertEqual(l_compute._linebreak_offsets, None)
+            l_compute._compute_linebreak_offsets()
+            self.assertNotEqual(l_compute._linebreak_offsets, None)
+
+            if 0:
+                print("l_iter")
+                l_iter.print_linebreak_offsets()
+                print("")
+                print("l_compute")
+                l_compute.print_linebreak_offsets()
+                print()
+
+            self.assertEqual(l_iter._linebreak_offsets, l_compute._linebreak_offsets, f"{s!r}")
+
+    # def test_lines(self):
+    #     script = "a = 3\nb = 5\n# comment!\ndef foo():\n    print(a * b)\n"
+
+    #     result = [
+    #         "a = 3\n",
+    #         "b = 5\n",
+    #         "# comment!\n",
+    #         "def foo():\n",
+    #         "    print(a * b)\n",
+    #         ""
+    #         ]
+
+    #     got = list(lines(script, clip_linebreaks=False, line_number=0, source='P'))
+    #     expected = [String(s, "P", i, 1) for i, s in enumerate(result)]
+    #     self.assertEqual(got, expected)
+
+    #     got = list(lines(script, line_number=1, source='Q'))
+    #     expected = [String(s.rstrip('\n'), "Q", i, 1) for i, s in enumerate(result, 1)]
+    #     self.assertEqual(got, expected)
+
+def run_tests():
+    bigtestlib.run(name="big.types", module=__name__)
+
+if __name__ == "__main__": # pragma: no cover
+    run_tests()
+    bigtestlib.finish()

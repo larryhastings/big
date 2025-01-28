@@ -1,6 +1,6 @@
 ![# big](https://raw.githubusercontent.com/larryhastings/big/master/resources/images/big.header.png)
 
-##### Copyright 2022-2024 by Larry Hastings
+##### Copyright 2022-2025 by Larry Hastings
 
 [![# test badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# coverage badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml) [![# python versions badge](https://img.shields.io/pypi/pyversions/big.svg?logo=python&logoColor=FBE072)](https://pypi.org/project/big/)
 
@@ -6556,6 +6556,20 @@ in the **big** test suite.
 
 
 ## Release history
+
+#### 0.13
+
+*under development*
+
+* Added a new module: *big.types*, which contains
+  core types.
+* Added `String` to *big.types*.  `String` is a subclass
+  of `str` that tracks line number and column number offsets
+  for you.  Just initialize one big `String` containing an
+  entire file, and every substring of that string will know
+  its line number, column number, and offset in characters
+  from the beginning.
+* Updated copyright notices to 2025.
 
 #### 0.12.8
 
