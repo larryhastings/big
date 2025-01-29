@@ -33,6 +33,7 @@ import sys
 import unittest
 
 from big.types import String
+from big.tokens import *
 
 
 source = "C:\\AUTOEXEC.BAT"
@@ -51,6 +52,7 @@ tabs  = String('this\tis\ta\tseries\tof\twords\twith\ttabs', source=source)
 leading_and_trailing  = String('            a b c                  ', source=source)
 leading_only  = String('            a b c', source=source)
 trailing_only  = String('a b c            ', source=source)
+all_uppercase  = String("HELLO WORLD!", source=source)
 
 splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
 
@@ -62,10 +64,10 @@ chipmunk = String('🐿️', source='tic e tac')
 
 l = abcde
 
-values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only]
+values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only, all_uppercase]
 
 
-class BigStringTests(unittest.TestCase):
+class BigStringMethodTests(unittest.TestCase):
 
     maxDiff = 2**32
 
@@ -76,25 +78,23 @@ class BigStringTests(unittest.TestCase):
     ## that the value == "expected".
     ##
 
-    def bool(self, got, expected):
+    def assertBool(self, got, expected):
         self.assertIsInstance(got, bool)
         self.assertIs(got, expected)
 
-    def bytes(self, got, expected):
+    def assertBytes(self, got, expected):
         self.assertIsInstance(got, bytes)
         self.assertEqual(got, expected)
 
-    def int(self, got, expected):
+    def assertInt(self, got, expected):
         self.assertIsInstance(got, int)
         self.assertEqual(got, expected)
 
-    def String(self, got, expected):
+    def assertString(self, got, expected):
         self.assertIsInstance(got, String)
         self.assertEqual(got, expected)
 
-    line = String
-
-    def str(self, got, expected):
+    def assertStr(self, got, expected):
         self.assertIsInstance(got, str)
         self.assertNotIsInstance(got, String)
         self.assertEqual(got, expected)
@@ -109,10 +109,10 @@ class BigStringTests(unittest.TestCase):
     ##
 
     def test___add__(self):
-        self.str(l + " xyz", 'abcde xyz')
-        self.str("boogie " + l, 'boogie abcde')
+        self.assertStr(l + " xyz", 'abcde xyz')
+        self.assertStr("boogie " + l, 'boogie abcde')
 
-        self.line(abcde + fghij, alphabet[:10])
+        self.assertString(abcde + fghij, alphabet[:10])
 
     def test___class__(self):
         self.assertEqual(l.__class__, String)
@@ -203,7 +203,7 @@ class BigStringTests(unittest.TestCase):
     def test___format__(self):
         f = String('{abcde} {line1} {line2}', source=source)
         got = f.format(abcde=abcde, line1=line1, line2=line2)
-        self.str(got, 'abcde line 1!\n line 2.\n')
+        self.assertStr(got, 'abcde line 1!\n line 2.\n')
 
     def test___ge__(self):
         self.assertGreaterEqual(l, str(l))
@@ -230,9 +230,9 @@ class BigStringTests(unittest.TestCase):
         s = str(abcde)
         length = len(s)
         for i in range(-length, length):
-            self.line(abcde[i], String(s[i], source=source, column_number=first_column_number + (i % length)))
+            self.assertString(abcde[i], String(s[i], source=source, column_number=first_column_number + (i % length)))
 
-        self.line(abcde[1:4], String('bcd', source=source, column_number=first_column_number + 1))
+        self.assertString(abcde[1:4], String('bcd', source=source, column_number=first_column_number + 1))
 
         # regression!
         last_zero = abcde[len(abcde):len(abcde)]
@@ -246,15 +246,15 @@ class BigStringTests(unittest.TestCase):
             abcde[33]
 
         # *sliciing* out of range clamps to allowed range.
-        self.line(abcde[-20:], abcde)
-        self.line(abcde[448:], abcde[length:length])
+        self.assertString(abcde[-20:], abcde)
+        self.assertString(abcde[448:], abcde[length:length])
 
     def test___getnewargs__(self):
         # String implements __getnewargs__, it's pickling machinery.
         for value in values:
             p = pickle.dumps(value)
             value2 = pickle.loads(p)
-            self.line(value2, value)
+            self.assertString(value2, value)
 
     def test___getstate__(self):
         # __getstate__ is part of the pickling machinery.
@@ -284,8 +284,8 @@ class BigStringTests(unittest.TestCase):
             s = str(value)
             for i, (a, b) in enumerate(zip(value, s)):
                 self.assertEqual(a, b, f'failed on {value=} {i=} {a=} != {b=}')
-                self.str(b, s[i])
-                self.line(a, value[i])
+                self.assertStr(b, s[i])
+                self.assertString(a, value[i])
 
         # and now, a cool String feature
         l = String('a\nb\ncde\nf', source='s1')
@@ -301,7 +301,7 @@ class BigStringTests(unittest.TestCase):
             String('f',  source='s1', line_number=4, column_number=1, offset=8),
             ]
         for a, b in zip(l, expected):
-            self.line(a, b)
+            self.assertString(a, b)
 
         l = String('a\nb\ncde\nf', source='s2', line_number=10, column_number=2, first_column_number=2, offset=99)
         expected = [
@@ -316,7 +316,7 @@ class BigStringTests(unittest.TestCase):
             String('f',  source='s2', line_number=13, column_number=2, offset=107),
             ]
         for a, b in zip(l, expected):
-            self.line(a, b)
+            self.assertString(a, b)
 
 
     def test___le__(self):
@@ -326,7 +326,7 @@ class BigStringTests(unittest.TestCase):
 
     def test___len__(self):
         for value in values:
-            self.int(len(value), len(str(value)))
+            self.assertInt(len(value), len(str(value)))
 
     def test___lt__(self):
         self.assertLess(l, str(l) + 'x')
@@ -336,12 +336,12 @@ class BigStringTests(unittest.TestCase):
         # wow!  crack a window, will ya?
         f = String('%s %d %f', source=source)
         got = f % (abcde, 33, 35.5)
-        self.str(got, 'abcde 33 35.500000')
+        self.assertStr(got, 'abcde 33 35.500000')
 
     def test___mul__(self):
         for value in values:
             for i in range(6):
-                self.str(value * i, str(value) * i)
+                self.assertStr(value * i, str(value) * i)
 
     def test___ne__(self):
         self.assertNotEqual(l, str(l) + 'x')
@@ -368,7 +368,7 @@ class BigStringTests(unittest.TestCase):
             else:
                 extra = f", first_column_number={value.first_column_number}"
             expected = f"String({repr(str(value))}, source={value.source!r}, line_number={value.line_number}, column_number={value.column_number}{extra})"
-            self.str(repr(value), expected)
+            self.assertStr(repr(value), expected)
 
     def test___rmod__(self):
         # I don't know what rmod does.
@@ -381,7 +381,7 @@ class BigStringTests(unittest.TestCase):
     def test___rmul__(self):
         for value in values:
             for i in range(6):
-                self.str(i * value, i * str(value))
+                self.assertStr(i * value, i * str(value))
 
     def test___setattr__(self):
         with self.assertRaises(AttributeError):
@@ -400,7 +400,7 @@ class BigStringTests(unittest.TestCase):
         self.assertGreaterEqual(value, 40)
 
     def test___str__(self):
-        self.String(abcde, 'abcde')
+        self.assertString(abcde, 'abcde')
 
     def test___subclasshook__(self):
         # don't need to test this (I hope)
@@ -408,40 +408,40 @@ class BigStringTests(unittest.TestCase):
 
     def test_capitalize(self):
         for value in values:
-            self.str(value.capitalize(), str(value).capitalize())
+            self.assertStr(value.capitalize(), str(value).capitalize())
 
     def test_casefold(self):
         for value in values:
-            self.str(value.casefold(), str(value).casefold())
+            self.assertStr(value.casefold(), str(value).casefold())
 
     def test_center(self):
         for value in values:
-            self.str(value.center(30), str(value).center(30))
-            self.str(value.center(30, 'Z'), str(value).center(30, 'Z'))
+            self.assertStr(value.center(30), str(value).center(30))
+            self.assertStr(value.center(30, 'Z'), str(value).center(30, 'Z'))
 
     def test_count(self):
         for value in values:
-            self.int(value.count('e'), str(value).count('e'))
+            self.assertInt(value.count('e'), str(value).count('e'))
 
     def test_encode(self):
         for value in values:
-            self.bytes(value.encode('utf-8'),     str(value).encode('utf-8'))
-            self.bytes(value.encode('ascii'),     str(value).encode('ascii'))
-            self.bytes(value.encode('utf-16'),    str(value).encode('utf-16'))
-            self.bytes(value.encode('utf-16-be'), str(value).encode('utf-16-be'))
-            self.bytes(value.encode('utf-16-le'), str(value).encode('utf-16-le'))
-            self.bytes(value.encode('utf-32'),    str(value).encode('utf-32'))
-            self.bytes(value.encode('utf-32-be'), str(value).encode('utf-32-be'))
-            self.bytes(value.encode('utf-32-le'), str(value).encode('utf-32-le'))
+            self.assertBytes(value.encode('utf-8'),     str(value).encode('utf-8'))
+            self.assertBytes(value.encode('ascii'),     str(value).encode('ascii'))
+            self.assertBytes(value.encode('utf-16'),    str(value).encode('utf-16'))
+            self.assertBytes(value.encode('utf-16-be'), str(value).encode('utf-16-be'))
+            self.assertBytes(value.encode('utf-16-le'), str(value).encode('utf-16-le'))
+            self.assertBytes(value.encode('utf-32'),    str(value).encode('utf-32'))
+            self.assertBytes(value.encode('utf-32-be'), str(value).encode('utf-32-be'))
+            self.assertBytes(value.encode('utf-32-le'), str(value).encode('utf-32-le'))
 
     def test_endswith(self):
         for value in values:
-            self.bool(value.endswith('f'), str(value).endswith('f'))
-            self.bool(value.endswith('.'), str(value).endswith('.'))
+            self.assertBool(value.endswith('f'), str(value).endswith('f'))
+            self.assertBool(value.endswith('.'), str(value).endswith('.'))
 
     def test_expandtabs(self):
         for value in values:
-            tester = self.str if '\t' in value else self.line
+            tester = self.assertStr if '\t' in value else self.assertString
             tester(value.expandtabs(), str(value).expandtabs())
 
     def test_find(self):
@@ -466,7 +466,7 @@ class BigStringTests(unittest.TestCase):
             for i in range(len(value)):
                 prefix = value[:i]
                 for tester in testers:
-                    self.int(getattr(prefix, tester)(), getattr(str(prefix), tester)())
+                    self.assertInt(getattr(prefix, tester)(), getattr(str(prefix), tester)())
         for tester in testers:
             fn = self.assertTrue if tester == 'isprintable' else self.assertFalse
             fn(getattr(chipmunk, tester)())
@@ -530,7 +530,7 @@ class BigStringTests(unittest.TestCase):
                 if s == s_mutated:
                     self.assertIs(value_mutated, value)
                 else:
-                    self.str(value_mutated, s_mutated)
+                    self.assertStr(value_mutated, s_mutated)
 
 
     def test_lstrip(self):
@@ -543,7 +543,7 @@ class BigStringTests(unittest.TestCase):
             s = str(value)
             table = value.maketrans(map)
             self.assertEqual(table, s.maketrans(map))
-            self.str(value.translate(table), s.translate(table))
+            self.assertStr(value.translate(table), s.translate(table))
 
     def test_partition(self):
         for value in values:
@@ -652,9 +652,9 @@ class BigStringTests(unittest.TestCase):
         for value in values:
             for i in range(len(value)):
                 prefix = value[:i]
-                self.line(value.removeprefix(prefix), str(value).removeprefix(prefix))
+                self.assertString(value.removeprefix(prefix), str(value).removeprefix(prefix))
                 suffix = value[i:]
-                self.line(value.removesuffix(suffix), str(value).removesuffix(suffix))
+                self.assertString(value.removesuffix(suffix), str(value).removesuffix(suffix))
             self.assertIs(value.removeprefix(chipmunk), value)
             self.assertIs(value.removesuffix(chipmunk), value)
 
@@ -667,7 +667,7 @@ class BigStringTests(unittest.TestCase):
             for src in "abcde":
                 result = value.replace(src, str(chipmunk))
                 if src in value:
-                    self.str(result, str(value).replace(src, chipmunk))
+                    self.assertStr(result, str(value).replace(src, chipmunk))
                 else:
                     self.assertIs(result, value)
 
@@ -680,7 +680,8 @@ class BigStringTests(unittest.TestCase):
         pass
 
     def test_rjust(self):
-        pass
+        self.assertEqual(himem.rstrip().rjust(8), "    QEMM")
+        self.assertString(himem.rstrip().rjust(4), "QEMM")
 
     def test_rpartition(self):
         # see test_partitino
@@ -729,7 +730,7 @@ class BigStringTests(unittest.TestCase):
         for value in values:
             splitted = value.splitlines(True)
             reconstituted = String.cat(splitted)
-            self.line(reconstituted, value)
+            self.assertString(reconstituted, value)
 
     def test_startswith(self):
         pass
@@ -745,11 +746,11 @@ class BigStringTests(unittest.TestCase):
                     self.assertIs(value_mutated, value)
                 else:
                     # print(f"{value=!r} {method} -> {value_mutated=!r}")
-                    self.line(value_mutated, s_mutated)
+                    self.assertString(value_mutated, s_mutated)
 
     def test_swapcase(self):
         for value in values:
-            self.str(value.swapcase(), str(value).swapcase())
+            self.assertStr(value.swapcase(), str(value).swapcase())
 
     def test_title(self):
         # see test_lower
@@ -764,7 +765,14 @@ class BigStringTests(unittest.TestCase):
         pass
 
     def test_zfill(self):
-        pass
+        self.assertEqual(himem.zfill(8), "000QEMM\n")
+        self.assertString(himem.zfill(5), "QEMM\n")
+
+
+
+class BigStringAdditionTests(unittest.TestCase):
+
+    maxDiff = 2**32
 
     def test_linebreak_offsets_generation(self):
         # a String can generate and cache linebreak offsets two different ways:
@@ -794,25 +802,37 @@ class BigStringTests(unittest.TestCase):
 
             self.assertEqual(l_iter._linebreak_offsets, l_compute._linebreak_offsets, f"{s!r}")
 
-    # def test_lines(self):
-    #     script = "a = 3\nb = 5\n# comment!\ndef foo():\n    print(a * b)\n"
+    def test_generate_tokens(self):
+        lines = [
+        "import big\n",
+        "print(big)\n",
+        "'''abc\n",
+        "def\n",
+        "ghi'''\n",
+        ''
+        ]
+        text = String("".join(lines))
 
-    #     result = [
-    #         "a = 3\n",
-    #         "b = 5\n",
-    #         "# comment!\n",
-    #         "def foo():\n",
-    #         "    print(a * b)\n",
-    #         ""
-    #         ]
+        lines_2_3_4 = lines[2] + lines[3] + lines[4]
+        s = lines_2_3_4.rstrip()
 
-    #     got = list(lines(script, clip_linebreaks=False, line_number=0, source='P'))
-    #     expected = [String(s, "P", i, 1) for i, s in enumerate(result)]
-    #     self.assertEqual(got, expected)
+        expected = [
+            (TOKEN_NAME,      'import', (1, 0),  (1, 6),  lines[0]),
+            (TOKEN_NAME,      'big',    (1, 7),  (1, 10), lines[0]),
+            (TOKEN_NEWLINE,   '\n',     (1, 10), (1, 11), lines[0]),
+            (TOKEN_NAME,      'print',  (2, 0),  (2, 5),  lines[1]),
+            (TOKEN_OP,        '(',      (2, 5),  (2, 6),  lines[1]),
+            (TOKEN_NAME,      'big',    (2, 6),  (2, 9),  lines[1]),
+            (TOKEN_OP,        ')',      (2, 9),  (2, 10), lines[1]),
+            (TOKEN_NEWLINE,   '\n',     (2, 10), (2, 11), lines[1]),
+            (TOKEN_STRING,    s,        (3, 0),  (5, 6),  lines_2_3_4),
+            (TOKEN_NEWLINE,   '\n',     (5, 6),  (5, 7),  lines[4]),
+            (TOKEN_ENDMARKER, '',       (6, 0),  (6, 0),  lines[5]),
+            ]
 
-    #     got = list(lines(script, line_number=1, source='Q'))
-    #     expected = [String(s.rstrip('\n'), "Q", i, 1) for i, s in enumerate(result, 1)]
-    #     self.assertEqual(got, expected)
+        got = list(text.generate_tokens())
+        self.assertEqual(expected, got)
+
 
 def run_tests():
     bigtestlib.run(name="big.types", module=__name__)

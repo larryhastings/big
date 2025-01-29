@@ -6561,8 +6561,9 @@ in the **big** test suite.
 
 *under development*
 
-* Added a new module: *big.types*, which contains
-  core types.
+* Added two new modules: *big.types*, which contains
+  core types, and *big.tokens*, which is useful when
+  working with Python's tokenizer.
 * Added `String` to *big.types*.  `String` is a subclass
   of `str` that tracks line number and column number offsets
   for you.  Just initialize one big `String` containing an

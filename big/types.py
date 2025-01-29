@@ -1,3 +1,30 @@
+#!/usr/bin/env python3
+
+_license = """
+big
+Copyright 2022-2025 Larry Hastings
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+
 from .text import linebreaks, multipartition, multisplit
 from bisect import bisect_right
 import re
@@ -716,26 +743,30 @@ class String(str):
         ):
         return multipartition(self, separators, count=count, reverse=reverse, separate=separate)
 
-    def generate_tokens(readline):
-        lines = {}
+    def generate_tokens(self):
+        line_number_to_line = {}
         lines_read = 0
         lines_tokenized = 0
         last_line = None
         TokenInfo = tokenize.TokenInfo
 
-        def wrapped_readline():
+        lines = self.splitlines(True)
+        lines.reverse()
+
+        def readline():
             nonlocal lines_read
             nonlocal last_line
-            line = readline()
-            if (not line) and last_line:
-                length = len(last_line)
-                line = last_line[length:]
+            if lines:
+                line = lines.pop()
+            else:
+                length = len(self)
+                line = self[length:]
             lines_read += 1
-            lines[lines_read] = line
+            line_number_to_line[lines_read] = line
             last_line = line
             return line
 
-        for t in tokenize.generate_tokens(wrapped_readline):
+        for t in tokenize.generate_tokens(readline):
             # token[0] = token type (a la token.py, TOKEN_NL TOKEN_OP etc)
             # token[1] = string (value of token, '\n' '=' etc)
             # token[2] = start tuple (row, column)
@@ -747,9 +778,9 @@ class String(str):
             start_line, start_column = t[2]
             end_line, end_column = t[3]
             while lines_tokenized < start_line:
-                lines.pop(lines_tokenized, None)
+                line_number_to_line.pop(lines_tokenized, None)
                 lines_tokenized += 1
-            line = lines[start_line]
+            line = line_number_to_line[start_line]
             if start_line == end_line:
                 string = line[start_column:end_column]
             else:
@@ -760,10 +791,10 @@ class String(str):
                 string_append(line[start_column:])
                 line_append(line)
                 for i in range(start_line + 1, end_line):
-                    line = lines[i]
+                    line = line_number_to_line[i]
                     string_append(line)
                     line_append(line)
-                line = lines[end_line]
+                line = line_number_to_line[end_line]
                 string_append(line[:end_column])
                 line_append(line)
 
