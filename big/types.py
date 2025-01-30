@@ -199,10 +199,19 @@ class String(str):
             )
         return result
 
-    def __radd__(self, other):
-        if not (isinstance(other, String) and other.is_followed_by(self)):
-            return other + str(self)
-        return other.__add__(self)
+    # We don't need to implement __radd__, we can just inherit the str one.
+    # def __radd__(self, other):
+    #     # Assertion 1: self is a String object.  (Pretty safe assertion.)
+    #     # Assertion 2: Python must already have called other.__add__(self).
+    #     #     (Python doesn't call __radd__ unless __add__ returns NotImplemented.)
+    #     # Assertion 3: If self is a String, and other is a String, then
+    #     #     we wouldn't have gotten here, because other.__add__ would have
+    #     #     happily handled adding us together already.
+    #     # Therefore: other is not a String, QED.
+    #     assert not isinstance(other, String)
+    #     if not (isinstance(other, String) and other.is_followed_by(self)):
+    #         return other + str(self)
+    #     return other.__add__(self)
 
     def __getitem__(self, index):
         s = str(self)
@@ -230,13 +239,9 @@ class String(str):
                 if index > length:
                     index = length
         else:
-            assert isinstance(index, int)
             # indexing raises an exception if the index is out of range.
             if index < 0:
                 index += length
-            elif index > length:
-                index -= length
-            assert 0 <= index < length, f"0 <= index={index} < length={length} isn't true!"
 
         line_number = self._line_number
         column_number = self._column_number
@@ -676,19 +681,19 @@ class String(str):
 
         return f"String({repr(str(self))}, {s})"
 
-    if 1:
-        def print_linebreak_offsets(self):
-            start = 0
-            print(repr(str(self)))
-            print("    (")
-            if self._linebreak_offsets is None:
-                self._compute_linebreak_offsets()
-            if self._linebreak_offsets:
-                for i, offset in enumerate(self._linebreak_offsets):
-                    end = offset
-                    print(f"    [{i:3}] {offset:3} {str(self)[start:end]!r}")
-                    start = end
-            print("    )")
+    # if 1:
+    #     def print_linebreak_offsets(self):
+    #         start = 0
+    #         print(repr(str(self)))
+    #         print("    (")
+    #         if self._linebreak_offsets is None:
+    #             self._compute_linebreak_offsets()
+    #         if self._linebreak_offsets:
+    #             for i, offset in enumerate(self._linebreak_offsets):
+    #                 end = offset
+    #                 print(f"    [{i:3}] {offset:3} {str(self)[start:end]!r}")
+    #                 start = end
+    #         print("    )")
 
 
     ##

@@ -53,6 +53,7 @@ leading_and_trailing  = String('            a b c                  ', source=sou
 leading_only  = String('            a b c', source=source)
 trailing_only  = String('a b c            ', source=source)
 all_uppercase  = String("HELLO WORLD!", source=source)
+title_case  = String("Hello World!", source=source)
 
 splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
 
@@ -64,7 +65,7 @@ chipmunk = String('🐿️', source='tic e tac')
 
 l = abcde
 
-values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only, all_uppercase]
+values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only, all_uppercase, title_case]
 
 
 class BigStringMethodTests(unittest.TestCase):
@@ -204,6 +205,15 @@ class BigStringMethodTests(unittest.TestCase):
         f = String('{abcde} {line1} {line2}', source=source)
         got = f.format(abcde=abcde, line1=line1, line2=line2)
         self.assertStr(got, 'abcde line 1!\n line 2.\n')
+        got = f.format_map({'abcde': abcde, 'line1': line1, 'line2': line2})
+        self.assertStr(got, 'abcde line 1!\n line 2.\n')
+
+        # if the String is unchanged, return the String!
+        f = String("{abcde}", source=source)
+        got = f.format(abcde='{abcde}')
+        self.assertString(f, got)
+        got = f.format_map({'abcde': '{abcde}'})
+        self.assertString(f, got)
 
     def test___ge__(self):
         self.assertGreaterEqual(l, str(l))
@@ -233,6 +243,8 @@ class BigStringMethodTests(unittest.TestCase):
             self.assertString(abcde[i], String(s[i], source=source, column_number=first_column_number + (i % length)))
 
         self.assertString(abcde[1:4], String('bcd', source=source, column_number=first_column_number + 1))
+
+        self.assertStr(abcde[1:-1:2], 'bd')
 
         # regression!
         last_zero = abcde[len(abcde):len(abcde)]
@@ -519,7 +531,17 @@ class BigStringMethodTests(unittest.TestCase):
         pass
 
     def test_ljust(self):
-        pass
+        got = abcde.ljust(10)
+        self.assertStr(got, 'abcde     ')
+        got = abcde.ljust(10, 'x')
+        self.assertStr(got, 'abcdexxxxx')
+
+        # if the String doesn't change, return the String
+        got = abcde.ljust(5)
+        self.assertString(got, abcde)
+        got = abcde.ljust(5, 'x')
+        self.assertString(got, abcde)
+
 
     def test_lower(self):
         for method in "lower upper title".split():
@@ -574,6 +596,16 @@ class BigStringMethodTests(unittest.TestCase):
                         self.assertEqual(got.column_number,       expected.column_number,       f'failed on {value=} {which}: {got=} {expected=}')
                         self.assertEqual(got.first_column_number, expected.first_column_number, f'failed on {value=} {which}: {got=} {expected=}')
 
+            before, s, after = value.partition('🐛') # generic bug!
+            self.assertString(before, value)
+            self.assertFalse(s)
+            self.assertFalse(after)
+
+            before, s, after = value.rpartition('🪳') # cockroach!
+            self.assertFalse(before)
+            self.assertFalse(s)
+            self.assertString(after, value)
+
         # test overlapping
         l = String('a . . b . . c . . d . . e', source='smith')
         sep = ' . '
@@ -605,6 +637,28 @@ class BigStringMethodTests(unittest.TestCase):
         self.assertIs(l.partition(sep, 0)[0], l)
         self.assertEqual(l.rpartition(sep, 0), (l,))
         self.assertIs(l.rpartition(sep, 0)[0], l)
+
+        partitions = l.partition(sep, 2)
+        self.assertEqual(partitions,
+            (
+            l[0:1],   # 'a'
+            l[1:4],   # sep     - split 1
+            l[4:7],   # '. b'
+            l[7:10],  # sep     - split 2
+            l[10:],   # ... and the rest
+            )
+            )
+
+        partitions = l.rpartition(sep, 2)
+        self.assertEqual(partitions,
+            (
+            l[:15],   # 'a . b . c'
+            l[15:18], # sep     - split 2
+            l[18:21], # '. d'
+            l[21:24], # sep     - split 1
+            l[24:25], # '. e'
+            )
+            )
 
         partitions = l.partition(sep, 6)
         self.assertEqual(partitions,
