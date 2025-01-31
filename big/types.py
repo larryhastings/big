@@ -72,13 +72,15 @@ class String(str):
     __slots__ = ('_source', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_linebreak_offsets')
 
     def __new__(cls, s, *, source=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1):
+        if isinstance(s, String):
+            return s
         if not isinstance(s, str):
-            raise TypeError("String: s must be a str (or String)")
+            raise TypeError("String: s must be a str or String object")
 
-        if not ((source == None) or isinstance(source, str)):
-            raise TypeError("String: source must be a str object or None")
         if source is None:
             source = s
+        if not isinstance(source, str):
+            raise TypeError("String: source must be a str or String object, or None")
 
         ex = None
 
@@ -110,12 +112,18 @@ class String(str):
         if ex:
             raise ex("String: first_line_number must be an int >= 0")
 
+        if line_number < first_line_number:
+            raise ValueError("String: line_number can't be less than first_line_number")
+
         if not isinstance(first_column_number, int):
             ex = TypeError
         elif first_column_number < 0:
             ex = ValueError
         if ex:
             raise ex("String: first_column_number must be an int >= 0")
+
+        if column_number < first_column_number:
+            raise ValueError("String: column_number can't be less than first_column_number")
 
         self = super().__new__(cls, s)
         self._source = source
@@ -636,10 +644,11 @@ class String(str):
                 assert substring
                 offset = find(substring, offset)
 
-            l = self[offset:offset+substring_length]
+            end_of_slice = offset + substring_length
+            l = self[offset:end_of_slice]
             result.append(l)
 
-            offset += substring_length + sep_length
+            offset = end_of_slice + sep_length
 
         return result
 
@@ -695,6 +704,23 @@ class String(str):
     #                 start = end
     #         print("    )")
 
+    ##
+    ## support all modern methods
+    ##
+
+    ## 3.6 lacked isascii and removeprefix
+    if not hasattr(str, 'isascii'):
+        def isascii(self):
+            for c in self:
+                if ord(c) > 127:
+                    return False
+            return True
+
+    if not hasattr(str, 'removeprefix'):
+        def removeprefix(self, prefix):
+            if not self.startswith(prefix):
+                return self
+            return self[len(prefix):]
 
     ##
     ## extensions
@@ -704,25 +730,27 @@ class String(str):
         return self[:index], self[index:]
 
     @staticmethod
-    def cat(lines):
-        if not lines:
+    def cat(strings):
+        if not strings:
             return ''
 
-        if len(lines) == 1:
-            return lines[0]
+        first = strings[0]
+        if len(strings) == 1:
+            return first
 
-        s = "".join(lines)
+        s = "".join(strings)
 
-        first = lines[0]
-        if not isinstance(first, String):
-            return s
-
-        for i, l in enumerate(lines):
-            if i:
-                if not (isinstance(l, String) and previous.is_followed_by(l)):
-                    print(f"{l=} {previous=} {isinstance(l, String)=} {previous.is_followed_by(l)=}")
+        first_time = True
+        for l in strings:
+            if not isinstance(l, String):
+                return s
+            if first_time:
+                first_time = False
+            else:
+                if not previous.is_followed_by(l):
                     return s
             previous = l
+
         o = String(s,
             source=first._source,
             offset=first._offset,

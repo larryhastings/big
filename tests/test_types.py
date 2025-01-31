@@ -68,7 +68,7 @@ l = abcde
 values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only, all_uppercase, title_case]
 
 
-class BigStringMethodTests(unittest.TestCase):
+class BigStringTests(unittest.TestCase):
 
     maxDiff = 2**32
 
@@ -108,6 +108,73 @@ class BigStringMethodTests(unittest.TestCase):
     ## if we don't need to test it, I left it
     ## in, with a comment and a pass statement.
     ##
+
+    def test_constructor(self):
+        self.assertString(String('abc'), 'abc')
+
+        self.assertEqual(String(abcde), abcde)
+
+        ar = self.assertRaises
+
+        with ar(TypeError):
+            String(54321)
+        with ar(TypeError):
+            String(33.4)
+        with ar(TypeError):
+            String(['x', 'y'])
+
+        self.assertString(String('abc', source=None), 'abc')
+        self.assertString(String('abc', source='xyz'), 'abc')
+
+        with ar(TypeError):
+            String('abc', source=33.5)
+        with ar(TypeError):
+            String('abc', source=-2)
+        with ar(TypeError):
+            String('abc', source=['x'])
+
+        with ar(TypeError):
+            String('abc', line_number=33.5)
+        with ar(ValueError):
+            String('abc', line_number=-2)
+        with ar(ValueError):
+            String('abc', line_number=0)
+        with ar(ValueError):
+            String('abc', line_number=2, first_line_number=3)
+
+        with ar(TypeError):
+            String('abc', column_number=33.5)
+        with ar(ValueError):
+            String('abc', column_number=-2)
+        with ar(ValueError):
+            String('abc', column_number=0)
+        with ar(ValueError):
+            String('abc', column_number=2, first_column_number=3)
+
+        with ar(TypeError):
+            String('abc', offset=33.5)
+        with ar(ValueError):
+            String('abc', offset=-2)
+
+        with ar(TypeError):
+            String('abc', first_line_number=33.5)
+        with ar(ValueError):
+            String('abc', first_line_number=-2)
+
+        with ar(TypeError):
+            String('abc', first_column_number=33.5)
+        with ar(ValueError):
+            String('abc', first_column_number=-2)
+
+
+    def test_attributes(self):
+        s = String("abcde", source="source", line_number=3, column_number=4, first_line_number=1, first_column_number=2)
+        self.assertString(s, "abcde")
+        self.assertStr(s.source, "source")
+        self.assertInt(s.line_number, 3)
+        self.assertInt(s.column_number, 4)
+        self.assertInt(s.first_line_number, 1)
+        self.assertInt(s.first_column_number, 2)
 
     def test___add__(self):
         self.assertStr(l + " xyz", 'abcde xyz')
@@ -295,7 +362,7 @@ class BigStringMethodTests(unittest.TestCase):
         for value in values:
             s = str(value)
             for i, (a, b) in enumerate(zip(value, s)):
-                self.assertEqual(a, b, f'failed on {value=} {i=} {a=} != {b=}')
+                self.assertEqual(a, b, f'failed on value={value!r} i={i!r} a={a!r} != b={b!r}')
                 self.assertStr(b, s[i])
                 self.assertString(a, value[i])
 
@@ -381,6 +448,10 @@ class BigStringMethodTests(unittest.TestCase):
                 extra = f", first_column_number={value.first_column_number}"
             expected = f"String({repr(str(value))}, source={value.source!r}, line_number={value.line_number}, column_number={value.column_number}{extra})"
             self.assertStr(repr(value), expected)
+        long_source = String('x' * 90)
+        s = String('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
+        self.assertEqual(repr(s), "String('abcde', source='xxxxxxxxxxxxxxxxx...', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
+
 
     def test___rmod__(self):
         # I don't know what rmod does.
@@ -473,13 +544,20 @@ class BigStringMethodTests(unittest.TestCase):
         pass
 
     def test_isalnum(self):
+        # smoke test for 3.6
+        self.assertTrue(abcde.isascii())
+        self.assertFalse(chipmunk.isascii())
+
         testers = "isalnum isalpha isascii isdecimal isdigit isidentifier islower isnumeric isprintable isspace istitle isupper".split()
         for value in values:
             for i in range(len(value)):
                 prefix = value[:i]
                 for tester in testers:
-                    self.assertInt(getattr(prefix, tester)(), getattr(str(prefix), tester)())
+                    if hasattr(str, tester):
+                        self.assertInt(getattr(prefix, tester)(), getattr(str(prefix), tester)())
         for tester in testers:
+            if not hasattr(str, tester):
+                continue
             fn = self.assertTrue if tester == 'isprintable' else self.assertFalse
             fn(getattr(chipmunk, tester)())
 
@@ -528,7 +606,13 @@ class BigStringMethodTests(unittest.TestCase):
         pass
 
     def test_join(self):
-        pass
+        empty = abcde[0:0]
+        result = empty.join(list(abcde))
+        self.assertString(result, abcde)
+
+        a = abcde[0]
+        result = a.join(list(abcde))
+        self.assertStr(result, 'aabacadae')
 
     def test_ljust(self):
         got = abcde.ljust(10)
@@ -591,10 +675,10 @@ class BigStringMethodTests(unittest.TestCase):
                         ('middle', m, middle),
                         ('after',  a, after),
                         ):
-                        self.assertEqual(got.source,              expected.source,              f'failed on {value=} {which}: {got=} {expected=}')
-                        self.assertEqual(got.line_number,         expected.line_number,         f'failed on {value=} {which}: {got=} {expected=}')
-                        self.assertEqual(got.column_number,       expected.column_number,       f'failed on {value=} {which}: {got=} {expected=}')
-                        self.assertEqual(got.first_column_number, expected.first_column_number, f'failed on {value=} {which}: {got=} {expected=}')
+                        self.assertEqual(got.source,              expected.source,              f'failed on value={value!r} {which}: got={got!r} expected={expected!r}')
+                        self.assertEqual(got.line_number,         expected.line_number,         f'failed on value={value!r} {which}: got={got!r} expected={expected!r}')
+                        self.assertEqual(got.column_number,       expected.column_number,       f'failed on value={value!r} {which}: got={got!r} expected={expected!r}')
+                        self.assertEqual(got.first_column_number, expected.first_column_number, f'failed on value={value!r} {which}: got={got!r} expected={expected!r}')
 
             before, s, after = value.partition('🐛') # generic bug!
             self.assertString(before, value)
@@ -703,6 +787,13 @@ class BigStringMethodTests(unittest.TestCase):
 
 
     def test_removeprefix(self):
+        # smoke test for 3.6
+        self.assertString(abcde.removeprefix('ab'), abcde[2:])
+        self.assertString(abcde.removeprefix('xx'), abcde)
+
+        if not hasattr(str, 'removeprefix'):
+            return
+
         for value in values:
             for i in range(len(value)):
                 prefix = value[:i]
@@ -742,6 +833,7 @@ class BigStringMethodTests(unittest.TestCase):
         pass
 
     def test_rsplit(self):
+        # see split
         pass
 
     def test_rstrip(self):
@@ -763,16 +855,31 @@ class BigStringMethodTests(unittest.TestCase):
                 (' \n\n \n ', 18, 3, 6),
                 ('ef',        25, 6, 3),
                 ]),
+            ('XooXoooXoooXoooXoo', 'Xooo', [('Xoo', 0, 1, 1), ('', 7, 1, 8), ('', 11, 1, 12), ('Xoo', 15, 1, 16)]),
             ):
             source = 'toe'
             l2 = String(s, source=source)
             list_split = list(l2.split(sep))
-            for line, r in zip(list_split, result):
+            list_rsplit = list(l2.rsplit(sep))
+            for line, rline, r in zip(list_split, list_rsplit, result):
                 s2, offset, line_number, column_number = r
                 self.assertEqual(line, s2, f"{line!r} != {r}")
+                self.assertEqual(rline, s2, f"{rline!r} != {r}")
                 self.assertEqual(line.offset, offset, f"{line!r} != {r}")
+                self.assertEqual(rline.offset, offset, f"{rline!r} != {r}")
                 self.assertEqual(line.line_number, line_number, f"{line!r} != {r}")
+                self.assertEqual(rline.line_number, line_number, f"{rline!r} != {r}")
                 self.assertEqual(line.column_number, column_number, f"{line!r} != {r}")
+                self.assertEqual(rline.column_number, column_number, f"{rline!r} != {r}")
+
+            axxb = String("a x x b")
+            list_split = axxb.split(' x ')
+            self.assertString(list_split[0], 'a')
+            self.assertString(list_split[1], 'x b')
+            list_rsplit = axxb.rsplit(' x ')
+            self.assertString(list_rsplit[0], 'a x')
+            self.assertString(list_rsplit[1], 'b')
+
 
     def test_splitlines(self):
         # splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
@@ -822,11 +929,41 @@ class BigStringMethodTests(unittest.TestCase):
         self.assertEqual(himem.zfill(8), "000QEMM\n")
         self.assertString(himem.zfill(5), "QEMM\n")
 
+    #######
+    ## our additions
+    #######
 
+    def test_bisect(self):
+        for i in range(1, len(alphabet) - 1):
+            a, b = alphabet.bisect(i)
+            self.assertIsInstance(a, String)
+            self.assertIsInstance(b, String)
+            self.assertEqual(len(a), i)
+            self.assertTrue(alphabet.startswith(a))
+            self.assertEqual(a + b, alphabet)
 
-class BigStringAdditionTests(unittest.TestCase):
+    def test_is_followed_by(self):
+        a = abcde[0]
+        b = abcde[1]
+        c = abcde[2]
 
-    maxDiff = 2**32
+        self.assertTrue(a.is_followed_by(b))
+        self.assertFalse(a.is_followed_by('b'))
+        self.assertFalse(a.is_followed_by(c))
+        self.assertFalse(b.is_followed_by(a))
+
+        xbcde = String('xbcde')
+        fake_b = xbcde[1]
+        self.assertFalse(a.is_followed_by(fake_b))
+
+    def test_cat(self):
+        self.assertStr(String.cat([]), '')
+        self.assertStr(String.cat(['xyz']), 'xyz')
+        self.assertString(String.cat([abcde]), abcde)
+        self.assertStr(String.cat([abcde, 'xyz']), 'abcdexyz')
+        self.assertString(String.cat([abcde[:2], abcde[2:]]), abcde)
+        self.assertStr(String.cat([abcde[:2], abcde[:2]]), 'abab')
+
 
     def test_linebreak_offsets_generation(self):
         # a String can generate and cache linebreak offsets two different ways:
@@ -886,6 +1023,16 @@ class BigStringAdditionTests(unittest.TestCase):
 
         got = list(text.generate_tokens())
         self.assertEqual(expected, got)
+
+    def test_multipassthroughs(self):
+        l = list(tabs.multisplit('\t'))
+        l2 = list(tabs.split('\t'))
+        self.assertEqual(l, l2)
+
+        before, c, after = abcde.multipartition('c')
+        self.assertString(before, 'ab')
+        self.assertString(c, 'c')
+        self.assertString(after, 'de')
 
 
 def run_tests():
