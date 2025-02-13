@@ -42,6 +42,7 @@ for test_module in """
     test_state
     test_text
     test_time
+    test_tokens
     test_types
     test_version
 """.strip().split():

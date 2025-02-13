@@ -24,6 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from .boundinnerclass import BoundInnerClass
 import enum
 import functools
 import heapq
@@ -5175,6 +5176,147 @@ def decode_python_script(script, *,
         s = s.replace('\r\n', '\n').replace('\r', '\n')
 
     return s
+
+
+@export
+class Pattern:
+    def __init__(self, s, flags=0):
+        self.s = s
+        self.flags = flags
+
+        self.pattern = re.compile(s, flags)
+
+    def search(self, string, pos=0, endpos=sys.maxsize):
+        return self.Match(self.pattern.search(string, pos, endpos), self.string)
+
+    def match(self, string, pos=0, endpos=sys.maxsize):
+        return self.Match(self.pattern.match(string, pos, endpos), self.string)
+
+    def fullmatch(self, string, pos=0, endpos=sys.maxsize):
+        return self.Match(self.pattern.fullmatch(string, pos, endpos), self.string)
+
+    def split(self, string, maxsplit=sys.maxsize):
+        result = []
+        start = 0
+        for count, m in enumerate(self.finditer(string), 1):
+            end = m.start()
+            result.append(string[start:end])
+
+            # if the group doesn't exist, we get IndexError.
+            # if the group exists but didn't match anything, m.group returns None.
+            # if the group exists and matched something, we can get a span and
+            #    fill from the original string object.
+            try:
+                i = 1
+                while True:
+                    group = m.group(i)
+                    if group is None:
+                        result.append(None)
+                    else:
+                        group_start, group_end = m.span(i)
+                        result.append(string[group_start:group_end])
+                    i += 1
+            except IndexError:
+                pass
+
+            start = m.end()
+
+            if count == maxsplit:
+                break
+
+        end = len(string)
+        result.append(string[start:end])
+
+        return result
+
+    def findall(self, string, pos=0, endpos=sys.maxsize):
+        return [self.Match(m, self.string) for m in self.pattern.findall(string, pos, endpos)]
+
+    def finditer(self, string, pos=0, endpos=sys.maxsize):
+        for m in self.pattern.finditer(string, pos, endpos):
+            yield self.Match(m, string)
+
+    def sub(self, repl, string, count=0):
+        # sorry, we can't honor the substring here
+        return self.pattern.sub(repl, string, count)
+
+    def subn(self, repl, string, count=0):
+        # sorry, we can't honor the substring here
+        return self.pattern.subn(repl, string, count)
+
+
+    @BoundInnerClass
+    class Match:
+        def __init__(self, pattern, match, string):
+            self.pattern = self.re = pattern
+            self.match = match
+            self.string = string
+
+            self.pos = match.pos
+            self.endpos = match.endpos
+            self.lastindex = match.lastindex
+            self.lastgroup = match.lastgroup
+
+        def __bool__(self):
+            return True
+
+        def expand(self, template):
+            # sorry, can't honor the subclass here
+            return self.match.expand(template)
+
+        def group(self, *groups):
+            if not groups:
+                groups = (0,)
+
+            results = self.match.group(*groups)
+            if (len(groups) == 1) or (results is None):
+                return results
+
+            results2 = []
+            for group, result in zip(groups, results):
+                if result is None:
+                    results2.append(None)
+                    continue
+                start, end = self.match.span(group)
+                results2.append(self.string[start:end])
+
+            if len(groups) == 1:
+                return results2[0]
+            return tuple(results2)
+
+        def __getitem(self, item):
+            return self.group(item)
+
+        def groups(self, default=None):
+            if not self.lastindex:
+                return ()
+            results = []
+            for i in range(1, self.lastindex + 1):
+                value = self.match.group(i)
+                if value is None:
+                    value = default
+                results.append(value)
+            return tuple(value)
+
+        def groupdict(self, default=None):
+            result = {}
+            for name, value in self.groupdict().items():
+                if value is None:
+                    value = default
+                else:
+                    value = self.group(name)
+                result[name] = value
+            return result
+
+        def start(self, group=0):
+            return self.match.start(group)
+
+        def end(self, group=0):
+            return self.match.end(group)
+
+        def span(self, group=0):
+            return self.match.span(group)
+
 
 del export
 del export_name

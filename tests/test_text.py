@@ -28,7 +28,7 @@ import bigtestlib
 bigtestlib.preload_local_big()
 
 import big.all as big
-from big.all import lines, python_delimiters, read_python_file, split_delimiters
+from big.all import lines, Pattern, python_delimiters, read_python_file, split_delimiters, String
 import copy
 import itertools
 import math
@@ -5431,6 +5431,81 @@ class BigTextTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             big.decode_python_script(script, newline='x')
+
+
+class BigPatternTests(unittest.TestCase):
+
+    def assertTypedEqual(self, actual, expect, msg=None):
+        self.assertEqual(actual, expect, msg)
+        def recurse(actual, expect):
+            if isinstance(expect, (tuple, list)):
+                for x, y in zip(actual, expect):
+                    recurse(x, y)
+            else:
+                self.assertIs(type(actual), type(expect), msg)
+        recurse(actual, expect)
+
+    def test_re_split(self):
+
+        def re_split(pattern, string):
+            p = Pattern(pattern)
+            return p.split(string)
+
+        for s in ":a:b::c", String(":a:b::c"):
+            self.assertTypedEqual(re_split(":", s),
+                                  [s[0:0], s[1], s[3], s[5:5], s[6]])
+            self.assertTypedEqual(re_split(":+", s),
+                                  [s[0:0], s[1], s[3], s[6]])
+            self.assertTypedEqual(re_split("(:+)", s),
+                                  [s[0:0], s[0], s[1], s[2], s[3], s[4:6], s[6]])
+        for string in (b":a:b::c",):
+                       #memoryview(b":a:b::c")):
+            self.assertTypedEqual(re_split(b":", string),
+                                  [b'', b'a', b'b', b'', b'c'])
+            self.assertTypedEqual(re_split(b":+", string),
+                                  [b'', b'a', b'b', b'c'])
+            self.assertTypedEqual(re_split(b"(:+)", string),
+                                  [b'', b':', b'a', b':', b'b', b'::', b'c'])
+        for a, b, c in (
+                ("\xe0", "\xdf", "\xe7"),
+                ("\u0430", "\u0431", "\u0432"),
+                ("\U0001d49c", "\U0001d49e", "\U0001d4b5"),
+            ):
+            string = f":{a}:{b}::{c}"
+            self.assertEqual(re_split(":", string), ['', a, b, '', c])
+            self.assertEqual(re_split(":+", string), ['', a, b, c])
+            self.assertEqual(re_split("(:+)", string),
+                             ['', ':', a, ':', b, '::', c])
+
+        self.assertEqual(re_split("(?::+)", ":a:b::c"), ['', 'a', 'b', 'c'])
+        self.assertEqual(re_split("(:)+", ":a:b::c"),
+                         ['', ':', 'a', ':', 'b', ':', 'c'])
+        self.assertEqual(re_split("([b:]+)", ":a:b::c"),
+                         ['', ':', 'a', ':b::', 'c'])
+        self.assertEqual(re_split("(b)|(:+)", ":a:b::c"),
+                         ['', None, ':', 'a', None, ':', '', 'b', None, '',
+                          None, '::', 'c'])
+        self.assertEqual(re_split("(?:b)|(?::+)", ":a:b::c"),
+                         ['', 'a', '', '', 'c'])
+
+        for sep, expected in [
+            (':*',     ['', '', 'a', '', 'b', '', 'c', '']),
+            ('(?::*)', ['', '', 'a', '', 'b', '', 'c', '']),
+            ('(:*)',   ['', ':', '', '', 'a', ':', '', '', 'b', '::', '', '', 'c', '', '']),
+            ('(:)*',   ['', ':', '', None, 'a', ':', '', None, 'b', ':', '', None, 'c', None, '']),
+        ]:
+            with self.subTest(sep=sep):
+                self.assertTypedEqual(re_split(sep, ':a:b::c'), expected)
+
+        for sep, expected in [
+            ('',        ['', ':', 'a', ':', 'b', ':', ':', 'c', '']),
+            (r'\b',     [':', 'a', ':', 'b', '::', 'c', '']),
+            (r'(?=:)',  ['', ':a', ':b', ':', ':c']),
+            (r'(?<=:)', [':', 'a:', 'b:', ':', 'c']),
+        ]:
+            with self.subTest(sep=sep):
+                self.assertTypedEqual(re_split(sep, ':a:b::c'), expected)
+
 
 
 def run_tests():

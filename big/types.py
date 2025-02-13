@@ -25,10 +25,11 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-from .text import linebreaks, multipartition, multisplit
+from .text import linebreaks, multipartition, multisplit, Pattern
+from .tokens import generate_tokens
 from bisect import bisect_right
 import re
-import tokenize
+
 
 __all__ = []
 def export(o):
@@ -62,8 +63,6 @@ def export(o):
 _re_linebreaks = "|".join(sorted(linebreaks, key=lambda s: -len(s)))
 _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
 
-# _re_linebreaks_keepends = '(' + _re_linebreaks + ')'
-# _re_linebreaks_splitlines = re.compile(_re_linebreaks_keepends).split
 
 @export
 class String(str):
@@ -708,19 +707,18 @@ class String(str):
     ## support all modern methods
     ##
 
-    ## 3.6 lacked isascii and removeprefix
-    if not hasattr(str, 'isascii'):
-        def isascii(self):
-            for c in self:
-                if ord(c) > 127:
-                    return False
-            return True
-
-    if not hasattr(str, 'removeprefix'):
-        def removeprefix(self, prefix):
-            if not self.startswith(prefix):
-                return self
-            return self[len(prefix):]
+    ## isascii was added in 3.7.
+    ## if we have a real isascii, use that.
+    ## but keep around _isascii for testing.
+    ## why do it this way? I wanted __name__ to be "isascii" not "_isascii".
+    def isascii(self):
+        for c in self:
+            if ord(c) > 127:
+                return False
+        return True
+    _isascii = isascii
+    if hasattr(str, 'isascii'):
+        del isascii
 
     ##
     ## extensions
@@ -777,67 +775,10 @@ class String(str):
         return multipartition(self, separators, count=count, reverse=reverse, separate=separate)
 
     def generate_tokens(self):
-        line_number_to_line = {}
-        lines_read = 0
-        lines_tokenized = 0
-        last_line = None
-        TokenInfo = tokenize.TokenInfo
+        return generate_tokens(self)
 
-        lines = self.splitlines(True)
-        lines.reverse()
-
-        def readline():
-            nonlocal lines_read
-            nonlocal last_line
-            if lines:
-                line = lines.pop()
-            else:
-                length = len(self)
-                line = self[length:]
-            lines_read += 1
-            line_number_to_line[lines_read] = line
-            last_line = line
-            return line
-
-        for t in tokenize.generate_tokens(readline):
-            # token[0] = token type (a la token.py, TOKEN_NL TOKEN_OP etc)
-            # token[1] = string (value of token, '\n' '=' etc)
-            # token[2] = start tuple (row, column)
-            # token[3] = end tuple (row, column)
-            # token[4] = line
-
-            # if the token spans multiple lines, both string and line will contain \n
-
-            start_line, start_column = t[2]
-            end_line, end_column = t[3]
-            while lines_tokenized < start_line:
-                line_number_to_line.pop(lines_tokenized, None)
-                lines_tokenized += 1
-            line = line_number_to_line[start_line]
-            if start_line == end_line:
-                string = line[start_column:end_column]
-            else:
-                string_buffer = []
-                string_append = string_buffer.append
-                line_buffer = []
-                line_append = line_buffer.append
-                string_append(line[start_column:])
-                line_append(line)
-                for i in range(start_line + 1, end_line):
-                    line = line_number_to_line[i]
-                    string_append(line)
-                    line_append(line)
-                line = line_number_to_line[end_line]
-                string_append(line[:end_column])
-                line_append(line)
-
-                length = len(line)
-                empty = line[length:]
-                string = empty.join(string_buffer)
-                line = empty.join(line_buffer)
-
-            yield TokenInfo(t[0], string, t[2], t[3], line)
-
+    def compile(self, flags=0):
+        return Pattern(self, flags)
 
 
 del export

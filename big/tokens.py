@@ -112,22 +112,22 @@ TOKEN_N_TOKENS = token.N_TOKENS
 
 
 # present in 3.6, removed in 3.7, restored in 3.8
-try:
+try: # pragma: nocover
     TOKEN_AWAIT = token.AWAIT
     TOKEN_ASYNC = token.ASYNC
-except AttributeError:
+except AttributeError: # pragma: nocover
     TOKEN_AWAIT = -1
     TOKEN_ASYNC = -1
 
 # these three are defined in 3.6, but in the "tokenize" module
 # instead of the "token" module
 assert sys.version_info.major >= 3
-if sys.version_info.major == 3:
+if sys.version_info.major == 3: # pragma: nocover
     assert sys.version_info.minor >= 6
 
-if (sys.version_info.major == 3) and (sys.version_info.minor == 6):
+if (sys.version_info.major == 3) and (sys.version_info.minor == 6): # pragma: nocover
     _ = tokenize
-else:
+else: # pragma: nocover
     _ = token
 
 TOKEN_COMMENT  = _.COMMENT
@@ -136,30 +136,30 @@ TOKEN_ENCODING = _.ENCODING
 
 
 # new in 3.8
-try:
+try: # pragma: nocover
     TOKEN_COLONEQUAL = token.COLONEQUAL
     TOKEN_TYPE_IGNORE = token.TYPE_IGNORE
     TOKEN_TYPE_COMMENT = token.TYPE_COMMENT
-except AttributeError:
+except AttributeError: # pragma: nocover
     TOKEN_COLONEQUAL = -1
     TOKEN_TYPE_IGNORE = -1
     TOKEN_TYPE_COMMENT = -1
 
 
 # new in 3.10
-try:
+try: # pragma: nocover
     TOKEN_SOFT_KEYWORD = token.SOFT_KEYWORD
-except AttributeError:
+except AttributeError: # pragma: nocover
     TOKEN_SOFT_KEYWORD = -1
 
 
 # new in 3.12
-try:
+try: # pragma: nocover
     TOKEN_EXCLAMATION = token.EXCLAMATION
     TOKEN_FSTRING_START = token.FSTRING_START
     TOKEN_FSTRING_MIDDLE = token.FSTRING_MIDDLE
     TOKEN_FSTRING_END = token.FSTRING_END
-except AttributeError:
+except AttributeError: # pragma: nocover
     TOKEN_EXCLAMATION = -1
     TOKEN_FSTRING_START = -1
     TOKEN_FSTRING_MIDDLE = -1
@@ -171,6 +171,72 @@ def export(fn):
     __all__.append(fn.__name__)
     return fn
 
+
+def generate_tokens(s):
+    line_number_to_line = {}
+    lines_read = 0
+    lines_tokenized = 0
+    last_line = None
+    TokenInfo = tokenize.TokenInfo
+
+    lines = s.splitlines(True)
+    lines.reverse()
+
+    def readline():
+        nonlocal lines_read
+        nonlocal last_line
+        if lines:
+            line = lines.pop()
+        else:
+            length = len(s)
+            line = s[length:]
+        lines_read += 1
+        line_number_to_line[lines_read] = line
+        last_line = line
+        return line
+
+    for t in tokenize.generate_tokens(readline):
+        # token[0] = token type (a la token.py, TOKEN_NL TOKEN_OP etc)
+        # token[1] = string (value of token, '\n' '=' etc)
+        # token[2] = start tuple (row, column)
+        # token[3] = end tuple (row, column)
+        # token[4] = line
+
+        # if the token spans multiple lines, both string and line will contain \n
+
+        start_line, start_column = t[2]
+        end_line, end_column = t[3]
+        while lines_tokenized < start_line:
+            line_number_to_line.pop(lines_tokenized, None)
+            lines_tokenized += 1
+        line = line_number_to_line[start_line]
+        if start_line == end_line:
+            string = line[start_column:end_column]
+        else:
+            string_buffer = []
+            string_append = string_buffer.append
+            line_buffer = []
+            line_append = line_buffer.append
+            string_append(line[start_column:])
+            line_append(line)
+            for i in range(start_line + 1, end_line):
+                line = line_number_to_line[i]
+                string_append(line)
+                line_append(line)
+            line = line_number_to_line[end_line]
+            string_append(line[:end_column])
+            line_append(line)
+
+            length = len(line)
+            empty = line[length:]
+            string = empty.join(string_buffer)
+            line = empty.join(line_buffer)
+
+        yield TokenInfo(t[0], string, t[2], t[3], line)
+
+
+_aggregated_delimiters = { '(': ')', '[': ']', '{': '}' }
+_aggregated_close_delimiters = set(_aggregated_delimiters.values())
 
 @export
 def aggregate_delimiter_tokens(tokens):

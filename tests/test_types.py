@@ -32,7 +32,7 @@ import string
 import sys
 import unittest
 
-from big.types import String
+from big.types import String, Pattern
 from big.tokens import *
 
 
@@ -54,6 +54,9 @@ leading_only  = String('            a b c', source=source)
 trailing_only  = String('a b c            ', source=source)
 all_uppercase  = String("HELLO WORLD!", source=source)
 title_case  = String("Hello World!", source=source)
+kooky1 = String("kooky land 1", line_number=44,                   first_line_number=44                        )
+kooky2 = String("kooky land 2",                 column_number=33,                       first_column_number=33)
+kooky3 = String("kooky land 3", line_number=44, column_number=33, first_line_number=44, first_column_number=33)
 
 splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
 
@@ -65,7 +68,7 @@ chipmunk = String('🐿️', source='tic e tac')
 
 l = abcde
 
-values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only, all_uppercase, title_case]
+values = [abcde, himem, line1, line2, tabs, words, splitlines_demo, leading_and_trailing, leading_only, trailing_only, all_uppercase, title_case, kooky1, kooky2, kooky3]
 
 
 class BigStringTests(unittest.TestCase):
@@ -442,10 +445,11 @@ class BigStringTests(unittest.TestCase):
 
     def test___repr__(self):
         for value in values:
-            if value.first_column_number == 1:
-                extra = ''
-            else:
-                extra = f", first_column_number={value.first_column_number}"
+            extra = ''
+            if value.first_line_number != 1:
+                extra += f", first_line_number={value.first_line_number}"
+            if value.first_column_number != 1:
+                extra += f", first_column_number={value.first_column_number}"
             expected = f"String({repr(str(value))}, source={value.source!r}, line_number={value.line_number}, column_number={value.column_number}{extra})"
             self.assertStr(repr(value), expected)
         long_source = String('x' * 90)
@@ -546,7 +550,9 @@ class BigStringTests(unittest.TestCase):
     def test_isalnum(self):
         # smoke test for 3.6
         self.assertTrue(abcde.isascii())
+        self.assertTrue(abcde._isascii())
         self.assertFalse(chipmunk.isascii())
+        self.assertFalse(chipmunk._isascii())
 
         testers = "isalnum isalpha isascii isdecimal isdigit isidentifier islower isnumeric isprintable isspace istitle isupper".split()
         for value in values:
@@ -556,8 +562,8 @@ class BigStringTests(unittest.TestCase):
                     if hasattr(str, tester):
                         self.assertInt(getattr(prefix, tester)(), getattr(str(prefix), tester)())
         for tester in testers:
-            if not hasattr(str, tester):
-                continue
+            # if not hasattr(str, tester):
+            #     continue
             fn = self.assertTrue if tester == 'isprintable' else self.assertFalse
             fn(getattr(chipmunk, tester)())
 
@@ -790,9 +796,6 @@ class BigStringTests(unittest.TestCase):
         # smoke test for 3.6
         self.assertString(abcde.removeprefix('ab'), abcde[2:])
         self.assertString(abcde.removeprefix('xx'), abcde)
-
-        if not hasattr(str, 'removeprefix'):
-            return
 
         for value in values:
             for i in range(len(value)):
@@ -1033,6 +1036,19 @@ class BigStringTests(unittest.TestCase):
         self.assertString(before, 'ab')
         self.assertString(c, 'c')
         self.assertString(after, 'de')
+
+    def test_compile(self):
+        p = String(":+").compile()
+        s = String('a:b::c::d:')
+        l = p.split(s)
+        self.assertEqual(l,
+            [
+            s[0],
+            s[2],
+            s[5],
+            s[8],
+            s[10:10],
+            ])
 
 
 def run_tests():
