@@ -5445,11 +5445,95 @@ class BigPatternTests(unittest.TestCase):
                 self.assertIs(type(actual), type(expect), msg)
         recurse(actual, expect)
 
+    def test_match_group(self):
+        pattern = String("a(:+)b").compile()
+        m = pattern.search(String("xxa:::byy"))
+        self.assertTrue(m)
+        self.assertEqual(m.group(), "a:::b")
+        self.assertIsInstance(m.group(), String)
+        self.assertEqual(m.group(1), ":::")
+        self.assertIsInstance(m.group(1), String)
+        groups = m.group(0, 1)
+        self.assertEqual(groups, ("a:::b", ":::"))
+        self.assertIsInstance(groups[0], String)
+        self.assertIsInstance(groups[1], String)
+
+    def test_passthroughs(self):
+        # These Pattern methods are just one-line pass-throughs for
+        # re.Pattern methods.  Smoke testing seems sufficient.
+
+        pattern = String(":+").compile()
+        m = pattern.search(String("a b ::: c"))
+        self.assertTrue(m)
+        self.assertEqual(m.group(), ":::")
+        self.assertIsInstance(m.group(), String)
+
+        m = pattern.match(String(":::: xyz"))
+        self.assertTrue(m)
+        self.assertEqual(m.group(), "::::")
+        self.assertIsInstance(m.group(), String)
+
+        s = String(":::::")
+        m = pattern.fullmatch(s)
+        self.assertTrue(m)
+        self.assertEqual(m.group(), s)
+        self.assertIsInstance(m.group(), String)
+
+        s = String("a ::: b :: c :::: d")
+        result = pattern.sub("X", s)
+        self.assertEqual(result, "a X b X c X d")
+        self.assertIsInstance(result, str)
+
+        result = pattern.subn("X", s)
+        self.assertEqual(result[0], "a X b X c X d")
+        self.assertIsInstance(result[0], str)
+        self.assertEqual(result[1], 3)
+        self.assertIsInstance(result[1], int)
+
+
+    def test_re_findall(self):
+        pattern = String(":+").compile()
+        l = pattern.findall(String("a :: b ::: c"))
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l, ["::", ":::"])
+        self.assertIsInstance(l[0], String)
+        self.assertIsInstance(l[1], String)
+
+        pattern = String(r'\bf[a-z]*').compile()
+        l = pattern.findall(String('which foot or hand fell fastest'))
+        self.assertEqual(l, ['foot', 'fell', 'fastest'])
+        self.assertTrue(all(isinstance(o, String) for o in l))
+
+        pattern = String(r'(\w+)=(\d+)').compile()
+        l = pattern.findall(String('set width=20 and height=10'))
+        self.assertEqual(l, [('width', '20'), ('height', '10')])
+        self.assertTrue(all(isinstance(o, tuple) for o in l))
+        self.assertTrue(all(isinstance(q, String)  for o in l  for q in o ))
+
+        pattern = String(r'(a+)|(b+)').compile()
+        l = pattern.findall(String("xxxaxxxbbxxaabb"))
+        self.assertEqual(l, [('a', None), (None, 'bb'), ('aa', None), (None, 'bb')])
+        self.assertTrue(all((isinstance(q, String) or (q is None))  for o in l  for q in o ))
+
+        pattern = String(r'a(x+)b').compile()
+        l = pattern.findall(String("___aaxxxbb___axxb__"))
+        self.assertEqual(l, ['xxx', 'xx'])
+        self.assertTrue(all(isinstance(o, String) for o in l))
+
     def test_re_split(self):
 
         def re_split(pattern, string):
             p = Pattern(pattern)
             return p.split(string)
+
+        pattern = String(":+").compile()
+        s = String("a :: b ::: c")
+        l = pattern.split(s, 1)
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l[0], "a ")
+        self.assertIsInstance(l[0], String)
+        self.assertEqual(l[1], " b ::: c")
+        self.assertIsInstance(l[1], String)
 
         for s in ":a:b::c", String(":a:b::c"):
             self.assertTypedEqual(re_split(":", s),

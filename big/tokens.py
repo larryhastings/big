@@ -24,6 +24,10 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+#
+# big.tokens is designed to be safe for "from big.tokens import *"
+#
+
 
 # Note to self, since Python doesn't bother to document this
 # except as a comment in Lib/tokenize.py :

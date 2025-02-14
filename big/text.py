@@ -5187,13 +5187,13 @@ class Pattern:
         self.pattern = re.compile(s, flags)
 
     def search(self, string, pos=0, endpos=sys.maxsize):
-        return self.Match(self.pattern.search(string, pos, endpos), self.string)
+        return self.Match(self.pattern.search(string, pos, endpos), string)
 
     def match(self, string, pos=0, endpos=sys.maxsize):
-        return self.Match(self.pattern.match(string, pos, endpos), self.string)
+        return self.Match(self.pattern.match(string, pos, endpos), string)
 
     def fullmatch(self, string, pos=0, endpos=sys.maxsize):
-        return self.Match(self.pattern.fullmatch(string, pos, endpos), self.string)
+        return self.Match(self.pattern.fullmatch(string, pos, endpos), string)
 
     def split(self, string, maxsplit=sys.maxsize):
         result = []
@@ -5229,12 +5229,34 @@ class Pattern:
 
         return result
 
-    def findall(self, string, pos=0, endpos=sys.maxsize):
-        return [self.Match(m, self.string) for m in self.pattern.findall(string, pos, endpos)]
-
     def finditer(self, string, pos=0, endpos=sys.maxsize):
         for m in self.pattern.finditer(string, pos, endpos):
             yield self.Match(m, string)
+
+    def findall(self, string, pos=0, endpos=sys.maxsize):
+        results = []
+        for m in self.finditer(string, pos=pos, endpos=endpos):
+            groups = []
+            try:
+                i = 1
+                while True:
+                    group = m.group(i)
+                    if group is None:
+                        groups.append(None)
+                    else:
+                        group_start, group_end = m.span(i)
+                        groups.append(string[group_start:group_end])
+                    i += 1
+            except IndexError:
+                pass
+            if len(groups) == 0:
+                groups = m.group(0)
+            elif len(groups) == 1:
+                groups = groups[0]
+            else:
+                groups = tuple(groups)
+            results.append(groups)
+        return results
 
     def sub(self, repl, string, count=0):
         # sorry, we can't honor the substring here
@@ -5269,8 +5291,11 @@ class Pattern:
                 groups = (0,)
 
             results = self.match.group(*groups)
-            if (len(groups) == 1) or (results is None):
+            if results is None:
                 return results
+            if len(groups) == 1:
+                start, end = self.match.span(groups[0])
+                return self.string[start:end]
 
             results2 = []
             for group, result in zip(groups, results):
