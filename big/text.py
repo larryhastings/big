@@ -5187,13 +5187,16 @@ class Pattern:
         self.pattern = re.compile(s, flags)
 
     def search(self, string, pos=0, endpos=sys.maxsize):
-        return self.Match(self.pattern.search(string, pos, endpos), string)
+        m = self.pattern.search(string, pos, endpos)
+        return m and self.Match(m, string)
 
     def match(self, string, pos=0, endpos=sys.maxsize):
-        return self.Match(self.pattern.match(string, pos, endpos), string)
+        m = self.pattern.match(string, pos, endpos)
+        return m and self.Match(m, string)
 
     def fullmatch(self, string, pos=0, endpos=sys.maxsize):
-        return self.Match(self.pattern.fullmatch(string, pos, endpos), string)
+        m = self.pattern.fullmatch(string, pos, endpos)
+        return m and self.Match(m, string)
 
     def split(self, string, maxsplit=sys.maxsize):
         result = []
@@ -5266,6 +5269,9 @@ class Pattern:
         # sorry, we can't honor the substring here
         return self.pattern.subn(repl, string, count)
 
+    def __repr__(self):
+        return self.pattern.__repr__()
+
 
     @BoundInnerClass
     class Match:
@@ -5305,23 +5311,24 @@ class Pattern:
                 start, end = self.match.span(group)
                 results2.append(self.string[start:end])
 
-            if len(groups) == 1:
-                return results2[0]
             return tuple(results2)
 
-        def __getitem(self, item):
+        def __getitem__(self, item):
             return self.group(item)
 
         def groups(self, default=None):
-            if not self.lastindex:
-                return ()
             results = []
-            for i in range(1, self.lastindex + 1):
-                value = self.match.group(i)
-                if value is None:
-                    value = default
-                results.append(value)
-            return tuple(value)
+            try:
+                i = 1
+                while True:
+                    value = self.group(i)
+                    if value is None:
+                        value = default
+                    results.append(value)
+                    i += 1
+            except IndexError:
+                pass
+            return tuple(results)
 
         def groupdict(self, default=None):
             result = {}
@@ -5341,6 +5348,9 @@ class Pattern:
 
         def span(self, group=0):
             return self.match.span(group)
+
+        def __repr__(self):
+            return self.match.__repr__()
 
 
 del export

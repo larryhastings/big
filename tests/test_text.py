@@ -5451,10 +5451,21 @@ class BigPatternTests(unittest.TestCase):
         self.assertTrue(m)
         self.assertEqual(m.group(), "a:::b")
         self.assertIsInstance(m.group(), String)
-        self.assertEqual(m.group(1), ":::")
+        self.assertEqual(m[1], ":::")
         self.assertIsInstance(m.group(1), String)
         groups = m.group(0, 1)
         self.assertEqual(groups, ("a:::b", ":::"))
+        self.assertIsInstance(groups[0], String)
+        self.assertIsInstance(groups[1], String)
+
+        pattern = String(r"(a+)(b+)?(c+)?").compile()
+        m = pattern.search(String("xxaaabbyy"))
+        groups = m.groups()
+        self.assertEqual(groups, ('aaa', 'bb', None))
+        self.assertIsInstance(groups[0], String)
+        self.assertIsInstance(groups[1], String)
+        groups = m.group(1, 2, 3)
+        self.assertEqual(groups, ('aaa', 'bb', None))
         self.assertIsInstance(groups[0], String)
         self.assertIsInstance(groups[1], String)
 
@@ -5479,6 +5490,9 @@ class BigPatternTests(unittest.TestCase):
         self.assertEqual(m.group(), s)
         self.assertIsInstance(m.group(), String)
 
+        self.assertEqual(repr(pattern), repr(pattern.pattern))
+        self.assertEqual(repr(m), repr(m.match))
+
         s = String("a ::: b :: c :::: d")
         result = pattern.sub("X", s)
         self.assertEqual(result, "a X b X c X d")
@@ -5489,6 +5503,11 @@ class BigPatternTests(unittest.TestCase):
         self.assertIsInstance(result[0], str)
         self.assertEqual(result[1], 3)
         self.assertIsInstance(result[1], int)
+
+        pattern = String(r'(a+)|(b+)').compile()
+        m = pattern.search("xxaaayyyy")
+        result = m.expand(r"__\1--")
+        self.assertEqual(result, "__aaa--")
 
 
     def test_re_findall(self):
