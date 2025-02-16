@@ -49,7 +49,6 @@ from tokenize import TokenInfo
 import sys
 
 
-
 # define a TOKEN_X for every token.X in any supported version of Python.
 # if TOKEN_X isn't defined in the current version of Python, it'll be set to -1.
 # this lets you safely write
@@ -176,6 +175,16 @@ def export(fn):
     return fn
 
 
+if sys.version_info.major == 3: # pragma: nocover
+    _use_splitlines_for_tokenizer = sys.version_info.minor >= 12
+else: # pragma: nocover
+    _use_splitlines_for_tokenizer = True
+
+# we always create this anyway, for the sake of testing
+from big.text import Pattern
+_re_tokenizer_splitlines = Pattern("((?:\r\n)|\r|\n)").split
+
+
 def generate_tokens(s):
     line_number_to_line = {}
     lines_read = 0
@@ -183,8 +192,27 @@ def generate_tokens(s):
     last_line = None
     TokenInfo = tokenize.TokenInfo
 
-    lines = s.splitlines(True)
-    lines.reverse()
+    if _use_splitlines_for_tokenizer:
+        # The new tokenizer that shipped in CPython 3.12
+        # properly recognizes all linebreak charactres.
+        lines = s.splitlines(True)
+        lines.reverse()
+    else:
+        # In CPython 3.11 and before, the tokenizer
+        # only recognizes \r, \n, and \r\n as linebreaks.
+        lines = _re_tokenizer_splitlines(s)
+        lines.reverse()
+        joined_lines = []
+        while lines:
+            if len(lines) > 2:
+                text = lines.pop()
+                nl = lines.pop()
+                joined_lines.append(text + nl)
+                continue
+            joined_lines.extend(lines)
+            break
+        joined_lines.reverse()
+        lines = joined_lines
 
     def readline():
         nonlocal lines_read

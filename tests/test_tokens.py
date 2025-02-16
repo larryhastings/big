@@ -30,6 +30,7 @@ big_dir = bigtestlib.preload_local_big()
 
 import big.all as big
 from big.tokens import aggregate_delimiter_tokens, generate_tokens
+from big.all import String
 import unittest
 
 
@@ -111,26 +112,77 @@ class BigTokenTests(unittest.TestCase):
             """.strip().split():
             with self.subTest(id):
                 self.assertTrue(hasattr(big.tokens, id))
+                self.assertIsInstance(getattr(big.tokens, id), int)
 
     def test_functions(self):
-        text = """
-def foo(a, b):
-    return [1, 2, 3]
-""".strip()
-        tokens = list(generate_tokens(text))
-        strings = [t[1] for t in tokens if t[1]]
-        self.assertEqual(strings,
-            [
-            'def', 'foo', '(', 'a', ',', 'b', ')', ':', '\n',
-            '    ', 'return', '[', '1', ',', '2', ',', '3', ']',
-            ]
-            )
+        # white box testing
+        saved = big.tokens._use_splitlines_for_tokenizer
 
-        tokens2 = list(aggregate_delimiter_tokens(tokens))
-        tup = [t[1] for t in tokens2[2]]
-        self.assertEqual(tup, ['(', 'a', ',', 'b', ')'])
-        lst = [t[1] for t in tokens2[7]]
-        self.assertEqual(lst, ['[', '1', ',', '2', ',', '3', ']'])
+        def extract_strings_from_tokens(tokens):
+            result = []
+            result_append = result.append
+            for t in tokens:
+                if isinstance(t, list):
+                    value = extract_strings_from_tokens(t)
+                else:
+                    value = t[1]
+                result_append(value)
+            return result
+
+        for text, token_strings, aggregated_token_strings in (
+            (
+                "def foo(a, b):\n    return [1, 2, 3]",
+                [
+                'def', 'foo', '(', 'a', ',', 'b', ')', ':', '\n',
+                '    ', 'return', '[', '1', ',', '2', ',', '3', ']',
+                '', '', '',
+                ],
+                [
+                'def', 'foo',
+                    ['(', 'a', ',', 'b', ')'],
+                ':', '\n',
+                '    ', 'return',
+                    ['[', '1', ',', '2', ',', '3', ']', ],
+                '', '', '',
+                ]
+            ),
+
+            (
+                "'''\nline 1\nline 2\nline 3\n'''",
+                [
+                "'''\nline 1\nline 2\nline 3\n'''", '', '',
+                ],
+                [
+                "'''\nline 1\nline 2\nline 3\n'''", '', '',
+                ],
+            ),
+
+            ):
+            with self.subTest(text):
+                for use_splitlines in (False, True):
+                    with self.subTest(use_splitlines):
+                        big.tokens._use_splitlines_for_tokenizer = use_splitlines
+                        tokens = list(generate_tokens(text))
+                        got_token_strings = extract_strings_from_tokens(tokens)
+                        self.assertEqual(got_token_strings, token_strings)
+
+                        aggregated_tokens = list(aggregate_delimiter_tokens(tokens))
+                        got_aggregated_token_strings = extract_strings_from_tokens(aggregated_tokens)
+                        self.assertEqual(got_aggregated_token_strings, aggregated_token_strings)
+
+        big.tokens._use_splitlines_for_tokenizer = saved
+
+        text = String("def foo(a, b):\n")
+        expected_token_strings = [text[0:3], text[4:7], text[7:8], text[8:9], text[9:10], text[11:12], text[12:13], text[13:14], text[14:15], text[15:15]]
+        tokens = list(generate_tokens(text))
+        got_token_strings = extract_strings_from_tokens(tokens)
+        self.assertEqual(got_token_strings, expected_token_strings)
+        for got, expected in zip(got_token_strings, expected_token_strings):
+            with self.subTest(got):
+                self.assertIsInstance(got, String)
+                self.assertEqual(got.line_number, expected.line_number)
+                self.assertEqual(got.column_number, expected.column_number)
+                self.assertEqual(got.offset, expected.offset)
 
         text = """
 def foo(a, b]:

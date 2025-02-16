@@ -5469,6 +5469,18 @@ class BigPatternTests(unittest.TestCase):
         self.assertIsInstance(groups[0], String)
         self.assertIsInstance(groups[1], String)
 
+    def test_match_groupdict(self):
+        pattern = String(r'(?P<aye>a+)|(?P<bee>b+)').compile()
+        text = String("xxxaxxxbbx")
+        l = list(pattern.finditer(text))
+        for m, expected in zip(l, [
+            {'aye': text[3:4], 'bee': None},
+            {'aye': None, 'bee': text[7:9]},
+            ]):
+            with self.subTest(expected):
+                got = m.groupdict()
+                self.assertEqual(got, expected)
+
     def test_passthroughs(self):
         # These Pattern methods are just one-line pass-throughs for
         # re.Pattern methods.  Smoke testing seems sufficient.
@@ -5510,7 +5522,7 @@ class BigPatternTests(unittest.TestCase):
         self.assertEqual(result, "__aaa--")
 
 
-    def test_re_findall(self):
+    def test_pattern_findall(self):
         pattern = String(":+").compile()
         l = pattern.findall(String("a :: b ::: c"))
         self.assertEqual(len(l), 2)
@@ -5539,7 +5551,7 @@ class BigPatternTests(unittest.TestCase):
         self.assertEqual(l, ['xxx', 'xx'])
         self.assertTrue(all(isinstance(o, String) for o in l))
 
-    def test_re_split(self):
+    def test_pattern_split(self):
 
         def re_split(pattern, string):
             p = Pattern(pattern)

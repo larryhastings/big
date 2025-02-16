@@ -5332,7 +5332,7 @@ class Pattern:
 
         def groupdict(self, default=None):
             result = {}
-            for name, value in self.groupdict().items():
+            for name, value in self.match.groupdict().items():
                 if value is None:
                     value = default
                 else:
