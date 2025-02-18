@@ -5353,5 +5353,314 @@ class Pattern:
             return self.match.__repr__()
 
 
+@export
+def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
+    """
+    Takes an iterable of lines, with or without linebreaks; strips
+    the leading whitespace from each line and tracks the indent level.
+    Yields 2-tuples of (indent, lstripped_line).
+
+    indent is an integer, the ordinal number of the current
+    indent.  Text at the leftmost column is at indent 0.
+    If the line was indented three times, indent will be 3.
+
+    Uses an intentionally simple algorithm.  Only understands tab and
+    space characters as indent characters.  Internally detabs to spaces
+    for consistency, using the tab_width passed in.
+
+    Text can only dedent out to a previous indent.
+    Raises IndentationError if there's an illegal dedent.
+
+    Blank lines and empty lines have the indent level of the
+    *next* non-blank line, or 0 if there are no subsequent
+    non-blank lines.  If the line contains only whitespace,
+    any trailing string of characters found in "linebreaks"
+    will be preserved.  (If you don't want linebreak characters
+    preserved, pass in None or an empty sequence for "linebreaks".)
+    """
+    indent = 0
+    leadings = []
+
+    # a "blank line" is either empty or only has whitespace.
+    # blank lines get the indent of the *next* non-blank line,
+    # or 0 if there are no following non-blank lines... which
+    # means we need to buffer blank lines until we learn which
+    # of those two cases this is.
+    blank_lines = []
+
+    if linebreaks:
+        linebreaks = frozenset(linebreaks)
+
+    first_line = True
+
+    for line in lines:
+        if first_line:
+            first_line = False
+            if isinstance(line, bytes):
+                tab = b'\t'
+            else:
+                tab = '\t'
+        lstripped = line.lstrip()
+        if not lstripped:
+            if not linebreaks:
+                line = line[0:0]
+            else:
+                # count the linebreak characters at the end of line,
+                # and preserve them if any.  otherwise use line[0:0]
+                # to represent the empty line.
+                trailing_linebreaks = []
+                trailing_linebreaks_append = trailing_linebreaks.append
+                count = 0
+                for count, c in enumerate(reversed(line)):
+                    if c not in linebreaks:
+                        break
+                if not count:
+                    line = line[0:0]
+                else:
+                    length = len(line)
+                    line = line[len(line) - count:]
+
+            blank_lines.append(line)
+            continue
+
+        # if we reach here, lstripped is not empty.
+        if tab in line:
+            line = line.expandtabs(tab_width)
+        column_number = line.index(lstripped[0])
+
+        if not column_number:
+            # this line doesn't start with whitespace; text is at column 0.
+            # outdent to zero.
+            indent = 0
+            leadings.clear()
+            new_indent = False
+        # in all the remaining else cases, the line starts with whitespace.   and...
+        elif not leadings:
+            # this is the first indent.
+            new_indent = True
+        elif leadings[-1] == column_number:
+            # indent is unchanged.
+            new_indent = False
+        elif column_number > leadings[-1]:
+            # we are indented further than the previously observed indent.
+            new_indent = True
+        else:
+            # we're outdenting.
+            # ensure that this line's indent is one we've seen before.
+            assert leadings
+            leadings.pop()
+            indent -= 1
+            while leadings:
+                l = leadings[-1]
+                if l >= column_number:
+                    if l > column_number:
+                        leadings.clear()
+                    break
+                leadings.pop()
+                indent -= 1
+            if not leadings:
+                raise IndentationError(f"unindent doesn't match any outer indentation level")
+            new_indent = False
+
+        # print(f"  >> {leadings=} {new_indent=}")
+        if new_indent:
+            leadings.append(column_number)
+            indent += 1
+
+        if blank_lines:
+            # print(f"BL+ {blank_lines=}")
+            for line in blank_lines:
+                yield (indent, line)
+            blank_lines.clear()
+
+        yield (indent, lstripped)
+
+    # flush trailing blank lines
+    if blank_lines:
+        for line in blank_lines:
+            yield 0, line
+
+
+##
+## TODO
+## * support linebreaks
+## * rescan generator function
+## * fixup non-generator function that returns the generator
+##
+
+def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks):
+    "The generator function returned by the public strip_line_comments function."
+    state = None
+
+    for line in lines:
+        # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
+
+        if quotes or multiline_quotes:
+            i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
+        else:
+            i = iter( (('', line, ''),) )
+
+        # initialize these in case i never yields anything
+        leading_quote = segment = trailing_quote = ''
+
+        previous_lengths = 0
+        offset = 0
+
+        for leading_quote, segment, trailing_quote in i:
+            offset += previous_lengths
+
+            previous_lengths = len(leading_quote) + len(segment) + len(trailing_quote)
+
+            if leading_quote:
+                # this can be only one of two cases:
+                # * quotes are balanced, in which case trailing_quote is true, and we might loop again
+                # * quotes aren't balanced, in which case this is the last iteration and we handle it
+                continue
+
+            if state:
+                # we're still in a quote from a previous line.
+                # assert not leading_quote
+                if trailing_quote:
+                    state = None
+                else:
+                    # we didn't find the ending quote from the previous line,
+                    # so this should be the entire line
+                    assert segment == line
+                continue
+
+            fields = line_comment_splitter(segment, maxsplit=1)
+            if len(fields) == 1:
+                continue
+
+            # found a comment marker in an unquoted segment!
+            leading = fields[0]
+            offset += len(leading)
+            segment = line[:offset]
+
+            if linebreaks:
+                # count the linebreak characters at the end of line,
+                # and preserve them if any.  otherwise use line[0:0]
+                # to represent the empty line.
+                trailing_linebreaks = []
+                trailing_linebreaks_append = trailing_linebreaks.append
+                for count, c in enumerate(reversed(line)):
+                    if c not in linebreaks:
+                        break
+                if count:
+                    segment += line[len(line) - count:]
+
+            line = segment
+            break
+        else:
+            # we exhausted the loop.
+            if leading_quote and not trailing_quote:
+                if leading_quote not in multiline_quotes:
+                    raise SyntaxError(f"unterminated quote marker {leading_quote}")
+                state = leading_quote
+
+        yield line
+
+    if state:
+        raise SyntaxError(f"unterminated quote marker {state}")
+
+_strip_line_comments = strip_line_comments
+
+@export
+def strip_line_comments(lines, line_comment_markers, *,
+    escape='\\', quotes=(), multiline_quotes=(), linebreaks=linebreaks):
+    """
+    Strips line comments from a sequence of lines.
+
+    Line comments are substrings beginning with a special marker
+    that mean the rest of the line should be ignored;
+    lines_strip_line_comments truncates the line at the
+    beginning of the leftmost line comment marker.
+
+    line_comment_markers should be an iterable of line comment
+    marker strings.  These are strings that denote a "line comment",
+    which is to say, a comment that starts at that marker and
+    extends to the end of the line.
+
+    By default, quotes and multiline_quotes are both false,
+    in which case lines_strip_line_comments will truncate each
+    line, starting at the leftmost comment marker, and yield
+    the resulting line.  If the line doesn't contain any comment
+    markers, lines_strip_line_comments yields it unchanged.
+
+    However, the syntax of the text you're parsing might support
+    quoted strings, and comment marks in those quoted strings
+    should be ignored.  lines_strip_quoted_strings supports this
+    too, with its escape, quotes, and multiline_quotes parameters.
+
+    If quotes is true, it must be an iterable of quote marker
+    strings, length 1 or more.  lines_strip_line_comments will
+    parse the line using big's split_quoted_strings function
+    and ignore comment characters inside quoted strings.  Quoted
+    strings may not span lines; if a line ends with an unterminated
+    quoted string, lines_strip_line_comments will raise a SyntaxError.
+
+    If multiline_quotes is true, it must be an iterable of
+    quote marker strings, length 1 or more.  Quoted strings
+    enclosed in multiline quotes may span multiple lines;
+    quoted strings enclosed in (conventional) quotes are not
+    permitted to.  If the last line yielded by the upstream
+    iterator ends with an unterminated multiline string,
+    lines_strip_line_comments will raise a SyntaxError.
+
+    There must be no quote markers in common between quotes and
+    multiline_quotes.
+
+    If escape is true, it must be a string.  This string
+    will "escape" (quote) quote markers, either multiline
+    or non-multiline, as per backslash inside strings in Python.
+    The default value for escape is "\\".
+
+    What's the difference between lines_strip_line_comments and
+    lines_filter_line_comment_lines?
+      * lines_filter_line_comment_lines only recognizes lines that
+        *start* with a comment separator (ignoring leading
+        whitespace).  Also, it filters out those lines
+        completely, rather than modifying the line.
+      * lines_strip_line_comments handles comment characters
+        anywhere in the line, although it can ignore
+        comments inside quoted strings.  It truncates the
+        line but still always yields the line.
+
+    Composable with all the lines_ modifier functions in the big.text module.
+    """
+
+    # check line_comment_markers
+    if not line_comment_markers:
+        bad_value = True
+    elif isinstance(line_comment_markers, bytes):
+        bad_value = False
+        line_comment_markers = _iterate_over_bytes(line_comment_markers)
+        is_bytes = True
+    else:
+        is_bytes = isinstance(line_comment_markers[0], bytes)
+        bad_value = not (is_bytes or isinstance(line_comment_markers[0], str))
+    if bad_value:
+        raise ValueError(f"line comment markers must be str, bytes, or an non-empty iterable of str or bytes, not {line_comment_markers!r}")
+
+    # call split_quoted_string to validate quotes, multiline_quotes, and escape, if specified.
+    not_empty = quotes or multiline_quotes
+    if not_empty:
+        # if not_empty is not bytes, it's safe to index into
+        if isinstance(not_empty, bytes) or isinstance(not_empty[0], bytes):
+            test_text = b'x'
+        else:
+            test_text = 'x'
+
+        # don't iterate! just throw the iterator away.
+        # split_quoted_strings validates the inputs immediately,
+        # and there's no point in calling the iterator.
+        split_quoted_strings(test_text, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
+
+    line_comment_pattern = __separators_to_re(tuple(line_comment_markers), separators_is_bytes=is_bytes, separate=True, keep=True)
+    line_comment_splitter = re.compile(line_comment_pattern).split
+
+    return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks)
+
+
 del export
 del export_name

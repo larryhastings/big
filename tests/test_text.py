@@ -4542,6 +4542,327 @@ class BigTextTests(unittest.TestCase):
         test_clip_leading('         \n')
 
 
+    def test_lines_strip_indent(self):
+        self.maxDiff = 2**32
+
+        def test(li, expected):
+            got = list(li)
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+        def L(li, line_number, column_number, line, end=_sentinel, *, leading=None, trailing=None, original=None, **kwargs):
+            is_bytes = isinstance(line, bytes)
+            empty = b'' if is_bytes else ''
+
+            if end is _sentinel:
+                end = b'\n' if is_bytes else '\n'
+
+            if leading is None:
+                leading = empty
+
+            if trailing is None:
+                trailing = empty
+
+            if original is None:
+                original = leading + line + trailing + end
+
+            return (big.text.LineInfo(li, original, line_number, column_number, end=end, leading=leading, trailing=trailing, **kwargs), line)
+
+
+        lines = dedent("""
+            left margin
+            if 3:
+                text
+            else:
+                if 1:
+                      other text
+                      other text
+                more text
+                  different indent
+                outdent
+            outdent
+              new indent
+            qoutdent
+            """)
+
+        i = li = big.text.lines(lines)
+        i = big.text.lines_strip_indent(li)
+
+        expected = [
+            L(li,  1,  1, '',                 indent=0),
+            L(li,  2,  1, 'left margin',      indent=0),
+            L(li,  3,  1, 'if 3:',            indent=0),
+            L(li,  4,  5, 'text',             indent=1, leading='    '),
+            L(li,  5,  1, 'else:',            indent=0),
+            L(li,  6,  5, 'if 1:',            indent=1, leading='    '),
+            L(li,  7, 11, 'other text',       indent=2, leading='          '),
+            L(li,  8, 11, 'other text',       indent=2, leading='          '),
+            L(li,  9,  5, 'more text',        indent=1, leading='    '),
+            L(li, 10,  7, 'different indent', indent=2, leading='      '),
+            L(li, 11,  5, 'outdent',          indent=1, leading='    '),
+            L(li, 12,  1, 'outdent',          indent=0),
+            L(li, 13,  3, 'new indent',       indent=1, leading='  '),
+            L(li, 14,  1, 'qoutdent',         indent=0),
+            L(li, 15,  1, '',                 indent=0, end=''),
+            ]
+        test(i, expected)
+
+
+        ##
+        ## test tab to spaces
+        ##
+
+        lines = (
+            "left margin\n"
+            "\teight\n"
+            "  \t    twelve\n"
+            "        eight is enough\n"
+            "    \n"
+            )
+        i = li = big.lines(lines)
+        i = big.lines_strip_indent(i)
+
+        expected = [
+            L(li, 1,  1, 'left margin',     indent=0, leading=''),
+            L(li, 2,  9, 'eight',           indent=1, leading='\t'),
+            L(li, 3, 13, 'twelve',          indent=2, leading='  \t    '),
+            L(li, 4,  9, 'eight is enough', indent=1, leading='        '),
+            L(li, 5,  1, '',                indent=0, trailing='    '), # regression test!
+            L(li, 6,  1, '',                indent=0, leading='', end=''),
+            ]
+
+        test(i, expected)
+
+        lines = (
+            b"left margin\n"
+            b"\tfour\n"
+            b"  \t    eight\n"
+            b"  \t\tfigure eight is double four\n"
+            b"    figure four is half of eight\n"
+            )
+
+        i = li = big.lines(lines, tab_width=4)
+        i = big.lines_strip_indent(i)
+
+        expected = [
+            L(li, 1, 1, b'left margin',                  indent=0, leading=b''),
+            L(li, 2, 5, b'four',                         indent=1, leading=b'\t'),
+            L(li, 3, 9, b'eight',                        indent=2, leading=b'  \t    '),
+            L(li, 4, 9, b'figure eight is double four',  indent=2, leading=b'  \t\t'),
+            L(li, 5, 5, b'figure four is half of eight', indent=1, leading=b'    '),
+            L(li, 6, 1, b'',                             indent=0, leading=b'', end=b''),
+            ]
+
+        test(i, expected)
+
+        ##
+        ## test raising for illegal outdents
+        ##
+
+        # when it's between two existing indents
+        i = li = big.lines(
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "      six?!\n"
+            "left margin again\n",
+            tab_width=4)
+        i = big.lines_strip_indent(i)
+
+        with self.assertRaises(IndentationError):
+            test(i, [])
+
+
+        # when it's less than the first indent
+        i = li = big.lines(
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "  two?!\n"
+            "left margin again\n",
+            tab_width=4)
+        i = big.lines_strip_indent(i)
+
+        with self.assertRaises(IndentationError):
+            test(i, [])
+
+        # ensure that lines_strip_indent is an iterator
+        i = li = big.lines("a\nb\nc\nd")
+        i = big.lines_strip_indent(i)
+        try:
+            info, line = next(i)
+        except TypeError: # pragma: nocover
+            self.assertTrue(False, "line_strip_indent did not return an iterator")
+
+
+    def test_strip_indent(self):
+        self.maxDiff = 2**32
+
+        def test(li, expected):
+            got = list(li)
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+        def L(indent, line, line_number, column_number, offset, origin):
+            if isinstance(line, str):
+            # origin=origin, 
+                return (indent, String(line, source=origin, line_number=line_number, column_number=column_number, offset=offset))
+            return (indent, line)
+
+
+        lines = dedent("""
+            left margin
+            if 3:
+                text
+            else:
+                if 1:
+                      other text
+                      other text
+                more text
+                  different indent
+                outdent
+            outdent
+              new indent
+            qoutdent
+            """)
+
+        s = String(lines)
+        i = String(lines).split('\n')
+        i = big.text.strip_indents(i)
+
+        expected = [
+            L(0, '',                  1,  1,   0, s),
+            L(0, 'left margin',       2,  1,   1, s),
+            L(0, 'if 3:',             3,  1,  13, s),
+            L(1, 'text',              4,  5,  23, s),
+            L(0, 'else:',             5,  1,  28, s),
+            L(1, 'if 1:',             6,  5,  38, s),
+            L(2, 'other text',        7, 11,  54, s),
+            L(2, 'other text',        8, 11,  75, s),
+            L(1, 'more text',         9,  5,  90, s),
+            L(2, 'different indent', 10,  7, 106, s),
+            L(1, 'outdent',          11,  5, 127, s),
+            L(0, 'outdent',          12,  1, 135, s),
+            L(1, 'new indent',       13,  3, 145, s),
+            L(0, 'qoutdent',         14,  1, 156, s),
+            L(0, '',                 15,  1, 167, s),
+            ]
+        test(i, expected)
+
+
+        ##
+        ## test tab to spaces
+        ##
+
+        lines = (
+            "left margin\n"
+            "\teight\n"
+            "  \t    twelve\n"
+            "        eight is enough\n"
+            "    \n"
+            )
+        s = String(lines)
+        i = s.split('\n')
+        i = big.strip_indents(i)
+
+        expected = [
+            L(0, 'left margin',     1,  1,  0, s),
+            L(1, 'eight',           2,  9, 11, s),
+            L(2, 'twelve',          3, 13, 11, s),
+            L(1, 'eight is enough', 4,  9, 11, s),
+            L(0, '',                5,  1, 11, s),
+            L(0, '',                6,  1, 11, s),
+            ]
+
+        test(i, expected)
+
+        lines = (
+            b"left margin\n"
+            b"\tfour\n"
+            b"  \t    eight\n"
+            b"  \t\tfigure eight is double four\n"
+            b"    figure four is half of eight\n"
+            )
+
+        s = lines
+        i = s.split(b'\n')
+        i = big.strip_indents(i, tab_width=4)
+
+        expected = [
+            L(0, b'left margin',                  1, 1, 1, s),
+            L(1, b'four',                         2, 5, 1, s),
+            L(2, b'eight',                        3, 9, 1, s),
+            L(2, b'figure eight is double four',  4, 9, 1, s),
+            L(1, b'figure four is half of eight', 5, 5, 1, s),
+            L(0, b'',                             6, 1, 1, s),
+            ]
+
+        test(i, expected)
+
+        ##
+        ## test raising for illegal outdents
+        ##
+
+        # when it's between two existing indents
+        s = String(
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "      six?!\n"
+            "left margin again\n")
+        i = s.splitlines()
+        i = big.strip_indents(i, tab_width=4)
+
+        with self.assertRaises(IndentationError):
+            test(i, [])
+
+
+        # when it's less than the first indent
+        s = String(
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "  two?!\n"
+            "left margin again\n")
+        i = s.splitlines()
+        i = big.strip_indents(i, tab_width=4)
+
+        with self.assertRaises(IndentationError):
+            test(i, [])
+
+        # ensure that lines_strip_indent is an iterator
+        s = String("a\nb\nc\nd")
+        i = s.splitlines()
+        i = big.strip_indents(i, tab_width=4)
+        try:
+            info, line = next(i)
+        except TypeError: # pragma: nocover
+            self.assertTrue(False, "strip_indent did not return an iterator")
+
+
+
 
     def test_int_to_words(self):
         # confirm that flowery has a default of True
