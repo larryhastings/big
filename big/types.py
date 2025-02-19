@@ -66,20 +66,29 @@ _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
 
 @export
 class String(str):
-    "String(str, *, source=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1) -> String\nCreates a new String object.  String is a subclass of str that maintains line, column, and offset information."
+    "String(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1) -> String\nCreates a new String object.  String is a subclass of str that maintains line, column, and offset information."
 
-    __slots__ = ('_source', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_linebreak_offsets')
+    __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_linebreak_offsets')
 
-    def __new__(cls, s, *, source=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1):
+    def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1):
         if isinstance(s, String):
             return s
         if not isinstance(s, str):
             raise TypeError("String: s must be a str or String object")
 
-        if source is None:
-            source = s
-        if not isinstance(source, str):
-            raise TypeError("String: source must be a str or String object, or None")
+        if isinstance(source, String):
+            source = source.source
+        elif not ((source is None) or isinstance(source, str)):
+            raise TypeError(f"String: source must be a str or String object or None, not {type(source)}")
+
+        if origin is None:
+            origin = s
+        else:
+            if isinstance(origin, String):
+                origin = origin.origin
+            if not isinstance(origin, str):
+                raise TypeError(f"String: origin must be a str or String object or None, not {type(origin)}")
+        assert isinstance(origin, str)
 
         ex = None
 
@@ -126,6 +135,7 @@ class String(str):
 
         self = super().__new__(cls, s)
         self._source = source
+        self._origin = origin
         self._offset = offset
         self._line_number = line_number
         self._column_number = column_number
@@ -142,6 +152,10 @@ class String(str):
     @property
     def source(self):
         return self._source
+
+    @property
+    def origin(self):
+        return self._origin
 
     @property
     def line_number(self):
@@ -164,8 +178,10 @@ class String(str):
         return self._first_column_number
 
     def _compute_linebreak_offsets(self):
-        # self._linebreak_offsets[line_number_offset] is the offset of the first character of the line after
-        # self.line_number + line_number_offset
+        #     self._linebreak_offsets[line_number_offset]
+        # is the offset of the first character of the line after
+        #     self.line_number + line_number_offset
+        #
         # e.g. "abcde\nfghij"
         # self._linebreak_offsets = (6,)
         self._linebreak_offsets = offsets = tuple(match.end() for match in _re_linebreaks_finditer(str(self)))
@@ -181,24 +197,30 @@ class String(str):
         if not isinstance(other, String):
             return False
 
-        if self.source != other.source:
+        if self.origin != other.origin:
             return False
 
         return self.offset + len(self) == other.offset
 
     def __add__(self, other):
-        if not (isinstance(other, String) and self.is_followed_by(other)):
-            return str(self) + other
-
+        if not isinstance(other, str):
+            raise TypeError(f'can only concatenate str (not "{type(other)}") to String')
         if not other:
             return self
-        if not self:
-            return other
 
         s = str(self) + str(other)
+
+        if isinstance(other, String) and self.is_followed_by(other):
+            origin = self._origin
+            offset = self._offset
+        else:
+            origin = s
+            offset = 0
+
         result = self.__class__(s,
-            offset = self._offset,
             source = self._source,
+            origin = origin,
+            offset = offset,
             line_number = self._line_number,
             column_number = self._column_number,
             first_line_number = self._first_line_number,
@@ -206,19 +228,38 @@ class String(str):
             )
         return result
 
-    # We don't need to implement __radd__, we can just inherit the str one.
-    # def __radd__(self, other):
-    #     # Assertion 1: self is a String object.  (Pretty safe assertion.)
-    #     # Assertion 2: Python must already have called other.__add__(self).
-    #     #     (Python doesn't call __radd__ unless __add__ returns NotImplemented.)
-    #     # Assertion 3: If self is a String, and other is a String, then
-    #     #     we wouldn't have gotten here, because other.__add__ would have
-    #     #     happily handled adding us together already.
-    #     # Therefore: other is not a String, QED.
-    #     assert not isinstance(other, String)
-    #     if not (isinstance(other, String) and other.is_followed_by(self)):
-    #         return other + str(self)
-    #     return other.__add__(self)
+    def __radd__(self, other):
+        if not isinstance(other, str):
+            raise TypeError(f'unsupported operand type(s) for +: "{type(other)}" and String')
+        if not other:
+            return self
+
+        # if other were a String, then we'd be in other.__add__, not self.__radd__
+        assert not isinstance(other, String)
+
+        s = other + str(self)
+        left_lines = other.splitlines()
+        if len(left_lines) > 1:
+            line_number = self._line_number - (len(left_lines) - 1)
+            column_number = self._first_column_number
+            if line_number < self._first_line_number:
+                raise ValueError(f"resulting String.line_number would be {line_number}, which is less than first_line_number ({self._first_line_number})")
+        else:
+            line_number = self._line_number
+            column_number = self._column_number - len(other)
+            if column_number < self._first_column_number:
+                raise ValueError(f"resulting String.column_number would be {column_number}, which is less than first_column_number ({self._first_column_number})")
+
+        result = self.__class__(s,
+            source = self._source,
+            origin = s,
+            offset = 0,
+            line_number = line_number,
+            column_number = column_number,
+            first_line_number = self._first_line_number,
+            first_column_number = self._first_column_number,
+            )
+        return result
 
     def __getitem__(self, index):
         s = str(self)
@@ -246,7 +287,7 @@ class String(str):
                 if index > length:
                     index = length
         else:
-            # indexing raises an exception if the index is out of range.
+            # indexing *raises an exception* if the index is out of range.
             if index < 0:
                 index += length
 
@@ -273,6 +314,7 @@ class String(str):
 
         o = self.__class__(result,
             offset=self._offset + index,
+            origin=self._origin,
             source=self._source,
             line_number=line_number,
             column_number=column_number,
@@ -286,6 +328,7 @@ class String(str):
             (str(self),),
             {
                 'source': self._source,
+                'origin': self._origin,
                 'offset': self._offset,
                 'line_number': self._line_number,
                 'column_number': self._column_number,
@@ -297,6 +340,7 @@ class String(str):
     def __iter__(self):
         "also computes linebreak offsets if they haven't been cached yet"
         klass = self.__class__
+        origin = self._origin
         source = self._source
         line_number = self._line_number
         column_number = self._column_number
@@ -314,6 +358,7 @@ class String(str):
 
                 o = klass(waiting,
                     source=source,
+                    origin=origin,
                     offset=offset,
                     line_number=line_number,
                     column_number=column_number,
@@ -336,6 +381,7 @@ class String(str):
 
                 o = klass(s,
                     source=source,
+                    origin=origin,
                     offset=offset,
                     line_number=line_number,
                     column_number=column_number,
@@ -361,6 +407,7 @@ class String(str):
             else:
                 o = klass(s,
                     source=source,
+                    origin=origin,
                     offset=offset,
                     line_number=line_number,
                     column_number=column_number,
@@ -607,17 +654,18 @@ class String(str):
 
     def _split(self, sep, maxsplit, reverse):
         # print(f"_split({repr(str(self))}, {sep=}, {maxsplit=}, {reverse=})")
-        klass = self.__class__
-        source = self._source
-        offset = self._offset
-        line_number = self._line_number
-        column_number = self._column_number
-        first_line_number = self._first_line_number
-        first_column_number = self._first_column_number
+        # klass = self.__class__
+        # source = self._source
+        # origin = self._origin
+        # offset = self._offset
+        # line_number = self._line_number
+        # column_number = self._column_number
+        # first_line_number = self._first_line_number
+        # first_column_number = self._first_column_number
 
         # for now, just worry about correctness.
-        # we can make this *fast* later.
-        # (that said, this seems like it's pretty good.)
+        # we can make this faster later.
+        # (that said, this seems like it's okay.)
         #
         # this splits the string using split/rsplit,
         # then finds those segments in the original string
@@ -672,14 +720,16 @@ class String(str):
         extras = []
         append = extras.append
         if self._source != None:
-            s = self._source
-            if len(s) > 20:
-                s = s[:17] + "..."
-            append(f"source={s!r}")
-        if self._offset:
-            append(f"offset={self._offset}")
+            append(f"source={self._source!r}")
         append(f"line_number={self._line_number}")
         append(f"column_number={self._column_number}")
+        if self._origin != None:
+            o = self._origin
+            if len(o) > 20:
+                o = o[:17] + "..."
+            append(f"origin={o!r}")
+        if self._offset:
+            append(f"offset={self._offset}")
         if self._first_line_number != 1:
             append(f"first_line_number={self._first_line_number}")
         if self._first_column_number != 1:
@@ -688,6 +738,25 @@ class String(str):
         s = ", ".join(extras)
 
         return f"String({repr(str(self))}, {s})"
+
+    ##
+    ## isascii was added in 3.7.
+    ## if we have a real isascii, use that, it's faster.
+    ## but keep around _isascii for testing.
+    ## (why do it this convoluted way? I wanted __name__ to be "isascii", not "_isascii".)
+    ##
+    def isascii(self):
+        for c in self:
+            if ord(c) > 127:
+                return False
+        return True
+    _isascii = isascii
+    if hasattr(str, 'isascii'):
+        del isascii
+
+    ##
+    ## extensions
+    ##
 
     # if 1:
     #     def print_linebreak_offsets(self):
@@ -702,27 +771,6 @@ class String(str):
     #                 print(f"    [{i:3}] {offset:3} {str(self)[start:end]!r}")
     #                 start = end
     #         print("    )")
-
-    ##
-    ## support all modern methods
-    ##
-
-    ## isascii was added in 3.7.
-    ## if we have a real isascii, use that.
-    ## but keep around _isascii for testing.
-    ## why do it this way? I wanted __name__ to be "isascii" not "_isascii".
-    def isascii(self):
-        for c in self:
-            if ord(c) > 127:
-                return False
-        return True
-    _isascii = isascii
-    if hasattr(str, 'isascii'):
-        del isascii
-
-    ##
-    ## extensions
-    ##
 
     def bisect(self, index):
         return self[:index], self[index:]
