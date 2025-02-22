@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 big_dir = bigtestlib.preload_local_big()
 
+from itertools import zip_longest
 import pickle
 import string
 import sys
@@ -331,6 +332,17 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde[-20:], abcde)
         self.assertString(abcde[448:], abcde[length:length])
 
+        # regression: if the string ended with a linebreak,
+        # getting the zero-length string after that linebreak
+        # would increment the line number
+        s = String("x\n")
+
+        endo = s[len(s):len(s)]
+        self.assertEqual(endo.line_number, 2)
+        self.assertEqual(endo[0:0].line_number, 2) # used to be 3!
+        self.assertEqual(endo[0:0][0:0].line_number, 2) # used to be 4!
+        self.assertEqual(endo[0:0][0:0][0:0].line_number, 2) # used to be 5!
+
     def test___getnewargs__(self):
         # String implements __getnewargs__, it's pickling machinery.
         for value in values:
@@ -364,7 +376,7 @@ class BigStringTests(unittest.TestCase):
     def test___iter__(self):
         for value in values:
             s = str(value)
-            for i, (a, b) in enumerate(zip(value, s)):
+            for i, (a, b) in enumerate(zip_longest(value, s)):
                 self.assertEqual(a, b, f'failed on value={value!r} i={i!r} a={a!r} != b={b!r}')
                 self.assertStr(b, s[i])
                 self.assertString(a, value[i])
@@ -382,7 +394,7 @@ class BigStringTests(unittest.TestCase):
             String('\n', source='s1', line_number=3, column_number=4, offset=7),
             String('f',  source='s1', line_number=4, column_number=1, offset=8),
             ]
-        for a, b in zip(l, expected):
+        for a, b in zip_longest(l, expected):
             self.assertString(a, b)
 
         l = String('a\nb\ncde\nf', source='s2', line_number=10, column_number=2, first_column_number=2, offset=99)
@@ -397,7 +409,23 @@ class BigStringTests(unittest.TestCase):
             String('\n', source='s2', line_number=12, column_number=5, offset=106),
             String('f',  source='s2', line_number=13, column_number=2, offset=107),
             ]
-        for a, b in zip(l, expected):
+        for a, b in zip_longest(l, expected):
+            self.assertString(a, b)
+
+        # regression: at one point there was a bug, if the string ends with \r,
+        # it wouldn't get yielded.  __next__ buffers \r in case it's followed
+        # by \n, in which case we only break the line after the \n.
+        l = String('a\nb\r\nc\r', source='s2')
+        expected = [
+            String('a',  source='s2', line_number=1, column_number=1, offset=0),
+            String('\n', source='s2', line_number=1, column_number=2, offset=1),
+            String('b',  source='s2', line_number=2, column_number=1, offset=2),
+            String('\r', source='s2', line_number=2, column_number=2, offset=3),
+            String('\n', source='s2', line_number=2, column_number=3, offset=4),
+            String('c',  source='s2', line_number=3, column_number=1, offset=5),
+            String('\r', source='s2', line_number=3, column_number=2, offset=6),
+            ]
+        for a, b in zip_longest(l, expected):
             self.assertString(a, b)
 
 
@@ -859,7 +887,7 @@ class BigStringTests(unittest.TestCase):
             l2 = String(s, source=source)
             list_split = list(l2.split(sep))
             list_rsplit = list(l2.rsplit(sep))
-            for line, rline, r in zip(list_split, list_rsplit, result):
+            for line, rline, r in zip_longest(list_split, list_rsplit, result):
                 s2, offset, line_number, column_number = r
                 self.assertEqual(line, s2, f"{line!r} != {r}")
                 self.assertEqual(rline, s2, f"{rline!r} != {r}")
@@ -896,7 +924,7 @@ class BigStringTests(unittest.TestCase):
         pass
 
     def test_strip(self):
-        methods = "strip lstrip rstrip".split()
+        methods = ("strip", "lstrip", "rstrip")
         for value in values:
             s = str(value)
             for method in methods:
@@ -991,6 +1019,34 @@ class BigStringTests(unittest.TestCase):
                 print()
 
             self.assertEqual(l_iter._linebreak_offsets, l_compute._linebreak_offsets, f"{s!r}")
+
+    def test_line_etc(self):
+        s = String("a b c\nd e f\ng h i\nj k l\nm n o")
+
+        h = s[14]
+
+        self.assertString(h.line, s[12:18])
+        self.assertString(h.previous_line, s[6:12])
+        self.assertString(h.previous_line.previous_line, s[0:6])
+        self.assertString(h.next_line, s[18:24])
+        self.assertString(h.next_line.next_line, s[24:])
+
+        with self.assertRaises(ValueError):
+            print(repr(h.previous_line.previous_line.previous_line))
+        with self.assertRaises(ValueError):
+            print(repr(h.next_line.next_line.next_line))
+
+        # if s is a String, and x = s[i:j], and there are linebreaks in x,
+        # x.line extends from the beginning of the first line in x
+        # to the linebreak that ends the last line in x.
+        hijk = s[14:21] # "h i\nj k"
+        self.assertString(hijk.line, s[12:24]) # "g h i\nj k l\n"
+        self.assertString(hijk.previous_line, s[6:12]) # previous to the first line in hijk, "d e f\n"
+        self.assertString(hijk.next_line, s[24:]) # next after the last line in hijk, "m n o"
+
+        almost_everything = s[1:-1]
+        self.assertString(almost_everything.line, s)
+
 
     def test_generate_tokens(self):
         lines = [

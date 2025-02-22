@@ -68,7 +68,7 @@ _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
 class String(str):
     "String(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1) -> String\nCreates a new String object.  String is a subclass of str that maintains line, column, and offset information."
 
-    __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_linebreak_offsets')
+    __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_linebreak_offsets', '_line')
 
     def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1):
         if isinstance(s, String):
@@ -143,7 +143,7 @@ class String(str):
         self._column_number = column_number
         self._first_line_number = first_line_number
         self._first_column_number = first_column_number
-        self._linebreak_offsets = None
+        self._linebreak_offsets = self._line = None
 
         return self
 
@@ -186,6 +186,10 @@ class String(str):
         #
         # e.g. "abcde\nfghij"
         # self._linebreak_offsets = (6,)
+        #
+        # assuming first_line_number is 1:
+        # line 1 always starts at offset 0, we don't write it down
+        # line 2 starts at self._linebreak_offsets[0]
         self._linebreak_offsets = offsets = tuple(match.end() for match in _re_linebreaks_finditer(str(self)))
         if 0:
             print()
@@ -296,8 +300,7 @@ class String(str):
             if index < 0:
                 index += length
 
-        line_number = self._line_number
-        column_number = self._column_number
+        first_line_number = self._first_line_number
         first_column_number = self._first_column_number
 
         origin = self._origin
@@ -305,14 +308,10 @@ class String(str):
 
         offset = self.offset + index
         linebreak_index = bisect_right(linebreak_offsets, offset)
-        new_line_number = self._line_number + linebreak_index
-        if line_number == new_line_number:
-            column_number += index
-        else:
-            line_number = new_line_number
-            # either 0 or the offset of the previous line
-            line_start_index = linebreak_index and linebreak_offsets[linebreak_index - 1]
-            column_number = first_column_number + (offset - line_start_index)
+        line_number = first_line_number + linebreak_index
+        # either 0 or the offset of the previous line
+        line_start_index = linebreak_index and linebreak_offsets[linebreak_index - 1]
+        column_number = first_column_number + (offset - line_start_index)
 
         o = self.__class__(result,
             offset=self._offset + index,
@@ -320,7 +319,7 @@ class String(str):
             source=self._source,
             line_number=line_number,
             column_number=column_number,
-            first_line_number=self._first_line_number,
+            first_line_number=first_line_number,
             first_column_number=first_column_number)
         return o
 
@@ -360,7 +359,8 @@ class String(str):
         waiting = None
         for s in str(self):
             if waiting:
-                is_crlf = (waiting == '\r') and (s == '\n')
+                assert waiting == '\r'
+                is_crlf = s == '\n'
 
                 o = klass(waiting,
                     source=source,
@@ -376,10 +376,10 @@ class String(str):
                 offset += 1
 
                 if is_crlf:
-                    # advance normally for waiting
+                    # don't end the line until after s
                     column_number += 1
                 else:
-                    # start a new line for waiting
+                    # end the line after waiting and before s
                     if compute_linebreak_offsets:
                         linebreak_offsets.append(offset)
                     line_number += 1
@@ -408,7 +408,7 @@ class String(str):
                     column_number += 1
 
                 waiting = None
-            elif s in linebreaks:
+            elif s == '\r':
                 waiting = s
             else:
                 o = klass(s,
@@ -422,13 +422,34 @@ class String(str):
                     )
                 yield o
                 offset += 1
-                column_number += 1
+
+                if s in linebreaks:
+                    # new line for s
+                    if compute_linebreak_offsets:
+                        linebreak_offsets.append(offset)
+                    line_number += 1
+                    column_number = first_column_number
+                else:
+                    column_number += 1
 
         if compute_linebreak_offsets:
             if waiting:
                 # last character is a linebreak, add that offset
                 linebreak_offsets.append(offset + 1)
             self._linebreak_offsets = tuple(linebreak_offsets)
+
+        if waiting:
+            o = klass(s,
+                source=source,
+                origin=origin,
+                offset=offset,
+                line_number=line_number,
+                column_number=column_number,
+                first_line_number=first_line_number,
+                first_column_number=first_column_number,
+                )
+            yield o
+
 
 
     # these functions might return the same string,
@@ -780,11 +801,55 @@ class String(str):
     #                 start = end
     #         print("    )")
 
+    def _calculate_line(self, line_number):
+        origin = self._origin
+        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
+        line_offset = line_number - self._first_line_number
+        # print("\nLINE", line_number, linebreak_offsets)
+        if not line_offset:
+            starting_offset = 0
+        else:
+            starting_offset = linebreak_offsets[line_offset - 1]
+        if line_offset == len(linebreak_offsets):
+            ending_offset = len(origin)
+        else:
+            ending_offset = linebreak_offsets[line_offset]
+        # print(f"{self=} {len(self)=}")
+        # print(f"{line_offset=} {starting_offset=} {ending_offset=}")
+        return origin[starting_offset:ending_offset]
+
     @property
     def line(self):
-        if self._linebreak_offsets is None:
-            self._compute_linebreak_offsets()
-        
+        if self._line is None:
+            line = self._calculate_line(self._line_number)
+            last_character = self[-1]
+            if last_character._line_number != self._line_number:
+                ending_line = self._calculate_line(last_character._line_number)
+                origin = self._origin
+                line = origin[line._offset:ending_line._offset + len(ending_line)]
+            self._line = line
+        return self._line
+
+    @property
+    def previous_line(self):
+        if self._line_number == self._first_line_number:
+            raise ValueError("self is already the first line")
+        return self._calculate_line(self._line_number - 1)
+
+    @property
+    def next_line(self):
+        if self._line is None:
+            line = self.line
+        else:
+            line = self._line
+        last_character = line[-1]
+        origin = self._origin
+        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
+        line_number = last_character._line_number
+        if (line_number - self._first_line_number) >= len(linebreak_offsets):
+            raise ValueError("self is already the last line")
+        return self._calculate_line(line_number + 1)
+
 
     def bisect(self, index):
         return self[:index], self[index:]
