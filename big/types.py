@@ -76,19 +76,18 @@ class String(str):
         if not isinstance(s, str):
             raise TypeError("String: s must be a str or String object")
 
+        if not ((origin is None) or isinstance(origin, String)):
+            raise TypeError(f"String: origin must be String or None, not {type(origin)}")
+
         if isinstance(source, String):
             source = source.source
-        elif not ((source is None) or isinstance(source, str)):
-            raise TypeError(f"String: source must be a str or String object or None, not {type(source)}")
-
-        if origin is None:
-            origin = s
+        elif source == None:
+            if origin is not None:
+                source = origin.source
+        elif isinstance(source, str):
+            pass
         else:
-            if isinstance(origin, String):
-                origin = origin.origin
-            if not isinstance(origin, str):
-                raise TypeError(f"String: origin must be a str or String object or None, not {type(origin)}")
-        assert isinstance(origin, str)
+            raise TypeError(f"String: source must be a str or String object or None, not {type(source)}")
 
         ex = None
 
@@ -135,7 +134,10 @@ class String(str):
 
         self = super().__new__(cls, s)
         self._source = source
-        self._origin = origin
+        if origin is None:
+            self._origin = self
+        else:
+            self._origin = origin
         self._offset = offset
         self._line_number = line_number
         self._column_number = column_number
@@ -210,11 +212,11 @@ class String(str):
 
         s = str(self) + str(other)
 
-        if isinstance(other, String) and self.is_followed_by(other):
-            origin = self._origin
+        if self.is_followed_by(other):
+            origin = self.origin
             offset = self._offset
         else:
-            origin = s
+            origin = None
             offset = 0
 
         result = self.__class__(s,
@@ -226,6 +228,8 @@ class String(str):
             first_line_number = self._first_line_number,
             first_column_number = self._first_column_number,
             )
+        if origin is None:
+            result._origin = result
         return result
 
     def __radd__(self, other):
@@ -252,13 +256,14 @@ class String(str):
 
         result = self.__class__(s,
             source = self._source,
-            origin = s,
+            origin = None,
             offset = 0,
             line_number = line_number,
             column_number = column_number,
             first_line_number = self._first_line_number,
             first_column_number = self._first_column_number,
             )
+        result._origin = result
         return result
 
     def __getitem__(self, index):
@@ -295,26 +300,23 @@ class String(str):
         column_number = self._column_number
         first_column_number = self._first_column_number
 
-        linebreak_offsets = self._linebreak_offsets
-        if linebreak_offsets is None:
-            linebreak_offsets = self._compute_linebreak_offsets()
+        origin = self._origin
+        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
 
-        if self._linebreak_offsets:
-            linebreak_index = bisect_right(linebreak_offsets, index)
-            new_line_number = self._line_number + linebreak_index
-            if line_number == new_line_number:
-                column_number += index
-            else:
-                line_number = new_line_number
-                # either 0 or the offset of the previous line
-                line_start_index = linebreak_index and linebreak_offsets[linebreak_index - 1]
-                column_number = first_column_number + (index - line_start_index)
-        else:
+        offset = self.offset + index
+        linebreak_index = bisect_right(linebreak_offsets, offset)
+        new_line_number = self._line_number + linebreak_index
+        if line_number == new_line_number:
             column_number += index
+        else:
+            line_number = new_line_number
+            # either 0 or the offset of the previous line
+            line_start_index = linebreak_index and linebreak_offsets[linebreak_index - 1]
+            column_number = first_column_number + (offset - line_start_index)
 
         o = self.__class__(result,
             offset=self._offset + index,
-            origin=self._origin,
+            origin=origin,
             source=self._source,
             line_number=line_number,
             column_number=column_number,
@@ -324,11 +326,15 @@ class String(str):
 
     # this is all we need to implement to support pickle!
     def __getnewargs_ex__(self):
+        if self._origin == self:
+            origin = None
+        else:
+            origin = self._origin
         return (
             (str(self),),
             {
                 'source': self._source,
-                'origin': self._origin,
+                'origin': origin,
                 'offset': self._offset,
                 'line_number': self._line_number,
                 'column_number': self._column_number,
@@ -347,7 +353,7 @@ class String(str):
         offset = self._offset
         first_line_number = self._first_line_number
         first_column_number = self._first_column_number
-        compute_linebreak_offsets = self._linebreak_offsets is None
+        compute_linebreak_offsets = (self._origin == self) and (self._linebreak_offsets is None)
         if compute_linebreak_offsets:
             linebreak_offsets = []
 
@@ -723,11 +729,13 @@ class String(str):
             append(f"source={self._source!r}")
         append(f"line_number={self._line_number}")
         append(f"column_number={self._column_number}")
-        if self._origin != None:
-            o = self._origin
+        o = self._origin
+        assert o != None
+        if o != self:
+            o = repr(str(o))
             if len(o) > 20:
-                o = o[:17] + "..."
-            append(f"origin={o!r}")
+                o = o[:15] + "[...]" + o[-1]
+            append(f"origin=String({o})")
         if self._offset:
             append(f"offset={self._offset}")
         if self._first_line_number != 1:
@@ -771,6 +779,12 @@ class String(str):
     #                 print(f"    [{i:3}] {offset:3} {str(self)[start:end]!r}")
     #                 start = end
     #         print("    )")
+
+    @property
+    def line(self):
+        if self._linebreak_offsets is None:
+            self._compute_linebreak_offsets()
+        
 
     def bisect(self, index):
         return self[:index], self[index:]

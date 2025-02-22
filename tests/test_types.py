@@ -449,7 +449,7 @@ class BigStringTests(unittest.TestCase):
             self.assertTrue(f"line_number={value.line_number}, " in repr(value))
         long_source = String('x' * 90)
         s = String('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
-        self.assertEqual(repr(s), "String('abcde', line_number=2, column_number=3, origin='abcde', first_line_number=2, first_column_number=3)")
+        self.assertEqual(repr(s), "String('abcde', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
 
 
     # def test___rmod__(self):
@@ -887,9 +887,10 @@ class BigStringTests(unittest.TestCase):
         assert splitlines_demo in values
 
         for value in values:
-            splitted = value.splitlines(True)
-            reconstituted = String.cat(splitted)
-            self.assertString(reconstituted, value)
+            with self.subTest(repr(value)):
+                splitted = value.splitlines(True)
+                reconstituted = String.cat(splitted)
+                self.assertString(reconstituted, value)
 
     def test_startswith(self):
         pass
