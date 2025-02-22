@@ -1026,6 +1026,8 @@ class BigStringTests(unittest.TestCase):
         h = s[14]
 
         self.assertString(h.line, s[12:18])
+        self.assertString(h.line.line, h.line)
+        self.assertString(h.line.line.line, h.line)
         self.assertString(h.previous_line, s[6:12])
         self.assertString(h.previous_line.previous_line, s[0:6])
         self.assertString(h.next_line, s[18:24])
