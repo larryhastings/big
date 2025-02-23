@@ -960,6 +960,20 @@ class BigStringTests(unittest.TestCase):
     ## our additions
     #######
 
+    def test_tab_width(self):
+
+        s = String('ab\tcde\tfg')
+        for (i, c), expected in zip_longest(enumerate(s), [1, 2, 3, 9, 10, 11, 12, 17, 18]):
+            c2 = s[i]
+            self.assertEqual(c.column_number, expected)
+            self.assertEqual(c2.column_number, expected)
+
+        s = String('ab\tcde\tfg', tab_width=4)
+        for (i, c), expected in zip_longest(enumerate(s), [1, 2, 3, 5, 6, 7, 8, 9, 10]):
+            c2 = s[i]
+            self.assertEqual(c.column_number, expected)
+            self.assertEqual(c2.column_number, expected)
+
     def test_bisect(self):
         for i in range(1, len(alphabet) - 1):
             a, b = alphabet.bisect(i)

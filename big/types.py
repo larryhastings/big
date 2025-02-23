@@ -66,11 +66,11 @@ _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
 
 @export
 class String(str):
-    "String(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1) -> String\nCreates a new String object.  String is a subclass of str that maintains line, column, and offset information."
+    "String(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8) -> String\nCreates a new String object.  String is a subclass of str that maintains line, column, and offset information."
 
-    __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_linebreak_offsets', '_line')
+    __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_tab_width', '_linebreak_offsets', '_line')
 
-    def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1):
+    def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8):
         if isinstance(s, String):
             return s
         if not isinstance(s, str):
@@ -132,6 +132,13 @@ class String(str):
         if column_number < first_column_number:
             raise ValueError("String: column_number can't be less than first_column_number")
 
+        if not isinstance(tab_width, int):
+            ex = TypeError
+        elif tab_width < 1:
+            ex = ValueError
+        if ex:
+            raise ex("String: tab_width must be an int >= 1")
+
         self = super().__new__(cls, s)
         self._source = source
         if origin is None:
@@ -143,6 +150,7 @@ class String(str):
         self._column_number = column_number
         self._first_line_number = first_line_number
         self._first_column_number = first_column_number
+        self._tab_width = tab_width
         self._linebreak_offsets = self._line = None
 
         return self
@@ -179,6 +187,10 @@ class String(str):
     def first_column_number(self):
         return self._first_column_number
 
+    @property
+    def tab_width(self):
+        return self._tab_width
+
     def _compute_linebreak_offsets(self):
         #     self._linebreak_offsets[line_number_offset]
         # is the offset of the first character of the line after
@@ -198,6 +210,31 @@ class String(str):
             print(offsets)
             print()
         return offsets
+
+    def _compute_column(self, s, start, end, starting_column=None):
+        first_column_number = self._first_column_number
+        if starting_column is None:
+            starting_column = first_column_number
+        tab_width = self._tab_width
+
+        column_number = starting_column
+
+        for offset in range(start, end):
+            c = s[offset]
+            if c != '\t':
+                column_number += 1
+                continue
+            if c in linebreaks:
+                raise ValueError("don't include linebreaks when counting columns")
+            # handle tab:
+            # when your first column is 1, your tabs are at 9, 17, 25, etc.
+            # you have to deduct the first column number to do the math.
+            remainder = (column_number - first_column_number) % tab_width
+            distance_to_next_tab_stop = tab_width - remainder
+            column_number += distance_to_next_tab_stop
+        return column_number
+
+
 
     def is_followed_by(self, other):
         if not isinstance(other, String):
@@ -231,6 +268,7 @@ class String(str):
             column_number = self._column_number,
             first_line_number = self._first_line_number,
             first_column_number = self._first_column_number,
+            tab_width = self._tab_width,
             )
         if origin is None:
             result._origin = result
@@ -246,6 +284,15 @@ class String(str):
         assert not isinstance(other, String)
 
         s = other + str(self)
+
+        # if we're prepending with a string that contains a tab,
+        # we literally don't know what the resulting starting column should be.
+        # with a tab_width of 8, it could be one of eight values.
+        # and, faced with ambiguity, we decline to guess.
+        # so we just return a str, not a String.
+        if '\t' in other:
+            return s
+
         left_lines = other.splitlines()
         if len(left_lines) > 1:
             line_number = self._line_number - (len(left_lines) - 1)
@@ -266,6 +313,7 @@ class String(str):
             column_number = column_number,
             first_line_number = self._first_line_number,
             first_column_number = self._first_column_number,
+            tab_width = self._tab_width,
             )
         result._origin = result
         return result
@@ -311,7 +359,9 @@ class String(str):
         line_number = first_line_number + linebreak_index
         # either 0 or the offset of the previous line
         line_start_index = linebreak_index and linebreak_offsets[linebreak_index - 1]
-        column_number = first_column_number + (offset - line_start_index)
+
+        # column_number = first_column_number + (offset - line_start_index)
+        column_number = self._compute_column(str(origin), line_start_index, offset)
 
         o = self.__class__(result,
             offset=self._offset + index,
@@ -320,7 +370,9 @@ class String(str):
             line_number=line_number,
             column_number=column_number,
             first_line_number=first_line_number,
-            first_column_number=first_column_number)
+            first_column_number=first_column_number,
+            tab_width=self._tab_width,
+            )
         return o
 
     # this is all we need to implement to support pickle!
@@ -352,6 +404,8 @@ class String(str):
         offset = self._offset
         first_line_number = self._first_line_number
         first_column_number = self._first_column_number
+        tab_width = self._tab_width
+
         compute_linebreak_offsets = (self._origin == self) and (self._linebreak_offsets is None)
         if compute_linebreak_offsets:
             linebreak_offsets = []
@@ -370,6 +424,7 @@ class String(str):
                     column_number=column_number,
                     first_line_number=first_line_number,
                     first_column_number=first_column_number,
+                    tab_width=tab_width,
                     )
                 yield o
 
@@ -393,6 +448,7 @@ class String(str):
                     column_number=column_number,
                     first_line_number=first_line_number,
                     first_column_number=first_column_number,
+                    tab_width=tab_width,
                     )
                 yield o
                 offset += 1
@@ -405,7 +461,12 @@ class String(str):
                     column_number = first_column_number
                 else:
                     # advance normally for s
-                    column_number += 1
+                    if s != '\t':
+                        column_number += 1
+                    else:
+                        remainder = (column_number - first_column_number) % tab_width
+                        distance_to_next_tab_stop = tab_width - remainder
+                        column_number += distance_to_next_tab_stop
 
                 waiting = None
             elif s == '\r':
@@ -419,6 +480,7 @@ class String(str):
                     column_number=column_number,
                     first_line_number=first_line_number,
                     first_column_number=first_column_number,
+                    tab_width=tab_width,
                     )
                 yield o
                 offset += 1
@@ -430,7 +492,12 @@ class String(str):
                     line_number += 1
                     column_number = first_column_number
                 else:
-                    column_number += 1
+                    if s != '\t':
+                        column_number += 1
+                    else:
+                        remainder = (column_number - first_column_number) % tab_width
+                        distance_to_next_tab_stop = tab_width - remainder
+                        column_number += distance_to_next_tab_stop
 
         if compute_linebreak_offsets:
             if waiting:
@@ -447,6 +514,7 @@ class String(str):
                 column_number=column_number,
                 first_line_number=first_line_number,
                 first_column_number=first_column_number,
+                tab_width=tab_width,
                 )
             yield o
 
@@ -883,6 +951,7 @@ class String(str):
             column_number=first._column_number,
             first_line_number=first._first_line_number,
             first_column_number=first._first_column_number,
+            tab_width=first._tab_width,
             )
         return o
 
