@@ -221,11 +221,12 @@ class String(str):
 
         for offset in range(start, end):
             c = s[offset]
+            # assert c not in linebreaks
+
             if c != '\t':
                 column_number += 1
                 continue
-            if c in linebreaks:
-                raise ValueError("don't include linebreaks when counting columns")
+
             # handle tab:
             # when your first column is 1, your tabs are at 9, 17, 25, etc.
             # you have to deduct the first column number to do the math.
@@ -285,25 +286,29 @@ class String(str):
 
         s = other + str(self)
 
-        # if we're prepending with a string that contains a tab,
+        left_lines = other.splitlines()
+
+        # if we're prepending with a string that contains a tab on the same line,
         # we literally don't know what the resulting starting column should be.
         # with a tab_width of 8, it could be one of eight values.
         # and, faced with ambiguity, we decline to guess.
         # so we just return a str, not a String.
-        if '\t' in other:
+        if '\t' in left_lines[-1]:
             return s
 
-        left_lines = other.splitlines()
         if len(left_lines) > 1:
+            last_segment = left_lines[-1]
+            if (self._column_number - len(last_segment)) != self._first_column_number:
+                return s
             line_number = self._line_number - (len(left_lines) - 1)
-            column_number = self._first_column_number
             if line_number < self._first_line_number:
-                raise ValueError(f"resulting String.line_number would be {line_number}, which is less than first_line_number ({self._first_line_number})")
+                return s
+            column_number = self._first_column_number
         else:
             line_number = self._line_number
             column_number = self._column_number - len(other)
             if column_number < self._first_column_number:
-                raise ValueError(f"resulting String.column_number would be {column_number}, which is less than first_column_number ({self._first_column_number})")
+                return s
 
         result = self.__class__(s,
             source = self._source,

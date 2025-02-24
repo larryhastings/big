@@ -127,8 +127,11 @@ class BigStringTests(unittest.TestCase):
         with ar(TypeError):
             String(['x', 'y'])
 
-        self.assertString(String('abc', source=None), 'abc')
-        self.assertString(String('abc', source='xyz'), 'abc')
+        self.assertString(String('abc', source=None, origin=None), 'abc')
+        self.assertString(String('abc', source='xyz', origin=None), 'abc')
+        s = String('abc')
+        self.assertString(String('abc', source=None, origin=s), 'abc')
+        self.assertString(String('abc', source='xyz', origin=s), 'abc')
 
         with ar(TypeError):
             String('abc', source=33.5)
@@ -136,6 +139,13 @@ class BigStringTests(unittest.TestCase):
             String('abc', source=-2)
         with ar(TypeError):
             String('abc', source=['x'])
+
+        with ar(TypeError):
+            String('abc', origin=33.5)
+        with ar(TypeError):
+            String('abc', origin=-2)
+        with ar(TypeError):
+            String('abc', origin=['x'])
 
         with ar(TypeError):
             String('abc', line_number=33.5)
@@ -170,21 +180,72 @@ class BigStringTests(unittest.TestCase):
         with ar(ValueError):
             String('abc', first_column_number=-2)
 
+        with ar(TypeError):
+            String('abc', tab_width=33.5)
+        with ar(ValueError):
+            String('abc', tab_width=-2)
+        with ar(ValueError):
+            String('abc', tab_width=0)
+
 
     def test_attributes(self):
-        s = String("abcde", source="source", line_number=3, column_number=4, first_line_number=1, first_column_number=2)
+        s = String("abcde", source="source", line_number=3, column_number=4, first_line_number=1, first_column_number=2, tab_width=4)
         self.assertString(s, "abcde")
         self.assertStr(s.source, "source")
         self.assertInt(s.line_number, 3)
         self.assertInt(s.column_number, 4)
         self.assertInt(s.first_line_number, 1)
         self.assertInt(s.first_column_number, 2)
+        self.assertInt(s.tab_width, 4)
 
     def test___add__(self):
         self.assertString(l + " xyz", 'abcde xyz')
         self.assertString("boogie " + alphabet[22:], 'boogie wxyz')
 
         self.assertString(abcde + fghij, alphabet[:10])
+
+        with self.assertRaises(TypeError):
+            x = abcde + 35
+        with self.assertRaises(TypeError):
+            x = abcde + 55.0
+        with self.assertRaises(TypeError):
+            x = abcde + (1, 2)
+
+    def test___radd__(self):
+        with self.assertRaises(TypeError):
+            x = 1 + abcde
+
+        s = String("abcde", line_number=5, column_number=5)
+
+        # if it works out like magic, you can get a String out
+        # but the line and column numbers have to work.
+        str_x = "wxyz" + str(s)
+        x = "wxyz" + s
+        self.assertIsInstance(x, String)
+        self.assertEqual(x, str_x)
+        self.assertEqual(x.line_number, 5)
+        self.assertEqual(x.column_number, 1)
+
+        str_x = "123\nwxyz" + str(s)
+        x = "123\nwxyz" + s
+        self.assertIsInstance(x, String)
+        self.assertEqual(x, str_x)
+        self.assertEqual(x.line_number, 4)
+        self.assertEqual(x.column_number, 1)
+
+        # prepending a String with a str might return a str, if:
+        # too many columns
+        self.assertStr("xyzxyzxyzxyzxyz" + s, "xyzxyzxyzxyzxyz" + str(s))
+        # too many lines
+        self.assertStr("abc\n\n\n\n\n\nwxyz" + s, "abc\n\n\n\n\n\nwxyz" + str(s))
+        # not enough columns before a linebreak
+        self.assertStr("abc\nx" + s, "abc\nx" + str(s))
+
+        # if the string you prepend with contains a tab, you always get a str
+        self.assertStr('x\ty' + s, 'x\tyabcde')
+        # ... unless it's before a linebreak
+        self.assertString('x\ty\nxxxx' + s, 'x\ty\nxxxxabcde')
+
 
     def test___class__(self):
         self.assertEqual(l.__class__, String)
@@ -408,6 +469,29 @@ class BigStringTests(unittest.TestCase):
             String('e',  source='s2', line_number=12, column_number=4, offset=105),
             String('\n', source='s2', line_number=12, column_number=5, offset=106),
             String('f',  source='s2', line_number=13, column_number=2, offset=107),
+            ]
+        for a, b in zip_longest(l, expected):
+            self.assertString(a, b)
+
+        # test tab
+        l = String('ab\tc', source='s2')
+        expected = [
+            String('a',  source='s2', line_number=1, column_number=1, offset=0),
+            String('b',  source='s2', line_number=1, column_number=2, offset=1),
+            String('\t', source='s2', line_number=1, column_number=3, offset=2),
+            String('c',  source='s2', line_number=1, column_number=9, offset=3),
+            ]
+        for a, b in zip_longest(l, expected):
+            self.assertString(a, b)
+
+        # also test tab immediately after \r, because, reasons.
+        l = String('ab\r\tc', source='s2')
+        expected = [
+            String('a',  source='s2', line_number=1, column_number=1, offset=0),
+            String('b',  source='s2', line_number=1, column_number=2, offset=1),
+            String('\r', source='s2', line_number=1, column_number=3, offset=2),
+            String('\t', source='s2', line_number=2, column_number=1, offset=3),
+            String('c',  source='s2', line_number=2, column_number=9, offset=4),
             ]
         for a, b in zip_longest(l, expected):
             self.assertString(a, b)
