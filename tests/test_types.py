@@ -816,7 +816,7 @@ class BigStringTests(unittest.TestCase):
             )
             )
         self.assertEqual(partitions[0] + partitions[1] + partitions[2], l)
-        self.assertEqual(String.cat(partitions), l)
+        self.assertEqual(String.cat(*partitions), l)
 
         self.assertEqual(l.rpartition(sep),
             (
@@ -826,7 +826,7 @@ class BigStringTests(unittest.TestCase):
             )
             )
         self.assertEqual(partitions[0] + partitions[1] + partitions[2], l)
-        self.assertEqual(String.cat(partitions), l)
+        self.assertEqual(String.cat(*partitions), l)
 
         # test Eric Smith's extension
 
@@ -875,7 +875,7 @@ class BigStringTests(unittest.TestCase):
             l[25:25], # empty!
             )
             )
-        self.assertEqual(String.cat(partitions), l)
+        self.assertEqual(String.cat(*partitions), l)
 
         partitions = l.rpartition(sep, 6)
         self.assertEqual(partitions,
@@ -895,7 +895,7 @@ class BigStringTests(unittest.TestCase):
             l[24:25], # '. e'
             )
             )
-        self.assertEqual(String.cat(partitions), l)
+        self.assertEqual(String.cat(*partitions), l)
 
 
 
@@ -1001,7 +1001,7 @@ class BigStringTests(unittest.TestCase):
         for value in values:
             with self.subTest(repr(value)):
                 splitted = value.splitlines(True)
-                reconstituted = String.cat(splitted)
+                reconstituted = String.cat(*splitted)
                 self.assertString(reconstituted, value)
 
     def test_startswith(self):
@@ -1082,12 +1082,14 @@ class BigStringTests(unittest.TestCase):
         self.assertFalse(a.is_followed_by(fake_b))
 
     def test_cat(self):
-        self.assertStr(String.cat([]), '')
-        self.assertStr(String.cat(['xyz']), 'xyz')
-        self.assertString(String.cat([abcde]), abcde)
-        self.assertStr(String.cat([abcde, 'xyz']), 'abcdexyz')
-        self.assertString(String.cat([abcde[:2], abcde[2:]]), abcde)
-        self.assertStr(String.cat([abcde[:2], abcde[:2]]), 'abab')
+        self.assertStr(String.cat(), '')
+        self.assertString(String.cat(abcde), abcde)
+        self.assertString(String.cat(abcde, 'xyz'), 'abcdexyz')
+        self.assertString(String.cat(abcde[:2], abcde[2:]), abcde)
+        self.assertString(String.cat(abcde[:2], abcde[:2]), 'abab')
+
+        with self.assertRaises(ValueError):
+            String.cat('xyz', 'zooo')
 
 
     def test_linebreak_offsets_generation(self):

@@ -812,8 +812,9 @@ class String(str):
         return l
 
     def join(self, iterable):
+        l = list(iterable)
         if not self:
-            return String.cat(iterable)
+            return String.cat(*iterable, metadata=self)
         return str(self).join(iterable)
 
     def __repr__(self):
@@ -928,35 +929,49 @@ class String(str):
         return self[:index], self[index:]
 
     @staticmethod
-    def cat(strings):
+    def cat(*strings, metadata=None):
         if not strings:
             return ''
 
         first = strings[0]
+        if metadata is None:
+            if not isinstance(first, String):
+                raise ValueError("if the first argument is not a String, you must explicitly specify metadata")
+            # if they only specify one String to concatenate,
+            # and don't specify metadata,
+            # all we're gonna return is the first String, unmodified.
+            if len(strings) == 1:
+                return first
+            metadata = first
+        elif not isinstance(metadata, String):
+            raise TypeError("metadata must be either String or None")
+
+        origin = None
+
         if len(strings) == 1:
-            return first
+            s = first
+            origin = first.origin
+        else:
+            s = "".join(strings)
 
-        s = "".join(strings)
-
-        first_time = True
-        for l in strings:
-            if not isinstance(l, String):
-                return s
-            if first_time:
-                first_time = False
+            previous = None
+            for l in strings:
+                if not (isinstance(l, String) and ((previous is None) or previous.is_followed_by(l))):
+                    break
+                previous = l
             else:
-                if not previous.is_followed_by(l):
-                    return s
-            previous = l
+                # contiguous!
+                origin = first.origin
 
         o = String(s,
-            source=first._source,
-            offset=first._offset,
-            line_number=first._line_number,
-            column_number=first._column_number,
-            first_line_number=first._first_line_number,
-            first_column_number=first._first_column_number,
-            tab_width=first._tab_width,
+            source=metadata._source,
+            offset=metadata._offset,
+            origin=origin,
+            line_number=metadata._line_number,
+            column_number=metadata._column_number,
+            first_line_number=metadata._first_line_number,
+            first_column_number=metadata._first_column_number,
+            tab_width=metadata._tab_width,
             )
         return o
 
