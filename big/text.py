@@ -5659,7 +5659,7 @@ def strip_line_comments(lines, line_comment_markers, *,
     line_comment_pattern = __separators_to_re(tuple(line_comment_markers), separators_is_bytes=is_bytes, separate=True, keep=True)
     line_comment_splitter = re.compile(line_comment_pattern).split
 
-    return _lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks)
+    return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks)
 
 
 del export

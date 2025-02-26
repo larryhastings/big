@@ -5754,6 +5754,207 @@ class BigTextTests(unittest.TestCase):
             big.decode_python_script(script, newline='x')
 
 
+    def test_strip_line_comments(self):
+
+        def test(li, expected):
+
+            got = list(li)
+
+            if 1:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+                for e, g in zip(expected, got):
+                    print(e==g)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+        def resultifyer(origin, *args):
+            results = []
+            line_number = column_number = None
+            offset = 0
+            for a in args:
+                if line_number is None:
+                    line_number = a
+                    continue
+                if column_number is None:
+                    column_number = a
+                    continue
+                s = a
+
+                line_number = column_number = None
+                offset = origin.find(s, offset)
+                assert offset != -1
+                slice = origin[offset:offset+len(s)]
+                offset += len(s)
+                results.append(slice)
+            return results
+
+        # no quote marks defined (the default)
+        s = String(dedent("""
+            for x in range(5): # this is a comment
+                print("# this is quoted", x)
+                print("") # this "comment" is useless
+                print(no_comments_or_quotes_on_this_line)
+                both//on this line#dawg
+                and#also on this//line
+              torture////1
+             tort-ture######2
+            zzzz""").lstrip('\n'))
+        i = li = s.splitlines(False)
+        i = big.strip_line_comments(i, ("#", "//"))
+        test(i,
+            resultifyer(s,
+                1, 1, 'for x in range(5): ',
+                2, 1, '    print("',
+                3, 1, '    print("") ',
+                4, 1, '    print(no_comments_or_quotes_on_this_line)',
+                5, 1, '    both',
+                6, 1, '    and',
+                7, 1, '  torture',
+                8, 1, ' tort-ture',
+                9, 1, 'zzzz',
+            ))
+
+        return None
+        # test specifying quotes as a string
+        i = li = big.lines(dedent("""
+            for x in range(5): # this is my exciting comment
+                print("# this is quoted", x)
+                print("") # this "comment" is useless
+                print(no_comments_or_quotes_on_this_line)
+            """).lstrip('\n'))
+        i = big.lines_strip_line_comments(i, ("#", "//"), quotes='"\'')
+        test(i,
+            [
+                L(li, 1, 1, 'for x in range(5): ', trailing='# this is my exciting comment'),
+                L(li, 2, 1, '    print("# this is quoted", x)'),
+                L(li, 3, 1, '    print("") ', trailing='# this "comment" is useless'),
+                L(li, 4, 1, '    print(no_comments_or_quotes_on_this_line)'),
+                L(li, 5, 1, '', end=''),
+            ])
+
+        i = li = big.lines(dedent("""
+            for x in range(5): # this is my exciting comment
+                print("# this is quoted", x)
+                print("") # this "comment" is useless
+                print(no_comments_or_quotes_on_this_line)
+                print("#which is the comment?", w #z )
+                print("//which is the comment?", x // 4Q2 )
+                print("test without whitespace, and extra comment chars 1", y####artie deco )
+                print("test without whitespace, and extra comment chars 2", z///////chinchilla the wookie monster )
+            """).lstrip('\n'))
+        i = big.lines_strip_line_comments(i, ("#", "//"), quotes=('"', "'",))
+        i = big.lines_rstrip(i)
+        test(i,
+            [
+                L(li, 1, 1, 'for x in range(5):', trailing=' # this is my exciting comment'),
+                L(li, 2, 1, '    print("# this is quoted", x)'),
+                L(li, 3, 1, '    print("")', trailing=' # this "comment" is useless'),
+                L(li, 4, 1, '    print(no_comments_or_quotes_on_this_line)'),
+                L(li, 5, 1, '    print("#which is the comment?", w', trailing=' #z )'),
+                L(li, 6, 1, '    print("//which is the comment?", x', trailing=' // 4Q2 )'),
+                L(li, 7, 1, '    print("test without whitespace, and extra comment chars 1", y', trailing='####artie deco )'),
+                L(li, 8, 1, '    print("test without whitespace, and extra comment chars 2", z', trailing='///////chinchilla the wookie monster )'),
+                L(li, 9, 1, '', end=''),
+            ])
+
+        # test multiline
+        # test specifying line comment markers as a string, and only one quote mark
+        i = li = big.lines(dedent("""
+            for x in range(5): # this is my exciting comment
+                print('''
+                this is a multiline string
+                does this line have a comment? # no!
+                ''') > but here's a comment
+                print("just checking, # here too") # here is another comment
+            """).lstrip('\n'))
+        i = big.lines_strip_line_comments(i, "#>", quotes='"', multiline_quotes=("'''",))
+        test(i,
+            [
+                L(li, 1, 1, 'for x in range(5): ',                     trailing='# this is my exciting comment',),
+                L(li, 2, 1, "    print('''"),
+                L(li, 3, 1, "    this is a multiline string"),
+                L(li, 4, 1, "    does this line have a comment? # no!"),
+                L(li, 5, 1, "    ''') ",                               trailing="> but here's a comment"),
+                L(li, 6, 1, '    print("just checking, # here too") ', trailing="# here is another comment"),
+                L(li, 7, 1, '', end=''),
+            ])
+
+        # invalid comment characters
+        with self.assertRaises(ValueError):
+            test(big.lines_strip_line_comments(big.lines("a\nb\n"), None), [])
+
+        # unterminated single-quotes across lines
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar\n' bat 'zzz'"), ("#", '//',), quotes="'"), [])
+
+        # check that the exception has the right column number
+        sentinel = object()
+        result = sentinel
+        try:
+            # this should throw an exception, result should not be written to here.
+            result = list(big.lines_strip_line_comments(big.lines("\nfoo\nbar 'bat' baz 'cinco\n' doodle 'zzz'"), ("#", '//',), quotes="'"))
+        except SyntaxError as e:
+            self.assertTrue(str(e).startswith("Line 3 column 15:"))
+            self.assertTrue(str(e).endswith("'"))
+        self.assertEqual(result, sentinel)
+
+        # unterminated single-quotes at the end
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar' bat 'zzz"), ("#", '//',), quotes=("'",)), [])
+
+        # unterminated triple-quotes at the end
+        with self.assertRaises(SyntaxError):
+            test(big.lines_strip_line_comments(big.lines("foo 'bar' bat '''zzz\nmore lines here\nwait what's happening?"), ("#", '//',), multiline_quotes=("'''",)), [])
+
+        i = li = big.lines(b"a\nb# clipped\n c")
+        i = big.lines_strip_line_comments(i, b'#')
+        test(i,
+            [
+            L(li, 1, 1, b'a',),
+            L(li, 2, 1, b'b',  trailing=b'# clipped'),
+            L(li, 3, 1, b' c', end=b''),
+            ]
+            )
+
+        i = li = big.lines(b'a\nb"# ignored"\n c')
+        i = big.lines_strip_line_comments(i, (b'#',), quotes=(b'"',))
+        test(i,
+            [
+            L(li, 1, 1, b'a'),
+            L(li, 2, 1, b'b"# ignored"'),
+            L(li, 3, 1, b' c', end=b''),
+            ]
+            )
+
+        i = li = big.lines(b'a\nb"# ignored"\n c#lipped')
+        i = big.lines_strip_line_comments(i, b'#', quotes=b'"')
+        test(i,
+            [
+            L(li, 1, 1, b'a'),
+            L(li, 2, 1, b'b"# ignored"'),
+            L(li, 3, 1, b' c', trailing=b'#lipped', end=b''),
+            ]
+            )
+
+        i = li = big.lines(b'a\nb"# ignored\n" c#lipped')
+        i = big.lines_strip_line_comments(i, b'#', multiline_quotes=b'"')
+        test(i,
+            [
+            L(li, 1, 1, b'a'),
+            L(li, 2, 1, b'b"# ignored'),
+            L(li, 3, 1, b'" c', trailing=b'#lipped', end=b''),
+            ]
+            )
+
 class BigPatternTests(unittest.TestCase):
 
     def assertTypedEqual(self, actual, expect, msg=None):

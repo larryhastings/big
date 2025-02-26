@@ -1088,8 +1088,33 @@ class BigStringTests(unittest.TestCase):
         self.assertString(String.cat(abcde[:2], abcde[2:]), abcde)
         self.assertString(String.cat(abcde[:2], abcde[:2]), 'abab')
 
+        xyz = String.cat('xyz', metadata=abcde)
+        self.assertString(xyz, 'xyz')
+        self.assertEqual(xyz.source, abcde.source)
+        self.assertEqual(xyz.line_number, abcde.line_number)
+        self.assertEqual(xyz.column_number, abcde.column_number)
+
+        xyz = String.cat('xyz', metadata=abcde, line_number=77, column_number=88)
+        self.assertString(xyz, 'xyz')
+        self.assertEqual(xyz.source, abcde.source)
+        self.assertEqual(xyz.line_number, 77)
+        self.assertEqual(xyz.column_number, 88)
+
         with self.assertRaises(ValueError):
             String.cat('xyz', 'zooo')
+
+        with self.assertRaises(TypeError):
+            String.cat('xyz', metadata=3.5)
+
+        with self.assertRaises(TypeError):
+            String.cat('xyz', metadata=xyz, line_number=33.5)
+        with self.assertRaises(ValueError):
+            String.cat('xyz', metadata=xyz, line_number=-20)
+
+        with self.assertRaises(TypeError):
+            String.cat('xyz', metadata=xyz, column_number=33.5)
+        with self.assertRaises(ValueError):
+            String.cat('xyz', metadata=xyz, column_number=-20)
 
 
     def test_linebreak_offsets_generation(self):

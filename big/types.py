@@ -929,7 +929,7 @@ class String(str):
         return self[:index], self[index:]
 
     @staticmethod
-    def cat(*strings, metadata=None):
+    def cat(*strings, metadata=None, line_number=None, column_number=None):
         if not strings:
             return ''
 
@@ -950,7 +950,7 @@ class String(str):
 
         if len(strings) == 1:
             s = first
-            origin = first.origin
+            origin = metadata.origin
         else:
             s = "".join(strings)
 
@@ -963,12 +963,33 @@ class String(str):
                 # contiguous!
                 origin = first.origin
 
+        ex = None
+        if line_number == None:
+            line_number = metadata._line_number
+        else:
+            if not isinstance(line_number, int):
+                ex = TypeError
+            elif line_number < metadata._first_line_number:
+                ex = ValueError
+            if ex:
+                raise ex(f"line_number must be an int >= first_line_number ({metadata._first_line_number}), not {line_number}")
+
+        if column_number == None:
+            column_number = metadata._column_number
+        else:
+            if not isinstance(column_number, int):
+                ex = TypeError
+            elif column_number < metadata._first_column_number:
+                ex = ValueError
+            if ex:
+                raise ex(f"column_number must be an int >= first_column_number ({metadata._first_column_number}), not {column_number}")
+
         o = String(s,
             source=metadata._source,
             offset=metadata._offset,
             origin=origin,
-            line_number=metadata._line_number,
-            column_number=metadata._column_number,
+            line_number=line_number,
+            column_number=column_number,
             first_line_number=metadata._first_line_number,
             first_column_number=metadata._first_column_number,
             tab_width=metadata._tab_width,
