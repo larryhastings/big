@@ -5757,8 +5757,16 @@ class BigTextTests(unittest.TestCase):
     def test_strip_line_comments(self):
 
         def test(origin, line_comment_markers, *segments, **kwargs):
+            is_bytes = isinstance(origin, bytes)
+            if is_bytes:
+                linebreak = b'\n'
+            else:
+                linebreak = '\n'
 
-            origin = String(dedent(origin).lstrip('\n'))
+            origin = original = dedent(origin).lstrip(linebreak)
+
+            if not is_bytes:
+                origin = String(origin)
             i = li = origin.splitlines(False)
             got = list(big.strip_line_comments(i, line_comment_markers, **kwargs))
 
@@ -5785,6 +5793,21 @@ class BigTextTests(unittest.TestCase):
                 for e, g in zip(expected, got):
                     print(e==g)
                 print("\n\n")
+
+            self.assertEqual(expected, got)
+
+            if is_bytes:
+                return
+
+            origin = original.encode('utf-8')
+            line_comment_markers = big.encode_strings(line_comment_markers, 'utf-8')
+            bytes_kwargs = {}
+            for k, v in kwargs.items():
+                v = big.encode_strings(v, 'utf-8')
+                bytes_kwargs[k] = v
+            expected = big.encode_strings(expected, 'utf-8')
+            i = li = origin.splitlines(False)
+            got = list(big.strip_line_comments(i, line_comment_markers, **bytes_kwargs))
 
             self.assertEqual(expected, got)
 
@@ -5883,54 +5906,39 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             list(big.strip_line_comments(("foo 'bar", "' bat 'zzz'"), ("#", '//',), quotes="'"))
 
-        return None
-
         # unterminated single-quotes at the end
         with self.assertRaises(SyntaxError):
-            test(big.lines_strip_line_comments(big.lines("foo 'bar' bat 'zzz"), ("#", '//',), quotes=("'",)), [])
+            list(big.strip_line_comments(("foo 'bar' bat 'zzz",), ("#", '//',), quotes=("'",)))
 
         # unterminated triple-quotes at the end
         with self.assertRaises(SyntaxError):
-            test(big.lines_strip_line_comments(big.lines("foo 'bar' bat '''zzz\nmore lines here\nwait what's happening?"), ("#", '//',), multiline_quotes=("'''",)), [])
+            list(big.strip_line_comments(("foo 'bar' bat '''zzz", 'more lines here', "wait what's happening?"), ("#", '//',), multiline_quotes=("'''",)))
 
-        i = li = big.lines(b"a\nb# clipped\n c")
-        i = big.lines_strip_line_comments(i, b'#')
-        test(i,
-            [
-            L(li, 1, 1, b'a',),
-            L(li, 2, 1, b'b',  trailing=b'# clipped'),
-            L(li, 3, 1, b' c', end=b''),
-            ]
+        test(b"a\nb# clipped\n c", b'#',
+            b'a',
+            b'b',
+            b' c',
             )
 
-        i = li = big.lines(b'a\nb"# ignored"\n c')
-        i = big.lines_strip_line_comments(i, (b'#',), quotes=(b'"',))
-        test(i,
-            [
-            L(li, 1, 1, b'a'),
-            L(li, 2, 1, b'b"# ignored"'),
-            L(li, 3, 1, b' c', end=b''),
-            ]
+        test(b'a\nb"# ignored"\n c', (b'#',),
+            b'a',
+            b'b"# ignored"',
+            b' c',
+            quotes=(b'"',),
             )
 
-        i = li = big.lines(b'a\nb"# ignored"\n c#lipped')
-        i = big.lines_strip_line_comments(i, b'#', quotes=b'"')
-        test(i,
-            [
-            L(li, 1, 1, b'a'),
-            L(li, 2, 1, b'b"# ignored"'),
-            L(li, 3, 1, b' c', trailing=b'#lipped', end=b''),
-            ]
+        test(b'a\nb"# ignored"\n c#lipped', b'#',
+             b'a',
+             b'b"# ignored"',
+             b' c',
+            quotes=b'"',
             )
 
-        i = li = big.lines(b'a\nb"# ignored\n" c#lipped')
-        i = big.lines_strip_line_comments(i, b'#', multiline_quotes=b'"')
-        test(i,
-            [
-            L(li, 1, 1, b'a'),
-            L(li, 2, 1, b'b"# ignored'),
-            L(li, 3, 1, b'" c', trailing=b'#lipped', end=b''),
-            ]
+        test(b'a\nb"# ignored\n" c#lipped', b'#',
+            b'a',
+            b'b"# ignored',
+            b'" c',
+            multiline_quotes=b'"',
             )
 
 class BigPatternTests(unittest.TestCase):
