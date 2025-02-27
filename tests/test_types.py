@@ -904,6 +904,10 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde.removeprefix('ab'), abcde[2:])
         self.assertString(abcde.removeprefix('xx'), abcde)
 
+        # don't bother with the test for 3.6-3.8
+        if not hasattr('', 'removeprefix'):
+            return
+
         for value in values:
             for i in range(len(value)):
                 prefix = value[:i]

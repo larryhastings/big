@@ -5640,7 +5640,7 @@ class BigTextTests(unittest.TestCase):
                 append_linebreak = keepends and linebreak in s
                 substring = s.rstrip(linebreak)
                 offset = origin.find(substring, offset)
-                assert offset != -1, f"couldn't find {substring=} in {origin=}"
+                assert offset != -1, f"couldn't find substring={substring!r} in origin={origin!r}"
                 slice = origin[offset:offset+len(substring)]
                 if append_linebreak:
                     slice += '\n'

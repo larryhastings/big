@@ -32,6 +32,8 @@ import big.all as big
 from big.tokens import aggregate_delimiter_tokens, generate_tokens
 from big.all import String
 import unittest
+import sys
+
 
 
 class BigTokenTests(unittest.TestCase):
@@ -158,6 +160,15 @@ class BigTokenTests(unittest.TestCase):
             ),
 
             ):
+
+            # Python 3.6 tokenizer generates an extra NL token at the end
+            # of these token streams.  Not present in 3.7+.  So, we just
+            # remove one empty-quote from these just-the-strings lists for 3.6.
+            remove_nl_token = (sys.version_info.major == 3) and (sys.version_info.minor == 6)
+            if remove_nl_token:
+                token_strings.pop()
+                aggregated_token_strings.pop()
+
             with self.subTest(text):
                 for use_splitlines in (False, True):
                     with self.subTest(use_splitlines):
