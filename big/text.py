@@ -5488,9 +5488,19 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
 ## * fixup non-generator function that returns the generator
 ##
 
-def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks):
+def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes):
     "The generator function returned by the public strip_line_comments function."
     state = None
+
+    if is_bytes:
+        def line_reverser(line):
+            l = list(_iterate_over_bytes(line))
+            l.reverse()
+            return l
+        empty = b''
+    else:
+        line_reverser = reversed
+        empty = ''
 
     for line in lines:
         # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
@@ -5498,7 +5508,7 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         if quotes or multiline_quotes:
             i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
         else:
-            i = iter( (('', line, ''),) )
+            i = iter( ((empty, line, empty),) )
 
         # initialize these in case i never yields anything
         leading_quote = segment = trailing_quote = ''
@@ -5543,7 +5553,7 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
                 # to represent the empty line.
                 trailing_linebreaks = []
                 trailing_linebreaks_append = trailing_linebreaks.append
-                for count, c in enumerate(reversed(line)):
+                for count, c in enumerate(line_reverser(line)):
                     if c not in linebreaks:
                         break
                 if count:
@@ -5656,10 +5666,16 @@ def strip_line_comments(lines, line_comment_markers, *,
         # and there's no point in calling the iterator.
         split_quoted_strings(test_text, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
 
+    # we occluded the global "linebreaks", so we test here
+    # to see if we have the default value by comparing to "str_linebreaks"
+    # which is the same object.
+    if is_bytes and (linebreaks is str_linebreaks):
+        linebreaks = bytes_linebreaks
+
     line_comment_pattern = __separators_to_re(tuple(line_comment_markers), separators_is_bytes=is_bytes, separate=True, keep=True)
     line_comment_splitter = re.compile(line_comment_pattern).split
 
-    return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks)
+    return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes)
 
 
 del export

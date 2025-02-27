@@ -4542,170 +4542,6 @@ class BigTextTests(unittest.TestCase):
         test_clip_leading('         \n')
 
 
-    def test_lines_strip_indent(self):
-        self.maxDiff = 2**32
-
-        def test(li, expected):
-            got = list(li)
-
-            if 0:
-                import pprint
-                print("\n\n")
-                print("-"*72)
-                print("expected:")
-                pprint.pprint(expected)
-                print("\n\n")
-                print("got:")
-                pprint.pprint(got)
-                print("\n\n")
-
-            self.assertEqual(expected, got)
-
-        def L(li, line_number, column_number, line, end=_sentinel, *, leading=None, trailing=None, original=None, **kwargs):
-            is_bytes = isinstance(line, bytes)
-            empty = b'' if is_bytes else ''
-
-            if end is _sentinel:
-                end = b'\n' if is_bytes else '\n'
-
-            if leading is None:
-                leading = empty
-
-            if trailing is None:
-                trailing = empty
-
-            if original is None:
-                original = leading + line + trailing + end
-
-            return (big.text.LineInfo(li, original, line_number, column_number, end=end, leading=leading, trailing=trailing, **kwargs), line)
-
-
-        lines = dedent("""
-            left margin
-            if 3:
-                text
-            else:
-                if 1:
-                      other text
-                      other text
-                more text
-                  different indent
-                outdent
-            outdent
-              new indent
-            qoutdent
-            """)
-
-        i = li = big.text.lines(lines)
-        i = big.text.lines_strip_indent(li)
-
-        expected = [
-            L(li,  1,  1, '',                 indent=0),
-            L(li,  2,  1, 'left margin',      indent=0),
-            L(li,  3,  1, 'if 3:',            indent=0),
-            L(li,  4,  5, 'text',             indent=1, leading='    '),
-            L(li,  5,  1, 'else:',            indent=0),
-            L(li,  6,  5, 'if 1:',            indent=1, leading='    '),
-            L(li,  7, 11, 'other text',       indent=2, leading='          '),
-            L(li,  8, 11, 'other text',       indent=2, leading='          '),
-            L(li,  9,  5, 'more text',        indent=1, leading='    '),
-            L(li, 10,  7, 'different indent', indent=2, leading='      '),
-            L(li, 11,  5, 'outdent',          indent=1, leading='    '),
-            L(li, 12,  1, 'outdent',          indent=0),
-            L(li, 13,  3, 'new indent',       indent=1, leading='  '),
-            L(li, 14,  1, 'qoutdent',         indent=0),
-            L(li, 15,  1, '',                 indent=0, end=''),
-            ]
-        test(i, expected)
-
-
-        ##
-        ## test tab to spaces
-        ##
-
-        lines = (
-            "left margin\n"
-            "\teight\n"
-            "  \t    twelve\n"
-            "        eight is enough\n"
-            "    \n"
-            )
-        i = li = big.lines(lines)
-        i = big.lines_strip_indent(i)
-
-        expected = [
-            L(li, 1,  1, 'left margin',     indent=0, leading=''),
-            L(li, 2,  9, 'eight',           indent=1, leading='\t'),
-            L(li, 3, 13, 'twelve',          indent=2, leading='  \t    '),
-            L(li, 4,  9, 'eight is enough', indent=1, leading='        '),
-            L(li, 5,  1, '',                indent=0, trailing='    '), # regression test!
-            L(li, 6,  1, '',                indent=0, leading='', end=''),
-            ]
-
-        test(i, expected)
-
-        lines = (
-            b"left margin\n"
-            b"\tfour\n"
-            b"  \t    eight\n"
-            b"  \t\tfigure eight is double four\n"
-            b"    figure four is half of eight\n"
-            )
-
-        i = li = big.lines(lines, tab_width=4)
-        i = big.lines_strip_indent(i)
-
-        expected = [
-            L(li, 1, 1, b'left margin',                  indent=0, leading=b''),
-            L(li, 2, 5, b'four',                         indent=1, leading=b'\t'),
-            L(li, 3, 9, b'eight',                        indent=2, leading=b'  \t    '),
-            L(li, 4, 9, b'figure eight is double four',  indent=2, leading=b'  \t\t'),
-            L(li, 5, 5, b'figure four is half of eight', indent=1, leading=b'    '),
-            L(li, 6, 1, b'',                             indent=0, leading=b'', end=b''),
-            ]
-
-        test(i, expected)
-
-        ##
-        ## test raising for illegal outdents
-        ##
-
-        # when it's between two existing indents
-        i = li = big.lines(
-            "left margin\n"
-            "\tfour\n"
-            "  \t    eight\n"
-            "      six?!\n"
-            "left margin again\n",
-            tab_width=4)
-        i = big.lines_strip_indent(i)
-
-        with self.assertRaises(IndentationError):
-            test(i, [])
-
-
-        # when it's less than the first indent
-        i = li = big.lines(
-            "left margin\n"
-            "\tfour\n"
-            "  \t    eight\n"
-            "  two?!\n"
-            "left margin again\n",
-            tab_width=4)
-        i = big.lines_strip_indent(i)
-
-        with self.assertRaises(IndentationError):
-            test(i, [])
-
-        # ensure that lines_strip_indent is an iterator
-        i = li = big.lines("a\nb\nc\nd")
-        i = big.lines_strip_indent(i)
-        try:
-            info, line = next(i)
-        except TypeError: # pragma: nocover
-            self.assertTrue(False, "line_strip_indent did not return an iterator")
-
-
     def test_strip_indent(self):
         self.maxDiff = 2**32
 
@@ -4785,7 +4621,7 @@ class BigTextTests(unittest.TestCase):
             )
         s = String(lines)
         i = s.split('\n')
-        i = big.strip_indents(i)
+        i = big.strip_indents(i, linebreaks=None)
 
         expected = [
             L(0, 'left margin',     1,  1,  0, s),
@@ -4817,6 +4653,33 @@ class BigTextTests(unittest.TestCase):
             L(2, b'figure eight is double four',  4, 9, 1, s),
             L(1, b'figure four is half of eight', 5, 5, 1, s),
             L(0, b'',                             6, 1, 1, s),
+            ]
+
+        test(i, expected)
+
+        ##
+        ## test preserving linebreak characters
+        ##
+
+        lines = (
+            "left margin\n"
+            " \n"
+            "   \n"
+            "        eight is enough\n"
+            "    \n"
+            "  "
+            )
+        s = String(lines)
+        i = s.splitlines(True)
+        i = big.strip_indents(i)
+
+        expected = [
+            L(0, 'left margin\n',     1,  1,  0, s),
+            L(1, '\n',                2,  2, 13, s),
+            L(1, '\n',                3,  4, 17, s),
+            L(1, 'eight is enough\n', 4,  9, 26, s),
+            L(0, '\n',                5,  5, 46, s),
+            L(0, '',                  6,  1, 47, s),
             ]
 
         test(i, expected)
@@ -5756,7 +5619,7 @@ class BigTextTests(unittest.TestCase):
 
     def test_strip_line_comments(self):
 
-        def test(origin, line_comment_markers, *segments, **kwargs):
+        def test(origin, line_comment_markers, *segments, keepends=False, **kwargs):
             is_bytes = isinstance(origin, bytes)
             if is_bytes:
                 linebreak = b'\n'
@@ -5767,17 +5630,21 @@ class BigTextTests(unittest.TestCase):
 
             if not is_bytes:
                 origin = String(origin)
-            i = li = origin.splitlines(False)
+            i = li = origin.splitlines(keepends)
             got = list(big.strip_line_comments(i, line_comment_markers, **kwargs))
 
 
             expected = []
             offset = 0
             for s in segments:
-                offset = origin.find(s, offset)
-                assert offset != -1, f"couldn't find {s=} in {origin=}"
-                slice = origin[offset:offset+len(s)]
-                offset += len(s)
+                append_linebreak = keepends and linebreak in s
+                substring = s.rstrip(linebreak)
+                offset = origin.find(substring, offset)
+                assert offset != -1, f"couldn't find {substring=} in {origin=}"
+                slice = origin[offset:offset+len(substring)]
+                if append_linebreak:
+                    slice += '\n'
+                offset += len(substring)
                 expected.append(slice)
 
             if 0:
@@ -5805,11 +5672,27 @@ class BigTextTests(unittest.TestCase):
             for k, v in kwargs.items():
                 v = big.encode_strings(v, 'utf-8')
                 bytes_kwargs[k] = v
-            expected = big.encode_strings(expected, 'utf-8')
-            i = li = origin.splitlines(False)
-            got = list(big.strip_line_comments(i, line_comment_markers, **bytes_kwargs))
+            bytes_expected = big.encode_strings(expected, 'utf-8')
+            i = li = origin.splitlines(keepends)
+            bytes_got = list(big.strip_line_comments(i, line_comment_markers, **bytes_kwargs))
 
-            self.assertEqual(expected, got)
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("bytes input:")
+                pprint.pprint(li)
+                print("bytes expected:")
+                pprint.pprint(bytes_expected)
+                print("\n\n")
+                print("bytes got:")
+                pprint.pprint(bytes_got)
+                print("\n\n")
+                for e, g in zip(bytes_expected, bytes_got):
+                    print(e==g)
+                print("\n\n")
+
+            self.assertEqual(bytes_expected, bytes_got)
 
         # no quote marks defined (the default)
         test("""
@@ -5939,6 +5822,22 @@ class BigTextTests(unittest.TestCase):
             b'b"# ignored',
             b'" c',
             multiline_quotes=b'"',
+            )
+
+        # test preserving linebreaks at the end
+        s = test("""
+            for x in range(5): # this is a comment
+                # blank line with comment
+            x
+            zzzz""",
+            "#",
+
+            'for x in range(5): \n',
+            '    \n',
+            'x\n',
+            'zzzz',
+
+            keepends=True,
             )
 
 class BigPatternTests(unittest.TestCase):
