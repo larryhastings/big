@@ -165,7 +165,7 @@ class BigTokenTests(unittest.TestCase):
             # of these token streams.  Not present in 3.7+.  So, we just
             # remove one empty-quote from these just-the-strings lists for 3.6.
             remove_nl_token = (sys.version_info.major == 3) and (sys.version_info.minor == 6)
-            if remove_nl_token:
+            if remove_nl_token: # pragma: no cover
                 token_strings.pop()
                 aggregated_token_strings.pop()
 

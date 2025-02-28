@@ -905,7 +905,7 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde.removeprefix('xx'), abcde)
 
         # don't bother with the test for 3.6-3.8
-        if not hasattr('', 'removeprefix'):
+        if not hasattr('', 'removeprefix'):  # pragma: no cover
             return
 
         for value in values:

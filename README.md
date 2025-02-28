@@ -30,7 +30,7 @@ It's a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
 required dependencies (unless you want to run the test suite).
-The current version is [0.12.8.](#0128)
+The current version is [0.13.](#013)
 
 *Think big!*
 
@@ -4510,6 +4510,14 @@ returns the string `'1.3'`.
 
 # Topic deep-dives
 
+## The big `String` object
+
+<dl><dd>
+
+
+
+</dd></dl>
+
 ## The `multi-` family of string functions
 
 <dl><dd>
@@ -6570,6 +6578,10 @@ in the **big** test suite.
   entire file, and every substring of that string will know
   its line number, column number, and offset in characters
   from the beginning.
+* `big.lines` is now deprecated; `String` replaces it,
+  and is a massive upgrade.  `big.lines` will move to
+  the `deprecated` module no sooner than September 2025,
+  and will be removed no sooner than March 2026.
 * Updated copyright notices to 2025.
 
 #### 0.12.8
