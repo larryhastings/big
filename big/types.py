@@ -71,6 +71,8 @@ class String(str):
     __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_tab_width', '_linebreak_offsets', '_line')
 
     def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8):
+        if s.startswith('a is {a[1)}') and line_number == 5:
+            breakpoint()
         if isinstance(s, String):
             return s
         if not isinstance(s, str):
@@ -814,7 +816,7 @@ class String(str):
     def join(self, iterable):
         l = list(iterable)
         if not self:
-            return String.cat(*iterable, metadata=self)
+            return String.cat(*iterable)
         return str(self).join(iterable)
 
     def __repr__(self):
@@ -936,7 +938,7 @@ class String(str):
         first = strings[0]
         if metadata is None:
             if not isinstance(first, String):
-                raise ValueError("if the first argument is not a String, you must explicitly specify metadata")
+                raise ValueError(f"if the first argument is not a String, you must explicitly specify metadata")
             # if they only specify one String to concatenate,
             # and don't specify metadata,
             # all we're gonna return is the first String, unmodified.
