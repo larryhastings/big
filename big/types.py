@@ -71,8 +71,6 @@ class String(str):
     __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_tab_width', '_linebreak_offsets', '_line')
 
     def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8):
-        if s.startswith('a is {a[1)}') and line_number == 5:
-            breakpoint()
         if isinstance(s, String):
             return s
         if not isinstance(s, str):
@@ -81,15 +79,14 @@ class String(str):
         if not ((origin is None) or isinstance(origin, String)):
             raise TypeError(f"String: origin must be String or None, not {type(origin)}")
 
-        if isinstance(source, String):
-            source = source.source
+        if isinstance(source, str):
+            if isinstance(source, String):
+                source = str(source)
         elif source == None:
             if origin is not None:
                 source = origin.source
-        elif isinstance(source, str):
-            pass
         else:
-            raise TypeError(f"String: source must be a str or String object or None, not {type(source)}")
+            raise TypeError(f"String: source must be str or None, not {type(source)}")
 
         ex = None
 
@@ -192,6 +189,12 @@ class String(str):
     @property
     def tab_width(self):
         return self._tab_width
+
+    @property
+    def where(self):
+        if self._source:
+            return f'"{self._source}" line {self._line_number} column {self._column_number}'
+        return f'line {self._line_number} column {self._column_number}'
 
     def _compute_linebreak_offsets(self):
         #     self._linebreak_offsets[line_number_offset]

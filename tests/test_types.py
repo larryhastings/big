@@ -197,6 +197,17 @@ class BigStringTests(unittest.TestCase):
         self.assertInt(s.first_line_number, 1)
         self.assertInt(s.first_column_number, 2)
         self.assertInt(s.tab_width, 4)
+        self.assertStr(s.where, '"source" line 3 column 4')
+
+        s = String("abcde", line_number=3, column_number=4, first_line_number=1, first_column_number=2, tab_width=4)
+        self.assertString(s, "abcde")
+        self.assertEqual(s.source, None)
+        self.assertInt(s.line_number, 3)
+        self.assertInt(s.column_number, 4)
+        self.assertInt(s.first_line_number, 1)
+        self.assertInt(s.first_column_number, 2)
+        self.assertInt(s.tab_width, 4)
+        self.assertStr(s.where, 'line 3 column 4')
 
     def test___add__(self):
         self.assertString(l + " xyz", 'abcde xyz')
@@ -561,7 +572,7 @@ class BigStringTests(unittest.TestCase):
             self.assertTrue(f"line_number={value.line_number}, " in repr(value))
         long_source = String('x' * 90)
         s = String('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
-        self.assertEqual(repr(s), "String('abcde', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
+        self.assertEqual(repr(s), "String('abcde', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
 
 
     # def test___rmod__(self):
