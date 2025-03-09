@@ -1189,6 +1189,11 @@ class BigStringTests(unittest.TestCase):
         almost_everything = s[1:-1]
         self.assertString(almost_everything.line, s)
 
+        # regression! if we have a zero-length slice of a String named x,
+        # x.line used to crash.
+        s_end = s[len(s):]
+        self.assertEqual(s_end.line, "m n o")
+
 
     def test_generate_tokens(self):
         lines = [

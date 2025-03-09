@@ -901,7 +901,10 @@ class String(str):
     def line(self):
         if self._line is None:
             line = self._calculate_line(self._line_number)
-            last_character = self[-1]
+            if self:
+                last_character = self[-1]
+            else:
+                last_character = self
             if last_character._line_number != self._line_number:
                 ending_line = self._calculate_line(last_character._line_number)
                 origin = self._origin
