@@ -1249,6 +1249,35 @@ class BigStringTests(unittest.TestCase):
             s[10:10],
             ])
 
+    def test_lazy_line_and_column(self):
+        # line and column numbers are now lazy-computed
+        # when we wouldn't otherwise get 'em for free.
+
+        # .where
+        segment = alphabet[5:10]
+        self.assertIsNone(segment._line_number)
+        self.assertIsNone(segment._column_number)
+        self.assertEqual(segment.where, '"C:\\AUTOEXEC.BAT" line 1 column 6')
+
+        # .__iter__
+        segment = alphabet[5:10]
+        self.assertIsNone(segment._line_number)
+        self.assertIsNone(segment._column_number)
+        l = list(segment)
+        s = l[0]
+        self.assertEqual(s.line_number, 1)
+        self.assertEqual(s.column_number, 6)
+
+        # cat
+        segment = alphabet[5:10]
+        self.assertIsNone(segment._line_number)
+        self.assertIsNone(segment._column_number)
+        s = String.cat(line1, line2, metadata=segment)
+        self.assertEqual(s.line_number, 1)
+        self.assertEqual(s.column_number, 6)
+        self.assertEqual(s, line1 + line2)
+
+
 
 def run_tests():
     bigtestlib.run(name="big.types", module=__name__)

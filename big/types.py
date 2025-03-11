@@ -90,20 +90,6 @@ class String(str):
 
         ex = None
 
-        if not isinstance(line_number, int):
-            ex = TypeError
-        elif line_number < 0:
-            ex = ValueError
-        if ex:
-            raise ex("String: line_number must be an int >= 0")
-
-        if not isinstance(column_number, int):
-            ex = TypeError
-        elif column_number < 0:
-            ex = ValueError
-        if ex:
-            raise ex(f"String: column_number must be an int >= 0, not {column_number}")
-
         if not isinstance(offset, int):
             ex = TypeError
         elif offset < 0:
@@ -118,9 +104,6 @@ class String(str):
         if ex:
             raise ex("String: first_line_number must be an int >= 0")
 
-        if line_number < first_line_number:
-            raise ValueError("String: line_number can't be less than first_line_number")
-
         if not isinstance(first_column_number, int):
             ex = TypeError
         elif first_column_number < 0:
@@ -128,8 +111,28 @@ class String(str):
         if ex:
             raise ex("String: first_column_number must be an int >= 0")
 
-        if column_number < first_column_number:
-            raise ValueError("String: column_number can't be less than first_column_number")
+        # secret API: if you pass in None for line_number and column_number,
+        # it's lazy-calculated
+        if not (line_number == column_number == None):
+            if not isinstance(line_number, int):
+                ex = TypeError
+            elif line_number < 0:
+                ex = ValueError
+            if ex:
+                raise ex("String: line_number must be an int >= 0")
+
+            if not isinstance(column_number, int):
+                ex = TypeError
+            elif column_number < 0:
+                ex = ValueError
+            if ex:
+                raise ex(f"String: column_number must be an int >= 0, not {column_number}")
+
+            if line_number < first_line_number:
+                raise ValueError("String: line_number can't be less than first_line_number")
+
+            if column_number < first_column_number:
+                raise ValueError("String: column_number can't be less than first_column_number")
 
         if not isinstance(tab_width, int):
             ex = TypeError
@@ -166,36 +169,6 @@ class String(str):
     def origin(self):
         return self._origin
 
-    @property
-    def line_number(self):
-        return self._line_number
-
-    @property
-    def column_number(self):
-        return self._column_number
-
-    @property
-    def offset(self):
-        return self._offset
-
-    @property
-    def first_line_number(self):
-        return self._first_line_number
-
-    @property
-    def first_column_number(self):
-        return self._first_column_number
-
-    @property
-    def tab_width(self):
-        return self._tab_width
-
-    @property
-    def where(self):
-        if self._source:
-            return f'"{self._source}" line {self._line_number} column {self._column_number}'
-        return f'line {self._line_number} column {self._column_number}'
-
     def _compute_linebreak_offsets(self):
         #     self._linebreak_offsets[line_number_offset]
         # is the offset of the first character of the line after
@@ -216,15 +189,24 @@ class String(str):
             print()
         return offsets
 
-    def _compute_column(self, s, start, end, starting_column=None):
-        first_column_number = self._first_column_number
-        if starting_column is None:
-            starting_column = first_column_number
+    def _calculate_line_and_column_numbers(self):
+        assert self._line_number == self._column_number == None
+        origin = self._origin
+
+        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
+
+        linebreak_index = bisect_right(linebreak_offsets, self._offset)
+        self._line_number = self._first_line_number + linebreak_index
+
+        # either 0 or the offset of the previous line
+        line_start_offset = linebreak_index and linebreak_offsets[linebreak_index - 1]
+
+        column_number = first_column_number = self._first_column_number
         tab_width = self._tab_width
 
-        column_number = starting_column
+        s = str(origin)
 
-        for offset in range(start, end):
+        for offset in range(line_start_offset, self._offset):
             c = s[offset]
             # assert c not in linebreaks
 
@@ -238,8 +220,43 @@ class String(str):
             remainder = (column_number - first_column_number) % tab_width
             distance_to_next_tab_stop = tab_width - remainder
             column_number += distance_to_next_tab_stop
-        return column_number
+        self._column_number = column_number
 
+    @property
+    def line_number(self):
+        if self._line_number is None:
+            self._calculate_line_and_column_numbers()
+        return self._line_number
+
+    @property
+    def column_number(self):
+        if self._column_number is None:
+            self._calculate_line_and_column_numbers()
+        return self._column_number
+
+    @property
+    def offset(self):
+        return self._offset
+
+    @property
+    def first_line_number(self):
+        return self._first_line_number
+
+    @property
+    def first_column_number(self):
+        return self._first_column_number
+
+    @property
+    def tab_width(self):
+        return self._tab_width
+
+    @property
+    def where(self):
+        if self._line_number is None:
+            self._calculate_line_and_column_numbers()
+        if self._source:
+            return f'"{self._source}" line {self._line_number} column {self._column_number}'
+        return f'line {self._line_number} column {self._column_number}'
 
 
     def is_followed_by(self, other):
@@ -249,7 +266,7 @@ class String(str):
         if self.origin != other.origin:
             return False
 
-        return self.offset + len(self) == other.offset
+        return self._offset + len(self) == other._offset
 
     def __add__(self, other):
         if not isinstance(other, str):
@@ -300,6 +317,9 @@ class String(str):
         # so we just return a str, not a String.
         if '\t' in left_lines[-1]:
             return s
+
+        if self._line_number is None:
+            self._calculate_line_and_column_numbers()
 
         if len(left_lines) > 1:
             last_segment = left_lines[-1]
@@ -358,29 +378,14 @@ class String(str):
             if index < 0:
                 index += length
 
-        first_line_number = self._first_line_number
-        first_column_number = self._first_column_number
-
-        origin = self._origin
-        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
-
-        offset = self.offset + index
-        linebreak_index = bisect_right(linebreak_offsets, offset)
-        line_number = first_line_number + linebreak_index
-        # either 0 or the offset of the previous line
-        line_start_index = linebreak_index and linebreak_offsets[linebreak_index - 1]
-
-        # column_number = first_column_number + (offset - line_start_index)
-        column_number = self._compute_column(str(origin), line_start_index, offset)
-
         o = self.__class__(result,
             offset=self._offset + index,
-            origin=origin,
+            origin=self.origin,
             source=self._source,
-            line_number=line_number,
-            column_number=column_number,
-            first_line_number=first_line_number,
-            first_column_number=first_column_number,
+            line_number=None,
+            column_number=None,
+            first_line_number=self._first_line_number,
+            first_column_number=self._first_column_number,
             tab_width=self._tab_width,
             )
         return o
@@ -401,11 +406,15 @@ class String(str):
                 'column_number': self._column_number,
                 'first_line_number': self._first_line_number,
                 'first_column_number': self._first_column_number,
+                'tab_width': self._tab_width,
             },
             )
 
     def __iter__(self):
         "also computes linebreak offsets if they haven't been cached yet"
+        if self._line_number is None:
+            self._calculate_line_and_column_numbers()
+
         klass = self.__class__
         origin = self._origin
         source = self._source
@@ -823,6 +832,9 @@ class String(str):
         return str(self).join(iterable)
 
     def __repr__(self):
+        if self._line_number is None:
+            self._calculate_line_and_column_numbers()
+
         extras = []
         append = extras.append
         if self._source != None:
@@ -900,9 +912,13 @@ class String(str):
     @property
     def line(self):
         if self._line is None:
+            if self._line_number is None:
+                self._calculate_line_and_column_numbers()
             line = self._calculate_line(self._line_number)
             if self:
                 last_character = self[-1]
+                if last_character._line_number is None:
+                    last_character._calculate_line_and_column_numbers()
             else:
                 last_character = self
             if last_character._line_number != self._line_number:
@@ -914,6 +930,8 @@ class String(str):
 
     @property
     def previous_line(self):
+        if self._line_number is None:
+            self._calculate_line_and_column_numbers()
         if self._line_number == self._first_line_number:
             raise ValueError("self is already the first line")
         return self._calculate_line(self._line_number - 1)
@@ -927,10 +945,12 @@ class String(str):
         last_character = line[-1]
         origin = self._origin
         linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
-        line_number = last_character._line_number
-        if (line_number - self._first_line_number) >= len(linebreak_offsets):
+        if last_character._line_number is None:
+            last_character._calculate_line_and_column_numbers()
+        last_character_line_number = last_character._line_number
+        if (last_character_line_number - self._first_line_number) >= len(linebreak_offsets):
             raise ValueError("self is already the last line")
-        return self._calculate_line(line_number + 1)
+        return self._calculate_line(last_character_line_number + 1)
 
 
     def bisect(self, index):
@@ -953,6 +973,8 @@ class String(str):
             metadata = first
         elif not isinstance(metadata, String):
             raise TypeError("metadata must be either String or None")
+        elif metadata._line_number is None:
+            metadata._calculate_line_and_column_numbers()
 
         origin = None
 
