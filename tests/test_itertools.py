@@ -113,7 +113,7 @@ class LoopContextTests(unittest.TestCase):
                     self.assertTrue(first_time)
                     first_time = False
 
-                    self.assertIsInstance(ctx, big.LoopContext)
+                    self.assertIsInstance(ctx, LoopContext)
                     self.assertTrue(ctx.is_first)
                     self.assertTrue(ctx.is_last)
 
@@ -124,9 +124,9 @@ class LoopContextTests(unittest.TestCase):
                     self.assertEqual(ctx.index, start)
                     self.assertEqual(ctx.countdown, start)
 
-                    self.assertEqual(ctx.previous, big.undefined)
+                    self.assertEqual(ctx.previous, undefined)
                     self.assertEqual(ctx.current, o)
-                    self.assertEqual(ctx.next, big.undefined)
+                    self.assertEqual(ctx.next, undefined)
 
 
         # iterator yields four things
@@ -137,15 +137,15 @@ class LoopContextTests(unittest.TestCase):
                 is_first = True
 
                 my_items = list(items)
-                my_items.append(big.undefined)
+                my_items.append(undefined)
                 my_iterator = iter(my_items)
-                buffer = [big.undefined, big.undefined, next(my_iterator)]
+                buffer = [undefined, undefined, next(my_iterator)]
 
                 countdowns = []
                 indices = []
 
                 for ctx, o in loop_context(items, start):
-                    self.assertIsInstance(ctx, big.LoopContext)
+                    self.assertIsInstance(ctx, LoopContext)
                     self.assertEqual(ctx.is_first, is_first)
                     is_last = (o == items[-1])
                     self.assertEqual(ctx.is_last, is_last)
