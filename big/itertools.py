@@ -151,7 +151,7 @@ def loop_context(iterator, start=0):
       time the iterator yields a value, this will be "start";
       the second time, it will be start + 1, etc.
     ctx.countdown contains the "opposite" value of ctx.index.
-      The values yielded by ctx.countdown ar ethe same as
+      The values yielded by ctx.countdown are the same as
       ctx.index, but in reversed order.  (If start is 0,
       and the iterator yields four items, ctx.index will
       be 0, 1, 2, and 3 in that order, and ctx.countdown
