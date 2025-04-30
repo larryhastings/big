@@ -1248,7 +1248,72 @@ of the heap, in sorted order.
 <dl><dd>
 
 Functions and classes for working with iteration.
-Only one entry so far.
+
+</dd></dl>
+
+#### `loop_context(iterator, start=0)`
+
+<dl><dd>
+
+Iterates over `iterable`.  Yields `(ctx, o)` where `o`
+is each value yielded by `iterable`, and `ctx` is a
+"loop context" variable containing metadata
+about the iteration.
+
+<dl><dt>
+`ctx.is_first`
+</dt><dd>
+   is true only for the first value yielded,
+   and false otherwise.
+</dd><dt>
+`ctx.is_last`
+</dt><dd>
+   is true only for the last value yielded,
+   and false otherwise.  (If the iterator only yields
+   one value, `is_first` and `is_last` will both be true.)
+</dd><dt>
+`ctx.current`
+</dt><dd>
+   contains the current value yielded by the
+   iterator (`o` as described above).
+</dd><dt>
+`ctx.previous`
+</dt><dd>
+   contains the previous value yielded if
+   this is the second or subsequent time this iterator
+   has yielded a value.  (If this is the first time
+   the iterator has yielded, `ctx.previous` will be
+   an `undefined` value.)
+</dd><dt>
+`ctx.next`
+</dt><dd>
+   contains the next value to be yielded by
+   this iterator if there is one.  (If `o` is the last
+   value yielded by the iterator, `ctx.previous` will be
+   an `undefined` value.)
+</dd><dt>
+`ctx.index`
+</dt><dd>
+   contains the index of this value.  The first
+   time the iterator yields a value, this will be `start`;
+   the second time, it will be `start + 1`, etc.
+</dd><dt>
+`ctx.countdown`
+</dt><dd>
+   contains the "opposite" value of `ctx.index`.
+   The values yielded by `ctx.countdown` are the same as
+   `ctx.index`, but in reversed order.  (If `start` is 0,
+   and the iterator yields four items, `ctx.index` will
+   be `0`, `1`, `2`, and `3` in that order, and `ctx.countdown`
+   will be `3`, `2`, `1`, and `0` in that order.)
+</dd><dt>
+`ctx.length`
+</dt><dd>
+   contain the total number of items that will be yielded.
+</dd>
+
+`ctx.length` and `ctx.countdown` depend on the `iterator`
+passed in supporting `__len__`.
 
 </dd></dl>
 
@@ -6579,9 +6644,13 @@ in the **big** test suite.
   its line number, column number, and offset in characters
   from the beginning.
 * `big.lines` is now deprecated; `String` replaces it,
-  and is a massive upgrade.  `big.lines` will move to
-  the `deprecated` module no sooner than September 2025,
-  and will be removed no sooner than March 2026.
+  and is a *massive* upgrade.  `big.lines` will move to
+  the `deprecated` module no sooner than November 2025,
+  and will be removed no sooner than May 2026.
+* Added `loop_context` to *big.itertools*.  `loop_context`
+  is like an extended version of Python's `enumerate`,
+  inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
+  it wraps an iterator and provides convenient metadata.
 * Updated copyright notices to 2025.
 
 #### 0.12.8

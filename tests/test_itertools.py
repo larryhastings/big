@@ -27,6 +27,8 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
+from big.itertools import *
+
 import big.all as big
 import copy
 import math
@@ -87,6 +89,91 @@ class BigItertoolsTests(unittest.TestCase):
         for i in pbi:
             self.assertEqual(True, False, "shouldn't reach here! pbi is exhausted!") # pragma: no cover
 
+
+
+# --8<-- start loop_context tests --8<--
+
+class LoopContextTests(unittest.TestCase):
+    def test_loop_context(self):
+        self.assertEqual(repr(undefined), '<Undefined>')
+        with self.assertRaises(TypeError):
+            x = Undefined()
+
+        # iterator yields zero things:
+        # loop_context should also never yield.
+        for ctx, i in loop_context( [] ): # pragma: nocover
+            self.assertTrue(False)
+
+        # iterator yields one thing:
+        # loop_context should be is_first *and* is_last.
+        for start in range(-2, 5):
+            with self.subTest(start=start):
+                first_time = True
+                for ctx, o in loop_context(('abc',), start):
+                    self.assertTrue(first_time)
+                    first_time = False
+
+                    self.assertIsInstance(ctx, big.LoopContext)
+                    self.assertTrue(ctx.is_first)
+                    self.assertTrue(ctx.is_last)
+
+                    # the length and countdown properties both cache _length.
+                    # so, examine length first this time...
+                    self.assertEqual(ctx.length, 1)
+
+                    self.assertEqual(ctx.index, start)
+                    self.assertEqual(ctx.countdown, start)
+
+                    self.assertEqual(ctx.previous, big.undefined)
+                    self.assertEqual(ctx.current, o)
+                    self.assertEqual(ctx.next, big.undefined)
+
+
+        # iterator yields four things
+        for start in range(-2, 5):
+            with self.subTest(start=start):
+                i = start
+                items = 'abcd'
+                is_first = True
+
+                my_items = list(items)
+                my_items.append(big.undefined)
+                my_iterator = iter(my_items)
+                buffer = [big.undefined, big.undefined, next(my_iterator)]
+
+                countdowns = []
+                indices = []
+
+                for ctx, o in loop_context(items, start):
+                    self.assertIsInstance(ctx, big.LoopContext)
+                    self.assertEqual(ctx.is_first, is_first)
+                    is_last = (o == items[-1])
+                    self.assertEqual(ctx.is_last, is_last)
+
+                    self.assertEqual(ctx.index, i)
+                    # ... and examine countdown first this time.
+                    self.assertEqual(ctx.countdown, start + len(items) - (1 + i - start))
+
+                    buffer.pop(0)
+                    buffer.append(next(my_iterator))
+
+                    self.assertEqual(ctx.previous, buffer[0])
+                    self.assertEqual(ctx.current, buffer[1])
+                    self.assertEqual(ctx.next, buffer[2])
+
+                    self.assertEqual(ctx.length, len(items))
+
+                    countdowns.append(ctx.countdown)
+                    indices.append(ctx.index)
+
+                    i += 1
+                    is_first = False
+
+                reversed_countdowns = list(countdowns)
+                reversed_countdowns.reverse()
+                self.assertEqual(reversed_countdowns, indices)
+
+# --8<-- end loop_context tests --8<--
 
 def run_tests():
     bigtestlib.run(name="big.itertools", module=__name__)
