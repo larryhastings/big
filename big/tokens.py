@@ -168,7 +168,7 @@ except AttributeError: # pragma: nocover
     TOKEN_FSTRING_MIDDLE = -1
     TOKEN_FSTRING_END = -1
 
-__all__ = [name for name in globals() if name.isupper()]
+__all__ = [name for name in globals() if name.startswith('TOKEN_')]
 
 def export(fn):
     __all__.append(fn.__name__)
@@ -185,6 +185,7 @@ from big.text import Pattern
 _re_tokenizer_splitlines = Pattern("((?:\r\n)|\r|\n)").split
 
 
+@export
 def generate_tokens(s):
     line_number_to_line = {}
     lines_read = 0
@@ -321,7 +322,6 @@ def aggregate_delimiter_tokens(tokens):
                 # don't continue! append our token.
         append(t)
     return output
-
 
 
 del export

@@ -2691,8 +2691,7 @@ class Workspace:
     # it quotes the closing quote mark, and it does.  The same is true for triple-quoted strings;
     # even in a raw triple-quoted string, you can escape single-quote marks.
 
-    all_four_quotes = ("'", '"', "'''", '"""')
-    all_quote_delimiters = [Delimiter(quotes, escape='\\', multiline=len(quotes) == 3, quoting=True) for quotes in all_four_quotes]
+    all_quote_delimiters = [Delimiter(quotes, escape='\\', multiline=len(quotes) == 3, quoting=True) for quotes in ("'", '"', "'''", '"""')]
 
     for prefix in all_string_prefixes:
         for d in all_quote_delimiters:
