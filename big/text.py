@@ -2350,6 +2350,7 @@ split_delimiters_default_delimiters_bytes = {
 export_name('split_delimiters_default_delimiters_bytes')
 
 _ACTION_POP = "<action: pop>"
+_ACTION_2POP = "<action: pop twice>"
 _ACTION_ESCAPE = "<action: escape>"
 _ACTION_ILLEGAL = "<action: illegal>"
 _ACTION_ILLEGAL_LINEBREAK = "<action: illegal linebreak>"
@@ -2912,6 +2913,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
 
     The _ACTION_* constants above dictate:
         * _ACTION_POP means pop the current state.
+        * _ACTION_2POP means pop two states.
         * _ACTION_ESCAPE means escape the next character yielded
           by multisplit.
         * _ACTION_ILLEGAL_LINEBREAK means the token is an illegal
@@ -3092,6 +3094,19 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
                 consumed += len(delimiter)
                 # and pop
+                current, _ = pop()
+            elif action is _ACTION_2POP:
+                # flush close delimiter
+                s = join(buffer)
+                clear()
+                s_length = len(s)
+                s_empty = s[s_length:]
+                delimiter_length = len(delimiter)
+                delimiter_empty = delimiter[delimiter_length:]
+                yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
+                consumed += len(delimiter)
+                # and pop twice
+                current, _ = pop()
                 current, _ = pop()
             elif action is _ACTION_ESCAPE:
                 # escape
