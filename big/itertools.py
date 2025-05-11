@@ -94,7 +94,11 @@ class Undefined:
     def __repr__(self):
         return "<Undefined>"
 
+    def __bool__(self):
+        return False
+
 undefined = Undefined()
+
 
 class LoopContext:
     def __init__(self, iterator, start, index, is_first, is_last, previous, current, _next):

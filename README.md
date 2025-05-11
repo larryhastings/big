@@ -342,8 +342,6 @@ And here are five little functions/classes I use all the time:
 
 [`Regulator.wake()`](#regulatorwake)
 
-[Release history](#release-history)
-
 [`reversed_re_finditer(pattern, string, flags=0)`](#reversed_re_finditerpattern-string-flags0)
 
 [`safe_mkdir(path)`](#safe_mkdirpath)

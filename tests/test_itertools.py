@@ -99,6 +99,8 @@ class LoopContextTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             x = Undefined()
 
+        self.assertFalse(undefined)
+
         # iterator yields zero things:
         # loop_context should also never yield.
         for ctx, i in loop_context( [] ): # pragma: nocover
