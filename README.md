@@ -6641,8 +6641,8 @@ in the **big** test suite.
   entire file, and every substring of that string will know
   its line number, column number, and offset in characters
   from the beginning.
-* `big.lines` is now deprecated; `String` replaces it,
-  and is a *massive* upgrade.  `big.lines` will move to
+* `big.lines` is now deprecated; `String` replaces it--and
+  it's a *massive* upgrade.  `big.lines` will move to
   the `deprecated` module no sooner than November 2025,
   and will be removed no sooner than May 2026.
 * Added `loop_context` to *big.itertools*.  `loop_context`
