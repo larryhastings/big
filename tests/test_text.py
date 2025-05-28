@@ -534,14 +534,20 @@ class BigTextTests(unittest.TestCase):
         # skip over the surrogate pair code points, they don't represent glyphs.
         for i in itertools.chain(range(0, 0xd7ff), range(0xdfff, 2**16 + 2**20)):
             c = chr(i)
-            s = f"a{c}b"
-            if len(s.split()) == 2:
+            if c.isspace():
                 observed_str_whitespace_without_crlf.add(c)
                 # all line-breaking characters are whitespace.
                 # therefore, don't bother with the linebreaks test
                 # unless this character passes the whitespace text.
+                s = f"a{c}b"
                 if len(s.splitlines()) == 2:
                     observed_str_linebreaks_without_crlf.add(c)
+
+        self.assertIn('\r', observed_str_whitespace_without_crlf)
+        self.assertIn('\n', observed_str_whitespace_without_crlf)
+
+        self.assertIn('\r', observed_str_linebreaks_without_crlf)
+        self.assertIn('\n', observed_str_linebreaks_without_crlf)
 
         crlf = set(('\r\n',))
         observed_str_whitespace = observed_str_whitespace_without_crlf | crlf
@@ -580,9 +586,9 @@ class BigTextTests(unittest.TestCase):
         observed_bytes_linebreaks_without_crlf = set()
         for i in range(128):
             c = chr(i).encode('ascii')
-            s = b'a' + c + b'b'
-            if len(s.split()) == 2:
+            if c.isspace():
                 observed_bytes_whitespace_without_crlf.add(c)
+                s = b'a' + c + b'b'
                 if len(s.splitlines()) == 2:
                     observed_bytes_linebreaks_without_crlf.add(c)
 

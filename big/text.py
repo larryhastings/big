@@ -2610,21 +2610,93 @@ tells you which ones are valid:
 
 ----------------------------------------------------------------------------
 
-all_prefixes = "bfru"
+alphabet = "abcdefghijklmnopqrstuvwxyz"
+alphabet = alphabet + alphabet.upper()
 
-import itertools
+worked1 = []
+worked2 = []
+worked3 = []
+worked4 = []
+worked5 = []
 
-print("prefixes = ['']")
-
-for r in range(1, len(all_prefixes) + 1):
-    for p in itertools.permutations(all_prefixes, r):
-        p = ''.join(p)
-        expr = (f"{p}'abc'")
+for prefix in alphabet:
+    for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
         try:
-            value = eval(expr)
-            print(f"prefixes.append({p!r})")
+            eval(s)
         except SyntaxError:
-            print(f"# invalid: {p}")
+            break
+    else:
+        worked1.append(prefix)
+
+
+# could use itertools here,
+# but level 3 we have to do by hand,
+# so let's just do it all by hand and copy&paste
+for c1 in worked1:
+    for c2 in worked1:
+        if c1.lower() == c2.lower():
+            continue
+        prefix = f'{c1}{c2}'
+        for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+            try:
+                eval(s)
+            except SyntaxError:
+                break
+        else:
+            worked2.append(prefix)
+
+assert worked2
+
+for c1 in worked1:
+    for c2 in worked2:
+        if c1.lower() in c2.lower():
+            continue
+        prefix = f'{c1}{c2}'
+        for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+            try:
+                eval(s)
+            except SyntaxError:
+                break
+        else:
+            worked3.append(prefix)
+
+if worked3:
+    for c1 in worked1:
+        for c2 in worked3:
+            if c1.lower() in c2.lower():
+                continue
+            prefix = f'{c1}{c2}'
+            for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+                try:
+                    eval(s)
+                except SyntaxError:
+                    break
+            else:
+                worked4.append(prefix)
+
+
+if worked4:
+    for c1 in worked1:
+        for c2 in worked4:
+            if c1.lower() in c2.lower():
+                continue
+            prefix = f'{c1}{c2}'
+            for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+                try:
+                    eval(s)
+                except SyntaxError:
+                    break
+            else:
+                worked5.append(prefix)
+
+all_prefixes = ['']
+all_prefixes.extend(worked1)
+all_prefixes.extend(worked2)
+all_prefixes.extend(worked3)
+all_prefixes.extend(worked4)
+all_prefixes.extend(worked5)
+
+print(f"{all_prefixes=}")
 
 ----------------------------------------------------------------------------
 
@@ -2643,7 +2715,11 @@ prefixes = [
     ]
 
 However, Python allows you to use the upper-case version of
-any letter, in any combination.  So here's the *actual* list.
+any letter, in any combination.  So the actual list is longer,
+as you can uppercase any letter and get a new prefix.
+
+Python 3.14 adds the 't' prefix for strings, for t-strings.
+Big supports all the new prefixes that adds, too.
 
 """
 
@@ -2657,20 +2733,18 @@ class Workspace:
         '',
         'b',
         'B',
-        'f',
-        'F',
-        'r',
-        'R',
-        'u',
-        'U',
         'br',
         'bR',
         'Br',
         'BR',
+        'f',
+        'F',
         'fr',
         'fR',
         'Fr',
         'FR',
+        'r',
+        'R',
         'rb',
         'rB',
         'Rb',
@@ -2679,9 +2753,28 @@ class Workspace:
         'rF',
         'Rf',
         'RF',
+        'u',
+        'U',
         ]
 
+
     assert sys.version_info.major >= 3
+
+    if (sys.version_info.major > 3) or (sys.version_info.minor >= 14):
+        all_string_prefixes.extend((
+            'rt',
+            'rT',
+            'Rt',
+            'RT',
+            't',
+            'T',
+            'tr',
+            'tR',
+            'Tr',
+            'TR',
+            ))
+        all_string_prefixes.sort()
+
     pep_701_f_strings_in_the_grammar = (sys.version_info.major > 3) or (sys.version_info.minor >= 12)
 
     python_delimiters = split_delimiters_default_delimiters.copy()

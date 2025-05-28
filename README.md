@@ -2265,7 +2265,7 @@ If it's `None`, states can be any object (except `None`).
 
 #### State transitions
 
-To transition to a new state, simply assign to the 'state'
+To transition to a new state, simply assign to the `state`
 attribute.
 
 * If `state_class` is `None`, you may use *any* value as a state
@@ -2303,7 +2303,7 @@ and you transition it to `new_state`:
       to the new state.
 * If `state_manager.state` has an `on_exit` attribute,
   call `state_manager.state.on_exit()`.
-* For every object `o` in the `state_manager.observer` list,
+* For every object `o` in the `state_manager.observers` list,
   call `o(self)`.
 * Set `state_manager.next` to `None`.
 * Set `state_manager.state` to `new_state`.
@@ -6649,6 +6649,16 @@ in the **big** test suite.
   is like an extended version of Python's `enumerate`,
   inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
   it wraps an iterator and provides convenient metadata.
+* Added support for Python 3.14.  The only change was to
+  `python_delimiters`, which now recognize the new string
+  prefixes containing `t` (or `T`).
+* Sped up `test/test_text.py`.  The tests confirm that **big**'s list of whitespace
+  characters is accurate.  It used to test if a particular character `c` was
+  whitespace by using `len(f'a{c}b'.split()) == 2`.  D'oh!  It's obviously much
+  faster to simply ask it with `c.isspace()`.  The resulting loop runs 3x
+  faster, saving 0.1 seconds on my workstation!  Modifying the equivalent code
+  for bytes instead of Unicode objects is also faster, but that optimization
+  only saved 0.0000014 seconds.
 * Updated copyright notices to 2025.
 
 #### 0.12.8
