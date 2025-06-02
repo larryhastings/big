@@ -164,6 +164,8 @@ And here are five little functions/classes I use all the time:
 
 [`big.text`](#bigtext)
 
+[`big.tokens`](#bigtokens)
+
 [`big.time`](#bigtime)
 
 [`big.version`](#bigversion)
@@ -4263,6 +4265,49 @@ For more information, see the deep-dive on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
 
+## `big.tokens`
+
+Functions and values for working with Python's tokenizer.
+
+<dl><dd>
+
+#### Token constants
+
+`big.tokens` contains a constant for every token defined in
+any supported version of Python.  This is helpful in case you
+support multiple versions of Python, some of which may have
+different sets of tokens.
+
+For example, Python 3.10 added four new tokens:
+`EXCLAMATION`,
+`FSTRING_START`, `FSTRING_MIDDLE`, and `FSTRING_END`.
+None of these existed in Python 3.9.  So how do you write
+code that runs in both 3.9 and 3.10, and handles these tokens?
+
+What Big does is, it defines a `TOKEN_<name>` token for every
+token that could exist.  If the token isn't defined in the
+current version of Python, this value is set to -1.  -1 is an
+invalid token value, so this won't match any tokens.
+
+Now you can write
+
+```Python
+if token.type == big.tokens.TOKEN_FSTRING_START:
+   ...
+```
+
+and it'll run fine in both versions.  In Python 3.9, it'll
+never match a token, so the if statement body will never run.
+You still have to ensure that your code supports both styles
+of token stream emitted by Python's tokenizer; these values
+just prevent you from having to do explicit version checks.
+
+#### `generate_tokens(s)``
+
+#### `aggregate_delimiter_tokens(tokens)`
+
+
+</dd></dl>
 
 ## `big.time`
 
@@ -6633,8 +6678,8 @@ in the **big** test suite.
 *under development*
 
 * Added two new modules: *big.types*, which contains
-  core types, and *big.tokens*, which is useful when
-  working with Python's tokenizer.
+  core types, and *big.tokens*, useful functions and values
+  when working with Python's tokenizer.
 * Added `String` to *big.types*.  `String` is a subclass
   of `str` that tracks line number and column number offsets
   for you.  Just initialize one big `String` containing an
@@ -6649,9 +6694,11 @@ in the **big** test suite.
   is like an extended version of Python's `enumerate`,
   inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
   it wraps an iterator and provides convenient metadata.
-* Added support for Python 3.14.  The only change was to
-  `python_delimiters`, which now recognize the new string
-  prefixes containing `t` (or `T`).
+* Added support for Python 3.14, mainly to support t-strings:
+  * `python_delimiters` now recognizes all the new string
+    prefixes containing `t` (or `T`).
+  * *big.tokens* supports the new tokens associated with
+    t-strings, although that's a new module anyway.
 * Sped up `test/test_text.py`.  The tests confirm that **big**'s list of whitespace
   characters is accurate.  It used to test if a particular character `c` was
   whitespace by using `len(f'a{c}b'.split()) == 2`.  D'oh!  It's obviously much

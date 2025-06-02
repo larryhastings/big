@@ -129,13 +129,18 @@ def encode_strings(o, encoding='ascii'):
 
 export_name('str_whitespace')
 str_whitespace = (
-    # char    decimal   hex      identity
-    ##########################################
-    '\t'    , #     9 - 0x0009 - tab
-    '\n'    , #    10 - 0x000a - linebreak
-    '\v'    , #    11 - 0x000b - vertical tab
-    '\f'    , #    12 - 0x000c - form feed
-    '\r'    , #    13 - 0x000d - carriage return
+    # character string
+    # |       ordinal number
+    # |        |    c in decimal
+    # |        |     |    c in hex
+    # |        |     |      |      name
+    # |        |     |      |        |
+    #vvvv-----vvv---vvv---vvvvvv---vvvvvvvvvvv
+    '\t'    , #01     9 - 0x0009 - tab
+    '\n'    , #02    10 - 0x000a - linebreak
+    '\v'    , #03    11 - 0x000b - vertical tab
+    '\f'    , #04    12 - 0x000c - form feed
+    '\r'    , #05    13 - 0x000d - carriage return
     '\r\n'  , # bonus! the classic DOS linebreak sequence!
 
     ###################################################
@@ -143,31 +148,31 @@ str_whitespace = (
     ## ASCII "separator" characters to be whitespace!
     ## (I agree, I think this is a Python bug.)
     ###################################################
-    '\x1c'  , #    28 - 0x001c - file separator
-    '\x1d'  , #    29 - 0x001d - group separator
-    '\x1e'  , #    30 - 0x001e - record separator
-    '\x1f'  , #    31 - 0x001f - unit separator
+    '\x1c'  , #06    28 - 0x001c - file separator
+    '\x1d'  , #07    29 - 0x001d - group separator
+    '\x1e'  , #08    30 - 0x001e - record separator
+    '\x1f'  , #09    31 - 0x001f - unit separator
 
-    ' '     , #    32 - 0x0020 - space
-    '\x85'  , #   133 - 0x0085 - next line
-    '\xa0'  , #   160 - 0x00a0 - non-breaking space
-    '\u1680', #  5760 - 0x1680 - ogham space mark
-    '\u2000', #  8192 - 0x2000 - en quad
-    '\u2001', #  8193 - 0x2001 - em quad
-    '\u2002', #  8194 - 0x2002 - en space
-    '\u2003', #  8195 - 0x2003 - em space
-    '\u2004', #  8196 - 0x2004 - three-per-em space
-    '\u2005', #  8197 - 0x2005 - four-per-em space
-    '\u2006', #  8198 - 0x2006 - six-per-em space
-    '\u2007', #  8199 - 0x2007 - figure space
-    '\u2008', #  8200 - 0x2008 - punctuation space
-    '\u2009', #  8201 - 0x2009 - thin space
-    '\u200a', #  8202 - 0x200a - hair space
-    '\u2028', #  8232 - 0x2028 - line separator
-    '\u2029', #  8233 - 0x2029 - paragraph separator
-    '\u202f', #  8239 - 0x202f - narrow no-break space
-    '\u205f', #  8287 - 0x205f - medium mathematical space
-    '\u3000', # 12288 - 0x3000 - ideographic space
+    ' '     , #10    32 - 0x0020 - space
+    '\x85'  , #11   133 - 0x0085 - next line
+    '\xa0'  , #12   160 - 0x00a0 - non-breaking space
+    '\u1680', #13  5760 - 0x1680 - ogham space mark
+    '\u2000', #14  8192 - 0x2000 - en quad
+    '\u2001', #15  8193 - 0x2001 - em quad
+    '\u2002', #16  8194 - 0x2002 - en space
+    '\u2003', #17  8195 - 0x2003 - em space
+    '\u2004', #18  8196 - 0x2004 - three-per-em space
+    '\u2005', #19  8197 - 0x2005 - four-per-em space
+    '\u2006', #20  8198 - 0x2006 - six-per-em space
+    '\u2007', #21  8199 - 0x2007 - figure space
+    '\u2008', #22  8200 - 0x2008 - punctuation space
+    '\u2009', #23  8201 - 0x2009 - thin space
+    '\u200a', #24  8202 - 0x200a - hair space
+    '\u2028', #25  8232 - 0x2028 - line separator
+    '\u2029', #26  8233 - 0x2029 - paragraph separator
+    '\u202f', #27  8239 - 0x202f - narrow no-break space
+    '\u205f', #28  8287 - 0x205f - medium mathematical space
+    '\u3000', #29 12288 - 0x3000 - ideographic space
     )
 export_name('str_whitespace_without_crlf')
 str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
@@ -221,7 +226,7 @@ str_linebreaks = (
     # I'm worried it would cause bugs with a malformed DOS string,
     # or maybe when operating in reverse mode.
     #
-    # Also: welcome, Acorn and RISC OS users!
+    # Also: welcome to Big, Acorn and RISC OS users!
     # What are you doing here?  You can't run Python 3.6+!
     )
 export_name('str_linebreaks_without_crlf')

@@ -168,6 +168,17 @@ except AttributeError: # pragma: nocover
     TOKEN_FSTRING_MIDDLE = -1
     TOKEN_FSTRING_END = -1
 
+
+# new in 3.14
+try: # pragma: nocover
+    TOKEN_TSTRING_START = token.TSTRING_START
+    TOKEN_TSTRING_MIDDLE = token.TSTRING_MIDDLE
+    TOKEN_TSTRING_END = token.TSTRING_END
+except AttributeError: # pragma: nocover
+    TOKEN_TSTRING_START = -1
+    TOKEN_TSTRING_MIDDLE = -1
+    TOKEN_TSTRING_END = -1
+
 __all__ = [name for name in globals() if name.startswith('TOKEN_')]
 
 def export(fn):

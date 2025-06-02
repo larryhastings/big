@@ -539,8 +539,11 @@ class BigTextTests(unittest.TestCase):
                 # all line-breaking characters are whitespace.
                 # therefore, don't bother with the linebreaks test
                 # unless this character passes the whitespace text.
-                s = f"a{c}b"
-                if len(s.splitlines()) == 2:
+                #
+                # if c is a linebreak, then splitlines returns a list
+                # containing only an empty string.  otherwise it returns
+                # a list containing c.
+                if not c.splitlines()[0]:
                     observed_str_linebreaks_without_crlf.add(c)
 
         self.assertIn('\r', observed_str_whitespace_without_crlf)
@@ -588,8 +591,7 @@ class BigTextTests(unittest.TestCase):
             c = chr(i).encode('ascii')
             if c.isspace():
                 observed_bytes_whitespace_without_crlf.add(c)
-                s = b'a' + c + b'b'
-                if len(s.splitlines()) == 2:
+                if not c.splitlines()[0]:
                     observed_bytes_linebreaks_without_crlf.add(c)
 
         bytes_crlf = set((b'\r\n',))
