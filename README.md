@@ -6680,6 +6680,12 @@ in the **big** test suite.
 * Added two new modules: *big.types*, which contains
   core types, and *big.tokens*, useful functions and values
   when working with Python's tokenizer.
+* Added `LinkedList` to *big.types*.  `LinkedList` is a
+  thoughtful implementation of a standard linked list data
+  structure, with an API and UX modeled on Python's `list`
+  (or, more accurately, `collections.deque`) class.  Unlike
+  Python's builtins, you're permitted to add and remove
+  values to a `LinkedList` while iterating.
 * Added `String` to *big.types*.  `String` is a subclass
   of `str` that tracks line number and column number offsets
   for you.  Just initialize one big `String` containing an
@@ -6703,9 +6709,11 @@ in the **big** test suite.
   characters is accurate.  It used to test if a particular character `c` was
   whitespace by using `len(f'a{c}b'.split()) == 2`.  D'oh!  It's obviously much
   faster to simply ask it with `c.isspace()`.  The resulting loop runs 3x
-  faster, saving 0.1 seconds on my workstation!  Modifying the equivalent code
-  for bytes instead of Unicode objects is also faster, but that optimization
-  only saved 0.0000014 seconds.
+  faster... saving a whole 0.1 seconds on my workstation!
+  Modifying the equivalent code for bytes instead of Unicode objects
+  is also faster, but that optimization only saved 0.0000014 seconds.
+  Hat tip to Eric V. Smith for his suggestions on how to make
+  Big's test suite so much faster!
 * Updated copyright notices to 2025.
 
 #### 0.12.8

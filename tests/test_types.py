@@ -34,6 +34,8 @@ import sys
 import unittest
 
 from big.types import String, Pattern
+from big.types import LinkedList, PseudonodeError
+from big.types import LinkedListIterator, LinkedListReverseIterator
 from big.tokens import *
 
 
@@ -1276,6 +1278,280 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(s.line_number, 1)
         self.assertEqual(s.column_number, 6)
         self.assertEqual(s, line1 + line2)
+
+
+class BigLinkedListTests(unittest.TestCase):
+    def assertLinkedListEqual(self, t, expected):
+        self.assertIsInstance(t, LinkedList)
+        expected = list(expected)
+        got = list(iter(t))
+        self.assertEqual(expected, got)
+
+
+    def assertPseudonode(self, cursor):
+        self.assertIsNotNone(cursor)
+        self.assertTrue(hasattr(cursor, 'special'))
+        self.assertTrue(cursor.special)
+
+    def assertHead(self, cursor):
+        self.assertIsNotNone(cursor)
+        self.assertTrue(hasattr(cursor, 'special'))
+        self.assertEqual(cursor.special, 'head')
+
+    def assertTail(self, cursor):
+        self.assertIsNotNone(cursor)
+        self.assertTrue(hasattr(cursor, 'special'))
+        self.assertEqual(cursor.special, 'tail')
+
+    def assertDeleted(self, cursor):
+        self.assertIsNotNone(cursor)
+        self.assertTrue(hasattr(cursor, 'special'))
+        self.assertEqual(cursor.special, 'deleted')
+
+    # "normal" node, that is
+    def assertNode(self, cursor):
+        self.assertIsNotNone(cursor)
+        self.assertTrue(hasattr(cursor, 'special'))
+        self.assertIsNone(cursor.special)
+
+
+
+
+    def testIteratorBasics(self):
+        t = LinkedList()
+
+        # an iterator on a linked list always starts out at head
+        it = iter(t)
+        self.assertHead(it)
+        self.assertTrue(it)
+        with self.assertRaises(PseudonodeError):
+            it.value
+        with self.assertRaises(PseudonodeError):
+            it.pop()
+        with self.assertRaises(PseudonodeError):
+            it.popleft()
+
+        # and before it is None
+        before = it.before()
+        self.assertIsNone(before)
+
+        # an reverse iterator on a linked list always starts out at tail
+        rit = reversed(t)
+        self.assertTail(rit)
+        self.assertTrue(rit)
+        with self.assertRaises(PseudonodeError):
+            rit.value
+        with self.assertRaises(PseudonodeError):
+            rit.pop()
+        with self.assertRaises(PseudonodeError):
+            rit.popleft()
+
+        # and before it (reversed!) is None
+        before = rit.before()
+        self.assertIsNone(before)
+
+        initial = [1, 2, 3, 4, 5]
+        t = LinkedList(initial)
+        it = iter(t)
+        result = list(it)
+        self.assertEqual(initial, result)
+
+        reversed_initial = list(reversed(initial))
+        rit = reversed(t)
+        result = list(rit)
+        self.assertEqual(reversed_initial, result)
+
+
+    def testEmptyList(self):
+        # if the list is empty:
+        t = LinkedList()
+
+        # after the initial iterator is tail
+        it = iter(t)
+        after = it.after()
+        self.assertTail(after)
+
+        # if you run next on it, it goes to tail and stays there
+        self.assertTrue(it)
+        result = next(it, 5)
+        self.assertEqual(result, 5)
+        self.assertFalse(it)
+        self.assertTail(it)
+        result = next(it, 5)
+        self.assertEqual(result, 5)
+        self.assertFalse(it)
+        self.assertTail(it)
+
+
+        # after the initial reversed iterator is head
+        rit = reversed(t)
+        self.assertTail(rit)
+        self.assertTrue(rit)
+        after = rit.after()
+        self.assertHead(after)
+
+        # if you run next on it, it goes to head and stays there
+        result = next(rit, 5)
+        self.assertEqual(result, 5)
+        self.assertFalse(rit)
+        self.assertHead(rit)
+        result = next(rit, 5)
+        self.assertEqual(result, 5)
+        self.assertFalse(rit)
+        self.assertHead(rit)
+
+    def testSloppy(self):
+        # inserting after head must work
+        t = LinkedList()
+        it = iter(t)
+        it.append('W')
+        self.assertLinkedListEqual(t, ['W'])
+
+        # inserting before head should work, this is "sloppy"
+        t = LinkedList()
+        it = iter(t)
+        it.prepend('X')
+        self.assertLinkedListEqual(t, ['X'])
+
+        # inserting before tail must work
+        t = LinkedList()
+        it = reversed(t)
+        it.prepend('Y')
+        self.assertLinkedListEqual(t, ['Y'])
+
+        # inserting after tail should work, this is "sloppy"
+        t = LinkedList()
+        it = reversed(t)
+        it.append('Z')
+        self.assertLinkedListEqual(t, ['Z'])
+
+
+
+    def testDeletedNode(self):
+        def setup():
+            t = LinkedList([1, 2, 3, 'X', 4, 5, 6])
+            it = t.find('X')
+            copy = it.copy()
+            copy.pop()
+            del copy
+            return t, it
+
+        t, it = setup()
+        self.assertEqual(list(    iter(t)), [1, 2, 3, 4, 5, 6])
+        self.assertEqual(list(reversed(t)), [6, 5, 4, 3, 2, 1])
+        self.assertDeleted(it)
+        self.assertIsInstance(it, LinkedListIterator)
+        with self.assertRaises(PseudonodeError):
+            it.value
+        with self.assertRaises(PseudonodeError):
+            it.pop()
+        with self.assertRaises(PseudonodeError):
+            it.popleft()
+
+        copy = it.copy()
+        value = copy.previous()
+        self.assertNode(copy)
+        self.assertEqual(value, 3)
+        self.assertEqual(copy.value, 3)
+
+        copy = it.copy()
+        value = next(copy)
+        self.assertNode(copy)
+        self.assertEqual(value, 4)
+        self.assertEqual(copy.value, 4)
+
+        before = it.before()
+        self.assertNode(before)
+        self.assertEqual(before.value, 3)
+        after = it.after()
+        self.assertNode(after)
+        self.assertEqual(after.value, 4)
+
+        five = it.find(5)
+        self.assertNode(five)
+        self.assertEqual(five.value, 5)
+        self.assertIsNone(it.find(333))
+        two = it.rfind(2)
+        self.assertNode(two)
+        self.assertEqual(two.value, 2)
+        self.assertIsNone(it.rfind(333))
+
+        six = it.match(lambda value: value == 6)
+        self.assertNode(six)
+        self.assertEqual(six.value, 6)
+        self.assertIsNone(it.match(lambda value: value == 888))
+        one = it.rmatch(lambda value: value == 1)
+        self.assertNode(one)
+        self.assertEqual(one.value, 1)
+        self.assertIsNone(it.rmatch(lambda value: value == 999))
+
+
+        rit = reversed(it)
+        self.assertDeleted(rit)
+        self.assertIsInstance(rit, LinkedListReverseIterator)
+        self.assertTrue(rit)
+        with self.assertRaises(PseudonodeError):
+            rit.value
+        with self.assertRaises(PseudonodeError):
+            rit.pop()
+        with self.assertRaises(PseudonodeError):
+            rit.popleft()
+
+        copy = rit.copy()
+        value = next(copy)
+        self.assertNode(copy)
+        self.assertEqual(value, 3)
+        self.assertEqual(copy.value, 3)
+
+        copy = rit.copy()
+        value = copy.previous()
+        self.assertNode(copy)
+        self.assertEqual(value, 4)
+        self.assertEqual(copy.value, 4)
+
+        before = rit.before()
+        self.assertNode(before)
+        self.assertEqual(before.value, 4)
+        after = rit.after()
+        self.assertNode(after)
+        self.assertEqual(after.value, 3)
+
+        five = rit.rfind(5)
+        self.assertEqual(five.value, 5)
+        self.assertNode(five)
+        self.assertIsNone(rit.rfind(333))
+        two = rit.find(2)
+        self.assertNode(two)
+        self.assertEqual(two.value, 2)
+        self.assertIsNone(rit.find(333))
+
+        six = rit.rmatch(lambda value: value == 6)
+        self.assertNode(six)
+        self.assertEqual(six.value, 6)
+        self.assertIsNone(rit.rmatch(lambda value: value == 888))
+        one = rit.match(lambda value: value == 1)
+        self.assertNode(one)
+        self.assertEqual(one.value, 1)
+        self.assertIsNone(rit.match(lambda value: value == 999))
+
+        t, it = setup()
+        it.prepend('Z')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'Z', 4, 5, 6])
+
+        t, it = setup()
+        it.append('Q')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'Q', 4, 5, 6])
+
+        t, it = setup()
+        rit = reversed(it)
+        rit.prepend('J')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'J', 4, 5, 6])
+
+        t, it = setup()
+        rit = reversed(it)
+        rit.append('K')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'K', 4, 5, 6])
+
 
 
 

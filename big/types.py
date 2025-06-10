@@ -1048,4 +1048,487 @@ class String(str):
         return Pattern(self, flags)
 
 
+
+
+_undefined = object()
+
+class PseudonodeError(LookupError):
+    pass
+
+class LinkedListNode:
+    def __init__(self, value):
+        self.value = value
+        self.special = None # None, 'deleted', 'head', or 'tail'
+        self.next = self.previous = None
+        self.irc = 0 # iterator reference count
+
+    def insert_before(self, value):
+        "inserts value into the linked list in front of self."
+
+        # should never attempt to insert before head
+        assert self.previous
+        assert self.special != 'head'
+
+        node = self.__class__(value)
+        previous = self.previous
+
+        node.next = self
+        node.previous = previous
+        previous.next = self.previous = node
+
+    def unlink(self):
+        # don't bother checking if self.special == 'deleted' or whatnot.
+        # we might get called during shutdown while the GC is trying to
+        # break cycles.  all we should do is--carefully--unlink the node.
+
+        previous = self.previous
+        next = self.next
+
+        if previous:
+            previous.next = next
+        if next:
+            next.previous = previous
+
+        # deconstruct node
+        self.special = self.previous = self.next = self.value = self.irc = None
+
+    def remove(self):
+        if self.special:
+            raise PseudonodeError(f'attempted to remove {cursor.special!r} pseudonode')
+
+        value = self.value
+
+        if not self.irc:
+            self.unlink()
+        else:
+            self.special = 'deleted'
+            self.value = None
+        return value
+
+    def __repr__(self):
+        special = f" ({self.special})" if self.special else ''
+        return f"LinkedListNode({self.value!r}{special})"
+
+@export
+class LinkedList:
+    def __init__(self, iterable=()):
+        self.head = head = LinkedListNode(None)
+        head.special = 'head'
+        head.next = self.tail = tail = LinkedListNode(None)
+        tail.special = 'tail'
+        tail.previous = self.head
+        for value in iterable:
+            self.append(value)
+
+    def __repr__(self):
+        buffer = ["LinkedList(["]
+        append = buffer.append
+        cursor = self.head.next
+        tail = self.tail
+        separator = ''
+        while cursor != tail:
+            if not cursor.special:
+                append(separator)
+                separator = ', '
+                append(repr(cursor.value))
+            cursor = cursor.next
+        append("])")
+        return ''.join(buffer)
+
+    def copy(self):
+        return LinkedList(self)
+
+    def __iter__(self):
+        return LinkedListIterator(self)
+
+    def __reversed__(self):
+        return LinkedListReverseIterator(self)
+
+    def __bool__(self):
+        return self.head.next != self.tail
+
+    def append(self, value):
+        self.tail.insert_before(value)
+
+    def appendleft(self, value):
+        self.head.next.insert_before(value)
+
+    prepend = appendleft
+
+    def clear(self):
+        head = self.head
+        tail = self.tail
+
+        # point cursor at the first node (if any),
+        cursor = head.next
+
+        # unlink all the nodes in the list,
+        head.next = self.tail
+        tail.previous = self.head
+
+        # and clean up all the nodes in the list:
+        while cursor != tail:
+            next = cursor.next
+
+            # in case there are any iterators
+            # still pointing at this node:
+
+            # drop the reference to the value.
+            cursor.value = None
+
+            # mark the node as deleted,
+            # so the iterator will know it's inactive.
+            cursor.special = 'deleted'
+
+            # set the irc to -1.
+            # iterators exiting this node don't need
+            # to bother unlinking the node from the list;
+            # the node is already unlinked.  we won't add
+            # any new iterators pointing here, so by making
+            # irc -1, they will only decrement it, so we'll
+            # never reach 0 and try to unlink the node.
+            cursor.irc = -1
+
+            # point previous and next directly
+            # at "head" and "tail" respectively,
+            # any remaining iterators that call
+            # previous() or next() will transition
+            # directly to one of those.
+            cursor.previous = head
+            cursor.next = tail
+
+            cursor = next
+
+    def pop(self):
+        node_before_tail = self.tail.previous
+        if node_before_tail == self.head:
+            raise ValueError('LinkedList is empty')
+        return node_before_tail.remove()
+
+    def popleft(self):
+        node_after_head = self.head.next
+        if node_after_head == self.tail:
+            raise ValueError('LinkedList is empty')
+        return node_after_head.remove()
+
+    def find(self, value):
+        return iter(self).find(value)
+
+    def rfind(self, value):
+        return reversed(self).rfind(value)
+
+    def match(self, predicate):
+        return iter(self).match(predicate)
+
+    def rmatch(self, predicate):
+        return reversed(self).rmatch(predicate)
+
+
+@export
+class LinkedListIterator:
+    def __init__(self, linked_list):
+        self.linked_list = linked_list
+        self.cursor = cursor = linked_list.head
+        cursor.irc += 1
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} cursor={self.cursor!r}>"
+
+    def __del__(self):
+        # drop our reference to the current node.
+        # that means decrementing node.irc.
+        # and if node.irc reaches 0, we *gotta* call unlink.
+        self.linked_list = None
+        cursor = self.cursor
+        if cursor is None:
+            return
+        self.cursor = None
+        irc = cursor.irc
+        if irc is None:
+            return
+        irc -= 1
+        cursor.irc = irc
+        if (not irc) and (cursor.special == 'deleted'):
+            unlink = cursor.unlink
+            if unlink is not None:
+                unlink()
+
+    def __bool__(self):
+        return self.cursor.special != 'tail'
+
+    def __iter__(self):
+        return self
+
+    def __reversed__(self):
+        cursor = self.cursor
+        copy = LinkedListReverseIterator(self.linked_list)
+        copy.cursor = cursor
+        cursor.irc += 1
+        return copy
+
+    def __next__(self):
+        cursor = self.cursor
+        special = cursor.special
+
+        if special == 'tail':
+            raise StopIteration
+
+        cursor.irc = irc = cursor.irc - 1
+        next = cursor.next
+        if (not irc) and (special == 'deleted'):
+            cursor.unlink()
+        cursor = next
+        special = cursor.special
+
+        while special == 'deleted':
+            cursor = cursor.next
+            special = cursor.special
+
+        self.cursor = cursor
+        cursor.irc += 1
+
+        if special == 'tail':
+            raise StopIteration
+        return cursor.value
+
+    def next(self, default=_undefined):
+        if default == _undefined:
+            return self.__next__()
+
+        try:
+            return self.__next__()
+        except StopIteration:
+            return default
+
+    def __previous__(self):
+        cursor = self.cursor
+        special = cursor.special
+
+        if special == 'head':
+            raise StopIteration
+
+        cursor.irc = irc = cursor.irc - 1
+        previous = cursor.previous
+        if (not irc) and (special == 'deleted'):
+            cursor.unlink()
+        cursor = previous
+        special = cursor.special
+
+        while special == 'deleted':
+            cursor = cursor.previous
+            special = cursor.special
+
+        self.cursor = cursor
+        cursor.irc += 1
+
+        if special == 'head':
+            raise StopIteration
+        return cursor.value
+
+    def previous(self, default=_undefined):
+        if default == _undefined:
+            return self.__previous__()
+
+        try:
+            return self.__previous__()
+        except StopIteration:
+            return default
+
+    def copy(self):
+        cursor = self.cursor
+        copy = self.__class__(self.linked_list)
+        copy.cursor = self.cursor
+        cursor.irc += 1
+        return copy
+
+    def before(self):
+        cursor = self.cursor.previous
+        if not cursor:
+            return None
+        while cursor.special == 'deleted':
+            cursor = cursor.previous
+        it = self.__class__(self.linked_list)
+        it.cursor = cursor
+        return it
+
+    def after(self):
+        cursor = self.cursor.next
+        if not cursor:
+            return None
+        while cursor.special == 'deleted':
+            cursor = cursor.next
+        it = self.__class__(self.linked_list)
+        it.cursor = cursor
+        return it
+
+    @property
+    def special(self):
+        return self.cursor.special
+
+    @property
+    def value(self):
+        cursor = self.cursor
+        if cursor.special:
+            raise PseudonodeError
+        return cursor.value
+
+    def replace(self, value):
+        cursor = self.cursor
+        if cursor.special:
+            raise PseudonodeError
+        cursor.value = value
+
+    def _pop(self, destination):
+        # removes the node we're pointing at,
+        # moves to destination, and returns the popped node's value.
+        cursor = self.cursor
+        if cursor.special:
+            raise PseudonodeError
+        cursor.irc -= 1
+        value = cursor.remove()
+        self.cursor = destination
+        destination.irc += 1
+        return value
+
+    def pop(self):
+        return self._pop(self.cursor.previous)
+
+    def popleft(self):
+        return self._pop(self.cursor.next)
+
+    def prepend(self, value):
+        cursor = self.cursor
+        if cursor.special == 'head':
+            # API affordance: allow "sloppy insert" *before* 'head'
+            cursor = cursor.next
+        cursor.insert_before(value)
+
+    insert = prepend
+
+    def append(self, value):
+        cursor = self.cursor
+        # API affrdance: allow "sloppy append" *after* 'tail'
+        if cursor.special != 'tail':
+            cursor = cursor.next
+        cursor.insert_before(value)
+
+    def find(self, value):
+        cursor = self.cursor
+
+        while True:
+            special = cursor.special
+            if (not special) and (cursor.value == value):
+                break
+            if special == 'tail':
+                return None
+            cursor = cursor.next
+
+        result = self.__class__(self.linked_list)
+        result.cursor = cursor
+        cursor.irc += 1
+        return result
+
+    def rfind(self, value):
+        cursor = self.cursor
+
+        while True:
+            special = cursor.special
+            if (not special) and (cursor.value == value):
+                break
+            if special == 'head':
+                return None
+            cursor = cursor.previous
+
+        result = self.__class__(self.linked_list)
+        result.cursor = cursor
+        cursor.irc += 1
+        return result
+
+    def match(self, predicate):
+        cursor = self.cursor
+
+        while True:
+            special = cursor.special
+            if (not special) and predicate(cursor.value):
+                break
+            if special == 'tail':
+                return None
+            cursor = cursor.next
+
+        result = self.__class__(self.linked_list)
+        result.cursor = cursor
+        cursor.irc += 1
+        return result
+
+    def rmatch(self, predicate):
+        cursor = self.cursor
+
+        while True:
+            special = cursor.special
+            if (not special) and predicate(cursor.value):
+                break
+            if special == 'head':
+                return None
+            cursor = cursor.previous
+
+        result = self.__class__(self.linked_list)
+        result.cursor = cursor
+        cursor.irc += 1
+        return result
+
+
+
+@export
+class LinkedListReverseIterator(LinkedListIterator):
+    def __init__(self, linked_list):
+        super().__init__(linked_list)
+        self.cursor = linked_list.tail
+
+    def __reversed__(self):
+        cursor = self.cursor
+        copy = LinkedListIterator(self.linked_list)
+        copy.cursor = cursor
+        cursor.irc += 1
+        return copy
+
+    def __next__(self):
+        return super().__previous__()
+
+    def __previous__(self):
+        return super().__next__()
+
+    def before(self):
+        return super().after()
+
+    def after(self):
+        return super().before()
+
+    def __bool__(self):
+        return self.cursor.special != 'head'
+
+    def prepend(self, value):
+        return super().append(value)
+
+    def append(self, value):
+        return super().prepend(value)
+
+    def pop(self):
+        return self._pop(self.cursor.next)
+
+    def popleft(self):
+        return self._pop(self.cursor.previous)
+
+    def find(self, value):
+        return super().rfind(value)
+
+    def rfind(self, value):
+        return super().find(value)
+
+    def match(self, predicate):
+        return super().rmatch(predicate)
+
+    def rmatch(self, predicate):
+        return super().match(predicate)
+
+
 del export
