@@ -1215,13 +1215,16 @@ class LinkedList:
         return iter(self).find(value)
 
     def rfind(self, value):
-        return reversed(self).rfind(value)
+        return reversed(self).find(value)
 
     def match(self, predicate):
         return iter(self).match(predicate)
 
     def rmatch(self, predicate):
-        return reversed(self).rmatch(predicate)
+        return reversed(self).match(predicate)
+
+    def remove(self, value, default=_undefined):
+        return iter(self).remove(value)
 
 
 @export
@@ -1391,10 +1394,30 @@ class LinkedListIterator:
         return value
 
     def pop(self):
-        return self._pop(self.cursor.previous)
+        cursor = self.cursor
+        if cursor.special:
+            raise PseudonodeError
+        cursor = cursor.previous
+        while cursor.special == 'deleted':
+            cursor = cursor.previous
+        return self._pop(cursor)
 
     def popleft(self):
-        return self._pop(self.cursor.next)
+        cursor = self.cursor
+        if cursor.special:
+            raise PseudonodeError
+        cursor = cursor.next
+        while cursor.special == 'deleted':
+            cursor = cursor.next
+        return self._pop(cursor)
+
+    def remove(self, value, default=_undefined):
+        it = self.find(value)
+        if it:
+            return it.pop()
+        if default is not _undefined:
+            return default
+        raise ValueError(f'value {value!r} not found')
 
     def prepend(self, value):
         cursor = self.cursor

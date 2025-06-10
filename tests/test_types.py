@@ -1553,6 +1553,91 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2, 3, 'K', 4, 5, 6])
 
 
+        #
+        # test navigating past deleted nodes
+        #
+
+        # smoke-check: this works to delete nodes, right?
+        def setup():
+            t = LinkedList(('a', 1, 'b', 2, 'c', 'd', 'e', 3, 4, 5, 'f', 'g', 'h', 6, 'i', 7, 'j'))
+            it = iter(t)
+            return t, it
+
+        t, it = setup()
+        for value in it:
+            if isinstance(value, str):
+                it.pop()
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7])
+
+        for c in 'abcdefghij':
+            with self.subTest(c=c):
+                t, it = setup()
+                t.remove(c)
+                self.assertIsNone(t.find(c))
+                self.assertIsNone(t.rfind(c))
+                for i in range(1, 8):
+                    with self.subTest(i=i):
+                        it = t.find(i)
+                        self.assertNode(it)
+                        self.assertEqual(it.value, i)
+                        it = t.rfind(i)
+                        self.assertNode(it)
+                        self.assertEqual(it.value, i)
+
+
+        # keep references to every node, to keep the nodes alive
+        it = iter(t)
+        iterators = []
+        while it:
+            iterators.append(it)
+            it = it.after()
+
+        t, it = setup()
+
+        # keep references to every node, to keep the nodes alive
+        iterators = []
+        while it:
+            iterators.append(it)
+            it = it.after()
+
+        # delete nodes with a str value
+        t.remove('e') # test remove!
+        it = iter(t)
+        for value in it:
+            if isinstance(value, str):
+                it.pop()
+
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7])
+
+        it = t.find(3)
+        seven = it.find(7)
+        self.assertNode(seven)
+        self.assertEqual(seven.value, 7)
+        one = it.rfind(1)
+        self.assertNode(one)
+        self.assertEqual(one.value, 1)
+
+        def raise_if_str(value):
+            if isinstance(value, str):
+                raise ValueError('str found, {value!r}')
+            return False
+
+        it.match(raise_if_str)
+        it.rmatch(raise_if_str)
+        t.match(raise_if_str)
+        t.rmatch(raise_if_str)
+
+        seven2 = it.match(lambda value: value == 7)
+        self.assertNode(seven2)
+        self.assertEqual(seven2.value, 7)
+        one2 = it.rmatch(lambda value: value == 1)
+        self.assertNode(one2)
+        self.assertEqual(one2.value, 1)
+
+
+
+
+
 
 
 def run_tests():
