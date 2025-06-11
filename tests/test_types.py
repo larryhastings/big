@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 big_dir = bigtestlib.preload_local_big()
 
+import itertools
 from itertools import zip_longest
 import pickle
 import string
@@ -1281,12 +1282,14 @@ class BigStringTests(unittest.TestCase):
 
 
 class BigLinkedListTests(unittest.TestCase):
+    def assertLength(self, o, length):
+        self.assertEqual(len(o), length)
+
     def assertLinkedListEqual(self, t, expected):
         self.assertIsInstance(t, LinkedList)
         expected = list(expected)
         got = list(iter(t))
         self.assertEqual(expected, got)
-
 
     def assertPseudonode(self, cursor):
         self.assertIsNotNone(cursor)
@@ -1352,6 +1355,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         initial = [1, 2, 3, 4, 5]
         t = LinkedList(initial)
+        self.assertLength(t, 5)
         it = iter(t)
         result = list(it)
         self.assertEqual(initial, result)
@@ -1365,10 +1369,13 @@ class BigLinkedListTests(unittest.TestCase):
     def testEmptyList(self):
         # if the list is empty:
         t = LinkedList()
+        self.assertFalse(t)
 
-        # after the initial iterator is tail
+        # "after" head is tail
         it = iter(t)
+        self.assertTrue(it)
         after = it.after()
+        self.assertFalse(after)
         self.assertTail(after)
 
         # if you run next on it, it goes to tail and stays there
@@ -1383,11 +1390,11 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertTail(it)
 
 
-        # after the initial reversed iterator is head
+        # after tail (reversed) is head
         rit = reversed(t)
-        self.assertTail(rit)
         self.assertTrue(rit)
         after = rit.after()
+        self.assertFalse(after)
         self.assertHead(after)
 
         # if you run next on it, it goes to head and stays there
@@ -1400,7 +1407,42 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertFalse(rit)
         self.assertHead(rit)
 
-    def testSloppy(self):
+        # can't pop from an empty list
+        with self.assertRaises(ValueError):
+            t.pop()
+        with self.assertRaises(ValueError):
+            t.popleft()
+
+    def testExtend(self):
+        def setup():
+            t = LinkedList((1, 2, 3))
+            self.assertLength(t, 3)
+            it = iter(t)
+            return t, it
+
+        t, it = setup()
+        t.extend('ABC')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'A', 'B', 'C'])
+        self.assertLength(t, 6)
+
+        t, it = setup()
+        t.extendleft('ABC')
+        self.assertLinkedListEqual(t, ['A', 'B', 'C', 1, 2, 3])
+        self.assertLength(t, 6)
+
+        t, it = setup()
+        it = it.find(1)
+        it.extend('ABC')
+        self.assertLinkedListEqual(t, [1, 'A', 'B', 'C', 2, 3])
+        self.assertLength(t, 6)
+
+        t, it = setup()
+        it = it.find(3)
+        it.extendleft('ABC')
+        self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
+        self.assertLength(t, 6)
+
+    def testSloppyPrependAndAppend(self):
         # inserting after head must work
         t = LinkedList()
         it = iter(t)
@@ -1426,6 +1468,28 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, ['Z'])
 
 
+    def testPseudonodes(self):
+        t = LinkedList('a')
+        self.assertTrue(t)
+        self.assertEqual(repr(t), "LinkedList(['a'])")
+
+        it = iter(t).after()
+        copy = it.copy(); copy.pop()
+        # test repr with a deleted node
+        self.assertEqual(repr(t), "LinkedList([])")
+        self.assertFalse(t)
+
+        with self.assertRaises(PseudonodeError):
+            iter(t).pop()
+        with self.assertRaises(PseudonodeError):
+            reversed(t).pop()
+        with self.assertRaises(PseudonodeError):
+            it.pop()
+
+        # white box test of repr
+        self.assertEqual(repr(t.head), "LinkedListNode(None (head))")
+
+
 
     def testDeletedNode(self):
         def setup():
@@ -1439,6 +1503,7 @@ class BigLinkedListTests(unittest.TestCase):
         t, it = setup()
         self.assertEqual(list(    iter(t)), [1, 2, 3, 4, 5, 6])
         self.assertEqual(list(reversed(t)), [6, 5, 4, 3, 2, 1])
+        self.assertLength(t, 6)
         self.assertDeleted(it)
         self.assertIsInstance(it, LinkedListIterator)
         with self.assertRaises(PseudonodeError):
@@ -1537,42 +1602,55 @@ class BigLinkedListTests(unittest.TestCase):
         t, it = setup()
         it.prepend('Z')
         self.assertLinkedListEqual(t, [1, 2, 3, 'Z', 4, 5, 6])
+        self.assertLength(t, 7)
 
         t, it = setup()
         it.append('Q')
         self.assertLinkedListEqual(t, [1, 2, 3, 'Q', 4, 5, 6])
+        self.assertLength(t, 7)
 
         t, it = setup()
         rit = reversed(it)
         rit.prepend('J')
         self.assertLinkedListEqual(t, [1, 2, 3, 'J', 4, 5, 6])
+        self.assertLength(t, 7)
 
         t, it = setup()
         rit = reversed(it)
         rit.append('K')
         self.assertLinkedListEqual(t, [1, 2, 3, 'K', 4, 5, 6])
+        self.assertLength(t, 7)
 
 
         #
         # test navigating past deleted nodes
         #
 
-        # smoke-check: this works to delete nodes, right?
         def setup():
             t = LinkedList(('a', 1, 'b', 2, 'c', 'd', 'e', 3, 4, 5, 'f', 'g', 'h', 6, 'i', 7, 'j'))
             it = iter(t)
-            return t, it
+            def delete_str_nodes():
+                it = iter(t)
+                for value in it:
+                    if isinstance(value, str):
+                        it.pop()
 
-        t, it = setup()
-        for value in it:
-            if isinstance(value, str):
-                it.pop()
+            self.assertLength(t, 17)
+            return t, it, delete_str_nodes
+
+        # smoke-check: we can delete nodes in a loop, right?
+        t, it, delete_str_nodes = setup()
+        delete_str_nodes()
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(list(reversed(t)), [7, 6, 5, 4, 3, 2, 1])
 
+        # test removing each individual character
+        # and make sure find and match all work
         for c in 'abcdefghij':
             with self.subTest(c=c):
-                t, it = setup()
+                t, it, delete_str_nodes = setup()
                 t.remove(c)
+                self.assertLength(t, 16)
                 self.assertIsNone(t.find(c))
                 self.assertIsNone(t.rfind(c))
                 for i in range(1, 8):
@@ -1580,36 +1658,32 @@ class BigLinkedListTests(unittest.TestCase):
                         it = t.find(i)
                         self.assertNode(it)
                         self.assertEqual(it.value, i)
-                        it = t.rfind(i)
+                        rit = t.rfind(i)
+                        self.assertNode(rit)
+                        self.assertEqual(rit.value, i)
+
+                        it = t.match(lambda value: value==i)
                         self.assertNode(it)
                         self.assertEqual(it.value, i)
+                        rit = t.rmatch(lambda value: value==i)
+                        self.assertNode(rit)
+                        self.assertEqual(rit.value, i)
 
+        t, it, delete_str_nodes = setup()
 
-        # keep references to every node, to keep the nodes alive
-        it = iter(t)
+        # keep references to every node, to keep the deleted nodes alive
         iterators = []
         while it:
             iterators.append(it)
             it = it.after()
 
-        t, it = setup()
-
-        # keep references to every node, to keep the nodes alive
-        iterators = []
-        while it:
-            iterators.append(it)
-            it = it.after()
-
-        # delete nodes with a str value
-        t.remove('e') # test remove!
-        it = iter(t)
-        for value in it:
-            if isinstance(value, str):
-                it.pop()
-
+        delete_str_nodes()
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7])
+        self.assertLength(t, 7)
 
+        # now, starting from the center:
         it = t.find(3)
+
         seven = it.find(7)
         self.assertNode(seven)
         self.assertEqual(seven.value, 7)
@@ -1634,8 +1708,68 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertNode(one2)
         self.assertEqual(one2.value, 1)
 
+        # prepend and append from two different deleted nodes
+        # in any order should always produce the same result
+        expected = [0, 1, 2, 3, 4, 5]
+        for ordering in itertools.permutations([0, 1, 2, 3]):
+            with self.subTest(ordering=ordering):
+                t = LinkedList([0, 'a', 'b', 5])
+                it1 = t.find('a')
+                copy = it1.copy(); copy.pop()
+                it2 = t.find('b')
+                copy = it2.copy(); copy.pop()
+
+                operations = [
+                    lambda: it1.prepend(1),
+                    lambda: it1.append(2),
+                    lambda: it2.prepend(3),
+                    lambda: it2.append(4),
+                    ]
+                for index in ordering:
+                    operations[index]()
+                self.assertLength(t, 6)
+                self.assertLinkedListEqual(t, expected)
+
+        # test clear
+        t, it, delete_str_nodes = setup()
+        self.assertLength(t, 17)
+        t.clear()
+        self.assertLength(t, 0)
+        self.assertFalse(t)
+        self.assertEqual(repr(t), 'LinkedList([])')
+        for value in t:
+            self.assertTrue(False) # shouldn't reach here!
 
 
+        t, it, delete_str_nodes = setup()
+        # keep references to every node, to keep the deleted nodes alive
+        iterators = []
+        while it:
+            iterators.append(it)
+            it = it.after()
+        delete_str_nodes()
+        t.clear()
+        self.assertFalse(t)
+        self.assertEqual(repr(t), 'LinkedList([])')
+        for value in t:
+            self.assertTrue(False) # shouldn't reach here!
+
+
+        t, it, delete_str_nodes = setup()
+        self.assertLength(t, 17)
+        self.assertEqual(t.pop(), 'j')
+        self.assertLength(t, 16)
+        self.assertEqual(t.pop(), 7)
+        self.assertLength(t, 15)
+        self.assertEqual(t.pop(), 'i')
+        self.assertLength(t, 14)
+
+        self.assertEqual(t.popleft(), 'a')
+        self.assertLength(t, 13)
+        self.assertEqual(t.popleft(), 1)
+        self.assertLength(t, 12)
+        self.assertEqual(t.popleft(), 'b')
+        self.assertLength(t, 11)
 
 
 

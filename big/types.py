@@ -767,16 +767,6 @@ class String(str):
 
 
     def _split(self, sep, maxsplit, reverse):
-        # print(f"_split({repr(str(self))}, {sep=}, {maxsplit=}, {reverse=})")
-        # klass = self.__class__
-        # source = self._source
-        # origin = self._origin
-        # offset = self._offset
-        # line_number = self._line_number
-        # column_number = self._column_number
-        # first_line_number = self._first_line_number
-        # first_column_number = self._first_column_number
-
         # for now, just worry about correctness.
         # we can make this faster later.
         # (that said, this seems like it's okay.)
@@ -877,20 +867,6 @@ class String(str):
     ##
     ## extensions
     ##
-
-    # if 1:
-    #     def print_linebreak_offsets(self):
-    #         start = 0
-    #         print(repr(str(self)))
-    #         print("    (")
-    #         if self._linebreak_offsets is None:
-    #             self._compute_linebreak_offsets()
-    #         if self._linebreak_offsets:
-    #             for i, offset in enumerate(self._linebreak_offsets):
-    #                 end = offset
-    #                 print(f"    [{i:3}] {offset:3} {str(self)[start:end]!r}")
-    #                 start = end
-    #         print("    )")
 
     def _calculate_line(self, line_number):
         origin = self._origin
@@ -1060,7 +1036,7 @@ class LinkedListNode:
         self.value = value
         self.special = None # None, 'deleted', 'head', or 'tail'
         self.next = self.previous = None
-        self.irc = 0 # iterator reference count
+        self.iterator_refcount = 0
 
     def insert_before(self, value):
         "inserts value into the linked list in front of self."
@@ -1076,6 +1052,9 @@ class LinkedListNode:
         node.previous = previous
         previous.next = self.previous = node
 
+    def clear(self):
+        self.special = self.previous = self.next = self.value = self.iterator_refcount = None
+
     def unlink(self):
         # don't bother checking if self.special == 'deleted' or whatnot.
         # we might get called during shutdown while the GC is trying to
@@ -1089,8 +1068,7 @@ class LinkedListNode:
         if next:
             next.previous = previous
 
-        # deconstruct node
-        self.special = self.previous = self.next = self.value = self.irc = None
+        self.clear()
 
     def remove(self):
         if self.special:
@@ -1098,7 +1076,7 @@ class LinkedListNode:
 
         value = self.value
 
-        if not self.irc:
+        if not self.iterator_refcount:
             self.unlink()
         else:
             self.special = 'deleted'
@@ -1109,6 +1087,7 @@ class LinkedListNode:
         special = f" ({self.special})" if self.special else ''
         return f"LinkedListNode({self.value!r}{special})"
 
+
 @export
 class LinkedList:
     def __init__(self, iterable=()):
@@ -1117,6 +1096,7 @@ class LinkedList:
         head.next = self.tail = tail = LinkedListNode(None)
         tail.special = 'tail'
         tail.previous = self.head
+        self.length = 0
         for value in iterable:
             self.append(value)
 
@@ -1145,13 +1125,30 @@ class LinkedList:
         return LinkedListReverseIterator(self)
 
     def __bool__(self):
-        return self.head.next != self.tail
+        return self.length > 0
+
+    def __len__(self):
+        return self.length
 
     def append(self, value):
+        self.length += 1
         self.tail.insert_before(value)
 
+    def extend(self, iterable):
+        insert_before = self.tail.insert_before
+        for value in iterable:
+            self.length += 1
+            insert_before(value)
+
     def appendleft(self, value):
+        self.length += 1
         self.head.next.insert_before(value)
+
+    def extendleft(self, iterable):
+        insert_before = self.head.next.insert_before
+        for value in iterable:
+            self.length += 1
+            insert_before(value)
 
     prepend = appendleft
 
@@ -1159,56 +1156,42 @@ class LinkedList:
         head = self.head
         tail = self.tail
 
-        # point cursor at the first node (if any),
+        # point cursor at the first node (if any)
+        previous = head
         cursor = head.next
 
-        # unlink all the nodes in the list,
-        head.next = self.tail
-        tail.previous = self.head
-
-        # and clean up all the nodes in the list:
         while cursor != tail:
             next = cursor.next
+            if cursor.iterator_refcount:
+                # keep node, but demote to "deleted"
+                previous.special = 'deleted'
+                previous.value = None
 
-            # in case there are any iterators
-            # still pointing at this node:
+                previous.next = cursor
+                cursor.previous = previous
 
-            # drop the reference to the value.
-            cursor.value = None
-
-            # mark the node as deleted,
-            # so the iterator will know it's inactive.
-            cursor.special = 'deleted'
-
-            # set the irc to -1.
-            # iterators exiting this node don't need
-            # to bother unlinking the node from the list;
-            # the node is already unlinked.  we won't add
-            # any new iterators pointing here, so by making
-            # irc -1, they will only decrement it, so we'll
-            # never reach 0 and try to unlink the node.
-            cursor.irc = -1
-
-            # point previous and next directly
-            # at "head" and "tail" respectively,
-            # any remaining iterators that call
-            # previous() or next() will transition
-            # directly to one of those.
-            cursor.previous = head
-            cursor.next = tail
-
+                previous = cursor
+            else:
+                # drop node
+                cursor.clear()
             cursor = next
+
+        tail.previous = previous
+        previous.next = tail
+        self.length = 0
 
     def pop(self):
         node_before_tail = self.tail.previous
         if node_before_tail == self.head:
             raise ValueError('LinkedList is empty')
+        self.length -= 1
         return node_before_tail.remove()
 
     def popleft(self):
         node_after_head = self.head.next
         if node_after_head == self.tail:
             raise ValueError('LinkedList is empty')
+        self.length -= 1
         return node_after_head.remove()
 
     def find(self, value):
@@ -1224,7 +1207,13 @@ class LinkedList:
         return reversed(self).match(predicate)
 
     def remove(self, value, default=_undefined):
-        return iter(self).remove(value)
+        it = iter(self).find(value)
+        if it is None:
+            if default is not _undefined:
+                return default
+            raise IndexError
+        self.length -= 1
+        return it.cursor.remove()
 
 
 @export
@@ -1232,26 +1221,27 @@ class LinkedListIterator:
     def __init__(self, linked_list):
         self.linked_list = linked_list
         self.cursor = cursor = linked_list.head
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
 
     def __repr__(self):
         return f"<{self.__class__.__name__} cursor={self.cursor!r}>"
 
     def __del__(self):
         # drop our reference to the current node.
-        # that means decrementing node.irc.
-        # and if node.irc reaches 0, we *gotta* call unlink.
+        # that means decrementing node.iterator_refcount.
+        # and if node.iterator_refcount reaches 0,
+        # we *gotta* call unlink.
         self.linked_list = None
         cursor = self.cursor
         if cursor is None:
             return
         self.cursor = None
-        irc = cursor.irc
-        if irc is None:
+        iterator_refcount = cursor.iterator_refcount
+        if iterator_refcount is None:
             return
-        irc -= 1
-        cursor.irc = irc
-        if (not irc) and (cursor.special == 'deleted'):
+        iterator_refcount -= 1
+        cursor.iterator_refcount = iterator_refcount
+        if (not iterator_refcount) and (cursor.special == 'deleted'):
             unlink = cursor.unlink
             if unlink is not None:
                 unlink()
@@ -1266,7 +1256,7 @@ class LinkedListIterator:
         cursor = self.cursor
         copy = LinkedListReverseIterator(self.linked_list)
         copy.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return copy
 
     def __next__(self):
@@ -1276,9 +1266,9 @@ class LinkedListIterator:
         if special == 'tail':
             raise StopIteration
 
-        cursor.irc = irc = cursor.irc - 1
+        cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         next = cursor.next
-        if (not irc) and (special == 'deleted'):
+        if (not iterator_refcount) and (special == 'deleted'):
             cursor.unlink()
         cursor = next
         special = cursor.special
@@ -1288,7 +1278,7 @@ class LinkedListIterator:
             special = cursor.special
 
         self.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
 
         if special == 'tail':
             raise StopIteration
@@ -1310,9 +1300,9 @@ class LinkedListIterator:
         if special == 'head':
             raise StopIteration
 
-        cursor.irc = irc = cursor.irc - 1
+        cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         previous = cursor.previous
-        if (not irc) and (special == 'deleted'):
+        if (not iterator_refcount) and (special == 'deleted'):
             cursor.unlink()
         cursor = previous
         special = cursor.special
@@ -1322,7 +1312,7 @@ class LinkedListIterator:
             special = cursor.special
 
         self.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
 
         if special == 'head':
             raise StopIteration
@@ -1341,7 +1331,7 @@ class LinkedListIterator:
         cursor = self.cursor
         copy = self.__class__(self.linked_list)
         copy.cursor = self.cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return copy
 
     def before(self):
@@ -1352,6 +1342,7 @@ class LinkedListIterator:
             cursor = cursor.previous
         it = self.__class__(self.linked_list)
         it.cursor = cursor
+        cursor.iterator_refcount += 1
         return it
 
     def after(self):
@@ -1362,6 +1353,7 @@ class LinkedListIterator:
             cursor = cursor.next
         it = self.__class__(self.linked_list)
         it.cursor = cursor
+        cursor.iterator_refcount += 1
         return it
 
     @property
@@ -1387,10 +1379,11 @@ class LinkedListIterator:
         cursor = self.cursor
         if cursor.special:
             raise PseudonodeError
-        cursor.irc -= 1
+        cursor.iterator_refcount -= 1
         value = cursor.remove()
         self.cursor = destination
-        destination.irc += 1
+        destination.iterator_refcount += 1
+        self.linked_list.length -= 1
         return value
 
     def pop(self):
@@ -1424,16 +1417,37 @@ class LinkedListIterator:
         if cursor.special == 'head':
             # API affordance: allow "sloppy insert" *before* 'head'
             cursor = cursor.next
+        # it's okay if cursor is a deleted node here.
+        self.linked_list.length += 1
         cursor.insert_before(value)
 
     insert = prepend
 
-    def append(self, value):
+    def extend(self, iterable):
         cursor = self.cursor
-        # API affrdance: allow "sloppy append" *after* 'tail'
         if cursor.special != 'tail':
             cursor = cursor.next
+        linked_list = self.linked_list
+        insert_before = cursor.insert_before
+        for value in iterable:
+            linked_list.length += 1
+            insert_before(value)
+
+    def append(self, value):
+        cursor = self.cursor
+        # API affordance: allow "sloppy append" *after* 'tail'
+        if cursor.special != 'tail':
+            cursor = cursor.next
+        # it's okay if cursor is a deleted node here.
+        self.linked_list.length += 1
         cursor.insert_before(value)
+
+    def extendleft(self, iterable):
+        linked_list = self.linked_list
+        insert_before = self.cursor.insert_before
+        for value in iterable:
+            linked_list.length += 1
+            insert_before(value)
 
     def find(self, value):
         cursor = self.cursor
@@ -1448,7 +1462,7 @@ class LinkedListIterator:
 
         result = self.__class__(self.linked_list)
         result.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return result
 
     def rfind(self, value):
@@ -1464,7 +1478,7 @@ class LinkedListIterator:
 
         result = self.__class__(self.linked_list)
         result.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return result
 
     def match(self, predicate):
@@ -1480,7 +1494,7 @@ class LinkedListIterator:
 
         result = self.__class__(self.linked_list)
         result.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return result
 
     def rmatch(self, predicate):
@@ -1496,7 +1510,7 @@ class LinkedListIterator:
 
         result = self.__class__(self.linked_list)
         result.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return result
 
 
@@ -1511,7 +1525,7 @@ class LinkedListReverseIterator(LinkedListIterator):
         cursor = self.cursor
         copy = LinkedListIterator(self.linked_list)
         copy.cursor = cursor
-        cursor.irc += 1
+        cursor.iterator_refcount += 1
         return copy
 
     def __next__(self):
@@ -1534,6 +1548,12 @@ class LinkedListReverseIterator(LinkedListIterator):
 
     def append(self, value):
         return super().prepend(value)
+
+    def extend(self, value):
+        return super().extendleft(value)
+
+    def extendleft(self, value):
+        return super().extend(value)
 
     def pop(self):
         return self._pop(self.cursor.next)
