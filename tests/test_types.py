@@ -35,7 +35,7 @@ import sys
 import unittest
 
 from big.types import String, Pattern
-from big.types import LinkedList, PseudonodeError
+from big.types import LinkedList, SpecialNodeError
 from big.types import LinkedListIterator, LinkedListReverseIterator
 from big.tokens import *
 
@@ -1291,7 +1291,7 @@ class BigLinkedListTests(unittest.TestCase):
         got = list(iter(t))
         self.assertEqual(expected, got)
 
-    def assertPseudonode(self, cursor):
+    def assertSpecialNode(self, cursor):
         self.assertIsNotNone(cursor)
         self.assertTrue(hasattr(cursor, 'special'))
         self.assertTrue(cursor.special)
@@ -1327,11 +1327,11 @@ class BigLinkedListTests(unittest.TestCase):
         it = iter(t)
         self.assertHead(it)
         self.assertTrue(it)
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.value
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.pop()
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.popleft()
 
         # and before it is None
@@ -1342,11 +1342,11 @@ class BigLinkedListTests(unittest.TestCase):
         rit = reversed(t)
         self.assertTail(rit)
         self.assertTrue(rit)
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             rit.value
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             rit.pop()
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             rit.popleft()
 
         # and before it (reversed!) is None
@@ -1479,15 +1479,15 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(repr(t), "LinkedList([])")
         self.assertFalse(t)
 
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             iter(t).pop()
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             reversed(t).pop()
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.pop()
 
         # white box test of repr
-        self.assertEqual(repr(t.head), "LinkedListNode(None (head))")
+        self.assertEqual(repr(t._head), "LinkedListNode(None (head))")
 
 
 
@@ -1506,11 +1506,11 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 6)
         self.assertDeleted(it)
         self.assertIsInstance(it, LinkedListIterator)
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.value
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.pop()
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             it.popleft()
 
         copy = it.copy()
@@ -1555,11 +1555,11 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertDeleted(rit)
         self.assertIsInstance(rit, LinkedListReverseIterator)
         self.assertTrue(rit)
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             rit.value
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             rit.pop()
-        with self.assertRaises(PseudonodeError):
+        with self.assertRaises(SpecialNodeError):
             rit.popleft()
 
         copy = rit.copy()

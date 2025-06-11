@@ -29,7 +29,11 @@ It's the code you *would* have written... if only you had the time.
 It's a real pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
-required dependencies (unless you want to run the test suite).
+required dependencies to run.  (**big**'s test suite
+havs a few external dependencies, but **big** itself will
+run fine without them.)
+**big** is 100% pure Python code--it doesn't need to compile
+any native code in order to run.
 The current version is [0.13.](#013)
 
 *Think big!*
@@ -4618,9 +4622,181 @@ returns the string `'1.3'`.
 
 # Topic deep-dives
 
-## The big `String` object
+## The big `String`
 
 <dl><dd>
+
+Python's `tokenize` and `re` (regular expression) modules both had to
+solve an API problem.  In both cases, you provide a large string of text
+to them, and they return little substrings, tiny little slices of the
+big string.  Often, the user wants to know *where* those little slices
+came from.  How do you communicate that?
+
+In both cases, they added extra information accompanying the string.
+`tokenize.tokenize` returns a `TokenInfo` object
+[https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](containing
+the line and column numbers of the string it contains).  And the regular
+expression engine returns
+[https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](a `Match` object)
+which tells you the index where the string started in the original string.
+
+This is sufficient--barely--but it's fragile.  What if you further
+subdivide the string?  What if you join the text with its antecedent
+or subsequent text from the original?  Now you have to clumsily
+track these offsets yourself.  And if you want line and column
+information the re module's `Match` object is of no help.
+
+And what if you're parsing your text yourself, rather than using
+`tokenize` or `re`?  If you split up a string into lines using the
+`splitlines` method on a string, you have to track the line numbers
+yourself.  Worse yet, if you split by lines, then use `re` to subdivide
+the string, you have to mate your offset tracking with the `re.Match`
+object's tracking.  What a pain!
+
+big's `String` object solves all that.  It's a drop-in replacement for
+Python's `str` object, and in fact is a subclass of `str`.  The functionality
+it adds: any time you extract a substring of a `String` object, the substring
+knows its *own* offset, line number, and column number relative to the original
+string!  You don't need to figure it out yourself, and you don't need to store
+the information separately in a fragile external object.  Any time you have a
+`String` object, you *automatically* know where it came from.
+(You can also specify a "source" for the text--a filename or what
+have you--and the `String` object will retain that too.)
+
+This makes producing syntax error messages effortless.  If `s` is a `String`
+object, and represents a syntax error because it was an unexpected token,
+you can simply write this:
+
+```Python
+raise SyntaxError(f'{s.where}: unexpected token {s}')
+```
+
+The `where` property is a pre-formatted string containing the line and
+column information for the string; if you specified a "source",
+it contains that too.  If you initialized the `String` with "source"
+set to `/home/larry/myscript.py`, and `s` was the token `whule` (whoops!
+mistyped `while`!), from line number 12 and column number 15, the text
+of the exception would read:
+
+```
+"/home/larry/myscript.py" line 12 column 15: unexpected token 'whule'
+```
+
+#### Tomorrow's methods, today
+
+big supports older versions of Python; as of this writing it supports all
+the way back to 3.6, which has been unsupported by Python itself for several
+years now.
+
+The `String` object supports *all* the methods of the `str` object.  At the
+moment there's a new `str` method as of version 3.7, `isascii`.  Rather than
+only provide that in 3.7+, `String` makes that available in 3.6 too.
+
+#### Naughty modules not honoring the subclass
+
+It was important that `String` not only be a drop-in replacement for `str`.
+The only way for that to work: it had to literally *be* a subclass of `str`.
+There's a lot of code that says
+```Python
+if isinstance(obj, str):
+```
+and if `String` objects failed that test they'd break code.
+
+This has an unfortunate side-effect.  CPython ships with modules in its
+standard library written in C that check to see "is this object a `str` object?"
+And if the object passes that test, they use low-level C API calls on the `str`
+object to interact with it.  The problem is, these low-level C API calls ignore
+the fact that this is a *subclass* of `str`, and they sidestep the overloaded
+behaviors of the `String` object.  This means that, for example, when they
+extract a substring from the object, they don't get a `String` object preserving
+the offsets, they just get a plain old `str` object.
+
+Fixing this in CPython would be worthwhile, but it'd be a lot of work and it
+would only benefit the future.  We want to solve our problem today.  So big
+provides workarounds for the two worst offenders: `re` and `tokenize`.
+big's `String` object has a `compile` method that is a drop-in replacement
+for `re.compile`, and all the methods you call on it will return `String`
+objects instead of `str` objects.  The `String` object also has a method
+called `generate_tokens` that produces the same output as `tokenize.generate_tokens`,
+except (of course!) all the strings returned in its `TokenInfo` objects
+are `String` objects.
+
+Unfortunately, there's one more wrinkle.  For reasons I cannot imagine,
+the objects in CPython's `re` module neither let you instantitate them,
+nor subclass them.  This means it's *impossible* for `String.compile` to
+return objects that pass `isinstance` tests.  `String.compile` returns
+a `Pattern` object, but it's *not* an instance of `re.Pattern`, and
+`isinstance` tests will fail.  **big** was forced to reimplement these
+objects, and we ensure they behave identically to the originals, but
+CPython makes this facet of incompatibility unfixable.
+
+
+</dd></dl>
+
+## The big `LinkedList`
+
+<dl><dd>
+
+big's `LinkedList` behaves like a list or deque: you add values to it,
+and it maintains them in order and manages the storage.  Internally it's a
+traditional doubly-linked-list structure with its own nodes.
+
+The `LinkedList` object supports a subset of the methods on list (or deque):
+it has `append`, and `prepend` (also known as `appendleft`), and `pop` and `popleft`.
+But most of the time you won't use those--you'll be modifying the list via an *iterator.*
+
+With a doubly-linked list, conceptually you want to operate on the list locally, not
+globally.  You're going to be navigating around somewhere in the middle of the
+list--who knows where!--and you're examining values, and maybe adding and removing nodes
+relative to where you're doing your work.  And what is the Python object that helps you
+navigate the values of an iterable?  That's right, an *iterator.*
+
+#### `LinkedList` iterators
+
+LinkedList iterators are more like *database cursors.*  Not only can you iterate over the
+values of a `LinkedList` using one, you can also modify the list!  `LinkedListIterator`
+objects have methods like `insert` (also known as `prepend`), `append`, `pop`, `popleft`...
+These all operate relative to the linked list node the iterator is currently pointing to.
+
+LinkedList iterators also support find and rfind, but with a twist: instead of returning an index where the value was found, they return an iterator pointing at the node where the value was found.  There's also match and rmatch, where you pass in a callable that tests the value; if the callable returns True we return an iterator pointing at that node.  find / match / etc return None if a desired node was not found.
+
+(The before() and after() methods on an iterator also return iterators, pointing at the previous and next nodes respectively.)
+
+#### Pseudonodes
+
+Now it's time to talk about "pseudonodes".  This started as an internal implementation detail, but the abstraction got kinda leaky and it seemed better to embrace reality and make it a first-class part of the API.  With LinkedList, "head" and "tail" are special nodes in the linked list, not pointers stored in the LinkedList instance--an "empty" LinkedList actually contains two nodes, "head" and "tail".
+
+The two rules about pseudonodes are:
+
+* Pseudonodes never have a value.
+* When an iterator navigates through a LinkedList, it automatically skips over pseudonodes.
+
+So for example: if you create a new empty list (t = LinkedList()), and you create an iterator over that empty linked list (it = iter(t)), it starts out pointing at "head".  When you iterate it advances to "tail" and raises StopIteration.  (Reverse iterators start out pointing at "tail", and raise StopIteration when they reach "head", and next and previous are reversed.)
+
+If you create a linked list with two nodes (t = LinkedList((1, 2))), and you create an iterator over it (it = iter(t)), when you call next() it advances to the first data node and yields its value.  Now your iterator is "pointing at" the value 1.  You can insert or append new values, relative to 1 in the linked list!  All the iterator methods are performed relative to its current position--find, rfind, match, rmatch, before, after.  replace() lets you replace the value stored at that node.
+
+You can even pop() the current node.  When you pop(), the iterator cursor rewinds by one node and returns the value of the old node.  (popleft() does exactly the same thing, but advances one node forward.  These are reversed for reversed iterators.)  That's right, adding and removing nodes from a linked list while you're iterating over it is expressly supported.
+
+Now, you're a clever guy, you might already be thinking about the boundary case resulting from the above semantics.  What if someone else deletes a node while you're pointing at it?  Example:
+
+```Python
+    t = LinkedList((1, 2, 3))
+    it = t.find(2)            # it is now pointing at 2
+    copy = it.copy()          # copy is now an iterator also pointing at 2
+    copy.pop()                # pop() returned 2, copy is now pointing at 1
+```
+
+What does "it" point to now?  This is the third type of pseudonode: a "deleted" node.  Internally, nodes contain a reference count for how many iterators are pointing at them.  If the "iterator reference count" (irc) for a node is > 1 when they get popped, they don't get removed from the linked list.  Instead, they're demoted to a "deleted" pseudonode.  They forget their value, and they're marked as "deleted".  Most operations on "it" still work fine; you can sit there all day, and append and prepend new nodes, or call find or rmatch or copy or what have you.  But once the last iterator navigates away from that node, and the "irc" drops to zero, we actually remove the node for real.
+
+As per the two rules of pseudonodes: navigation methods on linked lists ignore deleted ndes.  When you execute next() on an iterator, if it lands on a deleted node it auto-advances, it skips past it.  find and match and before and after also ignore pseudonodes.
+
+This means, for example, that this code always works:
+
+    for value in linked_list:
+        examine(value)
+
+If examine() removes values from the linked list--or if someone else removes values, from another thread**--the iterator handles it and stays functional.  Unlike dict, which gets an upset tummy and raises "dict size change during iteration" at the slightest provocation.  Lame!
+
 
 
 
