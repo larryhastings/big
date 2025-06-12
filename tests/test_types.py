@@ -1291,32 +1291,27 @@ class BigLinkedListTests(unittest.TestCase):
         got = list(iter(t))
         self.assertEqual(expected, got)
 
-    def assertSpecialNode(self, cursor):
-        self.assertIsNotNone(cursor)
-        self.assertTrue(hasattr(cursor, 'special'))
-        self.assertTrue(cursor.special)
+    def assertSpecialNode(self, it):
+        self.assertIsNotNone(it)
+        self.assertTrue(it.special)
 
-    def assertHead(self, cursor):
-        self.assertIsNotNone(cursor)
-        self.assertTrue(hasattr(cursor, 'special'))
-        self.assertEqual(cursor.special, 'head')
+    def assertHead(self, it):
+        self.assertSpecialNode(it)
+        self.assertEqual(it.special, 'head')
 
-    def assertTail(self, cursor):
-        self.assertIsNotNone(cursor)
-        self.assertTrue(hasattr(cursor, 'special'))
-        self.assertEqual(cursor.special, 'tail')
+    def assertTail(self, it):
+        self.assertSpecialNode(it)
+        self.assertEqual(it.special, 'tail')
 
-    def assertDeleted(self, cursor):
-        self.assertIsNotNone(cursor)
-        self.assertTrue(hasattr(cursor, 'special'))
-        self.assertEqual(cursor.special, 'deleted')
+    def assertDeleted(self, it):
+        self.assertSpecialNode(it)
+        self.assertEqual(it.special, 'deleted')
 
     # "normal" node, that is
-    def assertNode(self, cursor):
-        self.assertIsNotNone(cursor)
-        self.assertTrue(hasattr(cursor, 'special'))
-        self.assertIsNone(cursor.special)
-
+    def assertNode(self, it):
+        self.assertIsNotNone(it)
+        self.assertTrue(it)
+        self.assertIsNone(it.special)
 
 
 
@@ -1442,6 +1437,239 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
         self.assertLength(t, 6)
 
+        def setup2():
+            t = LinkedList((1, 2, 3))
+            rit = reversed(t)
+            return t, rit
+
+        t, rit = setup2()
+        rit = rit.find(2)
+        rit.extend('ABC')
+        self.assertLinkedListEqual(t, [1, 'A', 'B', 'C', 2, 3])
+        self.assertLength(t, 6)
+
+        t, rit = setup2()
+        rit = rit.find(2)
+        rit.extendleft('ABC')
+        self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
+        self.assertLength(t, 6)
+
+
+    def testLinkedListMethods(self):
+        def setup():
+            t = LinkedList((1, 2, 3))
+            it = t.find(2)
+            return t, it
+
+        t, it = setup()
+        copy = t.copy()
+        self.assertEqual(t, copy)
+
+        copy.remove(2)
+        self.assertNotEqual(t, copy)
+        self.assertNotEqual(t, (1, 2, 4))
+
+        with self.assertRaises(IndexError):
+            t.remove('abcde')
+        got = t.remove('abcde', 'not found')
+        self.assertEqual(got, 'not found')
+
+        t, it = setup()
+        t.append('xyz')
+        self.assertLinkedListEqual(t, (1, 2, 3, 'xyz'))
+
+        t, it = setup()
+        t.prepend('abc')
+        self.assertLinkedListEqual(t, ('abc', 1, 2, 3))
+
+
+    def testWithDeletedNodes(self):
+        def setup():
+            # returns t, it, iterators
+            #
+            #   deleted nodes! --+--+--+-----+--+--+
+            #                    |  |  |     |  |  |
+            #                    v  v  v     v  v  v
+            # t = LinkedList((0, 1, 2, 3, 4, 5, 6, 7, 8))
+            #                             ^
+            #                             |
+            # it = iter pointing at 4 ----+
+            #
+            # iterators, array of iterators pointing at each node
+            t = LinkedList((0, 1, 2, 3, 4, 5, 6, 7, 8))
+            iterators = [t.find(i) for i in range(9)]
+            for i in (1, 2, 3, 5, 6, 7):
+                it = t.find(i)
+                it.pop()
+            it = t.find(4)
+            return t, it, iterators
+
+        t, it, iterators = setup()
+        copy = it.copy()
+        got = copy.previous()
+        self.assertEqual(got, 0)
+        self.assertEqual(copy.value, 0)
+        before = it.before()
+        self.assertEqual(before.value, 0)
+
+        copy = it.copy()
+        got = copy.next()
+        self.assertEqual(got, 8)
+        self.assertEqual(copy.value, 8)
+        after = it.after()
+        self.assertEqual(after.value, 8)
+
+        it1 = iterators[1]
+        with self.assertRaises(SpecialNodeError):
+            it1.replace('foo')
+
+        t, it, iterators = setup()
+        value = it.pop()
+        self.assertEqual(value, 4)
+        self.assertEqual(it.value, 0)
+
+        t, it, iterators = setup()
+        value = it.popleft()
+        self.assertEqual(value, 4)
+        self.assertEqual(it.value, 8)
+
+        t, it, iterators = setup()
+        it2 = iterators[2]
+        value = it2.previous()
+        self.assertEqual(value, 0)
+        self.assertEqual(it2.value, 0)
+
+        t, it, iterators = setup()
+        it6 = iterators[6]
+        value = it6.next()
+        self.assertEqual(value, 8)
+        self.assertEqual(it6.value, 8)
+
+        # try t.popleft when the node after head is deleted
+        t, it, iterators = setup()
+        t.remove(0)
+        value = t.popleft()
+        self.assertEqual(value, 4)
+        it = iter(t)
+        value = next(it)
+        self.assertEqual(value, 8)
+
+        # and pop when the node before tail is deleted
+        t, it, iterators = setup()
+        t.remove(8)
+        value = t.pop()
+        self.assertEqual(value, 4)
+        it = reversed(t)
+        value = next(it)
+        self.assertEqual(value, 0)
+
+
+    def testIteratorMethods(self):
+        def setup():
+            t = LinkedList([1, 2, 3, 4, 5])
+            it = t.find(3)
+            return t, it
+
+        t, it = setup()
+        self.assertEqual(it.value, 3)
+        self.assertEqual(repr(it), "<LinkedListIterator cursor=LinkedListNode(3)>")
+        copy = it.copy()
+        del(copy)
+        self.assertEqual(it.value, 3)
+
+        got = it.next()
+        self.assertEqual(got, 4)
+        self.assertEqual(it.value, 4)
+
+        got = it.next()
+        self.assertEqual(got, 5)
+        self.assertEqual(it.value, 5)
+
+        with self.assertRaises(StopIteration):
+            got = it.next()
+        got = it.next(None)
+        self.assertIsNone(got)
+        self.assertTail(it)
+
+        got = it.next(None)
+        self.assertIsNone(got)
+        self.assertTail(it)
+
+        t, it = setup()
+        self.assertEqual(it.value, 3)
+        got = it.previous()
+        self.assertEqual(got, 2)
+        self.assertEqual(it.value, 2)
+
+        got = it.previous()
+        self.assertEqual(got, 1)
+        self.assertEqual(it.value, 1)
+
+        with self.assertRaises(StopIteration):
+            got = it.previous()
+        got = it.previous(None)
+        self.assertIsNone(got)
+        self.assertHead(it)
+
+        got = it.previous(None)
+        self.assertIsNone(got)
+        self.assertHead(it)
+
+        t, it = setup()
+        before = it.before()
+        self.assertEqual(it.value, 3)
+        self.assertEqual(before.value, 2)
+        copy = before.copy()
+        copy.pop() # now before points at a deleted node
+        before2 = it.before() # skips over deleted node
+        self.assertEqual(before2.value, 1)
+
+        before2.replace('abc')
+        self.assertEqual(before2.value, 'abc')
+
+        got = before2.remove(5)
+        self.assertEqual(got, 5)
+        with self.assertRaises(ValueError):
+            got = before2.remove('qemm')
+        got = before2.remove('quarterdeck', 'not found')
+        self.assertEqual(got, 'not found')
+
+
+        t, it = setup()
+        after = it.after()
+        self.assertEqual(it.value, 3)
+        self.assertEqual(after.value, 4)
+        copy = after.copy()
+        copy.pop() # now after points at a deleted node
+        after2 = it.after() # skips over deleted node
+        self.assertEqual(after2.value, 5)
+
+        after2.replace('xyz')
+        self.assertEqual(after2.value, 'xyz')
+
+        t, it = setup()
+        rit = reversed(it)
+        it2 = reversed(rit)
+        self.assertEqual(it, it2)
+        self.assertEqual(it.value, it2.value)
+
+        # test del!
+        # white box testing.
+        t, it = setup()
+        del it
+
+        t, it = setup()
+        node = it._cursor
+        del node.iterator_refcount
+        del it
+
+        t, it = setup()
+        node = it._cursor
+        del it._cursor
+        del it._linked_list
+        del it
+
+
     def testSloppyPrependAndAppend(self):
         # inserting after head must work
         t = LinkedList()
@@ -1468,7 +1696,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, ['Z'])
 
 
-    def testPseudonodes(self):
+    def testSpecialNodes(self):
         t = LinkedList('a')
         self.assertTrue(t)
         self.assertEqual(repr(t), "LinkedList(['a'])")

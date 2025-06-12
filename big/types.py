@@ -1072,8 +1072,7 @@ class LinkedListNode:
         self.clear()
 
     def remove(self):
-        if self.special:
-            raise SpecialNodeError(f'attempted to remove special {cursor.special!r} node')
+        assert not self.special
 
         value = self.value
 
@@ -1115,6 +1114,14 @@ class LinkedList:
             cursor = cursor.next
         append("])")
         return ''.join(buffer)
+
+    def __eq__(self, other):
+        if self.__class__ != other.__class__:
+            return False
+        for value1, value2 in zip(iter(self), iter(other)):
+            if value1 != value2:
+                return False
+        return True
 
     def copy(self):
         return LinkedList(self)
@@ -1183,6 +1190,8 @@ class LinkedList:
 
     def pop(self):
         node_before_tail = self._tail.previous
+        while node_before_tail.special == 'deleted':
+            node_before_tail = node_before_tail.previous
         if node_before_tail == self._head:
             raise ValueError('LinkedList is empty')
         self._length -= 1
@@ -1190,6 +1199,8 @@ class LinkedList:
 
     def popleft(self):
         node_after_head = self._head.next
+        while node_after_head.special == 'deleted':
+            node_after_head = node_after_head.next
         if node_after_head == self._tail:
             raise ValueError('LinkedList is empty')
         self._length -= 1
@@ -1213,6 +1224,7 @@ class LinkedList:
             if default is not _undefined:
                 return default
             raise IndexError
+        assert not it._cursor.special # find should never return a special node
         self._length -= 1
         return it._cursor.remove()
 
@@ -1252,6 +1264,13 @@ class LinkedListIterator:
 
     def __bool__(self):
         return self._cursor.special != 'tail'
+
+    def __eq__(self, other):
+        return (
+            (self.__class__ == other.__class__)
+            and (self._linked_list == other._linked_list)
+            and (self._cursor == other._cursor)
+            )
 
     def __iter__(self):
         return self
