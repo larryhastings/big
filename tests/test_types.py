@@ -1403,9 +1403,9 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertHead(rit)
 
         # can't pop from an empty list
-        with self.assertRaises(ValueError):
+        with self.assertRaises(IndexError):
             t.pop()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(IndexError):
             t.popleft()
 
     def testExtend(self):
@@ -1469,7 +1469,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertNotEqual(t, copy)
         self.assertNotEqual(t, (1, 2, 4))
 
-        with self.assertRaises(IndexError):
+        with self.assertRaises(ValueError):
             t.remove('abcde')
         got = t.remove('abcde', 'not found')
         self.assertEqual(got, 'not found')
@@ -2215,15 +2215,15 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [6, 7, 8, 9])
 
         t, it = setup()
-        with self.assertRaises(StopIteration):
+        with self.assertRaises(IndexError):
             it.slice( 6)
-        with self.assertRaises(StopIteration):
+        with self.assertRaises(IndexError):
             it.popslice( 6)
 
         t, it = setup()
-        with self.assertRaises(StopIteration):
+        with self.assertRaises(IndexError):
             it.slice(-6)
-        with self.assertRaises(StopIteration):
+        with self.assertRaises(IndexError):
             it.popslice(-6)
 
         t, it = setup()
@@ -2242,15 +2242,30 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 7, 8, 9])
 
         t, it = setup()
-        self.assertLinkedListEqual(it.slice   (0, 4, 2), [5, 7, 9])
-        self.assertLinkedListEqual(it.popslice(0, 4, 2), [5, 7, 9])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 8])
+        self.assertLinkedListEqual(it.slice   (0, 4, 2), [5, 7])
+        self.assertLinkedListEqual(it.popslice(0, 4, 2), [5, 7])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 8, 9])
 
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-4, 4, 2), [1, 3, 5, 7])
+        self.assertLinkedListEqual(it.popslice(-4, 4, 2), [1, 3, 5, 7])
+        self.assertLinkedListEqual(t, [2, 4, 6, 8, 9])
 
         t, it = setup()
         self.assertLinkedListEqual(it.slice   (-4, 5, 2), [1, 3, 5, 7, 9])
         self.assertLinkedListEqual(it.popslice(-4, 5, 2), [1, 3, 5, 7, 9])
         self.assertLinkedListEqual(t, [2, 4, 6, 8])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-4, 6, 2), [1, 3, 5, 7, 9])
+        self.assertLinkedListEqual(it.popslice(-4, 6, 2), [1, 3, 5, 7, 9])
+        self.assertLinkedListEqual(t, [2, 4, 6, 8])
+
+        t = LinkedList(range(1, 12))
+        it = t.find(6)
+        self.assertLinkedListEqual(it.slice   (-4, 6, 3), [2, 5, 8, 11])
+        self.assertLinkedListEqual(it.popslice(-4, 6, 3), [2, 5, 8, 11])
+        self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
 
 

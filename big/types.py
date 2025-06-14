@@ -1127,114 +1127,8 @@ class LinkedList:
     ##     * in __eq__, only use ==
     ##     * in __ne__, only use !=
     ##
-
-    # def __eq__(self, other):
-    #     if self.__class__ != other.__class__:
-    #         return False
-    #     sentinel = object()
-    #     for value1, value2 in zip_longest(iter(self), iter(other), fillvalue=sentinel):
-    #         if (value1 is sentinel) or (value2 is sentinel):
-    #             # all values were equal up to this point, but the lists aren't the same length
-    #             return False
-    #         if value1 == value2:
-    #             continue
-    #         return False
-    #     # all values are equal, and the lists are the same length
-    #     return True
-
-    # def __ne__(self, other):
-    #     if self.__class__ != other.__class__:
-    #         return True
-    #     sentinel = object()
-    #     for value1, value2 in zip_longest(iter(self), iter(other), fillvalue=sentinel):
-    #         if (value1 is sentinel) or (value2 is sentinel):
-    #             # all values were equal up to this point, but the lists aren't the same length
-    #             return True
-    #         if value1 != value2:
-    #             return True
-    #     # all values are equal, and the lists are the same length
-    #     return False
-
-    # def __lt__(self, other):
-    #     if self.__class__ != other.__class__:
-    #         return NotImplemented
-    #     sentinel = object()
-    #     for value1, value2 in zip_longest(iter(self), iter(other), fillvalue=sentinel):
-    #         if value1 is sentinel:
-    #             # all values were equal up to this point, and self is shorter than other
-    #             return True
-    #         if value2 is sentinel:
-    #             # all values were equal up to this point, and other is shorter than self
-    #             return False
-    #         if value1 < value2:
-    #             return True
-    #         if value1 == value2:
-    #             continue
-    #         # value1 > value2
-    #         return False
-    #     # all values are equal, and the lists are the same length
-    #     return False
-
-    # def __le__(self, other):
-    #     if self.__class__ != other.__class__:
-    #         return NotImplemented
-    #     sentinel = object()
-    #     for value1, value2 in zip_longest(iter(self), iter(other), fillvalue=sentinel):
-    #         if value1 is sentinel:
-    #             # all values were equal up to this point, and self is shorter than other
-    #             return True
-    #         if value2 is sentinel:
-    #             # all values were equal up to this point, and other is shorter than self
-    #             return False
-    #         if value1 <= value2:
-    #             if value1 == value2:
-    #                 continue
-    #             return True
-    #         # value1 > value2
-    #         return False
-    #     # all values are equal, and the lists are the same length
-    #     return True
-
-    # def __ge__(self, other):
-    #     if self.__class__ != other.__class__:
-    #         return NotImplemented
-    #     sentinel = object()
-    #     for value1, value2 in zip_longest(iter(self), iter(other), fillvalue=sentinel):
-    #         if value1 is sentinel:
-    #             # all values were equal up to this point, and self is shorter than other
-    #             return False
-    #         if value2 is sentinel:
-    #             # all values were equal up to this point, and other is shorter than self
-    #             return True
-    #         if value1 >= value2:
-    #             if value1 == value2:
-    #                 continue
-    #             return True
-    #         # value1 < value2
-    #         return False
-    #     # all values are equal, and the lists are the same length
-    #     return True
-
-    # def __gt__(self, other):
-    #     if self.__class__ != other.__class__:
-    #         return NotImplemented
-    #     sentinel = object()
-    #     for value1, value2 in zip_longest(iter(self), iter(other), fillvalue=sentinel):
-    #         if value1 is sentinel:
-    #             # all values were equal up to this point, and self is shorter than other
-    #             return False
-    #         if value2 is sentinel:
-    #             # all values were equal up to this point, and other is shorter than self
-    #             return True
-    #         if value1 > value2:
-    #             return True
-    #         if value1 == value2:
-    #             continue
-    #         # value1 < value2
-    #         return False
-    #     # all values are equal, and the lists are the same length
-    #     return False
-
+    ## well, also len() on the list itself.
+    ##
 
     def __eq__(self, other):
         if self.__class__ != other.__class__:
@@ -1321,11 +1215,9 @@ class LinkedList:
 
     def __mul__(self, other):
         if not hasattr(other, '__index__'):
-            raise TypeError(f"LinkedList cannot be multiplied by {other!r}")
+            raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         index = other.__index__()
-        if other < 0:
-            raise ValueError(f"LinkedList can't be multiplied by {index}")
-        if other == 0:
+        if other <= 0:
             return LinkedList()
         t = self.__copy__()
         for _ in range(index - 1):
@@ -1334,11 +1226,9 @@ class LinkedList:
 
     def __imul__(self, other):
         if not hasattr(other, '__index__'):
-            raise TypeError(f"LinkedList cannot be multiplied by {other!r}")
+            raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         index = other.__index__()
-        if other < 0:
-            raise ValueError(f"LinkedList can't be multiplied by {index}")
-        if other == 0:
+        if other <= 0:
             return LinkedList()
         t = self.__copy__()
         for _ in range(index - 1):
@@ -1386,10 +1276,14 @@ class LinkedList:
         head = self._head
         tail = self._tail
 
-        # point cursor at the first node (if any)
         previous = head
+        # point cursor at the first node *after* head.
+        # (if that's tail, this will be quick!)
         cursor = head.next
 
+        # iterate through all nodes,
+        # keep nodes with a >0 iterator_refcount,
+        # manually re-linking them into the list.
         while cursor != tail:
             next = cursor.next
             if cursor.iterator_refcount:
@@ -1415,7 +1309,7 @@ class LinkedList:
         while node_before_tail.special == 'deleted':
             node_before_tail = node_before_tail.previous
         if node_before_tail == self._head:
-            raise ValueError('LinkedList is empty')
+            raise IndexError('pop from empty LinkedList')
         self._length -= 1
         return node_before_tail.remove()
 
@@ -1424,7 +1318,7 @@ class LinkedList:
         while node_after_head.special == 'deleted':
             node_after_head = node_after_head.next
         if node_after_head == self._tail:
-            raise ValueError('LinkedList is empty')
+            raise IndexError('pop from empty LinkedList')
         self._length -= 1
         return node_after_head.remove()
 
@@ -1445,7 +1339,17 @@ class LinkedList:
         if it is None:
             if default is not _undefined:
                 return default
-            raise IndexError
+            raise ValueError('LinkedList.remove(x): x not in linked list')
+        assert not it._cursor.special # find should never return a special node
+        self._length -= 1
+        return it._cursor.remove()
+
+    def rremove(self, value, default=_undefined):
+        it = reversed(self).find(value)
+        if it is None:
+            if default is not _undefined:
+                return default
+            raise ValueError('LinkedList.remove(x): x not in linked list')
         assert not it._cursor.special # find should never return a special node
         self._length -= 1
         return it._cursor.remove()
@@ -1649,65 +1553,66 @@ class LinkedListIterator:
             cursor = cursor.next
         return self._pop(cursor)
 
-    def _slice(self, start, stop, step, advance_name):
+    def _slice(self, start, stop, step, pop):
         start = start.__index__()
         if stop == _undefined:
-            if start < 0:
-                stop = 1
-                start += 1
-            else:
+            if start >= 0:
+                # slice(0), slice(5), etc
+                # start at it[0] and grab N values
                 stop = start
                 start = 0
+            else:
+                # slice(-1), slice(-5)
+                # start at (1+N) and grab N values
+                # so that the last value is it[0]
+                start += 1
+                stop = 1
         else:
             stop = stop.__index__()
+
         step = step.__index__()
-        if not step >= 1:
-            raise ValueError("step must be > 0")
+        if not step:
+            raise ValueError("step must not be 0")
 
         result = self._linked_list.__class__()
         if start == stop:
             return result
-
         append = result.append
+
         it = self.copy()
+        index = 0
+        advance = it.next
+        retreat = it.previous
+        if pop:
+            pop = it.pop
 
-        # resposition iterator as necessary.
-        # we always call "advance" to get the first value
-        # so we actually deposit it one before the position we want.
-        if start < 0:
-            for _ in range(0, start, -1):
-                it.previous()
-        elif start > 0:
-            for _ in range(0, start):
-                it.next()
+        for i in range(start, stop, step):
+            try:
+                if (index + 1) == i:
+                    # (hopefully) fast path
+                    index = i
+                    append(advance())
+                else:
+                    # slow path
+                    while i > index:
+                        advance()
+                        index += 1
+                    while i < index:
+                        retreat()
+                        index -= 1
+                    append(it.value)
+                if pop:
+                    pop()
+            except StopIteration:
+                raise IndexError("LinkedList index out of range") from None
 
-        advance = getattr(it, advance_name)
-        append(it.value)
-        if advance_name == 'popleft':
-            it.popleft()
-
-        if step == 1:
-            # fast path for step == 1
-            for _ in range(start + 1, stop, step):
-                if it.special:
-                    raise StopIteration
-                result.append(advance())
-        else:
-            # slow path that handles step >= 1
-            step_minus_1 = step - 1
-            for _ in range(start + 1, stop, step):
-                for __ in range(step_minus_1):
-                    next(it)
-                if it.special:
-                    raise StopIteration
-                result.append(advance())
         return result
 
     def slice(self, start, stop=_undefined, step=1):
-        return self._slice(start, stop, step, 'next')
+        return self._slice(start, stop, step, False)
 
     def popslice(self, start, stop=_undefined, step=1):
-        return self._slice(start, stop, step, 'popleft')
+        return self._slice(start, stop, step, True)
 
     def remove(self, value, default=_undefined):
         it = self.find(value)
