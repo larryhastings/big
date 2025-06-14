@@ -4742,15 +4742,6 @@ and it maintains them in order and manages the storage.  Internally it's a
 traditional doubly-linked-list structure; it creates nodes, which contain
 the forwards and backwards links and a reference to your value.
 
-The `LinkedList` object supports a subset of the methods on list (or deque):
-it has `append`, and `prepend` (also known as `appendleft`), and `pop` and `popleft`.
-But most of the time you won't use those--you'll be modifying the list via an *iterator.*
-
-With a doubly-linked list, conceptually you want to operate on the list *locally*,
-not *globally*.  You're going to be navigating around somewhere in the middle of the
-list--who knows where!--and you're examining values, and maybe adding and removing nodes
-relative to where you're doing your work.  And there's a specific Python object that
-helps you navigate through an iterable--the *iterator.*
 
 #### `LinkedList` methods
 
@@ -4781,6 +4772,17 @@ magic methods:
   same values in the same order.
 * `iter(t)` returns a forward iterator over `t`.
 * `reversed(t)` returns a reverse iterator over `t`.
+
+
+The `LinkedList` object supports a subset of the methods on list (or deque):
+it has `append`, and `prepend` (also known as `appendleft`), and `pop` and `popleft`.
+But most of the time you won't use those--you'll be modifying the list via an *iterator.*
+
+With a doubly-linked list, conceptually you want to operate on the list *locally*,
+not *globally*.  You're going to be navigating around somewhere in the middle of the
+list--who knows where!--and you're examining values, and maybe adding and removing nodes
+relative to where you're doing your work.  And there's a specific Python object that
+helps you navigate through an iterable--the *iterator.*
 
 
 #### `LinkedList` iterators
