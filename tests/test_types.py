@@ -2000,6 +2000,261 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 11)
 
 
+    def testRichCompare(self):
+        a        = LinkedList([1, 2, 2])
+        b        = LinkedList([1, 2, 3])
+        b_longer = LinkedList([1, 2, 3, 4])
+        c        = LinkedList([1, 2, 4])
+        pi       = 3.14159
+
+
+        # __eq__
+
+        self.assertTrue (a == a)
+        self.assertFalse(a == b)
+        self.assertFalse(a == b_longer)
+        self.assertFalse(a == c)
+
+        self.assertFalse(b == a)
+        self.assertTrue (b == b)
+        self.assertFalse(b == b_longer)
+        self.assertFalse(b == c)
+
+        self.assertFalse(b_longer == a)
+        self.assertFalse(b_longer == b)
+        self.assertTrue (b_longer == b_longer)
+        self.assertFalse(b_longer == c)
+
+        self.assertFalse(c == a)
+        self.assertFalse(c == b)
+        self.assertFalse(c == b_longer)
+        self.assertTrue (c == c)
+
+        self.assertFalse(a == pi)
+
+        # __ne__
+        self.assertFalse(a != a)
+        self.assertTrue (a != b)
+        self.assertTrue (a != b_longer)
+        self.assertTrue (a != c)
+
+        self.assertTrue (b != a)
+        self.assertFalse(b != b)
+        self.assertTrue (b != b_longer)
+        self.assertTrue (b != c)
+
+        self.assertTrue (b_longer != a)
+        self.assertTrue (b_longer != b)
+        self.assertFalse(b_longer != b_longer)
+        self.assertTrue (b_longer != c)
+
+        self.assertTrue (c != a)
+        self.assertTrue (c != b)
+        self.assertTrue (c != b_longer)
+        self.assertFalse(c != c)
+
+        self.assertTrue (a != pi)
+
+
+        # __lt__
+        self.assertFalse(a < a)
+        self.assertTrue (a < b)
+        self.assertTrue (a < b_longer)
+        self.assertTrue (a < c)
+
+        self.assertFalse(b < a)
+        self.assertFalse(b < b)
+        self.assertTrue (b < b_longer)
+        self.assertTrue (b < c)
+
+        self.assertFalse(b_longer < a)
+        self.assertFalse(b_longer < b)
+        self.assertFalse(b_longer < b_longer)
+        self.assertTrue (b_longer < c)
+
+        self.assertFalse(c < a)
+        self.assertFalse(c < b)
+        self.assertFalse(c < b_longer)
+        self.assertFalse(c < c)
+
+        with self.assertRaises(TypeError):
+            a < pi
+
+
+        # __le__
+        self.assertTrue (a <= a)
+        self.assertTrue (a <= b)
+        self.assertTrue (a <= b_longer)
+        self.assertTrue (a <= c)
+
+        self.assertFalse(b <= a)
+        self.assertTrue (b <= b)
+        self.assertTrue (b <= b_longer)
+        self.assertTrue (b <= c)
+
+        self.assertFalse(b_longer <= a)
+        self.assertFalse(b_longer <= b)
+        self.assertTrue (b_longer <= b_longer)
+        self.assertTrue (b_longer <= c)
+
+        self.assertFalse(c <= a)
+        self.assertFalse(c <= b)
+        self.assertFalse(c <= b_longer)
+        self.assertTrue (c <= c)
+
+        with self.assertRaises(TypeError):
+            a <= pi
+
+        # __ge__
+        self.assertTrue (a >= a)
+        self.assertFalse(a >= b)
+        self.assertFalse(a >= b_longer)
+        self.assertFalse(a >= c)
+
+        self.assertTrue (b >= a)
+        self.assertTrue (b >= b)
+        self.assertFalse(b >= b_longer)
+        self.assertFalse(b >= c)
+
+        self.assertTrue (b_longer >= a)
+        self.assertTrue (b_longer >= b)
+        self.assertTrue (b_longer >= b_longer)
+        self.assertFalse(b_longer >= c)
+
+        self.assertTrue (c >= a)
+        self.assertTrue (c >= b)
+        self.assertTrue (c >= b_longer)
+        self.assertTrue (c >= c)
+
+        with self.assertRaises(TypeError):
+            a >= pi
+
+        # __gt__
+        self.assertFalse(a > a)
+        self.assertFalse(a > b)
+        self.assertFalse(a > b_longer)
+        self.assertFalse(a > c)
+
+        self.assertTrue (b > a)
+        self.assertFalse(b > b)
+        self.assertFalse(b > b_longer)
+        self.assertFalse(b > c)
+
+        self.assertTrue (b_longer > a)
+        self.assertTrue (b_longer > b)
+        self.assertFalse(b_longer > b_longer)
+        self.assertFalse(b_longer > c)
+
+        self.assertTrue (c > a)
+        self.assertTrue (c > b)
+        self.assertTrue (c > b_longer)
+        self.assertFalse(c > c)
+
+        with self.assertRaises(TypeError):
+            a > pi
+
+    def testSlice(self):
+        def setup():
+            t = LinkedList((1, 2, 3, 4, 5, 6, 7, 8, 9))
+            it = t.find(5)
+            return t, it
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   ( 0), [])
+        self.assertLinkedListEqual(it.popslice( 0), [])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   ( 1), [5])
+        self.assertLinkedListEqual(it.popslice( 1), [5])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-1), [5])
+        self.assertLinkedListEqual(it.popslice(-1), [5])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   ( 2), [5, 6])
+        self.assertLinkedListEqual(it.popslice( 2), [5, 6])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-2), [4, 5])
+        self.assertLinkedListEqual(it.popslice(-2), [4, 5])
+        self.assertLinkedListEqual(t, [1, 2, 3, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   ( 3), [5, 6, 7])
+        self.assertLinkedListEqual(it.popslice( 3), [5, 6, 7])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-3), [3, 4, 5])
+        self.assertLinkedListEqual(it.popslice(-3), [3, 4, 5])
+        self.assertLinkedListEqual(t, [1, 2, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   ( 4), [5, 6, 7, 8])
+        self.assertLinkedListEqual(it.popslice( 4), [5, 6, 7, 8])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice(-4), [2, 3, 4, 5])
+        self.assertLinkedListEqual(it.popslice(-4), [2, 3, 4, 5])
+        self.assertLinkedListEqual(t, [1, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   ( 5), [5, 6, 7, 8, 9])
+        self.assertLinkedListEqual(it.popslice( 5), [5, 6, 7, 8, 9])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-5), [1, 2, 3, 4, 5])
+        self.assertLinkedListEqual(it.popslice(-5), [1, 2, 3, 4, 5])
+        self.assertLinkedListEqual(t, [6, 7, 8, 9])
+
+        t, it = setup()
+        with self.assertRaises(StopIteration):
+            it.slice( 6)
+        with self.assertRaises(StopIteration):
+            it.popslice( 6)
+
+        t, it = setup()
+        with self.assertRaises(StopIteration):
+            it.slice(-6)
+        with self.assertRaises(StopIteration):
+            it.popslice(-6)
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (1, 4), [6, 7, 8])
+        self.assertLinkedListEqual(it.popslice(1, 4), [6, 7, 8])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-3, 0), [2, 3, 4])
+        self.assertLinkedListEqual(it.popslice(-3, 0), [2, 3, 4])
+        self.assertLinkedListEqual(t, [1, 5, 6, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-3, 2), [2, 3, 4, 5, 6])
+        self.assertLinkedListEqual(it.popslice(-3, 2), [2, 3, 4, 5, 6])
+        self.assertLinkedListEqual(t, [1, 7, 8, 9])
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (0, 4, 2), [5, 7, 9])
+        self.assertLinkedListEqual(it.popslice(0, 4, 2), [5, 7, 9])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 8])
+
+
+        t, it = setup()
+        self.assertLinkedListEqual(it.slice   (-4, 5, 2), [1, 3, 5, 7, 9])
+        self.assertLinkedListEqual(it.popslice(-4, 5, 2), [1, 3, 5, 7, 9])
+        self.assertLinkedListEqual(t, [2, 4, 6, 8])
+
+
+
+
 
 
 def run_tests():

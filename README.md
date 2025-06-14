@@ -4739,65 +4739,212 @@ CPython makes this facet of incompatibility unfixable.
 
 big's `LinkedList` behaves like a list or deque: you add values to it,
 and it maintains them in order and manages the storage.  Internally it's a
-traditional doubly-linked-list structure with its own nodes.
+traditional doubly-linked-list structure; it creates nodes, which contain
+the forwards and backwards links and a reference to your value.
 
 The `LinkedList` object supports a subset of the methods on list (or deque):
 it has `append`, and `prepend` (also known as `appendleft`), and `pop` and `popleft`.
 But most of the time you won't use those--you'll be modifying the list via an *iterator.*
 
-With a doubly-linked list, conceptually you want to operate on the list locally, not
-globally.  You're going to be navigating around somewhere in the middle of the
+With a doubly-linked list, conceptually you want to operate on the list *locally*,
+not *globally*.  You're going to be navigating around somewhere in the middle of the
 list--who knows where!--and you're examining values, and maybe adding and removing nodes
-relative to where you're doing your work.  And what is the Python object that helps you
-navigate the values of an iterable?  That's right, an *iterator.*
+relative to where you're doing your work.  And there's a specific Python object that
+helps you navigate through an iterable--the *iterator.*
+
+#### `LinkedList` methods
+
+append
+prepend / appendleft
+
+extend
+extendleft
+
+pop
+popleft
+remove
+clear
+
+find
+rfind
+
+match
+rmatch
+
+copy
+
+magic methods:
+
+* `bool(t)` returns `True` if `t` contains any values, or `False` if `t` is empty.
+* `len(t)` returns the number of items in `t`.  If `t` is empty, this is 0.
+* `t == t2` is true if and only if `t` and `t2` are of the same type and contain the
+  same values in the same order.
+* `iter(t)` returns a forward iterator over `t`.
+* `reversed(t)` returns a reverse iterator over `t`.
+
 
 #### `LinkedList` iterators
 
-LinkedList iterators are more like *database cursors.*  Not only can you iterate over the
+`LinkedList` iterators are more like *database cursors.*  As they move through the
+linked list, they point at successive nodes.  At all times the iterator "points to"
+a node in the linked list; you can see which node the iterator is pointing to by
+accessing its `value` property:
+
+```Python
+t = LinkedList((1, 2, 3))
+it = iter(t)
+for value in it:
+   print(value, end=' ')
+   print(it.value, end=' ')
+print()
+```
+
+This prints `1 1 2 2 3 3`.
+
+`LinkedList` iterators support a lot of different method calls.  For example,
+you can call `before` and `after` on an iterator; these return new iterators,
+pointing at the previous and next nodes respectively.
+
+`LinkedList` iterators also support `find` (like `list` and `deque`), and `rfind`,
+but instead of returning an *index* where the value was found, they return an *iterator*
+pointing at the node where the value was found.  There's also `match` and `rmatch`,
+where you pass in a callable called `predicate` that *tests* the value;
+if the predicate returns a true value, we return an iterator pointing at that node.
+These four methods return `None` if no matching value was found in the list.
+
+
+Not only can you iterate over the
 values of a `LinkedList` using one, you can also modify the list!  `LinkedListIterator`
 objects have methods like `insert` (also known as `prepend`), `append`, `pop`, `popleft`...
 These all operate relative to the linked list node the iterator is currently pointing to.
 
-LinkedList iterators also support find and rfind, but with a twist: instead of returning an index where the value was found, they return an iterator pointing at the node where the value was found.  There's also match and rmatch, where you pass in a callable that tests the value; if the callable returns True we return an iterator pointing at that node.  find / match / etc return None if a desired node was not found.
 
-(The before() and after() methods on an iterator also return iterators, pointing at the previous and next nodes respectively.)
 
-#### Pseudonodes
 
-Now it's time to talk about "pseudonodes".  This started as an internal implementation detail, but the abstraction got kinda leaky and it seemed better to embrace reality and make it a first-class part of the API.  With LinkedList, "head" and "tail" are special nodes in the linked list, not pointers stored in the LinkedList instance--an "empty" LinkedList actually contains two nodes, "head" and "tail".
 
-The two rules about pseudonodes are:
-
-* Pseudonodes never have a value.
-* When an iterator navigates through a LinkedList, it automatically skips over pseudonodes.
-
-So for example: if you create a new empty list (t = LinkedList()), and you create an iterator over that empty linked list (it = iter(t)), it starts out pointing at "head".  When you iterate it advances to "tail" and raises StopIteration.  (Reverse iterators start out pointing at "tail", and raise StopIteration when they reach "head", and next and previous are reversed.)
 
 If you create a linked list with two nodes (t = LinkedList((1, 2))), and you create an iterator over it (it = iter(t)), when you call next() it advances to the first data node and yields its value.  Now your iterator is "pointing at" the value 1.  You can insert or append new values, relative to 1 in the linked list!  All the iterator methods are performed relative to its current position--find, rfind, match, rmatch, before, after.  replace() lets you replace the value stored at that node.
 
 You can even pop() the current node.  When you pop(), the iterator cursor rewinds by one node and returns the value of the old node.  (popleft() does exactly the same thing, but advances one node forward.  These are reversed for reversed iterators.)  That's right, adding and removing nodes from a linked list while you're iterating over it is expressly supported.
 
-Now, you're a clever guy, you might already be thinking about the boundary case resulting from the above semantics.  What if someone else deletes a node while you're pointing at it?  Example:
+
+
+#### Special nodes
+
+Now it's time to talk about "special nodes".  Every linked list has the concept of
+its "head" and its "tail".  With `LinkedList`, "head" and "tail" are special nodes
+in the linked list--an "empty" `LinkedList` actually contains two special nodes,
+"head" and "tail".
+
+The two rules about special nodes are:
+
+* Special nodes never have a value.
+* When an iterator navigates through a `LinkedList`, it automatically skips over special nodes.
+
+For example, let's say you create a new empty linked list, and you create an iterator
+over that linked list, and you call `next` on it:
 
 ```Python
-    t = LinkedList((1, 2, 3))
-    it = t.find(2)            # it is now pointing at 2
-    copy = it.copy()          # copy is now an iterator also pointing at 2
-    copy.pop()                # pop() returned 2, copy is now pointing at 1
+t = LinkedList((1,))
+it = iter(t)
+value_a = next(it, None)
+value_b = next(it, None)
 ```
 
-What does "it" point to now?  This is the third type of pseudonode: a "deleted" node.  Internally, nodes contain a reference count for how many iterators are pointing at them.  If the "iterator reference count" (irc) for a node is > 1 when they get popped, they don't get removed from the linked list.  Instead, they're demoted to a "deleted" pseudonode.  They forget their value, and they're marked as "deleted".  Most operations on "it" still work fine; you can sit there all day, and append and prepend new nodes, or call find or rmatch or copy or what have you.  But once the last iterator navigates away from that node, and the "irc" drops to zero, we actually remove the node for real.
+Our iterator `it` started out pointing at the "head" node.  When you call `next(it, None)` the
+first time, it advances to `1` and returns it.  The iterator is now pointing at the node for
+the value `1`.  Calling `next(it, None)` the second time advances to the "tail" node;
+this would normally raise `StopIteration`, but the second argument to `next` is a
+"default value" it will return instead of raising.  So this second call to `next(it, None)`
+just returns `None`.
 
-As per the two rules of pseudonodes: navigation methods on linked lists ignore deleted ndes.  When you execute next() on an iterator, if it lands on a deleted node it auto-advances, it skips past it.  find and match and before and after also ignore pseudonodes.
+Any time you're pointed at a special node, you can do almost anything you can do when
+pointed at a normal node.  You can:
 
-This means, for example, that this code always works:
+* navigate, using `next` or `previous` or `find` or `rfind` or `match` or `rmatch`
+* create new iterators using `before` or `after`
+* insert new values using `append` or `prepend` or `extend` or `extendleft`
+* attempt to remove values using `remove` or `rremove`
 
-    for value in linked_list:
-        examine(value)
+What can't you do when pointing at a special node?  Anything involving a value will
+raise `SpecialNodeError` (a subclass of `LookupError`).  Here are the operations
+that raise `SpecialNodeError` if you attempt them while pointing at a special node:
 
-If examine() removes values from the linked list--or if someone else removes values, from another thread**--the iterator handles it and stays functional.  Unlike dict, which gets an upset tummy and raises "dict size change during iteration" at the slightest provocation.  Lame!
+* Calling the `replace` method.
+* Evaluating the `value` property.
+* Popping the current value using `pop` or `popleft`.
+
+If you're worried about whether your iterator is pointing at a special node,
+you can check the `special` property.  That returns `None` for a normal node,
+or `"head"` for the head node, or `"tail"` for the tail node.
+
+> [!NOTE]
+> You're explicitly permitted to prepend to "head" with a value,
+> or append to "tail" with a value.  This is called "sloppy" prepend
+> and append.  The "head" and "tail" nodes will always be the
+> *first* and *last* nodes of the linked list, respectively.
+
+#### Deleted nodes
+
+Now consider this complicated scenario:
+
+```Python
+t = LinkedList((1, 2, 3))
+it = t.find(2)
+copy = it.copy()
+copy.pop()
+```
+
+What does `it` point to now?  This is the third type of special node: a "deleted" node.
+
+Internally, nodes contain a reference count for how many iterators currently point at them,
+called `iterator_refcount`.
+If someone attempts to remove a node from the linked list and its "iterator reference count"
+is greater than 0,, the node doesn't *actually* get removed.
+Instead, that node forgets its value, and it's demoted to a
+"deleted" special node by setting its `special` value to `"deleted"`.
+(And, once the node's "iterator reference count" drops to zero, it finally *does* get removed
+from the linked list.)
+
+What are the rules about "deleted" special nodes?  Exactly the same as for any other
+"special" node.  If you have an iterator pointing at a special node, you can't interact
+with its value, but you can still call all the other iterator methods.
+
+And--as already mentioned--`LinkedList` iterators ignore special nodes.  If you call `next(some_iterator)`,
+and the next node is a deleted node, `next` will skip past it to the node after that.
+(And if that ones is deleted, it'll keep going until it either finds a normal node
+or it gets to the "tail".)
 
 
+
+
+#### Reverse iterators
+
+`LinkedList` objects also support reverse iteration.  You create a
+reverse iterator by calling `reversed` on the list.  You can also create
+a reverse iterator by calling `reversed` on a forwards iterator; this
+returns a reverse iterator pointing at the same node.
+
+With reverse iterators, the directionality of every method is reversed:
+
+* A new reversed iterator points at "tail", not "head".
+* `next` goes to the *previous* node, `previous` goes to the *next* node.
+* A reversed iterator becomes "exhausted" when it reaches "head", not "tail".
+* `pop` goes to the *next* node, `popleft` goes to the *previous* node.
+* `append` inserts *before* the current node, `prepend` inserts *after* the current node.
+* `extend` inserts the new values *before* the current node, `extendleft` inserts the
+  new values *after* the current node.  However, the values are still inserted into the
+  list in forwards order.  (`extend((1, 2, 3))` and `extendleft((1, 2, 3))` always insert
+  the nodes `1`, `2`, and `3` in that order; they *never* insert them reversed, like
+  `3`, `2`, `1`.)
+* `before` returns a *reverse* iterator pointing at the *next* node,
+  `after` returns a *reverse* iterator pointing at the *previous* node.
+* `find` returns a *reverse* iterator at the *previous* instance of value,
+  `rfind` returns a *reverse* iterator at the *next* instance of value.
+* `match` returns a *reverse* iterator at the *previous* value accepted by the predicate,
+  `rmatch` returns a *reverse* iterator at the *next* value accepted by the predicate.
+* Calling `reversed` on a reverse iterator returns a *forward* iterator
+  pointing at the same node.
 
 
 </dd></dl>
