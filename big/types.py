@@ -1584,7 +1584,10 @@ class LinkedListIterator:
         advance = it.next
         retreat = it.previous
         if pop:
-            pop = it.pop
+            if step > 0:
+                pop = it.pop
+            else:
+                pop = it.popleft
 
         for i in range(start, stop, step):
             try:

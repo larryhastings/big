@@ -2267,6 +2267,12 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(it.popslice(-4, 6, 3), [2, 5, 8, 11])
         self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
+        t = LinkedList(range(1, 12))
+        it = t.find(5)
+        self.assertLinkedListEqual(it.slice   (6, -4, -3), [11, 8, 5, 2])
+        self.assertLinkedListEqual(it.popslice(6, -4, -3), [11, 8, 5, 2])
+        self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
+
 
 
 
