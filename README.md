@@ -3939,7 +3939,7 @@ Returns an iterator yielding 3-tuples:
 ```
 
 where `leading_quote` and `trailing_quote` are either
-empty strings or quote delimiters from `quotes`,
+empty strings or quote delimiters from `quotes` (or `multiline_quotes`),
 and `segment` is a substring of `s`.  Joining together
 all strings yielded recreates `s`.
 

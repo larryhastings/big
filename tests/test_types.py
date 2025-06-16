@@ -2274,7 +2274,42 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
 
+    def test_dunder_item(self):
+        a = LinkedList((1, 2, 3, 4, 5))
 
+        self.assertEqual(a[0], 1)
+        self.assertEqual(a[1], 2)
+        self.assertEqual(a[2], 3)
+        self.assertEqual(a[3], 4)
+        self.assertEqual(a[4], 5)
+
+        self.assertEqual(a[-1], 5)
+        self.assertEqual(a[-2], 4)
+        self.assertEqual(a[-3], 3)
+        self.assertEqual(a[-4], 2)
+        self.assertEqual(a[-5], 1)
+
+        with self.assertRaises(IndexError):
+            a[6]
+        with self.assertRaises(IndexError):
+            a[-6]
+
+        self.assertLinkedListEqual(a[0:3],      [1, 2, 3])
+        self.assertLinkedListEqual(a[0:5:2],    [1, 3, 5])
+        self.assertLinkedListEqual(a[-4:-1],    [2, 3, 4])
+        self.assertLinkedListEqual(a[-1:-4:-1], [5, 4, 3])
+        # rules are different for slices!
+        # Python just clamps for you, YOU'RE WELCOME
+        self.assertLinkedListEqual(a[9999:999999], [5])
+        self.assertLinkedListEqual(a[9999:999999:-1], [])
+
+        copy_a = a.copy()
+        copy_a[5:1:-2] = 'ab'
+        self.assertLinkedListEqual(copy_a, [1, 2, 'b', 4, 'a'])
+
+        copy_a = a.copy()
+        copy_a[10000000000:-3239879817998:-2] = 'abc'
+        self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
 
 
