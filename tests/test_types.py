@@ -2316,15 +2316,11 @@ class BigLinkedListTests(unittest.TestCase):
         # using the test list of (1, 2, 3, 4, 5),
         # test all valid combinations of these "values"
         # for start, stop, and step.
-        initializers = (
-            (1, 2, 3, 4, 5),
-            (1, 2, 3, 4, 5, 6),
-            (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
-            (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
-            )
-        values = (-12345678, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 23456789)
-        values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
-        for initializer in initializers:
+        for count in (5, 6, 7):
+            initializer = tuple(range(1, count + 1))
+            values = (-12345678,) + tuple(range(-(count + 1), 1)) + initializer + (count + 1, 23456789,)
+            values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
+
             for start in values:
                 for stop in values:
                     for step in values_without_zero:
