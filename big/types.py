@@ -1258,11 +1258,18 @@ class LinkedList:
     def __contains__(self, value):
         return self.find(value) != None
 
-    def _it_at_index(self, index, *, clamp=False):
+    def _it_at_index(self, index):
+        """
+        index can be -1, in which case it points to head.
+        index can be length, in which case it points to tail.
+        this is to accommodate slicing semantics copied from list.
+        """
         length = self._length
-        assert 0 <= index < self._length
+        assert -1 <= index <= length, f"index should be >= 0 and < {length} but it's {index}"
 
         it = iter(self)
+        if index == -1:
+            return it
 
         halfway = self._length // 2
         if index > halfway:
@@ -1271,11 +1278,11 @@ class LinkedList:
         else:
             it._cursor = self._head.next
 
-        it._to_index(index, clamp=clamp)
+        it._to_index(index)
         return it
 
 
-    def _adjust_slice(self, slice):
+    def _unpack_and_adjust_slice(self, slice, *, for_assignment=False):
         """
         Unpacks slice, and clamps slice values in the same way list does.
         Returns a 4-tuple:
@@ -1283,74 +1290,61 @@ class LinkedList:
         """
 
         # this is harder to get right than you might think,
-        # because it's foolish garbage comprised of bewildering bad ideas.
-        # but, this is what list does.
-
-        # unpack slice:
+        # because it's emulating foolish garbage comprised
+        # of bewildering bad ideas committed against
+        # the list object decades ago.
 
         start = slice.start
         stop = slice.stop
         step = slice.step
 
-        max_size = sys.maxsize
-        min_size = -sys.maxsize
-
-        def clamp(index): return min(max(index.__index__(), min_size), max_size)
-
         if step is None:
             step = 1
-            step_is_negative = False
+            step_is_negative = 0
         else:
-            step = clamp(step)
             assert step != 0
-            step_is_negative = (step < 0)
-
-        if start is None:
-            start = size_max if step_is_negative else 0
-        else:
-            start = clamp(start)
-
-        if stop is None:
-            stop = size_min if step_is_negative else size_max
-        else:
-            stop = clamp(stop)
+            step_is_negative = step < 0
 
         length = self._length
+        negative_length = -length
 
-        # adjust slice:
-
-        if start < 0:
-            start += length
-            if start < 0:
-                start = -1 if step_is_negative else 0
+        if start is None:
+            start = sys.maxsize * step_is_negative
+        elif start < 0:
+            if start >= negative_length:
+                start += length
+            else:
+                # 0 if step is positive, -1 if step is negative
+                start = -step_is_negative
         elif start >= length:
-            start = (length - 1) if step_is_negative else length
+            start = length - step_is_negative
 
-        if stop < 0:
-            stop += length
-            if stop < 0:
-                stop = -1 if step_is_negative else 0
+        if stop is None:
+            stop = sys.maxsize * (1 - (step_is_negative * 2))
+        elif stop < 0:
+            if stop >= negative_length:
+                stop += length
+            else:
+                # 0 if step is positive, -1 if step is negative
+                stop = -step_is_negative
         elif stop >= length:
-            stop = (length - 1) if step_is_negative else length
+            stop = length - step_is_negative
 
-        slice_length = 0
-        if step_is_negative:
-            if stop < start:
-                slice_length = (start - stop - 1) / ((-step) + 1)
-        elif start < stop:
-            slice_length = (stop - start - 1) / (step + 1)
-
-        # Make sure s[5:2] = [..] inserts at the right place:
-        # before 5, not before 2.
-        if (
-            (step < 0 and start < stop) ||
-            (step > 0 and start > stop)
-            ):
-            stop = start
+        if step_is_negative and (stop < start):
+            slice_length = ((start - stop - 1) // -step) + 1
+        elif (not step_is_negative) and (start < stop):
+            slice_length = ((stop - start - 1) // step) + 1
+        else:
+            slice_length = 0
+            if for_assignment:
+                # Make sure s[5:2] = [..] inserts at the right place:
+                # before 5, not before 2.
+                stop = start
 
         return start, stop, step, slice_length
 
-    def _parse_key(self, key):
+
+    def _parse_key(self, key, *, for_assignment=False):
         """
         Parses key, it must either be an index or a slice object.
 
@@ -1358,61 +1352,44 @@ class LinkedList:
             (it, start, stop, step, slice_length)
         it is an iterator pointing at the start'th entry.
         start will be the index of the first element we want.
-        if key was not a slice, stop, step, and slice_length
-        will be None, otherwise they'll be integers.
-        (slice_length is the count of how many numbers the
-        slice will generate when you run it through range.)
 
-        if start, stop, and step are integers, they will be
-        positive (adjusted for length).
+        if key is a slice, stop and step will be integers,
+        and slice_length will be how many numbers the
+        slice will generate when you run it through range.
+        if key wasn't a slice, slice_length will be 0.
+
+        if start and stop are integers, they will not be
+        negative.  (they'll be adjusted to be in the range
+        0 <= n < length.)  if step is an integer, it will
+        not be zero.
+
+        if key is not a slice, stop, step, and slice_length
+        will be None.
 
         enforces Python semantics for indexing with ints vs slices.
         for example, if a has 3 elements, a[5] is an IndexError,
         but a[5:1000] evaluates to an empty list.  (sigh.)
         so, _parse_key will raise the IndexError for you,
-        but will clamp the slice values like list would.
+        but will clamp the slice values like list does.
         """
         if isinstance(key, slice):
-            start = 0 if (key.start is None) else key.start.__index__()
-            stop = key.stop.__index__()
-            step = 1 if (key.step is None) else key.step.__index__()
-            if step == 0:
-                raise ValueError('step cannot be 0')
-            clamp = True
+            start, stop, step, slice_length = self._unpack_and_adjust_slice(key, for_assignment=for_assignment)
         else:
+            length = self._length
+            original_start = key
             start = key.__index__()
-            stop = step = None
-            clamp = False
-
-        length = self._length
-        original_start = start
-        if start < 0:
-            start += length
-
-        if stop is None:
-            # semantics of a[5]
+            if start < 0:
+                start += length
             if not (0 <= start < length):
                 raise IndexError(f'LinkedList index {original_start} out of range')
-        else:
-            # semantics of a[5:30]
-            if start < 0:
-                start = 0
-            if start >= length:
-                start = length - 1
+            stop = step = slice_length = None
 
-            if stop < 0:
-                stop += length
-                if stop < 0:
-                    stop = -1
-            elif stop >= length:
-                stop = length
+        it = self._it_at_index(start)
 
-        it = self._it_at_index(start, clamp=clamp)
-
-        return it, start, stop, step
+        return it, start, stop, step, slice_length
 
     def __getitem__(self, key):
-        it, start, stop, step = self._parse_key(key)
+        it, start, stop, step, slice_length = self._parse_key(key)
 
         if stop is None:
             return it.value
@@ -1421,23 +1398,32 @@ class LinkedList:
         return it.slice(0, stop, step)
 
     def __setitem__(self, key, value):
-        it, start, stop, step = self._parse_key(key)
+        it, start, stop, step, slice_length = self._parse_key(key, for_assignment=True)
         if stop is None:
             it.value = value
             return
 
         try:
-            values = list(value)
+            values = value
+            values_length = len(value)
         except TypeError:
-            raise TypeError('must assign iterable to extended slice') from None
+            try:
+                values = list(value)
+                values_length = len(values)
+            except TypeError:
+                raise TypeError('must assign iterable to extended slice') from None
+
+        if slice_length != values_length:
+            raise ValueError(f"attempt to assign sequence of size {values_length} to extended slice of size {slice_length}")
+
+        if slice_length == 0:
+            it.popslice(0, stop, step)
+            return
 
         index = start
         advance = it.next
         retreat = it.previous
-        indices = list(range(start, stop, step))
-
-        if len(indices) != len(values):
-            raise ValueError(f"attempt to assign sequence of size {len(values)} to extended slice of size {len(indices)}")
+        indices = range(start, stop, step)
 
         for i, v in zip(indices, values):
             try:
@@ -1458,7 +1444,7 @@ class LinkedList:
                 raise IndexError("LinkedList index out of range") from None
 
     def __delitem__(self, key):
-        it, start, stop, step = self._parse_key(key)
+        it, start, stop, step, slice_length = self._parse_key(key)
         if stop is None:
             it.pop()
 
@@ -1624,7 +1610,7 @@ class LinkedListIterator:
         cursor.iterator_refcount += 1
         return copy
 
-    def _to_index(self, index, *, clamp=False):
+    def _to_index(self, index):
         # starting at the current position,
         # advances or rewinds by index nodes.
 
@@ -1643,8 +1629,7 @@ class LinkedListIterator:
             for _ in range(index):
                 advance()
         except StopIteration:
-            if not clamp:
-                raise IndexError('LinkedList index out of range') from None
+            raise IndexError('LinkedList index out of range') from None
 
     def __next__(self):
         cursor = self._cursor

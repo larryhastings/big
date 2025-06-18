@@ -2275,7 +2275,8 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_dunder_item(self):
-        a = LinkedList((1, 2, 3, 4, 5))
+        initializer = (1, 2, 3, 4, 5)
+        a = LinkedList(initializer)
 
         self.assertEqual(a[0], 1)
         self.assertEqual(a[1], 2)
@@ -2299,8 +2300,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(a[-4:-1],    [2, 3, 4])
         self.assertLinkedListEqual(a[-1:-4:-1], [5, 4, 3])
         # rules are different for slices!
-        # Python just clamps for you, YOU'RE WELCOME
-        self.assertLinkedListEqual(a[9999:999999], [5])
+        # Python just 'em clamps for you, YOU'RE WELCOME
+        self.assertLinkedListEqual(a[9999:999999], [])
         self.assertLinkedListEqual(a[9999:999999:-1], [])
 
         copy_a = a.copy()
@@ -2310,6 +2311,38 @@ class BigLinkedListTests(unittest.TestCase):
         copy_a = a.copy()
         copy_a[10000000000:-3239879817998:-2] = 'abc'
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
+
+
+        # using the test list of (1, 2, 3, 4, 5),
+        # test all valid combinations of these "values"
+        # for start, stop, and step.
+        initializers = (
+            (1, 2, 3, 4, 5),
+            (1, 2, 3, 4, 5, 6),
+            (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+            (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+            )
+        values = (-12345678, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 23456789)
+        for initializer in initializers:
+            for start in values:
+                for stop in values:
+                    for step in values:
+                        if not step:
+                            # zero-length step is always illegal.
+                            #
+                            # well, wouldja look at that!
+                            # a value in a slice that list thinks is illegal!
+                            # how'd *that* happen!
+                            continue
+
+                        with self.subTest(initializer_length=len(initializer), start=start, stop=stop, step=step):
+                            t = LinkedList(initializer)
+                            l = list(initializer)
+
+                            l_slice = l[start:stop:step]
+                            t_slice = t[start:stop:step]
+
+                            self.assertLinkedListEqual(t_slice, l_slice)
 
 
 
