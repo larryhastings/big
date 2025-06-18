@@ -574,10 +574,10 @@ class BigStringTests(unittest.TestCase):
     def test___repr__(self):
         for value in values:
             self.assertStr(repr(value)[:11], repr(str(value))[:11])
-            self.assertTrue(f"line_number={value.line_number}, " in value.serialize())
+            self.assertTrue(f"line_number={value.line_number}, " in value.serialized())
         long_source = string('x' * 90)
         s = string('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
-        self.assertEqual(s.serialize(), "string('abcde', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
+        self.assertEqual(s.serialized(), "string('abcde', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
 
 
     # def test___rmod__(self):

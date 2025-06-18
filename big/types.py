@@ -40,8 +40,23 @@ def export(o):
     return o
 
 
+
+#############################################
+#############################################
+##         _        _
+##     ___| |_ _ __(_)_ __   __ _
+##    / __| __| '__| | '_ \ / _` |
+##    \__ \ |_| |  | | | | | (_| |
+##    |___/\__|_|  |_|_| |_|\__, |
+##                          |___/
 ##
-## string conforms to Python's rules about where to split a line.
+#############################################
+#############################################
+
+##
+## regular expressions to assist in recognizing linebreaks.
+##
+## string conforms to Python's rules about where to split a line:
 ## Python recognizes the DOS '\r\n' sequence as *one linebreak*.
 ##
 ##    >>> ' a \n b \r c \r\n d \n\r e '.splitlines(True)
@@ -61,6 +76,8 @@ def export(o):
 ## big's "linebreaks" iterable contains all of 'em, and it
 ## includes '\r\n'.  So we sort linebreaks by length, longest
 ## first, and build the regular expression out of that.
+## (Python's re engine, like all good regular expression engines,
+## keeps the *first* match.  So, sort longest substring first.)
 ##
 
 _re_linebreaks = "|".join(sorted(linebreaks, key=lambda s: -len(s)))
@@ -824,9 +841,14 @@ class string(str):
             return string.cat(*iterable)
         return str(self).join(iterable)
 
-    # sadly, don't reimplement repr
+    def serialized(self):
+        """
+        Returns a string that, if executed in Python, recreates this string object.
 
-    def serialize(self):
+        Traditionally this is what repr would produce; however, it's simply too
+        inconvenient for repr(string_object) to produce anything except the
+        traditional str repr.
+        """
         if self._line_number is None:
             self._calculate_line_and_column_numbers()
 
@@ -840,8 +862,9 @@ class string(str):
         assert o != None
         if o != self:
             o = repr(str(o))
-            if len(o) > 20:
-                o = o[:15] + "[...]" + o[-1]
+            # elide origin if it's more than 20 characters? ... naah.
+            # if len(o) > 20:
+            #     o = o[:15] + "[...]" + o[-1]
             append(f"origin=string({o})")
         if self._offset:
             append(f"offset={self._offset}")
@@ -849,6 +872,8 @@ class string(str):
             append(f"first_line_number={self._first_line_number}")
         if self._first_column_number != 1:
             append(f"first_column_number={self._first_column_number}")
+        if self._tab_width != 8:
+            append(f"tab_width={self._tab_width}")
 
         s = ", ".join(extras)
 
@@ -1029,6 +1054,19 @@ class string(str):
         return Pattern(self, flags)
 
 
+
+######################################################
+######################################################
+##
+##      _ _       _            _     _ _     _
+##     | (_)_ __ | | _____  __| |   | (_)___| |_
+##     | | | '_ \| |/ / _ \/ _` |   | | / __| __|
+##     | | | | | |   <  __/ (_| |   | | \__ \ |_
+##     |_|_|_| |_|_|\_\___|\__,_|   |_|_|___/\__|
+##
+##
+######################################################
+######################################################
 
 
 _undefined = object()
