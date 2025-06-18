@@ -1607,6 +1607,36 @@ class linked_list:
             next(it)
             it._cursor.value = v
 
+    def rotate(self, n):
+        n_is_negative = (n < 0)
+        n = abs(n) % self._length
+        if (not n) or (self._length < 2):
+            return
+
+        it = (iter if n_is_negative else reversed)(self)
+        for _ in range(n + n_is_negative):
+            it.next()
+
+        segment_1_head = self._head.next
+        segment_1_tail = it._cursor.previous
+
+        segment_2_head = it._cursor
+        segment_2_tail = self._tail.previous
+
+        assert isinstance(segment_1_head, linked_list_node)
+        assert isinstance(segment_1_tail, linked_list_node)
+        assert isinstance(segment_2_head, linked_list_node)
+        assert isinstance(segment_2_tail, linked_list_node)
+
+        self._head.next = segment_2_head
+        segment_2_head.previous = self._head
+
+        self._tail.previous = segment_1_tail
+        segment_1_tail.next = self._tail
+
+        segment_2_tail.next = segment_1_head
+        segment_1_head.previous = segment_2_tail
+
 
 @export
 class linked_list_iterator:

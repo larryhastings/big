@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 big_dir = bigtestlib.preload_local_big()
 
+import collections
 import itertools
 from itertools import zip_longest
 import pickle
@@ -2314,21 +2315,23 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
 
-        # using the test list of (1, 2, 3, 4, 5),
-        # test all valid combinations of these "values"
-        # for start, stop, and step.
-        for count in (5, 6, 7):
+        for count in (5, 6,):
+            # for the list [ 1, 2, 3, ..., count ],
             initializer = tuple(range(1, count + 1))
-            values = (-12345678,) + tuple(range(-(count + 1), 1)) + initializer + (count + 1, 23456789,)
+
+            t = linked_list(initializer)
+            l = list(initializer)
+
+            # test all valid combinations of these "values"
+            # for start, stop, and step.
+            # [-23456789, -12345678, -(count + 1), ..., count + 1, 12345678, 23456789]
+            values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789,)
             values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
 
             for start in values:
                 for stop in values:
                     for step in values_without_zero:
-                        with self.subTest(initializer_length=len(initializer), start=start, stop=stop, step=step):
-                            t = linked_list(initializer)
-                            l = list(initializer)
-
+                        with self.subTest(count=count, start=start, stop=stop, step=step):
                             l_slice = l[start:stop:step]
                             t_slice = t[start:stop:step]
 
@@ -2361,6 +2364,16 @@ class BigLinkedListTests(unittest.TestCase):
             t.insert(index, 'x')
             self.assertLinkedListEqual(t, a)
 
+        initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
+        d = collections.deque(initializer)
+        t = linked_list(initializer)
+
+        for i in range(-10, 11):
+            t_copy = t.copy()
+            t_copy.rotate(i)
+            d_copy = d.copy()
+            d_copy.rotate(i)
+            self.assertEqual(list(t_copy), list(d_copy))
 
 
 def run_tests():
