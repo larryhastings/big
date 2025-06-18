@@ -2344,6 +2344,33 @@ class BigLinkedListTests(unittest.TestCase):
 
                             self.assertLinkedListEqual(t_slice, l_slice)
 
+    def test_misc_methods(self):
+        l = [5, 20, -3, 3, 44, 4, 3, 6, 8, 3, 8]
+        t = LinkedList(l)
+        l.sort()
+        t.sort()
+        self.assertLinkedListEqual(t, l)
+
+        l.reverse()
+        t.reverse()
+        self.assertLinkedListEqual(t, l)
+
+        l.append(88)
+        t.append(88)
+        l.reverse()
+        t.reverse()
+        self.assertLinkedListEqual(t, l)
+
+        for v in l:
+            self.assertEqual(t.count(v), l.count(v))
+
+        for index in range(-7, 7):
+            a = [1, 2, 3, 4, 5]
+            a.insert(index, 'x')
+            t = LinkedList((1, 2, 3, 4, 5))
+            t.insert(index, 'x')
+            self.assertLinkedListEqual(t, a)
+
 
 
 def run_tests():

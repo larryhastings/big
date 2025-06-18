@@ -1232,6 +1232,8 @@ class LinkedList:
             t.extend(self)
         return t
 
+    __rmul__ = __mul__
+
     def __imul__(self, other):
         if not hasattr(other, '__index__'):
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
@@ -1451,10 +1453,21 @@ class LinkedList:
         stop -= start
         it.popslice(0, stop, step)
 
+    def insert(self, index, object):
+        length = self._length
+        # convert index to range 0 <= index <= length
+        if index <= -length:
+            index = 0
+        elif index < 0:
+            index += length
+        elif index > length:
+            index = length
+        it = self._it_at_index(index)
+        it.insert(object)
 
-    def append(self, value):
+    def append(self, object):
         self._length += 1
-        self._tail.insert_before(value)
+        self._tail.insert_before(object)
 
     def extend(self, iterable):
         insert_before = self._tail.insert_before
@@ -1462,9 +1475,9 @@ class LinkedList:
             self._length += 1
             insert_before(value)
 
-    def appendleft(self, value):
+    def appendleft(self, object):
         self._length += 1
-        self._head.next.insert_before(value)
+        self._head.next.insert_before(object)
 
     def extendleft(self, iterable):
         insert_before = self._head.next.insert_before
@@ -1524,6 +1537,13 @@ class LinkedList:
         self._length -= 1
         return node_after_head.remove()
 
+    def count(self, value):
+        counter = 0
+        for v in self:
+            if v == value:
+                counter += 1
+        return counter
+
     def find(self, value):
         return iter(self).find(value)
 
@@ -1555,6 +1575,33 @@ class LinkedList:
         assert not it._cursor.special # find should never return a special node
         self._length -= 1
         return it._cursor.remove()
+
+    def reverse(self):
+        previous_fit_cursor = None
+        fit = iter(self)
+        rit = reversed(self)
+
+        while True:
+            next(fit)
+            next(rit)
+            if ((rit._cursor == fit._cursor)
+                or (rit._cursor == previous_fit_cursor)):
+                break
+
+            tmp = fit._cursor.value
+            fit._cursor.value = rit._cursor.value
+            rit._cursor.value = tmp
+
+            previous_fit_cursor = fit._cursor
+
+    def sort(self, key=None, reverse=None):
+        l = list(self)
+        l.sort(key=key, reverse=reverse)
+
+        it = iter(self)
+        for v in l:
+            next(it)
+            it._cursor.value = v
 
 
 @export
