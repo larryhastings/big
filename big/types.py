@@ -41,7 +41,7 @@ def export(o):
 
 
 ##
-## String conforms to Python's rules about where to split a line.
+## string conforms to Python's rules about where to split a line.
 ## Python recognizes the DOS '\r\n' sequence as *one linebreak*.
 ##
 ##    >>> ' a \n b \r c \r\n d \n\r e '.splitlines(True)
@@ -68,28 +68,28 @@ _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
 
 
 @export
-class String(str):
-    "String(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8) -> String\nCreates a new String object.  String is a subclass of str that maintains line, column, and offset information."
+class string(str):
+    "string(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8) -> string\nCreates a new string object.  string is a subclass of str that maintains line, column, and offset information."
 
     __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_tab_width', '_linebreak_offsets', '_line')
 
     def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8):
-        if isinstance(s, String):
+        if isinstance(s, string):
             return s
         if not isinstance(s, str):
-            raise TypeError("String: s must be a str or String object")
+            raise TypeError("string: s must be a str or string object")
 
-        if not ((origin is None) or isinstance(origin, String)):
-            raise TypeError(f"String: origin must be String or None, not {type(origin)}")
+        if not ((origin is None) or isinstance(origin, string)):
+            raise TypeError(f"string: origin must be string or None, not {type(origin)}")
 
         if isinstance(source, str):
-            if isinstance(source, String):
+            if isinstance(source, string):
                 source = str(source)
         elif source == None:
             if origin is not None:
                 source = origin.source
         else:
-            raise TypeError(f"String: source must be str or None, not {type(source)}")
+            raise TypeError(f"string: source must be str or None, not {type(source)}")
 
         ex = None
 
@@ -98,21 +98,21 @@ class String(str):
         elif offset < 0:
             ex = ValueError
         if ex:
-            raise ex(f"String: offset must be an int >= 0, not {offset}")
+            raise ex(f"string: offset must be an int >= 0, not {offset}")
 
         if not isinstance(first_line_number, int):
             ex = TypeError
         elif first_line_number < 0:
             ex = ValueError
         if ex:
-            raise ex("String: first_line_number must be an int >= 0")
+            raise ex("string: first_line_number must be an int >= 0")
 
         if not isinstance(first_column_number, int):
             ex = TypeError
         elif first_column_number < 0:
             ex = ValueError
         if ex:
-            raise ex("String: first_column_number must be an int >= 0")
+            raise ex("string: first_column_number must be an int >= 0")
 
         # secret API: if you pass in None for line_number and column_number,
         # it's lazy-calculated
@@ -122,27 +122,27 @@ class String(str):
             elif line_number < 0:
                 ex = ValueError
             if ex:
-                raise ex("String: line_number must be an int >= 0")
+                raise ex("string: line_number must be an int >= 0")
 
             if not isinstance(column_number, int):
                 ex = TypeError
             elif column_number < 0:
                 ex = ValueError
             if ex:
-                raise ex(f"String: column_number must be an int >= 0, not {column_number}")
+                raise ex(f"string: column_number must be an int >= 0, not {column_number}")
 
             if line_number < first_line_number:
-                raise ValueError("String: line_number can't be less than first_line_number")
+                raise ValueError("string: line_number can't be less than first_line_number")
 
             if column_number < first_column_number:
-                raise ValueError("String: column_number can't be less than first_column_number")
+                raise ValueError("string: column_number can't be less than first_column_number")
 
         if not isinstance(tab_width, int):
             ex = TypeError
         elif tab_width < 1:
             ex = ValueError
         if ex:
-            raise ex("String: tab_width must be an int >= 1")
+            raise ex("string: tab_width must be an int >= 1")
 
         self = super().__new__(cls, s)
         self._source = source
@@ -162,7 +162,7 @@ class String(str):
 
     # OK?
     # comparisons behave like str for the purposes of comparison
-    # if l is a String, l == str(l), l < str(l) + 'x', l + 'x' > str(l), etc
+    # if l is a string, l == str(l), l < str(l) + 'x', l + 'x' > str(l), etc
 
     @property
     def source(self):
@@ -263,7 +263,7 @@ class String(str):
 
 
     def is_followed_by(self, other):
-        if not isinstance(other, String):
+        if not isinstance(other, string):
             return False
 
         if self.origin != other.origin:
@@ -273,7 +273,7 @@ class String(str):
 
     def __add__(self, other):
         if not isinstance(other, str):
-            raise TypeError(f'can only concatenate str (not "{type(other)}") to String')
+            raise TypeError(f'can only concatenate str (not "{type(other)}") to string')
         if not other:
             return self
 
@@ -302,12 +302,12 @@ class String(str):
 
     def __radd__(self, other):
         if not isinstance(other, str):
-            raise TypeError(f'unsupported operand type(s) for +: "{type(other)}" and String')
+            raise TypeError(f'unsupported operand type(s) for +: "{type(other)}" and string')
         if not other:
             return self
 
-        # if other were a String, then we'd be in other.__add__, not self.__radd__
-        assert not isinstance(other, String)
+        # if other were a string, then we'd be in other.__add__, not self.__radd__
+        assert not isinstance(other, string)
 
         s = other + str(self)
 
@@ -317,7 +317,7 @@ class String(str):
         # we literally don't know what the resulting starting column should be.
         # with a tab_width of 8, it could be one of eight values.
         # and, faced with ambiguity, we decline to guess.
-        # so we just return a str, not a String.
+        # so we just return a str, not a string.
         if '\t' in left_lines[-1]:
             return s
 
@@ -363,7 +363,7 @@ class String(str):
 
         if isinstance(index, slice):
             if (result_length > 1) and (index.step not in (1, None)):
-                # this slice of the original can't be a viable String
+                # this slice of the original can't be a viable string
                 return result
             index = index.start or 0
 
@@ -618,7 +618,7 @@ class String(str):
 
     #
     # if lstrip/rstrip/strip doesn't remove anything, return self.
-    # otherwise, we can still return a String!
+    # otherwise, we can still return a string!
     #
     def lstrip(self, chars=None):
         s = str(self)
@@ -659,7 +659,7 @@ class String(str):
 
     def removeprefix(self, prefix):
         # new in Python 3.11 (I think?)
-        # but String will support it all the way back to 3.6.
+        # but string will support it all the way back to 3.6.
         s = str(self)
         if not s.startswith(prefix):
             return self
@@ -667,7 +667,7 @@ class String(str):
 
     def removesuffix(self, suffix):
         # new in Python 3.11 (I think?)
-        # but String will support it all the way back to 3.6.
+        # but string will support it all the way back to 3.6.
         s = str(self)
         if not s.endswith(suffix):
             return self
@@ -821,10 +821,12 @@ class String(str):
     def join(self, iterable):
         l = list(iterable)
         if not self:
-            return String.cat(*iterable)
+            return string.cat(*iterable)
         return str(self).join(iterable)
 
-    def __repr__(self):
+    # sadly, don't reimplement repr
+
+    def serialize(self):
         if self._line_number is None:
             self._calculate_line_and_column_numbers()
 
@@ -840,7 +842,7 @@ class String(str):
             o = repr(str(o))
             if len(o) > 20:
                 o = o[:15] + "[...]" + o[-1]
-            append(f"origin=String({o})")
+            append(f"origin=string({o})")
         if self._offset:
             append(f"offset={self._offset}")
         if self._first_line_number != 1:
@@ -850,7 +852,7 @@ class String(str):
 
         s = ", ".join(extras)
 
-        return f"String({repr(str(self))}, {s})"
+        return f"string({repr(str(self))}, {s})"
 
     ##
     ## isascii was added in 3.7.
@@ -942,16 +944,16 @@ class String(str):
 
         first = strings[0]
         if metadata is None:
-            if not isinstance(first, String):
-                raise ValueError(f"if the first argument is not a String, you must explicitly specify metadata")
-            # if they only specify one String to concatenate,
+            if not isinstance(first, string):
+                raise ValueError(f"if the first argument is not a string, you must explicitly specify metadata")
+            # if they only specify one string to concatenate,
             # and don't specify metadata,
-            # all we're gonna return is the first String, unmodified.
+            # all we're gonna return is the first string, unmodified.
             if len(strings) == 1:
                 return first
             metadata = first
-        elif not isinstance(metadata, String):
-            raise TypeError("metadata must be either String or None")
+        elif not isinstance(metadata, string):
+            raise TypeError("metadata must be either string or None")
         elif metadata._line_number is None:
             metadata._calculate_line_and_column_numbers()
 
@@ -965,7 +967,7 @@ class String(str):
 
             previous = None
             for l in strings:
-                if not (isinstance(l, String) and ((previous is None) or previous.is_followed_by(l))):
+                if not (isinstance(l, string) and ((previous is None) or previous.is_followed_by(l))):
                     break
                 previous = l
             else:
@@ -993,7 +995,7 @@ class String(str):
             if ex:
                 raise ex(f"column_number must be an int >= first_column_number ({metadata._first_column_number}), not {column_number}")
 
-        o = String(s,
+        o = string(s,
             source=metadata._source,
             offset=metadata._offset,
             origin=origin,
@@ -1035,7 +1037,7 @@ class SpecialNodeError(LookupError):
     pass
 
 # implementation detail, no public APIs expose nodes
-class LinkedListNode:
+class linked_list_node:
     def __init__(self, value):
         self.value = value
         self.special = None # None, 'deleted', 'head', or 'tail'
@@ -1088,15 +1090,15 @@ class LinkedListNode:
 
     def __repr__(self):
         special = f" ({self.special})" if self.special else ''
-        return f"LinkedListNode({self.value!r}{special})"
+        return f"linked_list_node({self.value!r}{special})"
 
 
 @export
-class LinkedList:
+class linked_list:
     def __init__(self, iterable=()):
-        self._head = head = LinkedListNode(None)
+        self._head = head = linked_list_node(None)
         head.special = 'head'
-        head.next = self._tail = tail = LinkedListNode(None)
+        head.next = self._tail = tail = linked_list_node(None)
         tail.special = 'tail'
         tail.previous = self._head
         self._length = 0
@@ -1104,7 +1106,7 @@ class LinkedList:
             self.append(value)
 
     def __repr__(self):
-        buffer = ["LinkedList(["]
+        buffer = ["linked_list(["]
         append = buffer.append
         cursor = self._head.next
         tail = self._tail
@@ -1205,13 +1207,13 @@ class LinkedList:
 
 
     def __copy__(self):
-        return LinkedList(self)
+        return linked_list(self)
 
     def copy(self):
         return self.__copy__()
 
     def __deepcopy__(self, memo):
-        t = LinkedList()
+        t = linked_list()
         for value in self:
             t.append(copy.deepcopy(value, memo))
         return t
@@ -1226,7 +1228,7 @@ class LinkedList:
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         index = other.__index__()
         if other <= 0:
-            return LinkedList()
+            return linked_list()
         t = self.__copy__()
         for _ in range(index - 1):
             t.extend(self)
@@ -1239,17 +1241,17 @@ class LinkedList:
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         index = other.__index__()
         if other <= 0:
-            return LinkedList()
+            return linked_list()
         t = self.__copy__()
         for _ in range(index - 1):
             self.extend(t)
         return self
 
     def __iter__(self):
-        return LinkedListIterator(self)
+        return linked_list_iterator(self)
 
     def __reversed__(self):
-        return LinkedListReverseIterator(self)
+        return linked_list_reverse_iterator(self)
 
     def __bool__(self):
         return self._length > 0
@@ -1381,7 +1383,7 @@ class LinkedList:
             if start < 0:
                 start += length
             if not (0 <= start < length):
-                raise IndexError(f'LinkedList index {original_start} out of range')
+                raise IndexError(f'linked_list index {original_start} out of range')
             stop = step = slice_length = None
 
         it = self._it_at_index(start)
@@ -1441,7 +1443,7 @@ class LinkedList:
                         index -= 1
                 it.replace(v)
             except StopIteration:
-                raise IndexError("LinkedList index out of range") from None
+                raise IndexError("linked_list index out of range") from None
 
     def __delitem__(self, key):
         it, start, stop, step, slice_length = self._parse_key(key)
@@ -1522,7 +1524,7 @@ class LinkedList:
         while node_before_tail.special == 'deleted':
             node_before_tail = node_before_tail.previous
         if node_before_tail == self._head:
-            raise IndexError('pop from empty LinkedList')
+            raise IndexError('pop from empty linked_list')
         self._length -= 1
         return node_before_tail.remove()
 
@@ -1531,7 +1533,7 @@ class LinkedList:
         while node_after_head.special == 'deleted':
             node_after_head = node_after_head.next
         if node_after_head == self._tail:
-            raise IndexError('pop from empty LinkedList')
+            raise IndexError('pop from empty linked_list')
         self._length -= 1
         return node_after_head.remove()
 
@@ -1559,7 +1561,7 @@ class LinkedList:
         if it is None:
             if default is not _undefined:
                 return default
-            raise ValueError('LinkedList.remove(x): x not in linked list')
+            raise ValueError('linked_list.remove(x): x not in linked list')
         assert not it._cursor.special # find should never return a special node
         self._length -= 1
         return it._cursor.remove()
@@ -1569,7 +1571,7 @@ class LinkedList:
         if it is None:
             if default is not _undefined:
                 return default
-            raise ValueError('LinkedList.remove(x): x not in linked list')
+            raise ValueError('linked_list.remove(x): x not in linked list')
         assert not it._cursor.special # find should never return a special node
         self._length -= 1
         return it._cursor.remove()
@@ -1607,7 +1609,7 @@ class LinkedList:
 
 
 @export
-class LinkedListIterator:
+class linked_list_iterator:
     def __init__(self, linked_list):
         self._linked_list = linked_list
         self._cursor = cursor = linked_list._head
@@ -1654,7 +1656,7 @@ class LinkedListIterator:
 
     def __reversed__(self):
         cursor = self._cursor
-        copy = LinkedListReverseIterator(self._linked_list)
+        copy = linked_list_reverse_iterator(self._linked_list)
         copy._cursor = cursor
         cursor.iterator_refcount += 1
         return copy
@@ -1678,7 +1680,7 @@ class LinkedListIterator:
             for _ in range(index):
                 advance()
         except StopIteration:
-            raise IndexError('LinkedList index out of range') from None
+            raise IndexError('linked_list index out of range') from None
 
     def __next__(self):
         cursor = self._cursor
@@ -1894,7 +1896,7 @@ class LinkedListIterator:
                 if pop:
                     pop()
             except StopIteration:
-                raise IndexError("LinkedList index out of range") from None
+                raise IndexError("linked_list index out of range") from None
 
         return result
 
@@ -2024,14 +2026,14 @@ class LinkedListIterator:
 
 
 @export
-class LinkedListReverseIterator(LinkedListIterator):
+class linked_list_reverse_iterator(linked_list_iterator):
     def __init__(self, linked_list):
         super().__init__(linked_list)
         self._cursor = linked_list._tail
 
     def __reversed__(self):
         cursor = self._cursor
-        copy = LinkedListIterator(self._linked_list)
+        copy = linked_list_iterator(self._linked_list)
         copy._cursor = cursor
         cursor.iterator_refcount += 1
         return copy

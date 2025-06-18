@@ -30,13 +30,14 @@ big_dir = bigtestlib.preload_local_big()
 import itertools
 from itertools import zip_longest
 import pickle
-import string
+# import string
+from string import ascii_letters, punctuation, whitespace
 import sys
 import unittest
 
-from big.types import String, Pattern
-from big.types import LinkedList, SpecialNodeError
-from big.types import LinkedListIterator, LinkedListReverseIterator
+from big.types import string, Pattern
+from big.types import linked_list, SpecialNodeError
+from big.types import linked_list_iterator, linked_list_reverse_iterator
 from big.tokens import *
 
 
@@ -45,29 +46,29 @@ source2 = "C:\\HIMEM.SYS"
 first_line_number = 1
 first_column_number = 1
 
-alphabet = String('abcdefghijklmnopqrstuvwxyz', source=source)
+alphabet = string('abcdefghijklmnopqrstuvwxyz', source=source)
 abcde = alphabet[:5]
 fghij = alphabet[5:10]
-himem = String('QEMM\n', source=source2)
-line1 = String('line 1!\n', source=source)
-line2 = String('line 2.\n', source=source, line_number=2)
-words = String('this is a series of words.', source=source)
-tabs  = String('this\tis\ta\tseries\tof\twords\twith\ttabs', source=source)
-leading_and_trailing  = String('            a b c                  ', source=source)
-leading_only  = String('            a b c', source=source)
-trailing_only  = String('a b c            ', source=source)
-all_uppercase  = String("HELLO WORLD!", source=source)
-title_case  = String("Hello World!", source=source)
-kooky1 = String("kooky land 1", line_number=44,                   first_line_number=44                        )
-kooky2 = String("kooky land 2",                 column_number=33,                       first_column_number=33)
-kooky3 = String("kooky land 3", line_number=44, column_number=33, first_line_number=44, first_column_number=33)
+himem = string('QEMM\n', source=source2)
+line1 = string('line 1!\n', source=source)
+line2 = string('line 2.\n', source=source, line_number=2)
+words = string('this is a series of words.', source=source)
+tabs  = string('this\tis\ta\tseries\tof\twords\twith\ttabs', source=source)
+leading_and_trailing  = string('            a b c                  ', source=source)
+leading_only  = string('            a b c', source=source)
+trailing_only  = string('a b c            ', source=source)
+all_uppercase  = string("HELLO WORLD!", source=source)
+title_case  = string("Hello World!", source=source)
+kooky1 = string("kooky land 1", line_number=44,                   first_line_number=44                        )
+kooky2 = string("kooky land 2",                 column_number=33,                       first_column_number=33)
+kooky3 = string("kooky land 3", line_number=44, column_number=33, first_line_number=44, first_column_number=33)
 
-splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
+splitlines_demo = string(' a \n b \r c \r\n d \n\r e ', source='Z')
 
-l2 = String("ab\ncd\nef", source='xz')
+l2 = string("ab\ncd\nef", source='xz')
 
 
-chipmunk = String('🐿️', source='tic e tac')
+chipmunk = string('🐿️', source='tic e tac')
 
 
 l = abcde
@@ -99,12 +100,12 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(got, expected)
 
     def assertString(self, got, expected):
-        self.assertIsInstance(got, String)
+        self.assertIsInstance(got, string)
         self.assertEqual(got, expected)
 
     def assertStr(self, got, expected):
         self.assertIsInstance(got, str)
-        self.assertNotIsInstance(got, String)
+        self.assertNotIsInstance(got, string)
         self.assertEqual(got, expected)
 
     ##
@@ -117,82 +118,82 @@ class BigStringTests(unittest.TestCase):
     ##
 
     def test_constructor(self):
-        self.assertString(String('abc'), 'abc')
+        self.assertString(string('abc'), 'abc')
 
-        self.assertEqual(String(abcde), abcde)
+        self.assertEqual(string(abcde), abcde)
 
         ar = self.assertRaises
 
         with ar(TypeError):
-            String(54321)
+            string(54321)
         with ar(TypeError):
-            String(33.4)
+            string(33.4)
         with ar(TypeError):
-            String(['x', 'y'])
+            string(['x', 'y'])
 
-        self.assertString(String('abc', source=None, origin=None), 'abc')
-        self.assertString(String('abc', source='xyz', origin=None), 'abc')
-        s = String('abc')
-        self.assertString(String('abc', source=None, origin=s), 'abc')
-        self.assertString(String('abc', source='xyz', origin=s), 'abc')
-
-        with ar(TypeError):
-            String('abc', source=33.5)
-        with ar(TypeError):
-            String('abc', source=-2)
-        with ar(TypeError):
-            String('abc', source=['x'])
+        self.assertString(string('abc', source=None, origin=None), 'abc')
+        self.assertString(string('abc', source='xyz', origin=None), 'abc')
+        s = string('abc')
+        self.assertString(string('abc', source=None, origin=s), 'abc')
+        self.assertString(string('abc', source='xyz', origin=s), 'abc')
 
         with ar(TypeError):
-            String('abc', origin=33.5)
+            string('abc', source=33.5)
         with ar(TypeError):
-            String('abc', origin=-2)
+            string('abc', source=-2)
         with ar(TypeError):
-            String('abc', origin=['x'])
+            string('abc', source=['x'])
 
         with ar(TypeError):
-            String('abc', line_number=33.5)
-        with ar(ValueError):
-            String('abc', line_number=-2)
-        with ar(ValueError):
-            String('abc', line_number=0)
-        with ar(ValueError):
-            String('abc', line_number=2, first_line_number=3)
+            string('abc', origin=33.5)
+        with ar(TypeError):
+            string('abc', origin=-2)
+        with ar(TypeError):
+            string('abc', origin=['x'])
 
         with ar(TypeError):
-            String('abc', column_number=33.5)
+            string('abc', line_number=33.5)
         with ar(ValueError):
-            String('abc', column_number=-2)
+            string('abc', line_number=-2)
         with ar(ValueError):
-            String('abc', column_number=0)
+            string('abc', line_number=0)
         with ar(ValueError):
-            String('abc', column_number=2, first_column_number=3)
+            string('abc', line_number=2, first_line_number=3)
 
         with ar(TypeError):
-            String('abc', offset=33.5)
+            string('abc', column_number=33.5)
         with ar(ValueError):
-            String('abc', offset=-2)
+            string('abc', column_number=-2)
+        with ar(ValueError):
+            string('abc', column_number=0)
+        with ar(ValueError):
+            string('abc', column_number=2, first_column_number=3)
 
         with ar(TypeError):
-            String('abc', first_line_number=33.5)
+            string('abc', offset=33.5)
         with ar(ValueError):
-            String('abc', first_line_number=-2)
+            string('abc', offset=-2)
 
         with ar(TypeError):
-            String('abc', first_column_number=33.5)
+            string('abc', first_line_number=33.5)
         with ar(ValueError):
-            String('abc', first_column_number=-2)
+            string('abc', first_line_number=-2)
 
         with ar(TypeError):
-            String('abc', tab_width=33.5)
+            string('abc', first_column_number=33.5)
         with ar(ValueError):
-            String('abc', tab_width=-2)
+            string('abc', first_column_number=-2)
+
+        with ar(TypeError):
+            string('abc', tab_width=33.5)
         with ar(ValueError):
-            String('abc', tab_width=0)
+            string('abc', tab_width=-2)
+        with ar(ValueError):
+            string('abc', tab_width=0)
 
 
     def test_attributes(self):
-        s = String("abcde", source="source", line_number=3, column_number=4, first_line_number=1, first_column_number=2, tab_width=4)
+        s = string("abcde", source="source", line_number=3, column_number=4, first_line_number=1, first_column_number=2, tab_width=4)
         self.assertString(s, "abcde")
         self.assertStr(s.source, "source")
         self.assertInt(s.line_number, 3)
@@ -202,7 +203,7 @@ class BigStringTests(unittest.TestCase):
         self.assertInt(s.tab_width, 4)
         self.assertStr(s.where, '"source" line 3 column 4')
 
-        s = String("abcde", line_number=3, column_number=4, first_line_number=1, first_column_number=2, tab_width=4)
+        s = string("abcde", line_number=3, column_number=4, first_line_number=1, first_column_number=2, tab_width=4)
         self.assertString(s, "abcde")
         self.assertEqual(s.source, None)
         self.assertInt(s.line_number, 3)
@@ -229,25 +230,25 @@ class BigStringTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             x = 1 + abcde
 
-        s = String("abcde", line_number=5, column_number=5)
+        s = string("abcde", line_number=5, column_number=5)
 
-        # if it works out like magic, you can get a String out
+        # if it works out like magic, you can get a string out
         # but the line and column numbers have to work.
         str_x = "wxyz" + str(s)
         x = "wxyz" + s
-        self.assertIsInstance(x, String)
+        self.assertIsInstance(x, string)
         self.assertEqual(x, str_x)
         self.assertEqual(x.line_number, 5)
         self.assertEqual(x.column_number, 1)
 
         str_x = "123\nwxyz" + str(s)
         x = "123\nwxyz" + s
-        self.assertIsInstance(x, String)
+        self.assertIsInstance(x, string)
         self.assertEqual(x, str_x)
         self.assertEqual(x.line_number, 4)
         self.assertEqual(x.column_number, 1)
 
-        # prepending a String with a str might return a str, if:
+        # prepending a string with a str might return a str, if:
         # too many columns
         self.assertStr("xyzxyzxyzxyzxyz" + s, "xyzxyzxyzxyzxyz" + str(s))
         # too many lines
@@ -262,7 +263,7 @@ class BigStringTests(unittest.TestCase):
 
 
     def test___class__(self):
-        self.assertEqual(l.__class__, String)
+        self.assertEqual(l.__class__, string)
 
     def test___contains__(self):
         # also tests .find and .index and .rfind and .rindex
@@ -282,7 +283,7 @@ class BigStringTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 abcde.rindex(s)
 
-        letters = set(string.ascii_letters) | set(string.punctuation) | set(string.whitespace)
+        letters = set(ascii_letters) | set(punctuation) | set(whitespace)
         for value in values:
             in_value = set(str(value))
             not_in_value = letters - in_value
@@ -348,14 +349,14 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(l + 'x', str(l) + 'x')
 
     def test___format__(self):
-        f = String('{abcde} {line1} {line2}', source=source)
+        f = string('{abcde} {line1} {line2}', source=source)
         got = f.format(abcde=abcde, line1=line1, line2=line2)
         self.assertStr(got, 'abcde line 1!\n line 2.\n')
         got = f.format_map({'abcde': abcde, 'line1': line1, 'line2': line2})
         self.assertStr(got, 'abcde line 1!\n line 2.\n')
 
-        # if the String is unchanged, return the String!
-        f = String("{abcde}", source=source)
+        # if the string is unchanged, return the string!
+        f = string("{abcde}", source=source)
         got = f.format(abcde='{abcde}')
         self.assertString(f, got)
         got = f.format_map({'abcde': '{abcde}'})
@@ -386,9 +387,9 @@ class BigStringTests(unittest.TestCase):
         s = str(abcde)
         length = len(s)
         for i in range(-length, length):
-            self.assertString(abcde[i], String(s[i], source=source, column_number=first_column_number + (i % length)))
+            self.assertString(abcde[i], string(s[i], source=source, column_number=first_column_number + (i % length)))
 
-        self.assertString(abcde[1:4], String('bcd', source=source, column_number=first_column_number + 1))
+        self.assertString(abcde[1:4], string('bcd', source=source, column_number=first_column_number + 1))
 
         self.assertStr(abcde[1:-1:2], 'bd')
 
@@ -410,7 +411,7 @@ class BigStringTests(unittest.TestCase):
         # regression: if the string ended with a linebreak,
         # getting the zero-length string after that linebreak
         # would increment the line number
-        s = String("x\n")
+        s = string("x\n")
 
         endo = s[len(s):len(s)]
         self.assertEqual(endo.line_number, 2)
@@ -419,7 +420,7 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(endo[0:0][0:0][0:0].line_number, 2) # used to be 5!
 
     def test___getnewargs__(self):
-        # String implements __getnewargs__, it's pickling machinery.
+        # string implements __getnewargs__, it's pickling machinery.
         for value in values:
             p = pickle.dumps(value)
             value2 = pickle.loads(p)
@@ -445,7 +446,7 @@ class BigStringTests(unittest.TestCase):
         pass
 
     def test___init_subclass__(self):
-        # oh golly, idk.  don't subclass String, mkay?
+        # oh golly, idk.  don't subclass string, mkay?
         pass
 
     def test___iter__(self):
@@ -456,56 +457,56 @@ class BigStringTests(unittest.TestCase):
                 self.assertStr(b, s[i])
                 self.assertString(a, value[i])
 
-        # and now, a cool String feature
-        l = String('a\nb\ncde\nf', source='s1')
+        # and now, a cool string feature
+        l = string('a\nb\ncde\nf', source='s1')
         expected = [
-            String('a',  source='s1', line_number=1, column_number=1, offset=0),
-            String('\n', source='s1', line_number=1, column_number=2, offset=1),
-            String('b',  source='s1', line_number=2, column_number=1, offset=2),
-            String('\n', source='s1', line_number=2, column_number=2, offset=3),
-            String('c',  source='s1', line_number=3, column_number=1, offset=4),
-            String('d',  source='s1', line_number=3, column_number=2, offset=5),
-            String('e',  source='s1', line_number=3, column_number=3, offset=6),
-            String('\n', source='s1', line_number=3, column_number=4, offset=7),
-            String('f',  source='s1', line_number=4, column_number=1, offset=8),
+            string('a',  source='s1', line_number=1, column_number=1, offset=0),
+            string('\n', source='s1', line_number=1, column_number=2, offset=1),
+            string('b',  source='s1', line_number=2, column_number=1, offset=2),
+            string('\n', source='s1', line_number=2, column_number=2, offset=3),
+            string('c',  source='s1', line_number=3, column_number=1, offset=4),
+            string('d',  source='s1', line_number=3, column_number=2, offset=5),
+            string('e',  source='s1', line_number=3, column_number=3, offset=6),
+            string('\n', source='s1', line_number=3, column_number=4, offset=7),
+            string('f',  source='s1', line_number=4, column_number=1, offset=8),
             ]
         for a, b in zip_longest(l, expected):
             self.assertString(a, b)
 
-        l = String('a\nb\ncde\nf', source='s2', line_number=10, column_number=2, first_column_number=2, offset=99)
+        l = string('a\nb\ncde\nf', source='s2', line_number=10, column_number=2, first_column_number=2, offset=99)
         expected = [
-            String('a',  source='s2', line_number=10, column_number=2, offset=99),
-            String('\n', source='s2', line_number=10, column_number=3, offset=100),
-            String('b',  source='s2', line_number=11, column_number=2, offset=101),
-            String('\n', source='s2', line_number=11, column_number=3, offset=102),
-            String('c',  source='s2', line_number=12, column_number=2, offset=103),
-            String('d',  source='s2', line_number=12, column_number=3, offset=104),
-            String('e',  source='s2', line_number=12, column_number=4, offset=105),
-            String('\n', source='s2', line_number=12, column_number=5, offset=106),
-            String('f',  source='s2', line_number=13, column_number=2, offset=107),
+            string('a',  source='s2', line_number=10, column_number=2, offset=99),
+            string('\n', source='s2', line_number=10, column_number=3, offset=100),
+            string('b',  source='s2', line_number=11, column_number=2, offset=101),
+            string('\n', source='s2', line_number=11, column_number=3, offset=102),
+            string('c',  source='s2', line_number=12, column_number=2, offset=103),
+            string('d',  source='s2', line_number=12, column_number=3, offset=104),
+            string('e',  source='s2', line_number=12, column_number=4, offset=105),
+            string('\n', source='s2', line_number=12, column_number=5, offset=106),
+            string('f',  source='s2', line_number=13, column_number=2, offset=107),
             ]
         for a, b in zip_longest(l, expected):
             self.assertString(a, b)
 
         # test tab
-        l = String('ab\tc', source='s2')
+        l = string('ab\tc', source='s2')
         expected = [
-            String('a',  source='s2', line_number=1, column_number=1, offset=0),
-            String('b',  source='s2', line_number=1, column_number=2, offset=1),
-            String('\t', source='s2', line_number=1, column_number=3, offset=2),
-            String('c',  source='s2', line_number=1, column_number=9, offset=3),
+            string('a',  source='s2', line_number=1, column_number=1, offset=0),
+            string('b',  source='s2', line_number=1, column_number=2, offset=1),
+            string('\t', source='s2', line_number=1, column_number=3, offset=2),
+            string('c',  source='s2', line_number=1, column_number=9, offset=3),
             ]
         for a, b in zip_longest(l, expected):
             self.assertString(a, b)
 
         # also test tab immediately after \r, because, reasons.
-        l = String('ab\r\tc', source='s2')
+        l = string('ab\r\tc', source='s2')
         expected = [
-            String('a',  source='s2', line_number=1, column_number=1, offset=0),
-            String('b',  source='s2', line_number=1, column_number=2, offset=1),
-            String('\r', source='s2', line_number=1, column_number=3, offset=2),
-            String('\t', source='s2', line_number=2, column_number=1, offset=3),
-            String('c',  source='s2', line_number=2, column_number=9, offset=4),
+            string('a',  source='s2', line_number=1, column_number=1, offset=0),
+            string('b',  source='s2', line_number=1, column_number=2, offset=1),
+            string('\r', source='s2', line_number=1, column_number=3, offset=2),
+            string('\t', source='s2', line_number=2, column_number=1, offset=3),
+            string('c',  source='s2', line_number=2, column_number=9, offset=4),
             ]
         for a, b in zip_longest(l, expected):
             self.assertString(a, b)
@@ -513,15 +514,15 @@ class BigStringTests(unittest.TestCase):
         # regression: at one point there was a bug, if the string ends with \r,
         # it wouldn't get yielded.  __next__ buffers \r in case it's followed
         # by \n, in which case we only break the line after the \n.
-        l = String('a\nb\r\nc\r', source='s2')
+        l = string('a\nb\r\nc\r', source='s2')
         expected = [
-            String('a',  source='s2', line_number=1, column_number=1, offset=0),
-            String('\n', source='s2', line_number=1, column_number=2, offset=1),
-            String('b',  source='s2', line_number=2, column_number=1, offset=2),
-            String('\r', source='s2', line_number=2, column_number=2, offset=3),
-            String('\n', source='s2', line_number=2, column_number=3, offset=4),
-            String('c',  source='s2', line_number=3, column_number=1, offset=5),
-            String('\r', source='s2', line_number=3, column_number=2, offset=6),
+            string('a',  source='s2', line_number=1, column_number=1, offset=0),
+            string('\n', source='s2', line_number=1, column_number=2, offset=1),
+            string('b',  source='s2', line_number=2, column_number=1, offset=2),
+            string('\r', source='s2', line_number=2, column_number=2, offset=3),
+            string('\n', source='s2', line_number=2, column_number=3, offset=4),
+            string('c',  source='s2', line_number=3, column_number=1, offset=5),
+            string('\r', source='s2', line_number=3, column_number=2, offset=6),
             ]
         for a, b in zip_longest(l, expected):
             self.assertString(a, b)
@@ -542,7 +543,7 @@ class BigStringTests(unittest.TestCase):
 
     def test___mod__(self):
         # wow!  crack a window, will ya?
-        f = String('%s %d %f', source=source)
+        f = string('%s %d %f', source=source)
         got = f % (abcde, 33, 35.5)
         self.assertStr(got, 'abcde 33 35.500000')
 
@@ -555,7 +556,7 @@ class BigStringTests(unittest.TestCase):
         self.assertNotEqual(l, str(l) + 'x')
         self.assertNotEqual(l + 'x', str(l))
         self.assertNotEqual(l, 3)
-        self.assertNotEqual(String('3', source='x'), 3)
+        self.assertNotEqual(string('3', source='x'), 3)
 
     def test___new__(self):
         # don't need to test this
@@ -571,11 +572,11 @@ class BigStringTests(unittest.TestCase):
 
     def test___repr__(self):
         for value in values:
-            self.assertStr(repr(value)[:11], f"String({repr(str(value))}"[:11])
-            self.assertTrue(f"line_number={value.line_number}, " in repr(value))
-        long_source = String('x' * 90)
-        s = String('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
-        self.assertEqual(repr(s), "String('abcde', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
+            self.assertStr(repr(value)[:11], repr(str(value))[:11])
+            self.assertTrue(f"line_number={value.line_number}, " in value.serialize())
+        long_source = string('x' * 90)
+        s = string('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
+        self.assertEqual(s.serialize(), "string('abcde', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
 
 
     # def test___rmod__(self):
@@ -602,7 +603,7 @@ class BigStringTests(unittest.TestCase):
             l.first_column_number = 329872389
 
     def test___sizeof__(self):
-        value = sys.getsizeof(String(''))
+        value = sys.getsizeof(string(''))
         self.assertIsInstance(value, int)
         # the size varies from one Python version to the next
         self.assertGreaterEqual(value, 40)
@@ -747,7 +748,7 @@ class BigStringTests(unittest.TestCase):
         got = abcde.ljust(10, 'x')
         self.assertStr(got, 'abcdexxxxx')
 
-        # if the String doesn't change, return the String
+        # if the string doesn't change, return the string
         got = abcde.ljust(5)
         self.assertString(got, abcde)
         got = abcde.ljust(5, 'x')
@@ -786,7 +787,7 @@ class BigStringTests(unittest.TestCase):
                 if c in chars:
                     continue
                 chars.append(c)
-            value = String("".join(chars), source="PQ")
+            value = string("".join(chars), source="PQ")
 
             for i, middle in enumerate(value):
                 before = value[:i]
@@ -818,7 +819,7 @@ class BigStringTests(unittest.TestCase):
             self.assertString(after, value)
 
         # test overlapping
-        l = String('a . . b . . c . . d . . e', source='smith')
+        l = string('a . . b . . c . . d . . e', source='smith')
         sep = ' . '
 
         partitions = l.partition(sep)
@@ -830,7 +831,7 @@ class BigStringTests(unittest.TestCase):
             )
             )
         self.assertEqual(partitions[0] + partitions[1] + partitions[2], l)
-        self.assertEqual(String.cat(*partitions), l)
+        self.assertEqual(string.cat(*partitions), l)
 
         self.assertEqual(l.rpartition(sep),
             (
@@ -840,7 +841,7 @@ class BigStringTests(unittest.TestCase):
             )
             )
         self.assertEqual(partitions[0] + partitions[1] + partitions[2], l)
-        self.assertEqual(String.cat(*partitions), l)
+        self.assertEqual(string.cat(*partitions), l)
 
         # test Eric Smith's extension
 
@@ -889,7 +890,7 @@ class BigStringTests(unittest.TestCase):
             l[25:25], # empty!
             )
             )
-        self.assertEqual(String.cat(*partitions), l)
+        self.assertEqual(string.cat(*partitions), l)
 
         partitions = l.rpartition(sep, 6)
         self.assertEqual(partitions,
@@ -909,7 +910,7 @@ class BigStringTests(unittest.TestCase):
             l[24:25], # '. e'
             )
             )
-        self.assertEqual(String.cat(*partitions), l)
+        self.assertEqual(string.cat(*partitions), l)
 
 
 
@@ -986,7 +987,7 @@ class BigStringTests(unittest.TestCase):
             ('XooXoooXoooXoooXoo', 'Xooo', [('Xoo', 0, 1, 1), ('', 7, 1, 8), ('', 11, 1, 12), ('Xoo', 15, 1, 16)]),
             ):
             source = 'toe'
-            l2 = String(s, source=source)
+            l2 = string(s, source=source)
             list_split = list(l2.split(sep))
             list_rsplit = list(l2.rsplit(sep))
             for line, rline, r in zip_longest(list_split, list_rsplit, result):
@@ -1000,7 +1001,7 @@ class BigStringTests(unittest.TestCase):
                 self.assertEqual(line.column_number, column_number, f"{line!r} != {r}")
                 self.assertEqual(rline.column_number, column_number, f"{rline!r} != {r}")
 
-            axxb = String("a x x b")
+            axxb = string("a x x b")
             list_split = axxb.split(' x ')
             self.assertString(list_split[0], 'a')
             self.assertString(list_split[1], 'x b')
@@ -1010,7 +1011,7 @@ class BigStringTests(unittest.TestCase):
 
 
     def test_splitlines(self):
-        # splitlines_demo = String(' a \n b \r c \r\n d \n\r e ', source='Z')
+        # splitlines_demo = string(' a \n b \r c \r\n d \n\r e ', source='Z')
         self.assertEqual(list(splitlines_demo.splitlines()), [' a ', ' b ', ' c ', ' d ', '', ' e '])
         self.assertEqual(list(splitlines_demo.splitlines(True)), [' a \n', ' b \r', ' c \r\n', ' d \n', '\r', ' e '])
 
@@ -1019,7 +1020,7 @@ class BigStringTests(unittest.TestCase):
         for value in values:
             with self.subTest(repr(value)):
                 splitted = value.splitlines(True)
-                reconstituted = String.cat(*splitted)
+                reconstituted = string.cat(*splitted)
                 self.assertString(reconstituted, value)
 
     def test_startswith(self):
@@ -1064,13 +1065,13 @@ class BigStringTests(unittest.TestCase):
 
     def test_tab_width(self):
 
-        s = String('ab\tcde\tfg')
+        s = string('ab\tcde\tfg')
         for (i, c), expected in zip_longest(enumerate(s), [1, 2, 3, 9, 10, 11, 12, 17, 18]):
             c2 = s[i]
             self.assertEqual(c.column_number, expected)
             self.assertEqual(c2.column_number, expected)
 
-        s = String('ab\tcde\tfg', tab_width=4)
+        s = string('ab\tcde\tfg', tab_width=4)
         for (i, c), expected in zip_longest(enumerate(s), [1, 2, 3, 5, 6, 7, 8, 9, 10]):
             c2 = s[i]
             self.assertEqual(c.column_number, expected)
@@ -1079,8 +1080,8 @@ class BigStringTests(unittest.TestCase):
     def test_bisect(self):
         for i in range(1, len(alphabet) - 1):
             a, b = alphabet.bisect(i)
-            self.assertIsInstance(a, String)
-            self.assertIsInstance(b, String)
+            self.assertIsInstance(a, string)
+            self.assertIsInstance(b, string)
             self.assertEqual(len(a), i)
             self.assertTrue(alphabet.startswith(a))
             self.assertEqual(a + b, alphabet)
@@ -1095,60 +1096,60 @@ class BigStringTests(unittest.TestCase):
         self.assertFalse(a.is_followed_by(c))
         self.assertFalse(b.is_followed_by(a))
 
-        xbcde = String('xbcde')
+        xbcde = string('xbcde')
         fake_b = xbcde[1]
         self.assertFalse(a.is_followed_by(fake_b))
 
     def test_cat(self):
-        self.assertStr(String.cat(), '')
-        self.assertString(String.cat(abcde), abcde)
-        self.assertString(String.cat(abcde, 'xyz'), 'abcdexyz')
-        self.assertString(String.cat(abcde[:2], abcde[2:]), abcde)
-        self.assertString(String.cat(abcde[:2], abcde[:2]), 'abab')
+        self.assertStr(string.cat(), '')
+        self.assertString(string.cat(abcde), abcde)
+        self.assertString(string.cat(abcde, 'xyz'), 'abcdexyz')
+        self.assertString(string.cat(abcde[:2], abcde[2:]), abcde)
+        self.assertString(string.cat(abcde[:2], abcde[:2]), 'abab')
 
-        xyz = String.cat('xyz', metadata=abcde)
+        xyz = string.cat('xyz', metadata=abcde)
         self.assertString(xyz, 'xyz')
         self.assertEqual(xyz.source, abcde.source)
         self.assertEqual(xyz.line_number, abcde.line_number)
         self.assertEqual(xyz.column_number, abcde.column_number)
 
-        xyz = String.cat('xyz', metadata=abcde, line_number=77, column_number=88)
+        xyz = string.cat('xyz', metadata=abcde, line_number=77, column_number=88)
         self.assertString(xyz, 'xyz')
         self.assertEqual(xyz.source, abcde.source)
         self.assertEqual(xyz.line_number, 77)
         self.assertEqual(xyz.column_number, 88)
 
         with self.assertRaises(ValueError):
-            String.cat('xyz', 'zooo')
+            string.cat('xyz', 'zooo')
 
         with self.assertRaises(TypeError):
-            String.cat('xyz', metadata=3.5)
+            string.cat('xyz', metadata=3.5)
 
         with self.assertRaises(TypeError):
-            String.cat('xyz', metadata=xyz, line_number=33.5)
+            string.cat('xyz', metadata=xyz, line_number=33.5)
         with self.assertRaises(ValueError):
-            String.cat('xyz', metadata=xyz, line_number=-20)
+            string.cat('xyz', metadata=xyz, line_number=-20)
 
         with self.assertRaises(TypeError):
-            String.cat('xyz', metadata=xyz, column_number=33.5)
+            string.cat('xyz', metadata=xyz, column_number=33.5)
         with self.assertRaises(ValueError):
-            String.cat('xyz', metadata=xyz, column_number=-20)
+            string.cat('xyz', metadata=xyz, column_number=-20)
 
 
     def test_linebreak_offsets_generation(self):
-        # a String can generate and cache linebreak offsets two different ways:
-        #     * iterating over a String
+        # a string can generate and cache linebreak offsets two different ways:
+        #     * iterating over a string
         #     * calling split or partition, which call __compute_linebreak_offsets
         for value in values:
             s = str(value)
 
-            l_iter = String(s, source="z")
+            l_iter = string(s, source="z")
             self.assertEqual(l_iter._linebreak_offsets, None)
             [c for c in l_iter]
             self.assertNotEqual(l_iter._linebreak_offsets, None)
 
 
-            l_compute = String(s, source="z")
+            l_compute = string(s, source="z")
             self.assertEqual(l_compute._linebreak_offsets, None)
             l_compute._compute_linebreak_offsets()
             self.assertNotEqual(l_compute._linebreak_offsets, None)
@@ -1164,7 +1165,7 @@ class BigStringTests(unittest.TestCase):
             self.assertEqual(l_iter._linebreak_offsets, l_compute._linebreak_offsets, f"{s!r}")
 
     def test_line_etc(self):
-        s = String("a b c\nd e f\ng h i\nj k l\nm n o")
+        s = string("a b c\nd e f\ng h i\nj k l\nm n o")
 
         h = s[14]
 
@@ -1181,7 +1182,7 @@ class BigStringTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             print(repr(h.next_line.next_line.next_line))
 
-        # if s is a String, and x = s[i:j], and there are linebreaks in x,
+        # if s is a string, and x = s[i:j], and there are linebreaks in x,
         # x.line extends from the beginning of the first line in x
         # to the linebreak that ends the last line in x.
         hijk = s[14:21] # "h i\nj k"
@@ -1192,7 +1193,7 @@ class BigStringTests(unittest.TestCase):
         almost_everything = s[1:-1]
         self.assertString(almost_everything.line, s)
 
-        # regression! if we have a zero-length slice of a String named x,
+        # regression! if we have a zero-length slice of a string named x,
         # x.line used to crash.
         s_end = s[len(s):]
         self.assertEqual(s_end.line, "m n o")
@@ -1207,7 +1208,7 @@ class BigStringTests(unittest.TestCase):
         "ghi'''\n",
         ''
         ]
-        text = String("".join(lines))
+        text = string("".join(lines))
 
         lines_2_3_4 = lines[2] + lines[3] + lines[4]
         s = lines_2_3_4.rstrip()
@@ -1240,8 +1241,8 @@ class BigStringTests(unittest.TestCase):
         self.assertString(after, 'de')
 
     def test_compile(self):
-        p = String(":+").compile()
-        s = String('a:b::c::d:')
+        p = string(":+").compile()
+        s = string('a:b::c::d:')
         l = p.split(s)
         self.assertEqual(l,
             [
@@ -1275,7 +1276,7 @@ class BigStringTests(unittest.TestCase):
         segment = alphabet[5:10]
         self.assertIsNone(segment._line_number)
         self.assertIsNone(segment._column_number)
-        s = String.cat(line1, line2, metadata=segment)
+        s = string.cat(line1, line2, metadata=segment)
         self.assertEqual(s.line_number, 1)
         self.assertEqual(s.column_number, 6)
         self.assertEqual(s, line1 + line2)
@@ -1286,7 +1287,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(len(o), length)
 
     def assertLinkedListEqual(self, t, expected):
-        self.assertIsInstance(t, LinkedList)
+        self.assertIsInstance(t, linked_list)
         expected = list(expected)
         got = list(iter(t))
         self.assertEqual(expected, got)
@@ -1316,7 +1317,7 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def testIteratorBasics(self):
-        t = LinkedList()
+        t = linked_list()
 
         # an iterator on a linked list always starts out at head
         it = iter(t)
@@ -1349,7 +1350,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsNone(before)
 
         initial = [1, 2, 3, 4, 5]
-        t = LinkedList(initial)
+        t = linked_list(initial)
         self.assertLength(t, 5)
         it = iter(t)
         result = list(it)
@@ -1363,7 +1364,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def testEmptyList(self):
         # if the list is empty:
-        t = LinkedList()
+        t = linked_list()
         self.assertFalse(t)
 
         # "after" head is tail
@@ -1410,7 +1411,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def testExtend(self):
         def setup():
-            t = LinkedList((1, 2, 3))
+            t = linked_list((1, 2, 3))
             self.assertLength(t, 3)
             it = iter(t)
             return t, it
@@ -1438,7 +1439,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 6)
 
         def setup2():
-            t = LinkedList((1, 2, 3))
+            t = linked_list((1, 2, 3))
             rit = reversed(t)
             return t, rit
 
@@ -1457,7 +1458,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def testLinkedListMethods(self):
         def setup():
-            t = LinkedList((1, 2, 3))
+            t = linked_list((1, 2, 3))
             it = t.find(2)
             return t, it
 
@@ -1487,16 +1488,16 @@ class BigLinkedListTests(unittest.TestCase):
         def setup():
             # returns t, it, iterators
             #
-            #   deleted nodes! --+--+--+-----+--+--+
-            #                    |  |  |     |  |  |
-            #                    v  v  v     v  v  v
-            # t = LinkedList((0, 1, 2, 3, 4, 5, 6, 7, 8))
-            #                             ^
-            #                             |
-            # it = iter pointing at 4 ----+
+            #   deleted nodes! ---+--+--+-----+--+--+
+            #                     |  |  |     |  |  |
+            #                     v  v  v     v  v  v
+            # t = linked_list((0, 1, 2, 3, 4, 5, 6, 7, 8))
+            #                              ^
+            #                              |
+            # it = iter pointing at 4 -----+
             #
             # iterators, array of iterators pointing at each node
-            t = LinkedList((0, 1, 2, 3, 4, 5, 6, 7, 8))
+            t = linked_list((0, 1, 2, 3, 4, 5, 6, 7, 8))
             iterators = [t.find(i) for i in range(9)]
             for i in (1, 2, 3, 5, 6, 7):
                 it = t.find(i)
@@ -1566,13 +1567,13 @@ class BigLinkedListTests(unittest.TestCase):
 
     def testIteratorMethods(self):
         def setup():
-            t = LinkedList([1, 2, 3, 4, 5])
+            t = linked_list([1, 2, 3, 4, 5])
             it = t.find(3)
             return t, it
 
         t, it = setup()
         self.assertEqual(it.value, 3)
-        self.assertEqual(repr(it), "<LinkedListIterator cursor=LinkedListNode(3)>")
+        self.assertEqual(repr(it), "<linked_list_iterator cursor=linked_list_node(3)>")
         copy = it.copy()
         del(copy)
         self.assertEqual(it.value, 3)
@@ -1672,39 +1673,39 @@ class BigLinkedListTests(unittest.TestCase):
 
     def testSloppyPrependAndAppend(self):
         # inserting after head must work
-        t = LinkedList()
+        t = linked_list()
         it = iter(t)
         it.append('W')
         self.assertLinkedListEqual(t, ['W'])
 
         # inserting before head should work, this is "sloppy"
-        t = LinkedList()
+        t = linked_list()
         it = iter(t)
         it.prepend('X')
         self.assertLinkedListEqual(t, ['X'])
 
         # inserting before tail must work
-        t = LinkedList()
+        t = linked_list()
         it = reversed(t)
         it.prepend('Y')
         self.assertLinkedListEqual(t, ['Y'])
 
         # inserting after tail should work, this is "sloppy"
-        t = LinkedList()
+        t = linked_list()
         it = reversed(t)
         it.append('Z')
         self.assertLinkedListEqual(t, ['Z'])
 
 
     def testSpecialNodes(self):
-        t = LinkedList('a')
+        t = linked_list('a')
         self.assertTrue(t)
-        self.assertEqual(repr(t), "LinkedList(['a'])")
+        self.assertEqual(repr(t), "linked_list(['a'])")
 
         it = iter(t).after()
         copy = it.copy(); copy.pop()
         # test repr with a deleted node
-        self.assertEqual(repr(t), "LinkedList([])")
+        self.assertEqual(repr(t), "linked_list([])")
         self.assertFalse(t)
 
         with self.assertRaises(SpecialNodeError):
@@ -1715,13 +1716,13 @@ class BigLinkedListTests(unittest.TestCase):
             it.pop()
 
         # white box test of repr
-        self.assertEqual(repr(t._head), "LinkedListNode(None (head))")
+        self.assertEqual(repr(t._head), "linked_list_node(None (head))")
 
 
 
     def testDeletedNode(self):
         def setup():
-            t = LinkedList([1, 2, 3, 'X', 4, 5, 6])
+            t = linked_list([1, 2, 3, 'X', 4, 5, 6])
             it = t.find('X')
             copy = it.copy()
             copy.pop()
@@ -1733,7 +1734,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(list(reversed(t)), [6, 5, 4, 3, 2, 1])
         self.assertLength(t, 6)
         self.assertDeleted(it)
-        self.assertIsInstance(it, LinkedListIterator)
+        self.assertIsInstance(it, linked_list_iterator)
         with self.assertRaises(SpecialNodeError):
             it.value
         with self.assertRaises(SpecialNodeError):
@@ -1781,7 +1782,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         rit = reversed(it)
         self.assertDeleted(rit)
-        self.assertIsInstance(rit, LinkedListReverseIterator)
+        self.assertIsInstance(rit, linked_list_reverse_iterator)
         self.assertTrue(rit)
         with self.assertRaises(SpecialNodeError):
             rit.value
@@ -1855,7 +1856,7 @@ class BigLinkedListTests(unittest.TestCase):
         #
 
         def setup():
-            t = LinkedList(('a', 1, 'b', 2, 'c', 'd', 'e', 3, 4, 5, 'f', 'g', 'h', 6, 'i', 7, 'j'))
+            t = linked_list(('a', 1, 'b', 2, 'c', 'd', 'e', 3, 4, 5, 'f', 'g', 'h', 6, 'i', 7, 'j'))
             it = iter(t)
             def delete_str_nodes():
                 it = iter(t)
@@ -1941,7 +1942,7 @@ class BigLinkedListTests(unittest.TestCase):
         expected = [0, 1, 2, 3, 4, 5]
         for ordering in itertools.permutations([0, 1, 2, 3]):
             with self.subTest(ordering=ordering):
-                t = LinkedList([0, 'a', 'b', 5])
+                t = linked_list([0, 'a', 'b', 5])
                 it1 = t.find('a')
                 copy = it1.copy(); copy.pop()
                 it2 = t.find('b')
@@ -1964,7 +1965,7 @@ class BigLinkedListTests(unittest.TestCase):
         t.clear()
         self.assertLength(t, 0)
         self.assertFalse(t)
-        self.assertEqual(repr(t), 'LinkedList([])')
+        self.assertEqual(repr(t), 'linked_list([])')
         for value in t:
             self.assertTrue(False) # shouldn't reach here!
 
@@ -1978,7 +1979,7 @@ class BigLinkedListTests(unittest.TestCase):
         delete_str_nodes()
         t.clear()
         self.assertFalse(t)
-        self.assertEqual(repr(t), 'LinkedList([])')
+        self.assertEqual(repr(t), 'linked_list([])')
         for value in t:
             self.assertTrue(False) # shouldn't reach here!
 
@@ -2001,10 +2002,10 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def testRichCompare(self):
-        a        = LinkedList([1, 2, 2])
-        b        = LinkedList([1, 2, 3])
-        b_longer = LinkedList([1, 2, 3, 4])
-        c        = LinkedList([1, 2, 4])
+        a        = linked_list([1, 2, 2])
+        b        = linked_list([1, 2, 3])
+        b_longer = linked_list([1, 2, 3, 4])
+        c        = linked_list([1, 2, 4])
         pi       = 3.14159
 
 
@@ -2155,7 +2156,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def testSlice(self):
         def setup():
-            t = LinkedList((1, 2, 3, 4, 5, 6, 7, 8, 9))
+            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
             it = t.find(5)
             return t, it
 
@@ -2261,13 +2262,13 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(it.popslice(-4, 6, 2), [1, 3, 5, 7, 9])
         self.assertLinkedListEqual(t, [2, 4, 6, 8])
 
-        t = LinkedList(range(1, 12))
+        t = linked_list(range(1, 12))
         it = t.find(6)
         self.assertLinkedListEqual(it.slice   (-4, 6, 3), [2, 5, 8, 11])
         self.assertLinkedListEqual(it.popslice(-4, 6, 3), [2, 5, 8, 11])
         self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
-        t = LinkedList(range(1, 12))
+        t = linked_list(range(1, 12))
         it = t.find(5)
         self.assertLinkedListEqual(it.slice   (6, -4, -3), [11, 8, 5, 2])
         self.assertLinkedListEqual(it.popslice(6, -4, -3), [11, 8, 5, 2])
@@ -2276,7 +2277,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def test_dunder_item(self):
         initializer = (1, 2, 3, 4, 5)
-        a = LinkedList(initializer)
+        a = linked_list(initializer)
 
         self.assertEqual(a[0], 1)
         self.assertEqual(a[1], 2)
@@ -2325,7 +2326,7 @@ class BigLinkedListTests(unittest.TestCase):
                 for stop in values:
                     for step in values_without_zero:
                         with self.subTest(initializer_length=len(initializer), start=start, stop=stop, step=step):
-                            t = LinkedList(initializer)
+                            t = linked_list(initializer)
                             l = list(initializer)
 
                             l_slice = l[start:stop:step]
@@ -2335,7 +2336,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def test_misc_methods(self):
         l = [5, 20, -3, 3, 44, 4, 3, 6, 8, 3, 8]
-        t = LinkedList(l)
+        t = linked_list(l)
         l.sort()
         t.sort()
         self.assertLinkedListEqual(t, l)
@@ -2356,7 +2357,7 @@ class BigLinkedListTests(unittest.TestCase):
         for index in range(-7, 7):
             a = [1, 2, 3, 4, 5]
             a.insert(index, 'x')
-            t = LinkedList((1, 2, 3, 4, 5))
+            t = linked_list((1, 2, 3, 4, 5))
             t.insert(index, 'x')
             self.assertLinkedListEqual(t, a)
 
