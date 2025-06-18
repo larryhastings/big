@@ -1348,31 +1348,29 @@ class LinkedList:
 
     def _parse_key(self, key, *, for_assignment=False):
         """
-        Parses key, it must either be an index or a slice object.
+        Parses key, which must be either an index or a slice object.
 
         Returns a 5-tuple:
             (it, start, stop, step, slice_length)
         it is an iterator pointing at the start'th entry.
-        start will be the index of the first element we want.
+        start is the index of the first element we want;
+        it will be in the range 0 <= start < length.
 
-        if key is a slice, stop and step will be integers,
-        and slice_length will be how many numbers the
-        slice will generate when you run it through range.
-        if key wasn't a slice, slice_length will be 0.
-
-        if start and stop are integers, they will not be
-        negative.  (they'll be adjusted to be in the range
-        0 <= n < length.)  if step is an integer, it will
-        not be zero.
+        if key is a slice, stop, step, and slice_length
+        will be integers.  stop will be in the same range
+        as start, and step will not be zero.  slice_length
+        will be how many numbers would be in the list
+        if you called list(range(start, stop, step)).
 
         if key is not a slice, stop, step, and slice_length
-        will be None.
+        will all be None.
 
         enforces Python semantics for indexing with ints vs slices.
         for example, if a has 3 elements, a[5] is an IndexError,
         but a[5:1000] evaluates to an empty list.  (sigh.)
-        so, _parse_key will raise the IndexError for you,
-        but will clamp the slice values like list does.
+        so, _parse_key will raise the IndexError for you in
+        the first case, but will clamp the slice values
+        like list does in the second case.
         """
         if isinstance(key, slice):
             start, stop, step, slice_length = self._unpack_and_adjust_slice(key, for_assignment=for_assignment)
@@ -1577,6 +1575,8 @@ class LinkedList:
         return it._cursor.remove()
 
     def reverse(self):
+        # reverse in-place
+
         previous_fit_cursor = None
         fit = iter(self)
         rit = reversed(self)
@@ -1584,8 +1584,8 @@ class LinkedList:
         while True:
             next(fit)
             next(rit)
-            if ((rit._cursor == fit._cursor)
-                or (rit._cursor == previous_fit_cursor)):
+            if ((rit._cursor == fit._cursor) # odd # of nodes
+                or (rit._cursor == previous_fit_cursor)): # even # of nodes
                 break
 
             tmp = fit._cursor.value
@@ -1595,6 +1595,8 @@ class LinkedList:
             previous_fit_cursor = fit._cursor
 
     def sort(self, key=None, reverse=None):
+        # copy to list, sort, then write back in-place
+
         l = list(self)
         l.sort(key=key, reverse=reverse)
 
