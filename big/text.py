@@ -2355,7 +2355,7 @@ split_delimiters_default_delimiters_bytes = {
 export_name('split_delimiters_default_delimiters_bytes')
 
 _ACTION_POP = "<action: pop>"
-_ACTION_2POP = "<action: pop twice>"
+# _ACTION_2POP = "<action: pop twice>"
 _ACTION_ESCAPE = "<action: escape>"
 _ACTION_ILLEGAL = "<action: illegal>"
 _ACTION_ILLEGAL_LINEBREAK = "<action: illegal linebreak>"
@@ -2765,7 +2765,7 @@ class Workspace:
 
     assert sys.version_info.major >= 3
 
-    if (sys.version_info.major > 3) or (sys.version_info.minor >= 14):
+    if (sys.version_info.major > 3) or (sys.version_info.minor >= 14): # pragma: nocover
         all_string_prefixes.extend((
             'rt',
             'rT',
@@ -3193,19 +3193,19 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 consumed += len(delimiter)
                 # and pop
                 current, _ = pop()
-            elif action is _ACTION_2POP:
-                # flush close delimiter
-                s = join(buffer)
-                clear()
-                s_length = len(s)
-                s_empty = s[s_length:]
-                delimiter_length = len(delimiter)
-                delimiter_empty = delimiter[delimiter_length:]
-                yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
-                consumed += len(delimiter)
-                # and pop twice
-                current, _ = pop()
-                current, _ = pop()
+            # elif action is _ACTION_2POP:
+            #     # flush close delimiter
+            #     s = join(buffer)
+            #     clear()
+            #     s_length = len(s)
+            #     s_empty = s[s_length:]
+            #     delimiter_length = len(delimiter)
+            #     delimiter_empty = delimiter[delimiter_length:]
+            #     yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
+            #     consumed += len(delimiter)
+            #     # and pop twice
+            #     current, _ = pop()
+            #     current, _ = pop()
             elif action is _ACTION_ESCAPE:
                 # escape
                 append(delimiter)

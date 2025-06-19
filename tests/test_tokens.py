@@ -30,7 +30,7 @@ big_dir = bigtestlib.preload_local_big()
 
 import big.all as big
 from big.tokens import aggregate_delimiter_tokens, generate_tokens
-from big.all import String
+from big.all import string
 import unittest
 import sys
 
@@ -183,14 +183,14 @@ class BigTokenTests(unittest.TestCase):
 
         big.tokens._use_splitlines_for_tokenizer = saved
 
-        text = String("def foo(a, b):\n")
+        text = string("def foo(a, b):\n")
         expected_token_strings = [text[0:3], text[4:7], text[7:8], text[8:9], text[9:10], text[11:12], text[12:13], text[13:14], text[14:15], text[15:15]]
         tokens = list(generate_tokens(text))
         got_token_strings = extract_strings_from_tokens(tokens)
         self.assertEqual(got_token_strings, expected_token_strings)
         for got, expected in zip(got_token_strings, expected_token_strings):
             with self.subTest(got):
-                self.assertIsInstance(got, String)
+                self.assertIsInstance(got, string)
                 self.assertEqual(got.line_number, expected.line_number)
                 self.assertEqual(got.column_number, expected.column_number)
                 self.assertEqual(got.offset, expected.offset)

@@ -28,7 +28,7 @@ import bigtestlib
 bigtestlib.preload_local_big()
 
 import big.all as big
-from big.all import lines, Pattern, python_delimiters, read_python_file, split_delimiters, String
+from big.all import lines, Pattern, python_delimiters, read_python_file, split_delimiters, string
 import copy
 import itertools
 import math
@@ -4572,7 +4572,7 @@ class BigTextTests(unittest.TestCase):
         def L(indent, line, line_number, column_number, offset, origin):
             if isinstance(line, str):
             # origin=origin, 
-                return (indent, String(line, source=origin, line_number=line_number, column_number=column_number, offset=offset))
+                return (indent, string(line, source=origin, line_number=line_number, column_number=column_number, offset=offset))
             return (indent, line)
 
 
@@ -4592,8 +4592,8 @@ class BigTextTests(unittest.TestCase):
             qoutdent
             """)
 
-        s = String(lines)
-        i = String(lines).split('\n')
+        s = string(lines)
+        i = string(lines).split('\n')
         i = big.text.strip_indents(i)
 
         expected = [
@@ -4627,7 +4627,7 @@ class BigTextTests(unittest.TestCase):
             "        eight is enough\n"
             "    \n"
             )
-        s = String(lines)
+        s = string(lines)
         i = s.split('\n')
         i = big.strip_indents(i, linebreaks=None)
 
@@ -4677,7 +4677,7 @@ class BigTextTests(unittest.TestCase):
             "    \n"
             "  "
             )
-        s = String(lines)
+        s = string(lines)
         i = s.splitlines(True)
         i = big.strip_indents(i)
 
@@ -4697,7 +4697,7 @@ class BigTextTests(unittest.TestCase):
         ##
 
         # when it's between two existing indents
-        s = String(
+        s = string(
             "left margin\n"
             "\tfour\n"
             "  \t    eight\n"
@@ -4711,7 +4711,7 @@ class BigTextTests(unittest.TestCase):
 
 
         # when it's less than the first indent
-        s = String(
+        s = string(
             "left margin\n"
             "\tfour\n"
             "  \t    eight\n"
@@ -4724,7 +4724,7 @@ class BigTextTests(unittest.TestCase):
             test(i, [])
 
         # ensure that lines_strip_indent is an iterator
-        s = String("a\nb\nc\nd")
+        s = string("a\nb\nc\nd")
         i = s.splitlines()
         i = big.strip_indents(i, tab_width=4)
         try:
@@ -5637,7 +5637,7 @@ class BigTextTests(unittest.TestCase):
             origin = original = dedent(origin).lstrip(linebreak)
 
             if not is_bytes:
-                origin = String(origin)
+                origin = string(origin)
             i = li = origin.splitlines(keepends)
             got = list(big.strip_line_comments(i, line_comment_markers, **kwargs))
 
@@ -5861,32 +5861,32 @@ class BigPatternTests(unittest.TestCase):
         recurse(actual, expect)
 
     def test_match_group(self):
-        pattern = String("a(:+)b").compile()
-        m = pattern.search(String("xxa:::byy"))
+        pattern = string("a(:+)b").compile()
+        m = pattern.search(string("xxa:::byy"))
         self.assertTrue(m)
         self.assertEqual(m.group(), "a:::b")
-        self.assertIsInstance(m.group(), String)
+        self.assertIsInstance(m.group(), string)
         self.assertEqual(m[1], ":::")
-        self.assertIsInstance(m.group(1), String)
+        self.assertIsInstance(m.group(1), string)
         groups = m.group(0, 1)
         self.assertEqual(groups, ("a:::b", ":::"))
-        self.assertIsInstance(groups[0], String)
-        self.assertIsInstance(groups[1], String)
+        self.assertIsInstance(groups[0], string)
+        self.assertIsInstance(groups[1], string)
 
-        pattern = String(r"(a+)(b+)?(c+)?").compile()
-        m = pattern.search(String("xxaaabbyy"))
+        pattern = string(r"(a+)(b+)?(c+)?").compile()
+        m = pattern.search(string("xxaaabbyy"))
         groups = m.groups()
         self.assertEqual(groups, ('aaa', 'bb', None))
-        self.assertIsInstance(groups[0], String)
-        self.assertIsInstance(groups[1], String)
+        self.assertIsInstance(groups[0], string)
+        self.assertIsInstance(groups[1], string)
         groups = m.group(1, 2, 3)
         self.assertEqual(groups, ('aaa', 'bb', None))
-        self.assertIsInstance(groups[0], String)
-        self.assertIsInstance(groups[1], String)
+        self.assertIsInstance(groups[0], string)
+        self.assertIsInstance(groups[1], string)
 
     def test_match_groupdict(self):
-        pattern = String(r'(?P<aye>a+)|(?P<bee>b+)').compile()
-        text = String("xxxaxxxbbx")
+        pattern = string(r'(?P<aye>a+)|(?P<bee>b+)').compile()
+        text = string("xxxaxxxbbx")
         l = list(pattern.finditer(text))
         for m, expected in zip(l, [
             {'aye': text[3:4], 'bee': None},
@@ -5900,27 +5900,27 @@ class BigPatternTests(unittest.TestCase):
         # These Pattern methods are just one-line pass-throughs for
         # re.Pattern methods.  Smoke testing seems sufficient.
 
-        pattern = String(":+").compile()
-        m = pattern.search(String("a b ::: c"))
+        pattern = string(":+").compile()
+        m = pattern.search(string("a b ::: c"))
         self.assertTrue(m)
         self.assertEqual(m.group(), ":::")
-        self.assertIsInstance(m.group(), String)
+        self.assertIsInstance(m.group(), string)
 
-        m = pattern.match(String(":::: xyz"))
+        m = pattern.match(string(":::: xyz"))
         self.assertTrue(m)
         self.assertEqual(m.group(), "::::")
-        self.assertIsInstance(m.group(), String)
+        self.assertIsInstance(m.group(), string)
 
-        s = String(":::::")
+        s = string(":::::")
         m = pattern.fullmatch(s)
         self.assertTrue(m)
         self.assertEqual(m.group(), s)
-        self.assertIsInstance(m.group(), String)
+        self.assertIsInstance(m.group(), string)
 
         self.assertEqual(repr(pattern), repr(pattern.pattern))
         self.assertEqual(repr(m), repr(m.match))
 
-        s = String("a ::: b :: c :::: d")
+        s = string("a ::: b :: c :::: d")
         result = pattern.sub("X", s)
         self.assertEqual(result, "a X b X c X d")
         self.assertIsInstance(result, str)
@@ -5931,40 +5931,40 @@ class BigPatternTests(unittest.TestCase):
         self.assertEqual(result[1], 3)
         self.assertIsInstance(result[1], int)
 
-        pattern = String(r'(a+)|(b+)').compile()
+        pattern = string(r'(a+)|(b+)').compile()
         m = pattern.search("xxaaayyyy")
         result = m.expand(r"__\1--")
         self.assertEqual(result, "__aaa--")
 
 
     def test_pattern_findall(self):
-        pattern = String(":+").compile()
-        l = pattern.findall(String("a :: b ::: c"))
+        pattern = string(":+").compile()
+        l = pattern.findall(string("a :: b ::: c"))
         self.assertEqual(len(l), 2)
         self.assertEqual(l, ["::", ":::"])
-        self.assertIsInstance(l[0], String)
-        self.assertIsInstance(l[1], String)
+        self.assertIsInstance(l[0], string)
+        self.assertIsInstance(l[1], string)
 
-        pattern = String(r'\bf[a-z]*').compile()
-        l = pattern.findall(String('which foot or hand fell fastest'))
+        pattern = string(r'\bf[a-z]*').compile()
+        l = pattern.findall(string('which foot or hand fell fastest'))
         self.assertEqual(l, ['foot', 'fell', 'fastest'])
-        self.assertTrue(all(isinstance(o, String) for o in l))
+        self.assertTrue(all(isinstance(o, string) for o in l))
 
-        pattern = String(r'(\w+)=(\d+)').compile()
-        l = pattern.findall(String('set width=20 and height=10'))
+        pattern = string(r'(\w+)=(\d+)').compile()
+        l = pattern.findall(string('set width=20 and height=10'))
         self.assertEqual(l, [('width', '20'), ('height', '10')])
         self.assertTrue(all(isinstance(o, tuple) for o in l))
-        self.assertTrue(all(isinstance(q, String)  for o in l  for q in o ))
+        self.assertTrue(all(isinstance(q, string)  for o in l  for q in o ))
 
-        pattern = String(r'(a+)|(b+)').compile()
-        l = pattern.findall(String("xxxaxxxbbxxaabb"))
+        pattern = string(r'(a+)|(b+)').compile()
+        l = pattern.findall(string("xxxaxxxbbxxaabb"))
         self.assertEqual(l, [('a', None), (None, 'bb'), ('aa', None), (None, 'bb')])
-        self.assertTrue(all((isinstance(q, String) or (q is None))  for o in l  for q in o ))
+        self.assertTrue(all((isinstance(q, string) or (q is None))  for o in l  for q in o ))
 
-        pattern = String(r'a(x+)b').compile()
-        l = pattern.findall(String("___aaxxxbb___axxb__"))
+        pattern = string(r'a(x+)b').compile()
+        l = pattern.findall(string("___aaxxxbb___axxb__"))
         self.assertEqual(l, ['xxx', 'xx'])
-        self.assertTrue(all(isinstance(o, String) for o in l))
+        self.assertTrue(all(isinstance(o, string) for o in l))
 
     def test_pattern_split(self):
 
@@ -5972,39 +5972,39 @@ class BigPatternTests(unittest.TestCase):
             p = Pattern(pattern)
             return p.split(string)
 
-        pattern = String(":+").compile()
-        s = String("a :: b ::: c")
+        pattern = string(":+").compile()
+        s = string("a :: b ::: c")
         l = pattern.split(s, 1)
         self.assertEqual(len(l), 2)
         self.assertEqual(l[0], "a ")
-        self.assertIsInstance(l[0], String)
+        self.assertIsInstance(l[0], string)
         self.assertEqual(l[1], " b ::: c")
-        self.assertIsInstance(l[1], String)
+        self.assertIsInstance(l[1], string)
 
-        for s in ":a:b::c", String(":a:b::c"):
+        for s in ":a:b::c", string(":a:b::c"):
             self.assertTypedEqual(re_split(":", s),
                                   [s[0:0], s[1], s[3], s[5:5], s[6]])
             self.assertTypedEqual(re_split(":+", s),
                                   [s[0:0], s[1], s[3], s[6]])
             self.assertTypedEqual(re_split("(:+)", s),
                                   [s[0:0], s[0], s[1], s[2], s[3], s[4:6], s[6]])
-        for string in (b":a:b::c",):
+        for s in (b":a:b::c",):
                        #memoryview(b":a:b::c")):
-            self.assertTypedEqual(re_split(b":", string),
+            self.assertTypedEqual(re_split(b":", s),
                                   [b'', b'a', b'b', b'', b'c'])
-            self.assertTypedEqual(re_split(b":+", string),
+            self.assertTypedEqual(re_split(b":+", s),
                                   [b'', b'a', b'b', b'c'])
-            self.assertTypedEqual(re_split(b"(:+)", string),
+            self.assertTypedEqual(re_split(b"(:+)", s),
                                   [b'', b':', b'a', b':', b'b', b'::', b'c'])
         for a, b, c in (
                 ("\xe0", "\xdf", "\xe7"),
                 ("\u0430", "\u0431", "\u0432"),
                 ("\U0001d49c", "\U0001d49e", "\U0001d4b5"),
             ):
-            string = f":{a}:{b}::{c}"
-            self.assertEqual(re_split(":", string), ['', a, b, '', c])
-            self.assertEqual(re_split(":+", string), ['', a, b, c])
-            self.assertEqual(re_split("(:+)", string),
+            s = f":{a}:{b}::{c}"
+            self.assertEqual(re_split(":", s), ['', a, b, '', c])
+            self.assertEqual(re_split(":+", s), ['', a, b, c])
+            self.assertEqual(re_split("(:+)", s),
                              ['', ':', a, ':', b, '::', c])
 
         self.assertEqual(re_split("(?::+)", ":a:b::c"), ['', 'a', 'b', 'c'])

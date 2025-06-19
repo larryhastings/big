@@ -28,6 +28,7 @@ import bigtestlib
 big_dir = bigtestlib.preload_local_big()
 
 import collections
+import copy
 import itertools
 from itertools import zip_longest
 import pickle
@@ -576,8 +577,11 @@ class BigStringTests(unittest.TestCase):
             self.assertStr(repr(value)[:11], repr(str(value))[:11])
             self.assertTrue(f"line_number={value.line_number}, " in value.serialized())
         long_source = string('x' * 90)
-        s = string('abcde', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3)
-        self.assertEqual(s.serialized(), "string('abcde', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3)")
+        s = string('abcde\ndefgh', source=long_source, line_number=2, column_number=3, first_line_number=2, first_column_number=3, tab_width=5)
+        s2 = s[8:]
+
+        self.assertEqual(s.serialized(), "string('abcde\\ndefgh', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_line_number=2, first_column_number=3, tab_width=5)")
+        self.assertEqual(s2.serialized(), "string('fgh', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=3, column_number=5, origin=string('abcde\\ndefgh'), offset=8, first_line_number=2, first_column_number=3, tab_width=5)")
 
 
     # def test___rmod__(self):
@@ -1717,7 +1721,7 @@ class BigLinkedListTests(unittest.TestCase):
             it.pop()
 
         # white box test of repr
-        self.assertEqual(repr(t._head), "linked_list_node(None (head))")
+        self.assertEqual(repr(t._head), "<head>")
 
 
 
@@ -1922,14 +1926,14 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(one.value, 1)
 
         def raise_if_str(value):
-            if isinstance(value, str):
+            if isinstance(value, str): # pragma: nocover
                 raise ValueError('str found, {value!r}')
             return False
 
-        it.match(raise_if_str)
-        it.rmatch(raise_if_str)
-        t.match(raise_if_str)
-        t.rmatch(raise_if_str)
+        self.assertIsNone(it.match(raise_if_str))
+        self.assertIsNone(it.rmatch(raise_if_str))
+        self.assertIsNone(t.match(raise_if_str))
+        self.assertIsNone(t.rmatch(raise_if_str))
 
         seven2 = it.match(lambda value: value == 7)
         self.assertNode(seven2)
@@ -1967,7 +1971,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 0)
         self.assertFalse(t)
         self.assertEqual(repr(t), 'linked_list([])')
-        for value in t:
+        for value in t: # pragma: nocover
             self.assertTrue(False) # shouldn't reach here!
 
 
@@ -1981,7 +1985,7 @@ class BigLinkedListTests(unittest.TestCase):
         t.clear()
         self.assertFalse(t)
         self.assertEqual(repr(t), 'linked_list([])')
-        for value in t:
+        for value in t: # pragma: nocover
             self.assertTrue(False) # shouldn't reach here!
 
 
@@ -2218,7 +2222,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         with self.assertRaises(IndexError):
-            it.slice( 6)
+            sl = it.slice( 6)
         with self.assertRaises(IndexError):
             it.popslice( 6)
 
@@ -2227,6 +2231,16 @@ class BigLinkedListTests(unittest.TestCase):
             it.slice(-6)
         with self.assertRaises(IndexError):
             it.popslice(-6)
+
+        t, it = setup()
+        copy = it.copy()
+        copy.pop()
+        with self.assertRaises(SpecialNodeError):
+            it.slice(2)
+        with self.assertRaises(SpecialNodeError):
+            it.slice(-2)
+        with self.assertRaises(SpecialNodeError):
+            it.popslice(2)
 
         t, it = setup()
         self.assertLinkedListEqual(it.slice   (1, 4), [6, 7, 8])
@@ -2275,8 +2289,14 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(it.popslice(6, -4, -3), [11, 8, 5, 2])
         self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
+        with self.assertRaises(ValueError):
+            it.slice(3, 4, 0)
+
+
+
 
     def test_dunder_item(self):
+        # __getitem__ and slicing
         initializer = (1, 2, 3, 4, 5)
         a = linked_list(initializer)
 
@@ -2314,18 +2334,16 @@ class BigLinkedListTests(unittest.TestCase):
         copy_a[10000000000:-3239879817998:-2] = 'abc'
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
-
         for count in (5, 6,):
             # for the list [ 1, 2, 3, ..., count ],
-            initializer = tuple(range(1, count + 1))
 
-            t = linked_list(initializer)
-            l = list(initializer)
+            l = list(tuple(range(1, count + 1)))
+            t = linked_list(l)
 
             # test all valid combinations of these "values"
             # for start, stop, and step.
             # [-23456789, -12345678, -(count + 1), ..., count + 1, 12345678, 23456789]
-            values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789,)
+            values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789)
             values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
 
             for start in values:
@@ -2337,13 +2355,59 @@ class BigLinkedListTests(unittest.TestCase):
 
                             self.assertLinkedListEqual(t_slice, l_slice)
 
+        # __setitem__
+        t = linked_list(initializer)
+        t[2] = 'rem lezar'
+        self.assertLinkedListEqual(t, (1, 2, 'rem lezar', 4, 5))
+
+        t = linked_list(initializer)
+        t[1:4] = iter('abc')
+        self.assertLinkedListEqual(t, (1, 'a', 'b', 'c', 5))
+
+        t = linked_list(initializer)
+        t[3:0:-1] = iter('abc')
+        self.assertLinkedListEqual(t, (1, 'c', 'b', 'a', 5))
+
+        t = linked_list(initializer)
+        t[0:5:2] = iter('abc')
+        self.assertLinkedListEqual(t, ('a', 2, 'b', 4, 'c'))
+
+        t = linked_list(initializer)
+        with self.assertRaises(TypeError):
+            t[1:4] = 55
+        with self.assertRaises(ValueError):
+            t[1:4] = 'a'
+
+        # overwrite a zero-length slice!
+        t = linked_list(initializer)
+        t[3:3] = []
+        self.assertLinkedListEqual(t, initializer)
+
+        # __delitem__
+        t = linked_list(initializer)
+        del t[2]
+        self.assertLinkedListEqual(t, (1, 2, 4, 5))
+
+        t = linked_list(initializer)
+        del t[1:4]
+        self.assertLinkedListEqual(t, (1, 5))
+
+        # none as initializer in slice
+        t = linked_list(initializer)
+        self.assertLinkedListEqual(t[:3], (1, 2, 3))
+        self.assertLinkedListEqual(t[2:], (3, 4, 5))
+
+
+
     def test_misc_methods(self):
+        # sort
         l = [5, 20, -3, 3, 44, 4, 3, 6, 8, 3, 8]
         t = linked_list(l)
         l.sort()
         t.sort()
         self.assertLinkedListEqual(t, l)
 
+        # reverse
         l.reverse()
         t.reverse()
         self.assertLinkedListEqual(t, l)
@@ -2354,9 +2418,11 @@ class BigLinkedListTests(unittest.TestCase):
         t.reverse()
         self.assertLinkedListEqual(t, l)
 
+        # count
         for v in l:
             self.assertEqual(t.count(v), l.count(v))
 
+        # insert
         for index in range(-7, 7):
             a = [1, 2, 3, 4, 5]
             a.insert(index, 'x')
@@ -2364,6 +2430,7 @@ class BigLinkedListTests(unittest.TestCase):
             t.insert(index, 'x')
             self.assertLinkedListEqual(t, a)
 
+        # rotate
         initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
         d = collections.deque(initializer)
         t = linked_list(initializer)
@@ -2375,6 +2442,64 @@ class BigLinkedListTests(unittest.TestCase):
             d_copy.rotate(i)
             self.assertEqual(list(t_copy), list(d_copy))
 
+        # rremove
+        t2 = t * 2
+        t2.rremove(2)
+        self.assertLinkedListEqual(t2, ('x', 2, 3, 4, 5, 6, 7, 8, 9, 'x', 3, 4, 5, 6, 7, 8, 9))
+        with self.assertRaises(ValueError):
+            t2.rremove('abx')
+        self.assertEqual(t2.rremove('abz', 45), 45)
+
+        # iterator rremove
+        it = reversed(reversed(t2)) # it is a forwards iterator pointed at tail!
+        it.rremove(4)
+        self.assertLinkedListEqual(t2, ('x', 2, 3, 4, 5, 6, 7, 8, 9, 'x', 3, 5, 6, 7, 8, 9))
+        with self.assertRaises(ValueError):
+            it.rremove('abx')
+        self.assertEqual(it.rremove('abz', 77), 77)
+
+
+    def test_misc_dunder_methods(self):
+        t = linked_list((1, 2, 3, 4, 5))
+
+        # __deepcopy__
+        t1 = linked_list(({1:2}, {3:4}))
+        t2 = copy.deepcopy(t1)
+        self.assertEqual(t1, t2)
+        for v1, v2 in zip(t1, t2):
+            self.assertEqual(v1, v2)
+            self.assertFalse(v1 is v2)
+
+        # __add__
+        t1 = linked_list((1, 2, 3))
+        t2 = linked_list((4, 5, 6))
+        t3 = t1 + t2
+        self.assertLinkedListEqual(t3, (1, 2, 3, 4, 5, 6))
+
+        # __mul__
+        t4 = t1 * 3
+        self.assertLinkedListEqual(t4, (1, 2, 3, 1, 2, 3, 1, 2, 3))
+        with self.assertRaises(TypeError):
+            t1 * [3,4]
+        with self.assertRaises(TypeError):
+            t1 * 2+1j
+        t4 = t1 * 0
+        self.assertLinkedListEqual(t4, [])
+
+        # __imul__
+        t5 = t1
+        t5 *= 4
+        self.assertLinkedListEqual(t5, (1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3))
+        with self.assertRaises(TypeError):
+            t5 *= [3,4]
+        with self.assertRaises(TypeError):
+            t5 *= 2+1j
+        t5 *= 0
+        self.assertLinkedListEqual(t5, [])
+
+        # __contains__
+        self.assertIn(3, t)
+        self.assertNotIn('x', t)
 
 def run_tests():
     bigtestlib.run(name="big.types", module=__name__)
