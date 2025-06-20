@@ -29,7 +29,7 @@ big_dir = bigtestlib.preload_local_big()
 
 
 import big.all as big
-from big.tokens import aggregate_delimiter_tokens, generate_tokens
+from big.tokens import generate_tokens
 from big.all import string
 import unittest
 import sys
@@ -124,14 +124,11 @@ class BigTokenTests(unittest.TestCase):
             result = []
             result_append = result.append
             for t in tokens:
-                if isinstance(t, list):
-                    value = extract_strings_from_tokens(t)
-                else:
-                    value = t[1]
+                value = t[1]
                 result_append(value)
             return result
 
-        for text, token_strings, aggregated_token_strings in (
+        for text, token_strings in (
             (
                 "def foo(a, b):\n    return [1, 2, 3]",
                 [
@@ -139,21 +136,10 @@ class BigTokenTests(unittest.TestCase):
                 '    ', 'return', '[', '1', ',', '2', ',', '3', ']',
                 '', '', '',
                 ],
-                [
-                'def', 'foo',
-                    ['(', 'a', ',', 'b', ')'],
-                ':', '\n',
-                '    ', 'return',
-                    ['[', '1', ',', '2', ',', '3', ']', ],
-                '', '', '',
-                ]
             ),
 
             (
                 "'''\nline 1\nline 2\nline 3\n'''",
-                [
-                "'''\nline 1\nline 2\nline 3\n'''", '', '',
-                ],
                 [
                 "'''\nline 1\nline 2\nline 3\n'''", '', '',
                 ],
@@ -167,7 +153,6 @@ class BigTokenTests(unittest.TestCase):
             remove_nl_token = (sys.version_info.major == 3) and (sys.version_info.minor == 6)
             if remove_nl_token: # pragma: no cover
                 token_strings.pop()
-                aggregated_token_strings.pop()
 
             with self.subTest(text):
                 for use_splitlines in (False, True):
@@ -176,10 +161,6 @@ class BigTokenTests(unittest.TestCase):
                         tokens = list(generate_tokens(text))
                         got_token_strings = extract_strings_from_tokens(tokens)
                         self.assertEqual(got_token_strings, token_strings)
-
-                        aggregated_tokens = list(aggregate_delimiter_tokens(tokens))
-                        got_aggregated_token_strings = extract_strings_from_tokens(aggregated_tokens)
-                        self.assertEqual(got_aggregated_token_strings, aggregated_token_strings)
 
         big.tokens._use_splitlines_for_tokenizer = saved
 
@@ -194,15 +175,6 @@ class BigTokenTests(unittest.TestCase):
                 self.assertEqual(got.line_number, expected.line_number)
                 self.assertEqual(got.column_number, expected.column_number)
                 self.assertEqual(got.offset, expected.offset)
-
-        text = """
-def foo(a, b]:
-    return mismatched
-"""
-        tokens = list(generate_tokens(text))
-        with self.assertRaises(ValueError):
-            list(aggregate_delimiter_tokens(tokens))
-
 
 def run_tests():
     bigtestlib.run(name="big.tokens", module=__name__)

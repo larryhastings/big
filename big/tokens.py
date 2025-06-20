@@ -187,11 +187,18 @@ def export(fn):
 
 
 if sys.version_info.major == 3: # pragma: nocover
+    # In CPython 3.11 and before, the tokenizer
+    # only recognizes \r, \n, and \r\n as linebreaks.
+    # The new tokenizer that shipped in CPython 3.12
+    # properly recognizes all linebreak charactres.
     _use_splitlines_for_tokenizer = sys.version_info.minor >= 12
 else: # pragma: nocover
+    # This is for hypothetical Python 4.0 and beyond.
+    # (big doesn't support Python 1 or Python 2.)
     _use_splitlines_for_tokenizer = True
 
-# we always create this anyway, for the sake of testing
+# _re_tokenizer_splitlines is only used for Python 3.11 and before.
+# but we always create it anyway, for the sake of testing.
 from big.text import Pattern
 _re_tokenizer_splitlines = Pattern("((?:\r\n)|\r|\n)").split
 
@@ -205,13 +212,9 @@ def generate_tokens(s):
     TokenInfo = tokenize.TokenInfo
 
     if _use_splitlines_for_tokenizer:
-        # The new tokenizer that shipped in CPython 3.12
-        # properly recognizes all linebreak charactres.
         lines = s.splitlines(True)
         lines.reverse()
     else:
-        # In CPython 3.11 and before, the tokenizer
-        # only recognizes \r, \n, and \r\n as linebreaks.
         lines = _re_tokenizer_splitlines(s)
         lines.reverse()
         joined_lines = []
@@ -277,62 +280,6 @@ def generate_tokens(s):
             line = empty.join(line_buffer)
 
         yield TokenInfo(t[0], string, t[2], t[3], line)
-
-
-_aggregated_delimiters = { '(': ')', '[': ']', '{': '}' }
-_aggregated_close_delimiters = set(_aggregated_delimiters.values())
-
-@export
-def aggregate_delimiter_tokens(tokens):
-    """
-    Transforms a token stream.  Aggregates a sequence
-
-    If you pass in these tokens:
-        [
-            'def', 'foo', '(', 'a', ',', 'b', ')', ':',
-            'return', '[', '1', ',', '2', ',', '3', ']',
-        ]
-
-    You get this back:
-        [
-            'def', 'foo', ['(', 'a', ',', 'b', ')',], ':',
-            'return', [ '[', '1', ',', '2', ',', '3', ']', ],
-        ]
-
-    Nested delimiters create nested lists.
-    """
-    stack = []
-    push = stack.append
-    pop = stack.pop
-
-    output = []
-    append = output.append
-
-    current_close_delimiter = None
-
-    for t in tokens:
-        if t[0] == TOKEN_OP:
-            s = t[1]
-            if s == current_close_delimiter:
-                # pop
-                append(t)
-                output, append, current_close_delimiter = pop()
-                continue
-            if s in _aggregated_close_delimiters:
-                raise ValueError("mismatched close delimiter: expecting {current_close_delimiter!r}, got {s!r}")
-            closing_delimiter = _aggregated_delimiters.get(s)
-            if closing_delimiter:
-                # s is an open delimiter
-                # push
-                new_output = []
-                append(new_output)
-                push( (output, append, current_close_delimiter) )
-                output = new_output
-                append = output.append
-                current_close_delimiter = closing_delimiter
-                # don't continue! append our token.
-        append(t)
-    return output
 
 
 del export
