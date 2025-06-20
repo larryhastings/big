@@ -54,10 +54,9 @@ def export(o):
 #############################################
 
 ##
-## regular expressions to assist in recognizing linebreaks.
-##
-## string conforms to Python's rules about where to split a line:
-## Python recognizes the DOS '\r\n' sequence as *one linebreak*.
+## string uses _re_linebreaks_finditer to split lines by linebreaks.
+## string implements Python's rules about where to split a line,
+## and Python recognizes the DOS '\r\n' sequence as *one linebreak*.
 ##
 ##    >>> ' a \n b \r c \r\n d \n\r e '.splitlines(True)
 ##    [' a \n', ' b \r', ' c \r\n', ' d \n', '\r', ' e ']
@@ -74,7 +73,7 @@ def export(o):
 ##
 ## But we want to handle the other funny Unicode linebreaks too.
 ## big's "linebreaks" iterable contains all of 'em, and it
-## includes '\r\n'.  So we sort linebreaks by length, longest
+## includes '\r\n'.  So: sort linebreaks by length, longest
 ## first, and build the regular expression out of that.
 ## (Python's re engine, like all good regular expression engines,
 ## keeps the *first* match.  So, sort longest substring first.)
@@ -82,11 +81,39 @@ def export(o):
 
 _re_linebreaks = "|".join(sorted(linebreaks, key=lambda s: -len(s)))
 _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
+del _re_linebreaks
 
 
 @export
 class string(str):
-    "string(str, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8) -> string\nCreates a new string object.  string is a subclass of str that maintains line, column, and offset information."
+    """
+    A subclass of str that maintains line, column, and offset information.
+
+    string is a drop-in replacement for Python's str that automatically
+    computes the line, column, and offset of any substring.  It's a subclass
+    of str, and implements every str method.
+
+    Additional features of string:
+    * Every string knows its line number, column number, and offset from the
+      beginning of the original string.
+    * You may also specify a "source" parameter to the constructor,
+      which should indicate where the text came from (e.g. the filename).
+
+    Additional attributes of string:
+    * s.line_number is the line number of the first character of this string.
+    * s.column_number is the column number of the first character of this string.
+    * s.offset is the index of the first character of this string from where it
+      came from in the original string.  (e.g. if the original string was 'abcde',
+      'e' would have an offset of 4.)
+    * s.where is a string designed for error messages.  if the original string
+      was initialized with a source, this will be in the format
+          "<source>" line <line_number> column <column_number>
+      If no source was supplied, this will be in the format
+          line <line_number> column <column_number>
+      This makes writing error messages easy.  If err contains a syntax error,
+      you can raise
+          SyntaxError(f"{err.where}: {err}")
+    """
 
     __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_tab_width', '_linebreak_offsets', '_line')
 
