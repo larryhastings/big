@@ -1299,27 +1299,29 @@ class BigLinkedListTests(unittest.TestCase):
         got = list(iter(t))
         self.assertEqual(expected, got)
 
-    def assertSpecialNode(self, it):
+    def assertSpecial(self, it):
         self.assertIsNotNone(it)
-        self.assertTrue(it.special)
+        self.assertTrue(it.is_special)
+        self.assertFalse(it.is_at_head)
+        self.assertFalse(it.is_at_tail)
 
     def assertHead(self, it):
-        self.assertSpecialNode(it)
-        self.assertEqual(it.special, 'head')
+        self.assertIsNotNone(it)
+        self.assertTrue(it.is_special)
+        self.assertTrue(it.is_at_head)
+        self.assertFalse(it.is_at_tail)
 
     def assertTail(self, it):
-        self.assertSpecialNode(it)
-        self.assertEqual(it.special, 'tail')
-
-    def assertDeleted(self, it):
-        self.assertSpecialNode(it)
-        self.assertEqual(it.special, 'deleted')
+        self.assertIsNotNone(it)
+        self.assertTrue(it.is_special)
+        self.assertFalse(it.is_at_head)
+        self.assertTrue(it.is_at_tail)
 
     # "normal" node, that is
     def assertNode(self, it):
         self.assertIsNotNone(it)
         self.assertTrue(it)
-        self.assertIsNone(it.special)
+        self.assertFalse(it.is_special)
 
 
 
@@ -1685,26 +1687,31 @@ class BigLinkedListTests(unittest.TestCase):
         def setup():
             t = linked_list((1, 2, 3))
             it = t.find(2)
+            self.assertNode(it)
             return t, it
 
         t, it = setup()
         it.prepend(1.5)
         self.assertLinkedListEqual(t, [1, 1.5, 2, 3])
+        self.assertNode(it)
         self.assertEqual(it.value, 2)
 
         t, it = setup()
         it.append(2.5)
         self.assertLinkedListEqual(t, [1, 2, 2.5, 3])
+        self.assertNode(it)
         self.assertEqual(it.value, 2)
 
         t, it = setup()
         it.extendleft((1.25, 1.5, 1.75))
         self.assertLinkedListEqual(t, [1, 1.25, 1.5, 1.75, 2, 3])
+        self.assertNode(it)
         self.assertEqual(it.value, 2)
 
         t, it = setup()
         it.extend((2.25, 2.5, 2.75))
         self.assertLinkedListEqual(t, [1, 2, 2.25, 2.5, 2.75, 3])
+        self.assertNode(it)
         self.assertEqual(it.value, 2)
 
         #
@@ -1713,37 +1720,42 @@ class BigLinkedListTests(unittest.TestCase):
         def setup():
             t = linked_list((1, 2, 3))
             it = iter(t)
+            self.assertHead(it)
             return t, it
         t, it = setup()
 
         t, it = setup()
         it.append('A')
         self.assertLinkedListEqual(t, ['A', 1, 2, 3])
-        self.assertTrue(it.special == 'head')
+        self.assertHead(it)
 
         t, it = setup()
         it.prepend('B')
         self.assertLinkedListEqual(t, ['B', 1, 2, 3])
-        self.assertTrue(it.special == 'deleted')
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
+        self.assertNode(worker)
         self.assertEqual(worker.value, 'B')
         it.next(None)
+        self.assertNode(it)
         self.assertEqual(it.value, 1)
 
         t, it = setup()
         it.extend('CDE')
         self.assertLinkedListEqual(t, ['C', 'D', 'E', 1, 2, 3])
-        self.assertTrue(it.special == 'head')
+        self.assertHead(it)
 
         t, it = setup()
         it.extendleft('FGH')
         self.assertLinkedListEqual(t, ['F', 'G', 'H', 1, 2, 3])
-        self.assertTrue(it.special == 'deleted')
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
+        self.assertNode(worker)
         self.assertEqual(worker.value, 'H')
         it.next(None)
+        self.assertNode(it)
         self.assertEqual(it.value, 1)
 
 
@@ -1752,39 +1764,43 @@ class BigLinkedListTests(unittest.TestCase):
         #
         def setup():
             t = linked_list((1, 2, 3))
-            it = t.find(3)
-            it.next(None)
+            it = t.find(3).after()
+            self.assertTail(it)
             return t, it
         t, it = setup()
 
         t, it = setup()
         it.prepend('I')
         self.assertLinkedListEqual(t, [1, 2, 3, 'I'])
-        self.assertTrue(it.special == 'tail')
+        self.assertTail(it)
 
         t, it = setup()
         it.append('J')
         self.assertLinkedListEqual(t, [1, 2, 3, 'J'])
-        self.assertTrue(it.special == 'deleted')
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
+        self.assertNode(worker)
         self.assertEqual(worker.value, 3)
         it.next(None)
+        self.assertNode(it)
         self.assertEqual(it.value, 'J')
 
         t, it = setup()
         it.extendleft('KLM')
         self.assertLinkedListEqual(t, [1, 2, 3, 'K', 'L', 'M'])
-        self.assertTrue(it.special == 'tail')
+        self.assertTail(it)
 
         t, it = setup()
         it.extend('NOP')
         self.assertLinkedListEqual(t, [1, 2, 3, 'N', 'O', 'P'])
-        self.assertTrue(it.special == 'deleted')
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
+        self.assertNode(worker)
         self.assertEqual(worker.value, 3)
         it.next(None)
+        self.assertNode(it)
         self.assertEqual(it.value, 'N')
 
 
@@ -1792,94 +1808,90 @@ class BigLinkedListTests(unittest.TestCase):
         # now test all of the above with empty lists!
         #
 
+        def setup_at_head():
+            t = linked_list()
+            it = iter(t)
+            self.assertHead(it)
+            return t, it
+
+        def setup_at_tail():
+            t = linked_list()
+            it = iter(t).after()
+            self.assertTail(it)
+            return t, it
+
         # appending to head obviously works
-        t = linked_list()
-        it = iter(t)
-        self.assertTrue(it.special == 'head')
+        t, it = setup_at_head()
         it.append('W')
         self.assertLinkedListEqual(t, ['W'])
-        self.assertTrue(it.special == 'head')
+        self.assertHead(it)
 
         # prepending before head also works, this creates a new special node
-        t = linked_list()
-        it = iter(t)
-        self.assertTrue(it.special == 'head')
+        t, it = setup_at_head()
         it.prepend('X')
         self.assertLinkedListEqual(t, ['X'])
-        self.assertTrue(it.special == 'deleted')
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
+        self.assertNode(worker)
         self.assertEqual(worker.value, 'X')
         it.next(None)
-        self.assertEqual(it.special, 'tail')
+        self.assertTail(it)
 
         # prepending before tail obviously works
-        t = linked_list()
-        it = iter(t)
-        next(it, None)
-        self.assertTrue(it.special == 'tail')
+        t, it = setup_at_tail()
         it.prepend('Y')
         self.assertLinkedListEqual(t, ['Y'])
-        self.assertTrue(it.special == 'tail')
+        self.assertTail(it)
 
         # appending to tail also works, this creates a new special node
-        t = linked_list()
-        it = iter(t)
-        next(it, None)
-        self.assertTrue(it.special == 'tail')
+        t, it = setup_at_tail()
         it.append('Z')
         self.assertLinkedListEqual(t, ['Z'])
-        self.assertTrue(it.special)
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
-        self.assertEqual(worker.special, 'head')
+        self.assertHead(worker)
         it.next(None)
+        self.assertNode(it)
         self.assertEqual(it.value, 'Z')
 
         # now with extend and extendleft
 
         # appending to head obviously works
-        t = linked_list()
-        it = iter(t)
-        self.assertTrue(it.special == 'head')
+        t, it = setup_at_head()
         it.extend('uvw')
         self.assertLinkedListEqual(t, ['u', 'v', 'w'])
-        self.assertTrue(it.special == 'head')
+        self.assertHead(it)
 
         # prepending before head also works, this creates a new special node
-        t = linked_list()
-        it = iter(t)
-        self.assertTrue(it.special == 'head')
+        t, it = setup_at_head()
         it.extendleft('vwx')
         self.assertLinkedListEqual(t, ['v', 'w', 'x'])
-        self.assertTrue(it.special == 'deleted')
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
+        self.assertNode(worker)
         self.assertEqual(worker.value, 'x')
         it.next(None)
-        self.assertEqual(it.special, 'tail')
+        self.assertTail(it)
 
         # prepending before tail obviously works
-        t = linked_list()
-        it = iter(t)
-        next(it, None)
-        self.assertTrue(it.special == 'tail')
+        t, it = setup_at_tail()
         it.extendleft('wxy')
         self.assertLinkedListEqual(t, ['w', 'x', 'y'])
-        self.assertTrue(it.special == 'tail')
+        self.assertTail(it)
 
         # appending to tail also works, this creates a new special node
-        t = linked_list()
-        it = iter(t)
-        next(it, None)
-        self.assertTrue(it.special == 'tail')
+        t, it = setup_at_tail()
         it.extend('xyz')
         self.assertLinkedListEqual(t, ['x', 'y', 'z'])
-        self.assertTrue(it.special)
+        self.assertSpecial(it)
         worker = it.copy()
         worker.previous(None)
-        self.assertEqual(worker.special, 'head')
+        self.assertHead(worker)
         it.next(None)
+        self.assertNode(it)
         self.assertEqual(it.value, 'x')
 
 
@@ -1919,7 +1931,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(list(    iter(t)), [1, 2, 3, 4, 5, 6])
         self.assertEqual(list(reversed(t)), [6, 5, 4, 3, 2, 1])
         self.assertLength(t, 6)
-        self.assertDeleted(it)
+        self.assertSpecial(it)
         self.assertIsInstance(it, linked_list_iterator)
         with self.assertRaises(SpecialNodeError):
             it.value
@@ -1967,7 +1979,7 @@ class BigLinkedListTests(unittest.TestCase):
 
 
         rit = reversed(it)
-        self.assertDeleted(rit)
+        self.assertSpecial(rit)
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         self.assertTrue(rit)
         with self.assertRaises(SpecialNodeError):

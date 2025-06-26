@@ -1105,7 +1105,7 @@ class SpecialNodeError(LookupError):
 class linked_list_node:
     def __init__(self, value):
         self.value = value
-        self.special = None # None, 'deleted', 'head', or 'tail'
+        self.special = None # None, 'special', 'head', or 'tail'
         self.next = self.previous = None
         self.iterator_refcount = 0
 
@@ -1129,7 +1129,7 @@ class linked_list_node:
         self.special = self.previous = self.next = self.value = self.iterator_refcount = None
 
     def unlink(self):
-        # don't bother checking if self.special == 'deleted' or whatnot.
+        # don't bother checking if self.special == 'special' or whatnot.
         # we might get called during shutdown while the GC is trying to
         # break cycles.  all we should do is--carefully--unlink the node.
 
@@ -1151,7 +1151,7 @@ class linked_list_node:
         if not self.iterator_refcount:
             self.unlink()
         else:
-            self.special = 'deleted'
+            self.special = 'special'
             self.value = None
         return value
 
@@ -1583,8 +1583,8 @@ class linked_list:
         while cursor != tail:
             next = cursor.next
             if cursor.iterator_refcount:
-                # keep node, but demote to "deleted"
-                previous.special = 'deleted'
+                # keep node, but demote to 'special'
+                previous.special = 'special'
                 previous.value = None
 
                 previous.next = cursor
@@ -1602,7 +1602,7 @@ class linked_list:
 
     def pop(self):
         node_before_tail = self._tail.previous
-        while node_before_tail.special == 'deleted':
+        while node_before_tail.special == 'special':
             node_before_tail = node_before_tail.previous
         if node_before_tail == self._head:
             raise IndexError('pop from empty linked_list')
@@ -1611,7 +1611,7 @@ class linked_list:
 
     def popleft(self):
         node_after_head = self._head.next
-        while node_after_head.special == 'deleted':
+        while node_after_head.special == 'special':
             node_after_head = node_after_head.next
         if node_after_head == self._tail:
             raise IndexError('pop from empty linked_list')
@@ -1747,7 +1747,7 @@ class linked_list_iterator:
         iterator_refcount -= 1
         setattr(cursor, 'iterator_refcount', iterator_refcount)
         special = getattr(cursor, 'special', None)
-        if (not iterator_refcount) and (special == 'deleted'):
+        if (not iterator_refcount) and (special == 'special'):
             unlink = getattr(cursor, 'unlink', None)
             if unlink is not None:
                 unlink()
@@ -1799,12 +1799,12 @@ class linked_list_iterator:
 
         cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         next = cursor.next
-        if (not iterator_refcount) and (special == 'deleted'):
+        if (not iterator_refcount) and (special == 'special'):
             cursor.unlink()
         cursor = next
         special = cursor.special
 
-        while special == 'deleted':
+        while special == 'special':
             cursor = cursor.next
             special = cursor.special
 
@@ -1833,12 +1833,12 @@ class linked_list_iterator:
 
         cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         previous = cursor.previous
-        if (not iterator_refcount) and (special == 'deleted'):
+        if (not iterator_refcount) and (special == 'special'):
             cursor.unlink()
         cursor = previous
         special = cursor.special
 
-        while special == 'deleted':
+        while special == 'special':
             cursor = cursor.previous
             special = cursor.special
 
@@ -1869,7 +1869,7 @@ class linked_list_iterator:
         cursor = self._cursor.previous
         if not cursor:
             return None
-        while cursor.special == 'deleted':
+        while cursor.special == 'special':
             cursor = cursor.previous
         it = self.__class__(self._linked_list)
         it._cursor = cursor
@@ -1880,7 +1880,7 @@ class linked_list_iterator:
         cursor = self._cursor.next
         if not cursor:
             return None
-        while cursor.special == 'deleted':
+        while cursor.special == 'special':
             cursor = cursor.next
         it = self.__class__(self._linked_list)
         it._cursor = cursor
@@ -1888,8 +1888,16 @@ class linked_list_iterator:
         return it
 
     @property
-    def special(self):
-        return self._cursor.special
+    def is_at_head(self):
+        return self._cursor.special == 'head'
+
+    @property
+    def is_at_tail(self):
+        return self._cursor.special == 'tail'
+
+    @property
+    def is_special(self):
+        return self._cursor.special is not None
 
     @property
     def value(self):
@@ -1922,7 +1930,7 @@ class linked_list_iterator:
         if cursor.special:
             raise SpecialNodeError
         cursor = cursor.previous
-        while cursor.special == 'deleted':
+        while cursor.special == 'special':
             cursor = cursor.previous
         return self._pop(cursor)
 
@@ -1931,7 +1939,7 @@ class linked_list_iterator:
         if cursor.special:
             raise SpecialNodeError
         cursor = cursor.next
-        while cursor.special == 'deleted':
+        while cursor.special == 'special':
             cursor = cursor.next
         return self._pop(cursor)
 
@@ -2108,7 +2116,7 @@ class linked_list_iterator:
             cursor.iterator_refcount -= 1
             cursor = cursor.next
             self._cursor = cursor = cursor.insert_before(None)
-            cursor.special = "deleted"
+            cursor.special = 'special'
             cursor.iterator_refcount += 1
         # -- actually append value --
         self._linked_list._length += 1
@@ -2122,7 +2130,7 @@ class linked_list_iterator:
         if cursor.special == 'tail':
             cursor.iterator_refcount -= 1
             self._cursor = special = cursor.insert_before(None)
-            special.special = "deleted"
+            special.special = 'special'
             special.iterator_refcount += 1
         else:
             cursor = cursor.next
@@ -2136,7 +2144,7 @@ class linked_list_iterator:
         if cursor.special == 'tail':
             cursor.iterator_refcount -= 1
             self._cursor = special = cursor.insert_before(None)
-            special.special = "deleted"
+            special.special = 'special'
             special.iterator_refcount += 1
         else:
             cursor = cursor.next
@@ -2155,7 +2163,7 @@ class linked_list_iterator:
             cursor.iterator_refcount -= 1
             cursor = cursor.next
             self._cursor = cursor = cursor.insert_before(None)
-            cursor.special = "deleted"
+            cursor.special = 'special'
             cursor.iterator_refcount += 1
         # -- actually extend from iterator --
         counter = 0
