@@ -1123,6 +1123,8 @@ class linked_list_node:
         node.previous = previous
         previous.next = self.previous = node
 
+        return node
+
     def clear(self):
         self.special = self.previous = self.next = self.value = self.iterator_refcount = None
 
@@ -1192,11 +1194,13 @@ class linked_list:
     ## the relevant operator and ==:
     ##
     ##     * in __lt__, use <  and ==
+    ##     * in __le__, use <= and ==
     ##     * in __ge__, use >= and ==
+    ##     * in __gt__, use >  and ==
     ##     * in __eq__, only use ==
     ##     * in __ne__, only use !=
     ##
-    ## well, also len() on the list itself.
+    ## (well, also len() on the list itself.)
     ##
     ## why?  trying to honor this statement from
     ## the Python docs:
@@ -1424,7 +1428,8 @@ class linked_list:
 
     def _parse_key(self, key, *, for_assignment=False):
         """
-        Parses key, which must be either an index or a slice object.
+        Parses the "key" argument from a __{get,set,del}item__ call,
+        which must be either an index or a slice object.
 
         Returns a 5-tuple:
             (it, start, stop, step, slice_length)
@@ -1672,7 +1677,7 @@ class linked_list:
 
             previous_fit_cursor = fit._cursor
 
-    def sort(self, key=None, reverse=None):
+    def sort(self, key=None, reverse=False):
         # copy to list, sort, then write back in-place
 
         l = list(self)
@@ -2095,42 +2100,71 @@ class linked_list_iterator:
             return default
         raise ValueError(f'value {value!r} not found')
 
+
     def prepend(self, value):
+        # -- handle self pointing at head, or not --
         cursor = self._cursor
         if cursor.special == 'head':
-            # API affordance: allow "sloppy insert" *before* 'head'
+            cursor.iterator_refcount -= 1
             cursor = cursor.next
-        # it's okay if cursor is a deleted node here.
+            self._cursor = cursor = cursor.insert_before(None)
+            cursor.special = "deleted"
+            cursor.iterator_refcount += 1
+        # -- actually append value --
         self._linked_list._length += 1
         cursor.insert_before(value)
 
     insert = prepend
 
-    def extend(self, iterable):
-        cursor = self._cursor
-        if cursor.special != 'tail':
-            cursor = cursor.next
-        linked_list = self._linked_list
-        insert_before = cursor.insert_before
-        for value in iterable:
-            linked_list._length += 1
-            insert_before(value)
-
     def append(self, value):
+        # -- handle self pointing at tail, or not --
         cursor = self._cursor
-        # API affordance: allow "sloppy append" *after* 'tail'
-        if cursor.special != 'tail':
+        if cursor.special == 'tail':
+            cursor.iterator_refcount -= 1
+            self._cursor = special = cursor.insert_before(None)
+            special.special = "deleted"
+            special.iterator_refcount += 1
+        else:
             cursor = cursor.next
-        # it's okay if cursor is a deleted node here.
+        # -- actually append value --
         self._linked_list._length += 1
         cursor.insert_before(value)
 
-    def extendleft(self, iterable):
-        linked_list = self._linked_list
-        insert_before = self._cursor.insert_before
+    def extend(self, iterable):
+        # -- handle self pointing at tail, or not --
+        cursor = self._cursor
+        if cursor.special == 'tail':
+            cursor.iterator_refcount -= 1
+            self._cursor = special = cursor.insert_before(None)
+            special.special = "deleted"
+            special.iterator_refcount += 1
+        else:
+            cursor = cursor.next
+        # -- actually extend from iterator --
+        counter = 0
+        insert_before = cursor.insert_before
         for value in iterable:
-            linked_list._length += 1
+            counter += 1
             insert_before(value)
+        self._linked_list._length += counter
+
+    def extendleft(self, iterable):
+        # handle self pointing at head, or not --
+        cursor = self._cursor
+        if cursor.special == 'head':
+            cursor.iterator_refcount -= 1
+            cursor = cursor.next
+            self._cursor = cursor = cursor.insert_before(None)
+            cursor.special = "deleted"
+            cursor.iterator_refcount += 1
+        # -- actually extend from iterator --
+        counter = 0
+        insert_before = cursor.insert_before
+        for value in iterable:
+            counter += 1
+            insert_before(value)
+        self._linked_list._length += counter
+
 
     def find(self, value):
         cursor = self._cursor

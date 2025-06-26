@@ -920,9 +920,11 @@ class BigStringTests(unittest.TestCase):
 
 
     def test_removeprefix(self):
-        # smoke test for 3.6
+        # smoke test for 3.6-3.8
         self.assertString(abcde.removeprefix('ab'), abcde[2:])
         self.assertString(abcde.removeprefix('xx'), abcde)
+        self.assertString(abcde.removesuffix('de'), abcde[:-2])
+        self.assertString(abcde.removesuffix('xx'), abcde)
 
         # don't bother with the test for 3.6-3.8
         if not hasattr('', 'removeprefix'):  # pragma: no cover
@@ -1676,30 +1678,209 @@ class BigLinkedListTests(unittest.TestCase):
         del it
 
 
-    def testSloppyPrependAndAppend(self):
-        # inserting after head must work
+    def testPrependAndAppendAndExtendAndExtendLeft(self):
+        #
+        # test all our verbs in the middle of the list
+        #
+        def setup():
+            t = linked_list((1, 2, 3))
+            it = t.find(2)
+            return t, it
+
+        t, it = setup()
+        it.prepend(1.5)
+        self.assertLinkedListEqual(t, [1, 1.5, 2, 3])
+        self.assertEqual(it.value, 2)
+
+        t, it = setup()
+        it.append(2.5)
+        self.assertLinkedListEqual(t, [1, 2, 2.5, 3])
+        self.assertEqual(it.value, 2)
+
+        t, it = setup()
+        it.extendleft((1.25, 1.5, 1.75))
+        self.assertLinkedListEqual(t, [1, 1.25, 1.5, 1.75, 2, 3])
+        self.assertEqual(it.value, 2)
+
+        t, it = setup()
+        it.extend((2.25, 2.5, 2.75))
+        self.assertLinkedListEqual(t, [1, 2, 2.25, 2.5, 2.75, 3])
+        self.assertEqual(it.value, 2)
+
+        #
+        # now test when we're pointed at head
+        #
+        def setup():
+            t = linked_list((1, 2, 3))
+            it = iter(t)
+            return t, it
+        t, it = setup()
+
+        t, it = setup()
+        it.append('A')
+        self.assertLinkedListEqual(t, ['A', 1, 2, 3])
+        self.assertTrue(it.special == 'head')
+
+        t, it = setup()
+        it.prepend('B')
+        self.assertLinkedListEqual(t, ['B', 1, 2, 3])
+        self.assertTrue(it.special == 'deleted')
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.value, 'B')
+        it.next(None)
+        self.assertEqual(it.value, 1)
+
+        t, it = setup()
+        it.extend('CDE')
+        self.assertLinkedListEqual(t, ['C', 'D', 'E', 1, 2, 3])
+        self.assertTrue(it.special == 'head')
+
+        t, it = setup()
+        it.extendleft('FGH')
+        self.assertLinkedListEqual(t, ['F', 'G', 'H', 1, 2, 3])
+        self.assertTrue(it.special == 'deleted')
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.value, 'H')
+        it.next(None)
+        self.assertEqual(it.value, 1)
+
+
+        #
+        # now test when we're pointed at tail
+        #
+        def setup():
+            t = linked_list((1, 2, 3))
+            it = t.find(3)
+            it.next(None)
+            return t, it
+        t, it = setup()
+
+        t, it = setup()
+        it.prepend('I')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'I'])
+        self.assertTrue(it.special == 'tail')
+
+        t, it = setup()
+        it.append('J')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'J'])
+        self.assertTrue(it.special == 'deleted')
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.value, 3)
+        it.next(None)
+        self.assertEqual(it.value, 'J')
+
+        t, it = setup()
+        it.extendleft('KLM')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'K', 'L', 'M'])
+        self.assertTrue(it.special == 'tail')
+
+        t, it = setup()
+        it.extend('NOP')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'N', 'O', 'P'])
+        self.assertTrue(it.special == 'deleted')
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.value, 3)
+        it.next(None)
+        self.assertEqual(it.value, 'N')
+
+
+        #
+        # now test all of the above with empty lists!
+        #
+
+        # appending to head obviously works
         t = linked_list()
         it = iter(t)
+        self.assertTrue(it.special == 'head')
         it.append('W')
         self.assertLinkedListEqual(t, ['W'])
+        self.assertTrue(it.special == 'head')
 
-        # inserting before head should work, this is "sloppy"
+        # prepending before head also works, this creates a new special node
         t = linked_list()
         it = iter(t)
+        self.assertTrue(it.special == 'head')
         it.prepend('X')
         self.assertLinkedListEqual(t, ['X'])
+        self.assertTrue(it.special == 'deleted')
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.value, 'X')
+        it.next(None)
+        self.assertEqual(it.special, 'tail')
 
-        # inserting before tail must work
+        # prepending before tail obviously works
         t = linked_list()
-        it = reversed(t)
+        it = iter(t)
+        next(it, None)
+        self.assertTrue(it.special == 'tail')
         it.prepend('Y')
         self.assertLinkedListEqual(t, ['Y'])
+        self.assertTrue(it.special == 'tail')
 
-        # inserting after tail should work, this is "sloppy"
+        # appending to tail also works, this creates a new special node
         t = linked_list()
-        it = reversed(t)
+        it = iter(t)
+        next(it, None)
+        self.assertTrue(it.special == 'tail')
         it.append('Z')
         self.assertLinkedListEqual(t, ['Z'])
+        self.assertTrue(it.special)
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.special, 'head')
+        it.next(None)
+        self.assertEqual(it.value, 'Z')
+
+        # now with extend and extendleft
+
+        # appending to head obviously works
+        t = linked_list()
+        it = iter(t)
+        self.assertTrue(it.special == 'head')
+        it.extend('uvw')
+        self.assertLinkedListEqual(t, ['u', 'v', 'w'])
+        self.assertTrue(it.special == 'head')
+
+        # prepending before head also works, this creates a new special node
+        t = linked_list()
+        it = iter(t)
+        self.assertTrue(it.special == 'head')
+        it.extendleft('vwx')
+        self.assertLinkedListEqual(t, ['v', 'w', 'x'])
+        self.assertTrue(it.special == 'deleted')
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.value, 'x')
+        it.next(None)
+        self.assertEqual(it.special, 'tail')
+
+        # prepending before tail obviously works
+        t = linked_list()
+        it = iter(t)
+        next(it, None)
+        self.assertTrue(it.special == 'tail')
+        it.extendleft('wxy')
+        self.assertLinkedListEqual(t, ['w', 'x', 'y'])
+        self.assertTrue(it.special == 'tail')
+
+        # appending to tail also works, this creates a new special node
+        t = linked_list()
+        it = iter(t)
+        next(it, None)
+        self.assertTrue(it.special == 'tail')
+        it.extend('xyz')
+        self.assertLinkedListEqual(t, ['x', 'y', 'z'])
+        self.assertTrue(it.special)
+        worker = it.copy()
+        worker.previous(None)
+        self.assertEqual(worker.special, 'head')
+        it.next(None)
+        self.assertEqual(it.value, 'x')
 
 
     def testSpecialNodes(self):
