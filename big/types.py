@@ -1887,6 +1887,12 @@ class linked_list_iterator:
         cursor.iterator_refcount += 1
         return it
 
+    def to_head(self):
+        self._cursor = self._linked_list._head
+
+    def to_tail(self):
+        self._cursor = self._linked_list._tail
+
     @property
     def is_head(self):
         return self._cursor.special == 'head'
@@ -1898,6 +1904,14 @@ class linked_list_iterator:
     @property
     def is_special(self):
         return self._cursor.special is not None
+
+    @property
+    def is_forward(self):
+        return True
+
+    @property
+    def is_reverse(self):
+        return False
 
     @property
     def value(self):
@@ -2255,6 +2269,14 @@ class linked_list_reverse_iterator(linked_list_iterator):
 
     def __next__(self):
         return super().__previous__()
+
+    @property
+    def is_forward(self):
+        return False
+
+    @property
+    def is_reverse(self):
+        return True
 
     def __previous__(self):
         return super().__next__()
