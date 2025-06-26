@@ -1888,11 +1888,11 @@ class linked_list_iterator:
         return it
 
     @property
-    def is_at_head(self):
+    def is_head(self):
         return self._cursor.special == 'head'
 
     @property
-    def is_at_tail(self):
+    def is_tail(self):
         return self._cursor.special == 'tail'
 
     @property
