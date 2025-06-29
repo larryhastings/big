@@ -1308,7 +1308,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def assertIsHead(self, it):
         self.assertIsNotNone(it)
-        if it.is_forward:
+        if isinstance(it, linked_list_iterator):
             self.assertTrue(it)
         else:
             self.assertFalse(it)
@@ -1318,7 +1318,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def assertIsTail(self, it):
         self.assertIsNotNone(it)
-        if it.is_forward:
+        if isinstance(it, linked_list_iterator):
             self.assertFalse(it)
         else:
             self.assertTrue(it)

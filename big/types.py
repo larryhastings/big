@@ -1720,8 +1720,10 @@ class linked_list:
 
 
 @export
-class linked_list_iterator:
+class linked_list_base_iterator:
     def __init__(self, linked_list):
+        if type(self) == linked_list_base_iterator:
+            raise TypeError("instances of linked_list_base_iterator are not permitted")
         self._linked_list = linked_list
         self._cursor = cursor = linked_list._head
         cursor.iterator_refcount += 1
@@ -1904,14 +1906,6 @@ class linked_list_iterator:
     @property
     def is_special(self):
         return self._cursor.special is not None
-
-    @property
-    def is_forward(self):
-        return True
-
-    @property
-    def is_reverse(self):
-        return False
 
     @property
     def value(self):
@@ -2253,9 +2247,13 @@ class linked_list_iterator:
         return result
 
 
+@export
+class linked_list_iterator(linked_list_base_iterator):
+    pass
+
 
 @export
-class linked_list_reverse_iterator(linked_list_iterator):
+class linked_list_reverse_iterator(linked_list_base_iterator):
     def __init__(self, linked_list):
         super().__init__(linked_list)
         self._cursor = linked_list._tail
@@ -2269,14 +2267,6 @@ class linked_list_reverse_iterator(linked_list_iterator):
 
     def __next__(self):
         return super().__previous__()
-
-    @property
-    def is_forward(self):
-        return False
-
-    @property
-    def is_reverse(self):
-        return True
 
     def __previous__(self):
         return super().__next__()
