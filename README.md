@@ -4949,6 +4949,15 @@ With reverse iterators, the directionality of every method is reversed:
   pointing at the same node.
 
 
+#### Invariants
+
+The
+
+* In iterator pointing at a node will continue to point at that node until it takes action to move to a new node.
+* If you use an iterator to append a new node, and nobody deletes that node, if you advance that iterator with `next()` you will (eventually) see that node.
+    * If you use an iterator to prepend a new node, and nobody deletes that node, if you rewind that iterator with `previous()` you will (eventually) see that node.
+
+
 </dd></dl>
 
 ## The `multi-` family of string functions

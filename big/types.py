@@ -1760,7 +1760,6 @@ class linked_list_base_iterator:
     def __eq__(self, other):
         return (
             (self.__class__ == other.__class__)
-            and (self._linked_list == other._linked_list)
             and (self._cursor == other._cursor)
             )
 
@@ -2129,8 +2128,6 @@ class linked_list_base_iterator:
         # -- actually append value --
         self._linked_list._length += 1
         cursor.insert_before(value)
-
-    insert = prepend
 
     def append(self, value):
         # -- handle self pointing at tail, or not --
