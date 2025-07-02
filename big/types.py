@@ -1103,7 +1103,8 @@ class SpecialNodeError(LookupError):
 
 # implementation detail, no public APIs expose nodes
 class linked_list_node:
-    def __init__(self, value):
+    def __init__(self, linked_list, value):
+        self.linked_list = linked_list
         self.value = value
         self.special = None # None, 'special', 'head', or 'tail'
         self.next = self.previous = None
@@ -1116,7 +1117,7 @@ class linked_list_node:
         assert self.previous
         assert self.special != 'head'
 
-        node = self.__class__(value)
+        node = self.__class__(self.linked_list, value)
         previous = self.previous
 
         node.next = self
@@ -1165,9 +1166,9 @@ class linked_list_node:
 @export
 class linked_list:
     def __init__(self, iterable=()):
-        self._head = head = linked_list_node(None)
+        self._head = head = linked_list_node(self, None)
         head.special = 'head'
-        head.next = self._tail = tail = linked_list_node(None)
+        head.next = self._tail = tail = linked_list_node(self, None)
         tail.special = 'tail'
         tail.previous = self._head
         self._length = 0
@@ -1319,10 +1320,10 @@ class linked_list:
         return self
 
     def __iter__(self):
-        return linked_list_iterator(self)
+        return linked_list_iterator(self._head)
 
     def __reversed__(self):
-        return linked_list_reverse_iterator(self)
+        return linked_list_reverse_iterator(self._tail)
 
     def __bool__(self):
         return self._length > 0
@@ -1721,12 +1722,11 @@ class linked_list:
 
 @export
 class linked_list_base_iterator:
-    def __init__(self, linked_list):
+    def __init__(self, node):
         if type(self) == linked_list_base_iterator:
             raise TypeError("instances of linked_list_base_iterator are not permitted")
-        self._linked_list = linked_list
-        self._cursor = cursor = linked_list._head
-        cursor.iterator_refcount += 1
+        self._cursor = node
+        node.iterator_refcount += 1
 
     def __repr__(self):
         return f"<{self.__class__.__name__} cursor={self._cursor!r}>"
@@ -1736,9 +1736,6 @@ class linked_list_base_iterator:
         # that means decrementing node.iterator_refcount.
         # and if node.iterator_refcount reaches 0,
         # we *gotta* call unlink.
-        _linked_list = getattr(self, "_linked_list", None)
-        if _linked_list:
-            setattr(self, "_linked_list", None)
         cursor = getattr(self, '_cursor', None)
         if cursor is None:
             return
@@ -1765,13 +1762,6 @@ class linked_list_base_iterator:
 
     def __iter__(self):
         return self
-
-    def __reversed__(self):
-        cursor = self._cursor
-        copy = linked_list_reverse_iterator(self._linked_list)
-        copy._cursor = cursor
-        cursor.iterator_refcount += 1
-        return copy
 
     def _to_index(self, index):
         # starting at the current position,
@@ -1860,11 +1850,7 @@ class linked_list_base_iterator:
             return default
 
     def copy(self):
-        cursor = self._cursor
-        copy = self.__class__(self._linked_list)
-        copy._cursor = self._cursor
-        cursor.iterator_refcount += 1
-        return copy
+        return self.__class__(self._cursor)
 
     def before(self):
         cursor = self._cursor.previous
@@ -1872,10 +1858,7 @@ class linked_list_base_iterator:
             return None
         while cursor.special == 'special':
             cursor = cursor.previous
-        it = self.__class__(self._linked_list)
-        it._cursor = cursor
-        cursor.iterator_refcount += 1
-        return it
+        return self.__class__(cursor)
 
     def after(self):
         cursor = self._cursor.next
@@ -1883,16 +1866,13 @@ class linked_list_base_iterator:
             return None
         while cursor.special == 'special':
             cursor = cursor.next
-        it = self.__class__(self._linked_list)
-        it._cursor = cursor
-        cursor.iterator_refcount += 1
-        return it
+        return self.__class__(cursor)
 
     def to_head(self):
-        self._cursor = self._linked_list._head
+        self._cursor = self._cursor.linked_list._head
 
     def to_tail(self):
-        self._cursor = self._linked_list._tail
+        self._cursor = self._cursor.linked_list._tail
 
     @property
     def is_head(self):
@@ -1929,7 +1909,7 @@ class linked_list_base_iterator:
         value = cursor.remove()
         self._cursor = destination
         destination.iterator_refcount += 1
-        self._linked_list._length -= 1
+        destination.linked_list._length -= 1
         return value
 
     def pop(self):
@@ -1955,7 +1935,7 @@ class linked_list_base_iterator:
         # deliberately not the same as list slicing mechanics.
         # in particular, this does not clamp for you.
 
-        linked_list = self._linked_list
+        linked_list = self._cursor.linked_list
 
         step = step.__index__()
         if not step:
@@ -1979,7 +1959,7 @@ class linked_list_base_iterator:
                 stop = 1
 
         # at this point stop is guaranteed to not be None
-        result = self._linked_list.__class__()
+        result = self._cursor.linked_list.__class__()
         step_is_negative = step < 0
 
 
@@ -2126,7 +2106,7 @@ class linked_list_base_iterator:
             cursor.special = 'special'
             cursor.iterator_refcount += 1
         # -- actually append value --
-        self._linked_list._length += 1
+        cursor.linked_list._length += 1
         cursor.insert_before(value)
 
     def append(self, value):
@@ -2140,7 +2120,7 @@ class linked_list_base_iterator:
         else:
             cursor = cursor.next
         # -- actually append value --
-        self._linked_list._length += 1
+        cursor.linked_list._length += 1
         cursor.insert_before(value)
 
     def extend(self, iterable):
@@ -2159,7 +2139,7 @@ class linked_list_base_iterator:
         for value in iterable:
             counter += 1
             insert_before(value)
-        self._linked_list._length += counter
+        cursor.linked_list._length += counter
 
     def extendleft(self, iterable):
         # handle self pointing at head, or not --
@@ -2176,7 +2156,7 @@ class linked_list_base_iterator:
         for value in iterable:
             counter += 1
             insert_before(value)
-        self._linked_list._length += counter
+        cursor.linked_list._length += counter
 
 
     def find(self, value):
@@ -2190,10 +2170,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.next
 
-        result = self.__class__(self._linked_list)
-        result._cursor = cursor
-        cursor.iterator_refcount += 1
-        return result
+        return self.__class__(cursor)
 
     def rfind(self, value):
         cursor = self._cursor
@@ -2206,10 +2183,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.previous
 
-        result = self.__class__(self._linked_list)
-        result._cursor = cursor
-        cursor.iterator_refcount += 1
-        return result
+        return self.__class__(cursor)
 
     def match(self, predicate):
         cursor = self._cursor
@@ -2222,10 +2196,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.next
 
-        result = self.__class__(self._linked_list)
-        result._cursor = cursor
-        cursor.iterator_refcount += 1
-        return result
+        return self.__class__(cursor)
 
     def rmatch(self, predicate):
         cursor = self._cursor
@@ -2238,29 +2209,20 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.previous
 
-        result = self.__class__(self._linked_list)
-        result._cursor = cursor
-        cursor.iterator_refcount += 1
-        return result
+        return self.__class__(cursor)
 
 
 @export
 class linked_list_iterator(linked_list_base_iterator):
-    pass
+    def __reversed__(self):
+        return linked_list_reverse_iterator(self._cursor)
+
 
 
 @export
 class linked_list_reverse_iterator(linked_list_base_iterator):
-    def __init__(self, linked_list):
-        super().__init__(linked_list)
-        self._cursor = linked_list._tail
-
     def __reversed__(self):
-        cursor = self._cursor
-        copy = linked_list_iterator(self._linked_list)
-        copy._cursor = cursor
-        cursor.iterator_refcount += 1
-        return copy
+        return linked_list_iterator(self._cursor)
 
     def __next__(self):
         return super().__previous__()

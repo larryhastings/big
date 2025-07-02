@@ -38,7 +38,7 @@ import sys
 import unittest
 
 from big.types import string, Pattern
-from big.types import linked_list, SpecialNodeError
+from big.types import linked_list, SpecialNodeError, linked_list_base_iterator
 from big.types import linked_list_iterator, linked_list_reverse_iterator
 from big.tokens import *
 
@@ -1338,6 +1338,10 @@ class BigLinkedListTests(unittest.TestCase):
     def testIteratorBasics(self):
         t = linked_list()
 
+        with self.assertRaises(TypeError):
+            # white box testing
+            linked_list_base_iterator(t._head)
+
         # an iterator on a linked list always starts out at head
         it = iter(t)
         self.assertIsHead(it)
@@ -1684,7 +1688,6 @@ class BigLinkedListTests(unittest.TestCase):
         t, it = setup()
         node = it._cursor
         del it._cursor
-        del it._linked_list
         del it
 
 
