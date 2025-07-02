@@ -1544,7 +1544,7 @@ class linked_list:
         elif index > length:
             index = length
         it = self._it_at_index(index)
-        it.insert(object)
+        it._cursor.insert_before(object)
 
     def append(self, object):
         self._length += 1
