@@ -1103,6 +1103,8 @@ class SpecialNodeError(LookupError):
 
 # implementation detail, no public APIs expose nodes
 class linked_list_node:
+    __slots__ = ('value', 'special', 'next', 'previous', 'linked_list', 'iterator_refcount')
+
     def __init__(self, linked_list, value):
         self.linked_list = linked_list
         self.value = value
@@ -1165,6 +1167,8 @@ class linked_list_node:
 
 @export
 class linked_list:
+    __slots__ = ('_head', '_tail', '_length')
+
     def __init__(self, iterable=()):
         self._head = head = linked_list_node(self, None)
         head.special = 'head'
@@ -1620,11 +1624,7 @@ class linked_list:
         return node_after_head.remove()
 
     def count(self, value):
-        counter = 0
-        for v in self:
-            if v == value:
-                counter += 1
-        return counter
+        return iter(self).count(value)
 
     def find(self, value):
         return iter(self).find(value)
@@ -1722,6 +1722,8 @@ class linked_list:
 
 @export
 class linked_list_base_iterator:
+    __slots__ = ('_cursor',)
+
     def __init__(self, node):
         if type(self) == linked_list_base_iterator:
             raise TypeError("instances of linked_list_base_iterator are not permitted")
@@ -1762,6 +1764,12 @@ class linked_list_base_iterator:
 
     def __iter__(self):
         return self
+
+    def __contains__(self, value):
+        return bool(self.find(value))
+
+    def __copy__(self):
+        return self.copy()
 
     def _to_index(self, index):
         # starting at the current position,
@@ -1893,11 +1901,34 @@ class linked_list_base_iterator:
             raise SpecialNodeError
         return cursor.value
 
+    def count(self, value):
+        cursor = self._cursor
+        tail = cursor.linked_list._tail
+        counter = 0
+        while cursor != tail:
+            if (cursor.special is None) and (cursor.value == value):
+                counter += 1
+            cursor = cursor.next
+        return counter
+
+    def rcount(self, value):
+        cursor = self._cursor
+        head = cursor.linked_list._head
+        counter = 0
+        while cursor != head:
+            if (cursor.special is None) and (cursor.value == value):
+                counter += 1
+            cursor = cursor.previous
+        return counter
+
     def replace(self, value):
         cursor = self._cursor
         if cursor.special:
             raise SpecialNodeError
         cursor.value = value
+
+    def insert(self, index, object):
+        pass
 
     def _pop(self, destination):
         # removes the node we're pointing at,
@@ -2400,6 +2431,12 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     def __bool__(self):
         return self._cursor.special != 'head'
 
+    def count(self, value):
+        return super().rcount(value)
+
+    def rcount(self, value):
+        return super().count(value)
+
     def prepend(self, value):
         return super().append(value)
 
@@ -2429,6 +2466,18 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
 
     def rmatch(self, predicate):
         return super().match(predicate)
+
+    def truncate(self):
+        return super().rtruncate()
+
+    def rtruncate(self):
+        return super().truncate()
+
+    def split(self):
+        return super().rsplit()
+
+    def rsplit(self):
+        return super().split()
 
 
 del export
