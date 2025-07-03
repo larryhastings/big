@@ -4954,8 +4954,9 @@ With reverse iterators, the directionality of every method is reversed:
 The
 
 * In iterator pointing at a node will continue to point at that node until it takes action to move to a new node.
-* If you use an iterator to append a new node, and nobody deletes that node, if you advance that iterator with `next()` you will (eventually) see that node.
-    * If you use an iterator to prepend a new node, and nobody deletes that node, if you rewind that iterator with `previous()` you will (eventually) see that node.
+* If you use an iterator to append a new node, and nobody deletes that node, and then you advance that iterator with `next()` you will (eventually) see that node.
+    * If you use an iterator to prepend a new node, and nobody deletes that node, and then you rewind that iterator with `previous()` you will (eventually) see that node.
+* By default, actions on iterators that act on multiple nodes include the node they're pointing at.
 
 
 </dd></dl>

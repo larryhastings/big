@@ -2095,7 +2095,6 @@ class linked_list_base_iterator:
             return default
         raise ValueError(f'value {value!r} not found')
 
-
     def prepend(self, value):
         # -- handle self pointing at head, or not --
         cursor = self._cursor
@@ -2158,7 +2157,6 @@ class linked_list_base_iterator:
             insert_before(value)
         cursor.linked_list._length += counter
 
-
     def find(self, value):
         cursor = self._cursor
 
@@ -2210,6 +2208,169 @@ class linked_list_base_iterator:
             cursor = cursor.previous
 
         return self.__class__(cursor)
+
+    def truncate(self):
+        """
+        Truncates the linked_list at the current node, discarding all data in subsequent nodes.
+
+        If the current node is a data node (not a special node), it will become the last data
+        node in the list.
+        """
+        cursor = self._cursor
+        t = cursor.linked_list
+        tail = t._tail
+
+        if cursor == tail:
+            return
+
+        previous = cursor
+        cursor = cursor.next
+
+        while cursor != tail:
+            next = cursor.next
+            cursor.value = None
+            if cursor.iterator_refcount:
+                previous.next = cursor
+                cursor.previous = previous
+                previous = cursor
+            else:
+                cursor.previous = cursor.next = None
+            cursor = next
+        tail.previous = previous
+        previous.next = tail
+
+    def rtruncate(self):
+        """
+        Reverse-truncates the linked_list at the current node, discarding all data in previous nodes.
+
+        If the current node is a data node (not a special node), it will become the first data
+        node in the list.
+        """
+        cursor = self._cursor
+        t = cursor.linked_list
+        head = t._head
+
+        if cursor == head:
+            return
+
+        next = cursor
+        cursor = cursor.previous
+
+        while cursor != head:
+            previous = cursor.previous
+            cursor.value = None
+            if cursor.iterator_refcount:
+                next.previous = cursor
+                cursor.next = next
+                next = cursor
+            else:
+                cursor.previous = cursor.next = None
+            cursor = previous
+        head.next = next
+        next.previous = head
+
+
+    def split(self):
+        """
+        Bisects the list at the current node.  Returns the new list.
+
+        Creates a new linked_list, and moves the node pointed to by this iterator
+        and all subsequent nodes (including "tail") to the new linked_list.
+        All iterators pointing at nodes moved to the new list continue to point
+        to those nodes, meaning that they also move to the new list.
+
+        The current node becomes the first node after 'head' of this new linked_list;
+        the previous node becomes the last node before 'tail' of the existing linked_list.
+        """
+        cursor = self._cursor
+        t = cursor.linked_list
+
+        cls = type(t)
+        t2 = cls()
+
+        # t2 steals t's tail.
+        # so--t steals t2's tail!
+        # swap 'em here.
+        t_tail = t2._tail
+        t2_tail = t._tail
+
+        if cursor == t._head:
+            # just swap the two heads, too
+            t_head = t2._head
+
+            t2._head = t._head
+            t._head = t_head
+        else:
+            previous = cursor.previous
+            t2_head = t2._head
+
+            previous.next = t_tail
+            t_tail.previous = previous
+
+            t2_head.next = cursor
+            cursor.previous = t2_head
+
+        t2._tail = t2_tail
+        t._tail = t_tail
+
+        cursor = t2._head
+        while cursor != t2_tail:
+            cursor.linked_list = t2
+            cursor = cursor.next
+
+        return t2
+
+
+    def rsplit(self):
+        """
+        Bisects the list at the current node.  Returns the new list.
+
+        Creates a new linked_list, and moves the node pointed to by this iterator
+        and all previous nodes (including "head") to the new linked_list.
+        All iterators pointing at nodes moved to the new list continue to point
+        to those nodes, meaning that they also move to the new list.
+
+        The current node becomes the last node before 'tail' of this new linked_list;
+        the next node becomes the first node after 'head' of the existing linked_list.
+        """
+        cursor = self._cursor
+        t = cursor.linked_list
+
+        cls = type(t)
+        t2 = cls()
+
+        # t2 steals t's head.
+        # so--t steals t2's head!
+        # swap 'em here.
+        t_head = t2._head
+        t2_head = t._head
+
+        if cursor == t._tail:
+            # just swap the two tails, too
+            t_tail = t2._tail
+
+            t2_tail = t2._tail = t._tail
+            t._tail = t_tail
+        else:
+            next = cursor.next
+            t2_tail = t2._tail
+
+            next.previous = t_head
+            t_head.next = next
+
+            t2_tail.previous = cursor
+            cursor.next = t2_tail
+
+        t2._head = t2_head
+        t._head = t_head
+
+        cursor = t2._head
+        while cursor != t2_tail:
+            cursor.linked_list = t2
+            cursor = cursor.next
+
+        return t2
+
 
 
 @export
