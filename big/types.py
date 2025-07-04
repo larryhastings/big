@@ -1326,6 +1326,11 @@ class linked_list:
     def __iter__(self):
         return linked_list_iterator(self._head)
 
+    head = __iter__
+
+    def tail(self):
+        return linked_list_iterator(self._tail)
+
     def __reversed__(self):
         return linked_list_reverse_iterator(self._tail)
 
@@ -1788,6 +1793,9 @@ class linked_list_base_iterator:
 
         for _ in range(index):
             advance()
+
+    def linked_list(self):
+        return self._cursor.linked_list
 
     def __next__(self):
         cursor = self._cursor
@@ -2301,7 +2309,7 @@ class linked_list_base_iterator:
         next.previous = head
 
 
-    def split(self):
+    def split(self, end=None):
         """
         Bisects the list at the current node.  Returns the new list.
 
