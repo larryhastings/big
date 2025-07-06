@@ -1102,13 +1102,15 @@ class SpecialNodeError(LookupError):
     pass
 
 # implementation detail, no public APIs expose nodes
+_legal_special_values = set((None, 'special', 'head', 'tail'))
 class linked_list_node:
     __slots__ = ('value', 'special', 'next', 'previous', 'linked_list', 'iterator_refcount')
 
-    def __init__(self, linked_list, value):
+    def __init__(self, linked_list, value, special):
         self.linked_list = linked_list
         self.value = value
-        self.special = None # None, 'special', 'head', or 'tail'
+        assert special in _legal_special_values
+        self.special = special
         self.next = self.previous = None
         self.iterator_refcount = 0
 
@@ -1119,7 +1121,7 @@ class linked_list_node:
         assert self.previous
         assert self.special != 'head'
 
-        node = self.__class__(self.linked_list, value)
+        node = self.__class__(self.linked_list, value, None)
         previous = self.previous
 
         node.next = self
@@ -1159,10 +1161,11 @@ class linked_list_node:
         return value
 
     def __repr__(self):
-        special = self.special
-        if special:
-            return f'<{special}>'
-        return f"linked_list_node({self.value!r})"
+        if self.special:
+            special = f', special={self.special!r}'
+        else:
+            special = ''
+        return f"linked_list_node({self.value!r}{special})"
 
 
 @export
@@ -1170,10 +1173,8 @@ class linked_list:
     __slots__ = ('_head', '_tail', '_length')
 
     def __init__(self, iterable=()):
-        self._head = head = linked_list_node(self, None)
-        head.special = 'head'
-        head.next = self._tail = tail = linked_list_node(self, None)
-        tail.special = 'tail'
+        self._head = head = linked_list_node(self, None, 'head')
+        head.next = self._tail = tail = linked_list_node(self, None, 'tail')
         tail.previous = self._head
         self._length = 0
         for value in iterable:
@@ -1723,6 +1724,180 @@ class linked_list:
 
         segment_2_tail.next = segment_1_head
         segment_1_head.previous = segment_2_tail
+
+    def cut(self, start=None, end=None):
+        # first, check that start and end are legal values,
+        # while also converting them to be pointers to nodes,
+        # and changing end so it points to the last node to cut.
+
+        start_is_none = start is None
+        end_is_none = end is None
+
+        start_is_reversed = None if start_is_none else isinstance(start, linked_list_reverse_iterator)
+        end_is_reversed = None if end_is_none else isinstance(end, linked_list_reverse_iterator)
+
+        if start_is_reversed or end_is_reversed:
+            if (start_is_reversed is False) or (end_is_reversed is False):
+                raise ValueError("mismatched forward and reverse iterators")
+
+            tmp = start
+            start = end
+            end = tmp
+
+            if start:
+                if start._cursor == self._tail:
+                    start = None
+                else:
+                    tmp = iter(self)
+                    tmp._cursor = start._cursor.next
+                    start = tmp
+            if end:
+                if end._cursor == self._tail:
+                    end = None
+                else:
+                    tmp = iter(self)
+                    tmp._cursor = end._cursor.next
+                    end = tmp
+
+        if start_is_none:
+            start = self._head
+        else:
+            start = start._cursor
+            if start.linked_list is not self:
+                raise ValueError("start is not an iterator on this linked_list")
+
+        if end_is_none:
+            end = self._tail
+        else:
+            # convert end so it points to the last node to cut.
+            # (rather than one node past it, at the first node not cut.)
+            end = end._cursor.previous
+            if end.linked_list is not self:
+                raise ValueError("end is not an iterator on this linked_list")
+
+        if start_is_none or end_is_none:
+            cursor = start
+            while cursor and (cursor != end):
+                cursor = cursor.next
+            if not cursor:
+                raise ValueError("end points to a node before start")
+
+        # everything checks out, and we can cut.
+        # do all our memory allocation before changing anything,
+        # so that if an allocation fails we don't change anything.
+
+        cls = type(self)
+        t2 = cls()
+
+        new_head = linked_list_node(self, None, 'head') if start is self._head else None
+        new_tail = linked_list_node(self, None, 'tail') if end is self._tail else None
+
+        # all our allocations are done! modify self.
+        print(f"{start=} {end=}\n{new_head=} {new_tail=}")
+
+        if new_head:
+            # start is currently self._head.
+            # set t2._head to be start, and
+            # give self a new _head.
+            print("start is _head, swap heads around")
+            self._head = new_head
+            t2._head = start
+            previous = new_head
+        else:
+            # splice in start after t2._head
+            print("splice in start after t2._head")
+            head = t2._head
+            head.next = start
+            previous = start.previous
+            start.previous = head
+
+        if new_tail:
+            # end is currently self._tail.
+            # set t2._tail to be end, and
+            # give self a new _tail.
+            print("end is _tail, swap tails around")
+            self._tail = new_tail
+            t2._tail = end
+            next = new_tail
+        else:
+            # splice in end before t2._tail
+            print("splice in end before t2._tail")
+            tail = t2._tail
+            tail.previous = end
+            next = end.next
+            end.next = tail
+
+        print(f"{previous=} {next=}")
+
+        # at this point,
+        # previous points to the node in t just before the cut,
+        # and next points to the node in t just after the cut.
+        previous.next = next
+        next.previous = previous
+
+        while start != end:
+            start.linked_list = t2
+            start = start.next
+
+        return t2
+
+    def splice(self, other, where=None):
+        if not isinstance(other, linked_list):
+            raise ValueError('other must be a linked_list')
+
+        if where is None:
+            where = self._tail.previous
+        else:
+            if not isinstance(where, linked_list_base_iterator):
+                raise ValueError('where must be a linked_list iterator')
+            reversed = isinstance(where, linked_list_reverse_iterator)
+            where = where._cursor
+            if where.linked_list != self:
+                raise ValueError("where must be an iterator over self")
+            if reversed:
+                where = where.previous
+
+        # do allocations first
+        new_head = linked_list_node(other, None, 'head')
+        new_tail = linked_list_node(other, None, 'tail')
+
+        if (where is self._tail) or (where is None):
+            # insert new special node
+            where = linked_list_node(self, None, 'special')
+
+            if where is self._tail:
+                where.previous = self._tail.previous
+                where.previous.next = where
+                where.next = self._tail
+                self._tail.previous = where
+            else:
+                # where was a reversed iterator pointing at _head.
+                where = linked_list_node(self, None, 'special')
+                where.next = self._head.next
+                where.next.previous = where
+                where.previous = self._head
+                self._head.next = where
+
+        after = where.next
+        assert after
+
+        where.next = other._head
+        other._head.previous = where
+
+        after.previous = other._tail
+        other._tail.next = after
+
+        other._head = new_head
+        other._tail = new_tail
+        new_head.next = new_tail
+        new_tail.previous = new_head
+
+        while where != after:
+            where.linked_list = self
+            where = where.next
+
+
+
 
 
 @export
@@ -2309,7 +2484,7 @@ class linked_list_base_iterator:
         next.previous = head
 
 
-    def split(self, end=None):
+    def cut(self, end=None):
         """
         Bisects the list at the current node.  Returns the new list.
 
@@ -2321,46 +2496,10 @@ class linked_list_base_iterator:
         The current node becomes the first node after 'head' of this new linked_list;
         the previous node becomes the last node before 'tail' of the existing linked_list.
         """
-        cursor = self._cursor
-        t = cursor.linked_list
-
-        cls = type(t)
-        t2 = cls()
-
-        # t2 steals t's tail.
-        # so--t steals t2's tail!
-        # swap 'em here.
-        t_tail = t2._tail
-        t2_tail = t._tail
-
-        if cursor == t._head:
-            # just swap the two heads, too
-            t_head = t2._head
-
-            t2._head = t._head
-            t._head = t_head
-        else:
-            previous = cursor.previous
-            t2_head = t2._head
-
-            previous.next = t_tail
-            t_tail.previous = previous
-
-            t2_head.next = cursor
-            cursor.previous = t2_head
-
-        t2._tail = t2_tail
-        t._tail = t_tail
-
-        cursor = t2._head
-        while cursor != t2_tail:
-            cursor.linked_list = t2
-            cursor = cursor.next
-
-        return t2
+        return self._cursor.linked_list.cut(self, end)
 
 
-    def rsplit(self):
+    def rcut(self):
         """
         Bisects the list at the current node.  Returns the new list.
 
@@ -2372,43 +2511,10 @@ class linked_list_base_iterator:
         The current node becomes the last node before 'tail' of this new linked_list;
         the next node becomes the first node after 'head' of the existing linked_list.
         """
-        cursor = self._cursor
-        t = cursor.linked_list
+        return self._cursor.linked_list.cut(start, self)
 
-        cls = type(t)
-        t2 = cls()
-
-        # t2 steals t's head.
-        # so--t steals t2's head!
-        # swap 'em here.
-        t_head = t2._head
-        t2_head = t._head
-
-        if cursor == t._tail:
-            # just swap the two tails, too
-            t_tail = t2._tail
-
-            t2_tail = t2._tail = t._tail
-            t._tail = t_tail
-        else:
-            next = cursor.next
-            t2_tail = t2._tail
-
-            next.previous = t_head
-            t_head.next = next
-
-            t2_tail.previous = cursor
-            cursor.next = t2_tail
-
-        t2._head = t2_head
-        t._head = t_head
-
-        cursor = t2._head
-        while cursor != t2_tail:
-            cursor.linked_list = t2
-            cursor = cursor.next
-
-        return t2
+    def splice(self, other):
+        self._cursor._linked_list.splice(other, self)
 
 
 
@@ -2480,12 +2586,6 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
 
     def rtruncate(self):
         return super().truncate()
-
-    def split(self):
-        return super().rsplit()
-
-    def rsplit(self):
-        return super().split()
 
 
 del export

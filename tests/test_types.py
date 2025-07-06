@@ -1925,7 +1925,7 @@ class BigLinkedListTests(unittest.TestCase):
             it.pop()
 
         # white box test of repr
-        self.assertEqual(repr(t._head), "<head>")
+        self.assertEqual(repr(t._head), "linked_list_node(None, special='head')")
 
 
 
