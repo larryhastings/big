@@ -1342,7 +1342,7 @@ class linked_list:
         return self._length
 
     def __contains__(self, value):
-        return self.find(value) != None
+        return self.find(value) is not None
 
     def _it_at_index(self, index):
         """
@@ -1946,10 +1946,46 @@ class linked_list_base_iterator:
         return self
 
     def __contains__(self, value):
-        return bool(self.find(value))
+        return self.find(value) is not None
 
     def __copy__(self):
         return self.copy()
+
+    def _cursor_at_index(self, index, clamp=False):
+        # return a cursor (pointer to a node),
+        # starting at the current position,
+        # relative to index.  ignores special nodes.
+
+        cursor = self._cursor
+        index = index.__index__()
+
+        if not index:
+            return cursor
+
+        if index < 0:
+            while index:
+                c = cursor.previous
+                if c is None:
+                    if clamp:
+                        break
+                    raise ValueError("went past head")
+                if c.special:
+                    continue
+                cursor = c
+                index += 1
+            return cursor
+
+        while index:
+            c = cursor.next
+            if c is None:
+                if clamp:
+                    break
+                raise ValueError("went past tail")
+            if c.special:
+                continue
+            cursor = c
+            index -= 1
+        return cursor
 
     def _to_index(self, index):
         # starting at the current position,
@@ -2077,6 +2113,41 @@ class linked_list_base_iterator:
     def is_special(self):
         return self._cursor.special is not None
 
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start = key.start or 0
+            stop = key.stop or 0
+            step = key.step if key.step is not None else 1
+            return self._slice(start, stop, step, False)
+        cursor = self._cursor_at_index(key)
+        if cursor.special:
+            raise SpecialNodeError()
+        return cursor.value
+
+    def __setitem__(self, key, value):
+        cursor = self._cursor_at_index(key)
+        if cursor.special:
+            raise SpecialNodeError()
+        cursor.value = value
+
+    def __delitem__(self, key):
+        cursor = self._cursor_at_index(key)
+        if cursor.special:
+            raise SpecialNodeError()
+        cursor.remove()
+
+    def insert(self, index, object):
+        cursor = self._cursor_at_index(key)
+        # support for sloppy insert here:
+        # if you have an iterator IT pointed at head,
+        # you can call IT.prepend(value)
+        # and that creates the special node etc etc.
+        # therefore, inserting a node before head is ok.
+        # therefore, it should be okay here, and do the same thing.
+        if cursor.special == 'head':
+            cursor = cursor.next
+        cursor.insert_before(object)
+
     @property
     def value(self):
         cursor = self._cursor
@@ -2109,9 +2180,6 @@ class linked_list_base_iterator:
         if cursor.special:
             raise SpecialNodeError
         cursor.value = value
-
-    def insert(self, index, object):
-        pass
 
     def _pop(self, destination):
         # removes the node we're pointing at,
