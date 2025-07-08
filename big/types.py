@@ -1160,6 +1160,96 @@ class linked_list_node:
             self.value = None
         return value
 
+    def index(self, index, clamp=False):
+        # return a cursor (pointer to a node),
+        # starting at the current position,
+        # relative to index.  ignores special nodes.
+        # if we attempt to iterate past the end of the list
+        # in either direction, return None--
+        # except if clamp is False, in which case we return the last node before the end.
+
+        index = index.__index__()
+        cursor = self
+
+        if index < 0:
+            while index:
+                c = cursor.previous
+                if c is None:
+                    return cursor if clamp else None
+                if c.special:
+                    continue
+                cursor = c
+                index += 1
+            return cursor
+
+        while index:
+            c = cursor.next
+            if c is None:
+                return cursor if clamp else None
+            cursor = c
+            if c.special:
+                continue
+            index -= 1
+        return cursor
+
+
+    def nodes(self, start, first, stop, last, step):
+        cursor = first
+        index = start
+        for i in range(start, stop, step):
+            if i == 0:
+                # index 0 is *always* self.
+                # if self is deleted, we just skip over it.
+                cursor = self
+                index = 0
+                if not self.special:
+                    yield self
+                continue
+
+            if (index + 1) == i:
+                # (hopefully) fast path
+                cursor = cursor.next
+                index = i
+                yield cursor
+                continue
+
+            while index < i:
+                cursor = cursor.next
+                index += 1
+            while index > i:
+                cursor = cursor.previous
+                index -= 1
+            yield cursor
+
+    nodes_iterator = nodes
+
+    def nodes(self, start, stop, step, *, clamp=False):
+        """
+        Returns None if either start or stop is out of range.
+        Iterator, yields nodes.
+        """
+
+        step = step.__index__()
+        if not step:
+            raise ValueError("step must not be 0")
+
+        start = start.__index__()
+        stop = stop.__index__()
+
+        first = self.index(start, clamp=clamp)
+        last = self.index(stop, clamp=clamp)
+        if (first is None) or (last is None):
+            return None
+
+        if step < 0:
+            if start <= stop:
+                return iter(())
+        elif start >= stop:
+            return iter(())
+
+        return self.nodes_iterator(start, first, stop, last, step)
+
+
     def __repr__(self):
         if self.special:
             special = f', special={self.special!r}'
@@ -1435,7 +1525,6 @@ class linked_list:
         assert -1 <= stop <= length, f"failed: -1 <= {stop} <= {length}"
 
         return start, stop, step, slice_length
-
 
     def _parse_key(self, key, *, for_assignment=False):
         """
@@ -1951,6 +2040,14 @@ class linked_list_base_iterator:
     def __copy__(self):
         return self.copy()
 
+    def __len__(self):
+        length = 0
+        cursor = self._cursor
+        while cursor is not None:
+            if not cursor._special:
+                length += 1
+            cursor = cursor.next
+
     def _cursor_at_index(self, index, clamp=False):
         # return a cursor (pointer to a node),
         # starting at the current position,
@@ -2033,11 +2130,23 @@ class linked_list_base_iterator:
             raise StopIteration
         return cursor.value
 
-    def next(self, default=_undefined):
+    def next(self, default=_undefined, *, count=1):
+        if count < 0:
+            raise ValueError("next count can't be negative")
+        if count == 0:
+            return None
+
         if default == _undefined:
+            while count > 1:
+                self.__next__()
+                count -= 1
+
             return self.__next__()
 
         try:
+            while count > 1:
+                self.__next__()
+                count -= 1
             return self.__next__()
         except StopIteration:
             return default
@@ -2067,11 +2176,23 @@ class linked_list_base_iterator:
             raise StopIteration
         return cursor.value
 
-    def previous(self, default=_undefined):
+    def previous(self, default=_undefined, *, count=1):
+        if count < 0:
+            raise ValueError("previous count can't be negative")
+        if count == 0:
+            return None
+
         if default == _undefined:
+            while count > 1:
+                self.__previous__()
+                count -= 1
+
             return self.__previous__()
 
         try:
+            while count > 1:
+                self.__previous__()
+                count -= 1
             return self.__previous__()
         except StopIteration:
             return default
@@ -2079,20 +2200,30 @@ class linked_list_base_iterator:
     def copy(self):
         return self.__class__(self._cursor)
 
-    def before(self):
-        cursor = self._cursor.previous
-        if not cursor:
-            return None
-        while cursor.special == 'special':
+    def before(self, count=1):
+        if count < 0:
+            return self.after(-count)
+        cursor = self._cursor
+        while count:
             cursor = cursor.previous
+            if cursor is None:
+                return None
+            if cursor.special == 'special':
+                continue
+            count -= 1
         return self.__class__(cursor)
 
-    def after(self):
-        cursor = self._cursor.next
-        if not cursor:
-            return None
-        while cursor.special == 'special':
+    def after(self, count=1):
+        if count < 0:
+            return self.before(-count)
+        cursor = self._cursor
+        while count:
             cursor = cursor.next
+            if cursor is None:
+                return None
+            if cursor.special == 'special':
+                continue
+            count -= 1
         return self.__class__(cursor)
 
     def to_head(self):
@@ -2113,31 +2244,54 @@ class linked_list_base_iterator:
     def is_special(self):
         return self._cursor.special is not None
 
+    def _item_lookup(self, key):
+        """
+        Only returns a valid data node.
+        If key indexes to a special node, or overshoots head/tail,
+        raises an exception.
+        """
+        key = key.__index__()
+        cursor = self._cursor
+        if key == 0:
+            if cursor.special:
+                raise SpecialNodeError()
+        else:
+            cursor = cursor.index(key)
+            if (cursor is None) or cursor.special:
+                raise IndexError()
+        return cursor
+
+    def _slice_lookup(self, key):
+        cursor = self._cursor
+        start = key.start
+        start = 0 if start is None else start.__index__()
+        stop = key.stop
+        stop = 0 if stop is None else stop.__index__()
+        step = key.step
+        step = 1 if step is None else step.__index__()
+        cursor = self._cursor
+        it = cursor.nodes(start, stop, step)
+        if it is None:
+            raise IndexError()
+        return it
+
     def __getitem__(self, key):
         if isinstance(key, slice):
-            start = key.start or 0
-            stop = key.stop or 0
-            step = key.step if key.step is not None else 1
-            return self._slice(start, stop, step, False)
-        cursor = self._cursor_at_index(key)
-        if cursor.special:
-            raise SpecialNodeError()
+            it = self._slice_lookup(key)
+            return type(self._cursor.linked_list)(o.value for o in it)
+        cursor = self._item_lookup(key)
         return cursor.value
 
     def __setitem__(self, key, value):
-        cursor = self._cursor_at_index(key)
-        if cursor.special:
-            raise SpecialNodeError()
+        cursor = self._item_lookup(key)
         cursor.value = value
 
     def __delitem__(self, key):
-        cursor = self._cursor_at_index(key)
-        if cursor.special:
-            raise SpecialNodeError()
+        cursor = self._item_lookup(key)
         cursor.remove()
 
     def insert(self, index, object):
-        cursor = self._cursor_at_index(key)
+        cursor = self._item_lookup(key)
         # support for sloppy insert here:
         # if you have an iterator IT pointed at head,
         # you can call IT.prepend(value)
@@ -2654,6 +2808,15 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
 
     def rtruncate(self):
         return super().truncate()
+
+    def __len__(self):
+        length = 0
+        cursor = self._cursor
+        while cursor is not None:
+            if not cursor._special:
+                length += 1
+            cursor = cursor.previous
+
 
 
 del export
