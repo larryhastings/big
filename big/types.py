@@ -1160,7 +1160,7 @@ class linked_list_node:
             self.value = None
         return value
 
-    def index(self, index, clamp=False):
+    def index(self, index, allow_head_and_tail=False, clamp=False):
         # return a cursor (pointer to a node),
         # starting at the current position,
         # relative to index.  ignores special nodes.
@@ -1177,7 +1177,8 @@ class linked_list_node:
                 if c is None:
                     return cursor if clamp else None
                 if c.special:
-                    continue
+                    if (not allow_head_and_tail) or (c.special != 'head'):
+                        continue
                 cursor = c
                 index += 1
             return cursor
@@ -1188,7 +1189,8 @@ class linked_list_node:
                 return cursor if clamp else None
             cursor = c
             if c.special:
-                continue
+                if (not allow_head_and_tail) or (c.special != 'tail'):
+                    continue
             index -= 1
         return cursor
 
@@ -1237,7 +1239,7 @@ class linked_list_node:
         stop = stop.__index__()
 
         first = self.index(start, clamp=clamp)
-        last = self.index(stop, clamp=clamp)
+        last = self.index(stop, allow_head_and_tail=True, clamp=clamp)
         if (first is None) or (last is None):
             return None
 
