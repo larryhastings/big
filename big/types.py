@@ -1114,19 +1114,24 @@ class linked_list_node:
         self.next = self.previous = None
         self.iterator_refcount = 0
 
-    def insert_before(self, value):
+    def insert_before(self, value, special=None):
         "inserts value into the linked list in front of self."
 
         # should never attempt to insert before head
         assert self.previous
         assert self.special != 'head'
 
-        node = self.__class__(self.linked_list, value, None)
+        linked_list = self.linked_list
+
+        node = self.__class__(linked_list, value, special)
         previous = self.previous
 
         node.next = self
         node.previous = previous
         previous.next = self.previous = node
+
+        if special is None:
+            linked_list._length += 1
 
         return node
 
@@ -1146,6 +1151,13 @@ class linked_list_node:
         if next:
             next.previous = previous
 
+        if self.special is None:
+            linked_list = getattr(self, 'linked_list', None)
+            if linked_list is not None:
+                length = getattr(linked_list, '_length', None)
+                if length is not None:
+                    linked_list._length = length - 1
+
         self.clear()
 
     def remove(self):
@@ -1158,6 +1170,8 @@ class linked_list_node:
         else:
             self.special = 'special'
             self.value = None
+            self.linked_list._length -= 1
+
         return value
 
     def index(self, index, allow_head_and_tail=False, clamp=False):
@@ -1176,10 +1190,10 @@ class linked_list_node:
                 c = cursor.previous
                 if c is None:
                     return cursor if clamp else None
+                cursor = c
                 if c.special:
                     if (not allow_head_and_tail) or (c.special != 'head'):
                         continue
-                cursor = c
                 index += 1
             return cursor
 
@@ -1575,7 +1589,7 @@ class linked_list:
         it, start, stop, step, slice_length = self._parse_key(key)
 
         if stop is None:
-            return it.value
+            return it._cursor.value
 
         stop -= start
         return it.slice(0, stop, step)
@@ -1649,23 +1663,19 @@ class linked_list:
         it._cursor.insert_before(object)
 
     def append(self, object):
-        self._length += 1
         self._tail.insert_before(object)
 
     def extend(self, iterable):
         insert_before = self._tail.insert_before
         for value in iterable:
-            self._length += 1
             insert_before(value)
 
     def appendleft(self, object):
-        self._length += 1
         self._head.next.insert_before(object)
 
     def extendleft(self, iterable):
         insert_before = self._head.next.insert_before
         for value in iterable:
-            self._length += 1
             insert_before(value)
 
     prepend = appendleft
@@ -1708,7 +1718,6 @@ class linked_list:
             node_before_tail = node_before_tail.previous
         if node_before_tail == self._head:
             raise IndexError('pop from empty linked_list')
-        self._length -= 1
         return node_before_tail.remove()
 
     def popleft(self):
@@ -1717,7 +1726,6 @@ class linked_list:
             node_after_head = node_after_head.next
         if node_after_head == self._tail:
             raise IndexError('pop from empty linked_list')
-        self._length -= 1
         return node_after_head.remove()
 
     def count(self, value):
@@ -1742,7 +1750,6 @@ class linked_list:
                 return default
             raise ValueError('linked_list.remove(x): x not in linked list')
         assert not it._cursor.special # find should never return a special node
-        self._length -= 1
         return it._cursor.remove()
 
     def rremove(self, value, default=_undefined):
@@ -1752,7 +1759,6 @@ class linked_list:
                 return default
             raise ValueError('linked_list.remove(x): x not in linked list')
         assert not it._cursor.special # find should never return a special node
-        self._length -= 1
         return it._cursor.remove()
 
     def reverse(self):
@@ -1989,7 +1995,7 @@ class linked_list:
 
 
 
-
+_sentinel = object()
 
 @export
 class linked_list_base_iterator:
@@ -1998,8 +2004,13 @@ class linked_list_base_iterator:
     def __init__(self, node):
         if type(self) == linked_list_base_iterator:
             raise TypeError("instances of linked_list_base_iterator are not permitted")
-        self._cursor = node
         node.iterator_refcount += 1
+        self._cursor = node
+
+        self._filtering = False
+        self._stop_at_cursor = None
+        self._find_value = _sentinel
+        self._match_predicate = None
 
     def __repr__(self):
         return f"<{self.__class__.__name__} cursor={self._cursor!r}>"
@@ -2046,7 +2057,7 @@ class linked_list_base_iterator:
         length = 0
         cursor = self._cursor
         while cursor is not None:
-            if not cursor._special:
+            if not cursor.special:
                 length += 1
             cursor = cursor.next
 
@@ -2107,28 +2118,75 @@ class linked_list_base_iterator:
     def linked_list(self):
         return self._cursor.linked_list
 
+    def set_filters(self, *, stop_at=None, find=_sentinel, match=None):
+        """
+        If find and match are both specified, they combine with 'and'.
+        (This iterator will only yield values that satisfy both find AND match.)
+        Every set_filters call resets the filter for any argument not supplied.
+        (Calling set_filters with no arguments resets all filters.)
+        """
+        if stop_at is not None:
+            self._stop_at_cursor = stop_at._cursor
+        else:
+            self._stop_at_cursor = None
+        self._find_value = find
+        self._match_predicate = match
+        self._filtering = (self._stop_at_cursor != None) or (self._find_value != _sentinel) or (self._match_predicate != None)
+
     def __next__(self):
         cursor = self._cursor
         special = cursor.special
 
-        if special == 'tail':
+        if (special == 'tail') or (cursor is self._stop_at_cursor):
             raise StopIteration
 
         cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         next = cursor.next
         if (not iterator_refcount) and (special == 'special'):
             cursor.unlink()
-        cursor = next
-        special = cursor.special
 
-        while special == 'special':
-            cursor = cursor.next
+        stop_iteration = False
+        if not self._filtering:
+            # fast path
+            cursor = next
             special = cursor.special
+            while special == 'special':
+                cursor = cursor.next
+                special = cursor.special
+        else:
+            # slow path
+            stop_at_cursor = self._stop_at_cursor
+            find_value = self._find_value
+            sentinel = _sentinel
+            match_predicate = self._match_predicate
+            while True:
+                cursor = next
+                next = cursor.next
+                special = cursor.special
+                value = cursor.value
+
+                if cursor is stop_at_cursor:
+                    stop_iteration = True
+                    break
+
+                if special:
+                    if special == 'special':
+                        continue
+                    assert special in ('head', 'tail')
+                    break
+
+                if not ((find_value is sentinel) or (value == find_value)):
+                    continue
+                if not ((match_predicate is None) or match_predicate(value)):
+                    continue
+                break
 
         self._cursor = cursor
         cursor.iterator_refcount += 1
 
         if special == 'tail':
+            stop_iteration = True
+        if stop_iteration:
             raise StopIteration
         return cursor.value
 
@@ -2157,24 +2215,56 @@ class linked_list_base_iterator:
         cursor = self._cursor
         special = cursor.special
 
-        if special == 'head':
+        if (special == 'head') or (cursor is self._stop_at_cursor):
             raise StopIteration
 
         cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         previous = cursor.previous
         if (not iterator_refcount) and (special == 'special'):
             cursor.unlink()
-        cursor = previous
-        special = cursor.special
 
-        while special == 'special':
-            cursor = cursor.previous
+        stop_iteration = False
+        if not self._filtering:
+            # fast path
+            cursor = previous
             special = cursor.special
+            while special == 'special':
+                cursor = cursor.previous
+                special = cursor.special
+        else:
+            # slow path
+            stop_at_cursor = self._stop_at_cursor
+            find_value = self._find_value
+            sentinel = _sentinel
+            match_predicate = self._match_predicate
+            while True:
+                cursor = previous
+                previous = cursor.previous
+                special = cursor.special
+                value = cursor.value
+
+                if cursor is stop_at_cursor:
+                    stop_iteration = True
+                    break
+
+                if special:
+                    if special == 'special':
+                        continue
+                    assert special in ('head', 'tail')
+                    break
+
+                if not ((find_value is sentinel) or (value == find_value)):
+                    continue
+                if not ((match_predicate is None) or match_predicate(value)):
+                    continue
+                break
 
         self._cursor = cursor
         cursor.iterator_refcount += 1
 
         if special == 'head':
+            stop_iteration = True
+        if stop_iteration:
             raise StopIteration
         return cursor.value
 
@@ -2200,7 +2290,12 @@ class linked_list_base_iterator:
             return default
 
     def copy(self):
-        return self.__class__(self._cursor)
+        it = self.__class__(self._cursor)
+        it._filtering = self._filtering
+        it._stop_at_cursor = self._stop_at_cursor
+        it._find_value = self._find_value
+        it._match_predicate = self._match_predicate
+        return it
 
     def before(self, count=1):
         if count < 0:
@@ -2304,13 +2399,6 @@ class linked_list_base_iterator:
             cursor = cursor.next
         cursor.insert_before(object)
 
-    @property
-    def value(self):
-        cursor = self._cursor
-        if cursor.special:
-            raise SpecialNodeError
-        return cursor.value
-
     def count(self, value):
         cursor = self._cursor
         tail = cursor.linked_list._tail
@@ -2347,7 +2435,6 @@ class linked_list_base_iterator:
         value = cursor.remove()
         self._cursor = destination
         destination.iterator_refcount += 1
-        destination.linked_list._length -= 1
         return value
 
     def pop(self):
@@ -2431,7 +2518,7 @@ class linked_list_base_iterator:
                 # and it's always an error if self is a special node.
                 if self._cursor.special:
                     raise SpecialNodeError()
-                append(self.value)
+                append(self._cursor.value)
 
                 # fast path to update it and index
                 index = 0
@@ -2456,7 +2543,7 @@ class linked_list_base_iterator:
                     while i < index:
                         retreat()
                         index -= 1
-                    append(it.value)
+                    append(it._cursor.value)
                 if pop:
                     pop()
             except StopIteration:
@@ -2539,11 +2626,9 @@ class linked_list_base_iterator:
         if cursor.special == 'head':
             cursor.iterator_refcount -= 1
             cursor = cursor.next
-            self._cursor = cursor = cursor.insert_before(None)
-            cursor.special = 'special'
+            self._cursor = cursor = cursor.insert_before(None, 'special')
             cursor.iterator_refcount += 1
         # -- actually append value --
-        cursor.linked_list._length += 1
         cursor.insert_before(value)
 
     def append(self, value):
@@ -2551,13 +2636,11 @@ class linked_list_base_iterator:
         cursor = self._cursor
         if cursor.special == 'tail':
             cursor.iterator_refcount -= 1
-            self._cursor = special = cursor.insert_before(None)
-            special.special = 'special'
-            special.iterator_refcount += 1
+            self._cursor = special_node = cursor.insert_before(None, 'special')
+            special_node.iterator_refcount += 1
         else:
             cursor = cursor.next
         # -- actually append value --
-        cursor.linked_list._length += 1
         cursor.insert_before(value)
 
     def extend(self, iterable):
@@ -2565,9 +2648,8 @@ class linked_list_base_iterator:
         cursor = self._cursor
         if cursor.special == 'tail':
             cursor.iterator_refcount -= 1
-            self._cursor = special = cursor.insert_before(None)
-            special.special = 'special'
-            special.iterator_refcount += 1
+            self._cursor = special_node = cursor.insert_before(None, 'special')
+            special_node.iterator_refcount += 1
         else:
             cursor = cursor.next
         # -- actually extend from iterator --
@@ -2576,7 +2658,6 @@ class linked_list_base_iterator:
         for value in iterable:
             counter += 1
             insert_before(value)
-        cursor.linked_list._length += counter
 
     def extendleft(self, iterable):
         # handle self pointing at head, or not --
@@ -2584,8 +2665,7 @@ class linked_list_base_iterator:
         if cursor.special == 'head':
             cursor.iterator_refcount -= 1
             cursor = cursor.next
-            self._cursor = cursor = cursor.insert_before(None)
-            cursor.special = 'special'
+            self._cursor = cursor = cursor.insert_before(None, 'special')
             cursor.iterator_refcount += 1
         # -- actually extend from iterator --
         counter = 0
@@ -2593,7 +2673,6 @@ class linked_list_base_iterator:
         for value in iterable:
             counter += 1
             insert_before(value)
-        cursor.linked_list._length += counter
 
     def find(self, value):
         cursor = self._cursor
@@ -2815,7 +2894,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         length = 0
         cursor = self._cursor
         while cursor is not None:
-            if not cursor._special:
+            if not cursor.special:
                 length += 1
             cursor = cursor.previous
 

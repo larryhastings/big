@@ -1296,7 +1296,7 @@ class BigLinkedListTests(unittest.TestCase):
     def assertLinkedListEqual(self, t, expected):
         self.assertIsInstance(t, linked_list)
         expected = list(expected)
-        got = list(iter(t))
+        got = list(t)
         self.assertEqual(expected, got)
 
     def assertIsSpecial(self, it):
@@ -1347,7 +1347,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsHead(it)
         self.assertTrue(it)
         with self.assertRaises(SpecialNodeError):
-            it.value
+            it[0]
         with self.assertRaises(SpecialNodeError):
             it.pop()
         with self.assertRaises(SpecialNodeError):
@@ -1362,7 +1362,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsTail(rit)
         self.assertTrue(rit)
         with self.assertRaises(SpecialNodeError):
-            rit.value
+            rit[0]
         with self.assertRaises(SpecialNodeError):
             rit.pop()
         with self.assertRaises(SpecialNodeError):
@@ -1530,16 +1530,16 @@ class BigLinkedListTests(unittest.TestCase):
         copy = it.copy()
         got = copy.previous()
         self.assertEqual(got, 0)
-        self.assertEqual(copy.value, 0)
+        self.assertEqual(copy[0], 0)
         before = it.before()
-        self.assertEqual(before.value, 0)
+        self.assertEqual(before[0], 0)
 
         copy = it.copy()
         got = copy.next()
         self.assertEqual(got, 8)
-        self.assertEqual(copy.value, 8)
+        self.assertEqual(copy[0], 8)
         after = it.after()
-        self.assertEqual(after.value, 8)
+        self.assertEqual(after[0], 8)
 
         it1 = iterators[1]
         with self.assertRaises(SpecialNodeError):
@@ -1548,24 +1548,24 @@ class BigLinkedListTests(unittest.TestCase):
         t, it, iterators = setup()
         value = it.pop()
         self.assertEqual(value, 4)
-        self.assertEqual(it.value, 0)
+        self.assertEqual(it[0], 0)
 
         t, it, iterators = setup()
         value = it.popleft()
         self.assertEqual(value, 4)
-        self.assertEqual(it.value, 8)
+        self.assertEqual(it[0], 8)
 
         t, it, iterators = setup()
         it2 = iterators[2]
         value = it2.previous()
         self.assertEqual(value, 0)
-        self.assertEqual(it2.value, 0)
+        self.assertEqual(it2[0], 0)
 
         t, it, iterators = setup()
         it6 = iterators[6]
         value = it6.next()
         self.assertEqual(value, 8)
-        self.assertEqual(it6.value, 8)
+        self.assertEqual(it6[0], 8)
 
         # try t.popleft when the node after head is deleted
         t, it, iterators = setup()
@@ -1593,19 +1593,19 @@ class BigLinkedListTests(unittest.TestCase):
             return t, it
 
         t, it = setup()
-        self.assertEqual(it.value, 3)
+        self.assertEqual(it[0], 3)
         self.assertEqual(repr(it), "<linked_list_iterator cursor=linked_list_node(3)>")
         copy = it.copy()
         del(copy)
-        self.assertEqual(it.value, 3)
+        self.assertEqual(it[0], 3)
 
         got = it.next()
         self.assertEqual(got, 4)
-        self.assertEqual(it.value, 4)
+        self.assertEqual(it[0], 4)
 
         got = it.next()
         self.assertEqual(got, 5)
-        self.assertEqual(it.value, 5)
+        self.assertEqual(it[0], 5)
 
         with self.assertRaises(StopIteration):
             got = it.next()
@@ -1618,14 +1618,14 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsTail(it)
 
         t, it = setup()
-        self.assertEqual(it.value, 3)
+        self.assertEqual(it[0], 3)
         got = it.previous()
         self.assertEqual(got, 2)
-        self.assertEqual(it.value, 2)
+        self.assertEqual(it[0], 2)
 
         got = it.previous()
         self.assertEqual(got, 1)
-        self.assertEqual(it.value, 1)
+        self.assertEqual(it[0], 1)
 
         with self.assertRaises(StopIteration):
             got = it.previous()
@@ -1639,15 +1639,15 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         before = it.before()
-        self.assertEqual(it.value, 3)
-        self.assertEqual(before.value, 2)
+        self.assertEqual(it[0], 3)
+        self.assertEqual(before[0], 2)
         copy = before.copy()
         copy.pop() # now before points at a deleted node
         before2 = it.before() # skips over deleted node
-        self.assertEqual(before2.value, 1)
+        self.assertEqual(before2[0], 1)
 
         before2.replace('abc')
-        self.assertEqual(before2.value, 'abc')
+        self.assertEqual(before2[0], 'abc')
 
         got = before2.remove(5)
         self.assertEqual(got, 5)
@@ -1659,21 +1659,21 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         after = it.after()
-        self.assertEqual(it.value, 3)
-        self.assertEqual(after.value, 4)
+        self.assertEqual(it[0], 3)
+        self.assertEqual(after[0], 4)
         copy = after.copy()
         copy.pop() # now after points at a deleted node
         after2 = it.after() # skips over deleted node
-        self.assertEqual(after2.value, 5)
+        self.assertEqual(after2[0], 5)
 
         after2.replace('xyz')
-        self.assertEqual(after2.value, 'xyz')
+        self.assertEqual(after2[0], 'xyz')
 
         t, it = setup()
         rit = reversed(it)
         it2 = reversed(rit)
         self.assertEqual(it, it2)
-        self.assertEqual(it.value, it2.value)
+        self.assertEqual(it[0], it2[0])
 
         # test del!
         # white box testing.
@@ -1705,25 +1705,25 @@ class BigLinkedListTests(unittest.TestCase):
         it.prepend(1.5)
         self.assertLinkedListEqual(t, [1, 1.5, 2, 3])
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 2)
+        self.assertEqual(it[0], 2)
 
         t, it = setup()
         it.append(2.5)
         self.assertLinkedListEqual(t, [1, 2, 2.5, 3])
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 2)
+        self.assertEqual(it[0], 2)
 
         t, it = setup()
         it.extendleft((1.25, 1.5, 1.75))
         self.assertLinkedListEqual(t, [1, 1.25, 1.5, 1.75, 2, 3])
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 2)
+        self.assertEqual(it[0], 2)
 
         t, it = setup()
         it.extend((2.25, 2.5, 2.75))
         self.assertLinkedListEqual(t, [1, 2, 2.25, 2.5, 2.75, 3])
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 2)
+        self.assertEqual(it[0], 2)
 
         #
         # now test when we're pointed at head
@@ -1747,10 +1747,10 @@ class BigLinkedListTests(unittest.TestCase):
         worker = it.copy()
         worker.previous(None)
         self.assertIsNormalNode(worker)
-        self.assertEqual(worker.value, 'B')
+        self.assertEqual(worker[0], 'B')
         it.next(None)
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 1)
+        self.assertEqual(it[0], 1)
 
         t, it = setup()
         it.extend('CDE')
@@ -1764,10 +1764,10 @@ class BigLinkedListTests(unittest.TestCase):
         worker = it.copy()
         worker.previous(None)
         self.assertIsNormalNode(worker)
-        self.assertEqual(worker.value, 'H')
+        self.assertEqual(worker[0], 'H')
         it.next(None)
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 1)
+        self.assertEqual(it[0], 1)
 
 
         #
@@ -1792,10 +1792,10 @@ class BigLinkedListTests(unittest.TestCase):
         worker = it.copy()
         worker.previous(None)
         self.assertIsNormalNode(worker)
-        self.assertEqual(worker.value, 3)
+        self.assertEqual(worker[0], 3)
         it.next(None)
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 'J')
+        self.assertEqual(it[0], 'J')
 
         t, it = setup()
         it.extendleft('KLM')
@@ -1809,10 +1809,10 @@ class BigLinkedListTests(unittest.TestCase):
         worker = it.copy()
         worker.previous(None)
         self.assertIsNormalNode(worker)
-        self.assertEqual(worker.value, 3)
+        self.assertEqual(worker[0], 3)
         it.next(None)
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 'N')
+        self.assertEqual(it[0], 'N')
 
 
         #
@@ -1845,7 +1845,7 @@ class BigLinkedListTests(unittest.TestCase):
         worker = it.copy()
         worker.previous(None)
         self.assertIsNormalNode(worker)
-        self.assertEqual(worker.value, 'X')
+        self.assertEqual(worker[0], 'X')
         it.next(None)
         self.assertIsTail(it)
 
@@ -1865,7 +1865,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsHead(worker)
         it.next(None)
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 'Z')
+        self.assertEqual(it[0], 'Z')
 
         # now with extend and extendleft
 
@@ -1883,7 +1883,7 @@ class BigLinkedListTests(unittest.TestCase):
         worker = it.copy()
         worker.previous(None)
         self.assertIsNormalNode(worker)
-        self.assertEqual(worker.value, 'x')
+        self.assertEqual(worker[0], 'x')
         it.next(None)
         self.assertIsTail(it)
 
@@ -1903,7 +1903,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsHead(worker)
         it.next(None)
         self.assertIsNormalNode(it)
-        self.assertEqual(it.value, 'x')
+        self.assertEqual(it[0], 'x')
 
 
     def testSpecialNodes(self):
@@ -1945,7 +1945,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsSpecial(it)
         self.assertIsInstance(it, linked_list_iterator)
         with self.assertRaises(SpecialNodeError):
-            it.value
+            it[0]
         with self.assertRaises(SpecialNodeError):
             it.pop()
         with self.assertRaises(SpecialNodeError):
@@ -1955,37 +1955,37 @@ class BigLinkedListTests(unittest.TestCase):
         value = copy.previous()
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 3)
-        self.assertEqual(copy.value, 3)
+        self.assertEqual(copy[0], 3)
 
         copy = it.copy()
         value = next(copy)
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 4)
-        self.assertEqual(copy.value, 4)
+        self.assertEqual(copy[0], 4)
 
         before = it.before()
         self.assertIsNormalNode(before)
-        self.assertEqual(before.value, 3)
+        self.assertEqual(before[0], 3)
         after = it.after()
         self.assertIsNormalNode(after)
-        self.assertEqual(after.value, 4)
+        self.assertEqual(after[0], 4)
 
         five = it.find(5)
         self.assertIsNormalNode(five)
-        self.assertEqual(five.value, 5)
+        self.assertEqual(five[0], 5)
         self.assertIsNone(it.find(333))
         two = it.rfind(2)
         self.assertIsNormalNode(two)
-        self.assertEqual(two.value, 2)
+        self.assertEqual(two[0], 2)
         self.assertIsNone(it.rfind(333))
 
         six = it.match(lambda value: value == 6)
         self.assertIsNormalNode(six)
-        self.assertEqual(six.value, 6)
+        self.assertEqual(six[0], 6)
         self.assertIsNone(it.match(lambda value: value == 888))
         one = it.rmatch(lambda value: value == 1)
         self.assertIsNormalNode(one)
-        self.assertEqual(one.value, 1)
+        self.assertEqual(one[0], 1)
         self.assertIsNone(it.rmatch(lambda value: value == 999))
 
 
@@ -1994,7 +1994,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         self.assertTrue(rit)
         with self.assertRaises(SpecialNodeError):
-            rit.value
+            rit[0]
         with self.assertRaises(SpecialNodeError):
             rit.pop()
         with self.assertRaises(SpecialNodeError):
@@ -2004,37 +2004,37 @@ class BigLinkedListTests(unittest.TestCase):
         value = next(copy)
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 3)
-        self.assertEqual(copy.value, 3)
+        self.assertEqual(copy[0], 3)
 
         copy = rit.copy()
         value = copy.previous()
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 4)
-        self.assertEqual(copy.value, 4)
+        self.assertEqual(copy[0], 4)
 
         before = rit.before()
         self.assertIsNormalNode(before)
-        self.assertEqual(before.value, 4)
+        self.assertEqual(before[0], 4)
         after = rit.after()
         self.assertIsNormalNode(after)
-        self.assertEqual(after.value, 3)
+        self.assertEqual(after[0], 3)
 
         five = rit.rfind(5)
-        self.assertEqual(five.value, 5)
+        self.assertEqual(five[0], 5)
         self.assertIsNormalNode(five)
         self.assertIsNone(rit.rfind(333))
         two = rit.find(2)
         self.assertIsNormalNode(two)
-        self.assertEqual(two.value, 2)
+        self.assertEqual(two[0], 2)
         self.assertIsNone(rit.find(333))
 
         six = rit.rmatch(lambda value: value == 6)
         self.assertIsNormalNode(six)
-        self.assertEqual(six.value, 6)
+        self.assertEqual(six[0], 6)
         self.assertIsNone(rit.rmatch(lambda value: value == 888))
         one = rit.match(lambda value: value == 1)
         self.assertIsNormalNode(one)
-        self.assertEqual(one.value, 1)
+        self.assertEqual(one[0], 1)
         self.assertIsNone(rit.match(lambda value: value == 999))
 
         t, it = setup()
@@ -2095,17 +2095,17 @@ class BigLinkedListTests(unittest.TestCase):
                     with self.subTest(i=i):
                         it = t.find(i)
                         self.assertIsNormalNode(it)
-                        self.assertEqual(it.value, i)
+                        self.assertEqual(it[0], i)
                         rit = t.rfind(i)
                         self.assertIsNormalNode(rit)
-                        self.assertEqual(rit.value, i)
+                        self.assertEqual(rit[0], i)
 
                         it = t.match(lambda value: value==i)
                         self.assertIsNormalNode(it)
-                        self.assertEqual(it.value, i)
+                        self.assertEqual(it[0], i)
                         rit = t.rmatch(lambda value: value==i)
                         self.assertIsNormalNode(rit)
-                        self.assertEqual(rit.value, i)
+                        self.assertEqual(rit[0], i)
 
         t, it, delete_str_nodes = setup()
 
@@ -2124,10 +2124,10 @@ class BigLinkedListTests(unittest.TestCase):
 
         seven = it.find(7)
         self.assertIsNormalNode(seven)
-        self.assertEqual(seven.value, 7)
+        self.assertEqual(seven[0], 7)
         one = it.rfind(1)
         self.assertIsNormalNode(one)
-        self.assertEqual(one.value, 1)
+        self.assertEqual(one[0], 1)
 
         def raise_if_str(value):
             if isinstance(value, str): # pragma: nocover
@@ -2141,10 +2141,10 @@ class BigLinkedListTests(unittest.TestCase):
 
         seven2 = it.match(lambda value: value == 7)
         self.assertIsNormalNode(seven2)
-        self.assertEqual(seven2.value, 7)
+        self.assertEqual(seven2[0], 7)
         one2 = it.rmatch(lambda value: value == 1)
         self.assertIsNormalNode(one2)
-        self.assertEqual(one2.value, 1)
+        self.assertEqual(one2[0], 1)
 
         # prepend and append from two different deleted nodes
         # in any order should always produce the same result
@@ -2495,6 +2495,17 @@ class BigLinkedListTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             it.slice(3, 4, 0)
+
+        # it's okay if slice end is "head" or "tail"
+        t = linked_list(range(6))
+
+        it = t.find(3)
+        self.assertLinkedListEqual(it[:3], [3, 4, 5])
+        self.assertLinkedListEqual(it[-3:], [0, 1, 2])
+
+        # rit = reversed(it)
+        # self.assertLinkedListEqual(rit[:3], [0, 1, 2, 3])
+        # self.assertLinkedListEqual(rit[-3:], [3, 4, 5])
 
 
 
