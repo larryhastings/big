@@ -2118,75 +2118,28 @@ class linked_list_base_iterator:
     def linked_list(self):
         return self._cursor.linked_list
 
-    def set_filters(self, *, stop_at=None, find=_sentinel, match=None):
-        """
-        If find and match are both specified, they combine with 'and'.
-        (This iterator will only yield values that satisfy both find AND match.)
-        Every set_filters call resets the filter for any argument not supplied.
-        (Calling set_filters with no arguments resets all filters.)
-        """
-        if stop_at is not None:
-            self._stop_at_cursor = stop_at._cursor
-        else:
-            self._stop_at_cursor = None
-        self._find_value = find
-        self._match_predicate = match
-        self._filtering = (self._stop_at_cursor != None) or (self._find_value != _sentinel) or (self._match_predicate != None)
-
     def __next__(self):
         cursor = self._cursor
         special = cursor.special
 
-        if (special == 'tail') or (cursor is self._stop_at_cursor):
+        if special == 'tail':
             raise StopIteration
 
         cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         next = cursor.next
         if (not iterator_refcount) and (special == 'special'):
             cursor.unlink()
+        cursor = next
+        special = cursor.special
 
-        stop_iteration = False
-        if not self._filtering:
-            # fast path
-            cursor = next
+        while special == 'special':
+            cursor = cursor.next
             special = cursor.special
-            while special == 'special':
-                cursor = cursor.next
-                special = cursor.special
-        else:
-            # slow path
-            stop_at_cursor = self._stop_at_cursor
-            find_value = self._find_value
-            sentinel = _sentinel
-            match_predicate = self._match_predicate
-            while True:
-                cursor = next
-                next = cursor.next
-                special = cursor.special
-                value = cursor.value
-
-                if cursor is stop_at_cursor:
-                    stop_iteration = True
-                    break
-
-                if special:
-                    if special == 'special':
-                        continue
-                    assert special in ('head', 'tail')
-                    break
-
-                if not ((find_value is sentinel) or (value == find_value)):
-                    continue
-                if not ((match_predicate is None) or match_predicate(value)):
-                    continue
-                break
 
         self._cursor = cursor
         cursor.iterator_refcount += 1
 
         if special == 'tail':
-            stop_iteration = True
-        if stop_iteration:
             raise StopIteration
         return cursor.value
 
@@ -2215,56 +2168,24 @@ class linked_list_base_iterator:
         cursor = self._cursor
         special = cursor.special
 
-        if (special == 'head') or (cursor is self._stop_at_cursor):
+        if special == 'head':
             raise StopIteration
 
         cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
         previous = cursor.previous
         if (not iterator_refcount) and (special == 'special'):
             cursor.unlink()
+        cursor = previous
+        special = cursor.special
 
-        stop_iteration = False
-        if not self._filtering:
-            # fast path
-            cursor = previous
+        while special == 'special':
+            cursor = cursor.previous
             special = cursor.special
-            while special == 'special':
-                cursor = cursor.previous
-                special = cursor.special
-        else:
-            # slow path
-            stop_at_cursor = self._stop_at_cursor
-            find_value = self._find_value
-            sentinel = _sentinel
-            match_predicate = self._match_predicate
-            while True:
-                cursor = previous
-                previous = cursor.previous
-                special = cursor.special
-                value = cursor.value
-
-                if cursor is stop_at_cursor:
-                    stop_iteration = True
-                    break
-
-                if special:
-                    if special == 'special':
-                        continue
-                    assert special in ('head', 'tail')
-                    break
-
-                if not ((find_value is sentinel) or (value == find_value)):
-                    continue
-                if not ((match_predicate is None) or match_predicate(value)):
-                    continue
-                break
 
         self._cursor = cursor
         cursor.iterator_refcount += 1
 
         if special == 'head':
-            stop_iteration = True
-        if stop_iteration:
             raise StopIteration
         return cursor.value
 

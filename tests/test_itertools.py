@@ -91,9 +91,9 @@ class BigItertoolsTests(unittest.TestCase):
 
 
 
-# --8<-- start loop_context tests --8<--
+# --8<-- start tidy itertools tests --8<--
 
-class LoopContextTests(unittest.TestCase):
+class TidyItertoolsTests(unittest.TestCase):
     def test_loop_context(self):
         self.assertEqual(repr(undefined), '<Undefined>')
         with self.assertRaises(TypeError):
@@ -175,7 +175,86 @@ class LoopContextTests(unittest.TestCase):
                 reversed_countdowns.reverse()
                 self.assertEqual(reversed_countdowns, indices)
 
-# --8<-- end loop_context tests --8<--
+    def test_filterator(self):
+        l = [1, 'a', 2, 'b', 3, 'c', 4, 'd', 5]
+
+        def test(expected, **kwargs):
+            got = list(filterator(l, **kwargs))
+            self.assertEqual(expected, got)
+
+        test([1, 'a', 2, 'b'],         stop_at_value=3)
+        test([1, 'a', 2, 'b', 3],      stop_at_in=set(('c', 4, 'd')))
+        test([1, 'a', 2, 'b', 3, 'c'], stop_at_predicate=lambda o: o==4)
+
+        test([1, 'a', 2, 'b'], stop_at_count= 4)
+        test([1, 'a', 2],      stop_at_count= 3)
+        test([1, 'a'],         stop_at_count= 2)
+        test([],               stop_at_count= 0)
+        test([],               stop_at_count=-1)
+
+        test([1, 'a', 2, 'b', 'c', 4, 'd', 5], reject_value=3)
+        test([1, 'a', 2, 'b', 3, 5],           reject_in=set(('c', 4, 'd')))
+        test([1, 'a', 2, 'b', 3, 'c', 'd', 5], reject_predicate=lambda o: o==4)
+
+        test([3,],          only_value=3)
+        test(['c', 4, 'd'], only_in=set(('c', 4, 'd')))
+        test([2, 3, 4, 5],  only_predicate=lambda o: isinstance(o, int) and o > 1)
+
+        seven_threes = (3, 33, 333, 3333, 33333, 333333, 3333333)
+        six_threes   = (3, 33, 333, 3333, 33333, 333333)
+        five_threes  = (3, 33, 333, 3333, 33333)
+        four_threes  = (3, 33, 333, 3333)
+        three_threes = (3, 33, 333)
+        two_threes   = (3, 33)
+        one_three    = (3,)
+
+        class OnlyFourThrees(int):
+            def __ne__(self, other):
+                return other not in four_threes
+
+        only_four_threes = OnlyFourThrees()
+
+        # now test with all nine rules in play
+        def test(l, expected):
+            got = list(filterator(l,
+                stop_at_value='stop1',
+                stop_at_in=set(('stop2', 'stop3', 'stop4')),
+                stop_at_predicate=lambda o: o=='stop5',
+                stop_at_count=4,
+
+                reject_value=3333333,                 # seven threes
+                reject_in=set((333333,)),             # six threes
+                reject_predicate=lambda o: o ==33333, # five threes
+
+                only_value=only_four_threes,
+                only_in=three_threes,
+                only_predicate=lambda o: o in two_threes,
+                ))
+            self.assertEqual(expected, got)
+
+        test([33, 3, 'stop1', 3, 33], [33, 3])
+        test([33, 3, 'stop3', 3, 33], [33, 3])
+        test([33, 3, 'stop5', 3, 33], [33, 3])
+
+        test([33, 3, 3333333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,  333333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,   33333, 3, 33], [33, 3, 3, 33])
+
+        test([33, 3,    3333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,     333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,      33, 3, 33], [33, 3, 33, 3])
+
+        # test exhaustion
+        it = filterator(l, stop_at_value=2)
+        got = list(it)
+        self.assertEqual(got, [1, 'a'])
+        got = list(it)
+        self.assertEqual(got, [])
+        got = list(it)
+        self.assertEqual(got, [])
+
+
+# --8<-- end tidy itertools tests --8<--
 
 def run_tests():
     bigtestlib.run(name="big.itertools", module=__name__)

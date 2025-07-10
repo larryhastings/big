@@ -1,6 +1,6 @@
 import collections
 
-__all__ = ['PushbackIterator', 'LoopContext', 'loop_context', 'Undefined', 'undefined']
+__all__ = ['PushbackIterator', 'LoopContext', 'loop_context', 'Undefined', 'undefined', 'filterator', 'filter_iterator']
 
 class PushbackIterator:
     """
@@ -81,7 +81,7 @@ class PushbackIterator:
         return f"<{self.__class__.__name__} i={self.i} stack={self.stack}>"
 
 
-# --8<-- start loop_context --8<--
+# --8<-- start tidy itertools --8<--
 
 undefined = None
 
@@ -201,4 +201,124 @@ def loop_context(iterator, start=0):
         ctx = LoopContext(iterator, start, index, is_first, True, current, _next, undefined)
         yield (ctx, _next)
 
-# --8<-- end loop_context --8<--
+
+def filterator(iterator,
+    *,
+    stop_at_value=undefined,
+    stop_at_in=None,
+    stop_at_predicate=None,
+    stop_at_count=None,
+    reject_value=undefined,
+    reject_in=None,
+    reject_predicate=None,
+    only_value=undefined,
+    only_in=None,
+    only_predicate=None,
+    ):
+    """
+    filterator accepts one positional parameter, iterator, and
+    nine keyword-only parameters which constitute the "rules".
+    The rules are formed from three prefixes: "stop_at", "reject",
+    and "only", and three suffixes, "_value", "_in", and "_predicate".
+    So for example, filterator accepts arguments with names like
+    "stop_at_value", "reject_in", and "only_predicate".
+
+    filterator is itself an iterator.  It yields values from the
+    iterator you pass in, but only values that are acceptable to
+    all the rules you supply.
+
+    To "pass" a rule means "the test using this rule returned
+    a true value".  There are three varieties of tests, specified
+    with the end of the rule's name.
+
+        A rule that ends in _value means "pass if the value == this value".
+        For example, stop_at_value=5 would mean "if the inner iterator
+        ever yields the value 5, immediately become exhausted".
+
+        A rule that ends in _in means "pass if the value is in this value".
+        This value must support the "in" operator.  For example,
+        "reject_in=(1, 2, 3)" would reject the value if it was 1, 2, or 3.
+
+        A rule that ends in _predicate means "pass if calling this value
+        and passing in the value returns a true value".  This value must
+        be callable.  For example, "only_predicate=lambda o: isinstance(o, str)"
+        would only accept str values.
+
+    There are three categories of rule actions, specified by the start
+    of the rule's name.  They're examined in this order:
+    "stop_at", "reject", "only".
+
+        "stop_at" rules cause filterator to become exhausted.
+        If a value yielded by iterator passes a "stop_at" rule,
+        the iterator immediately goes into its "exhausted" state.
+
+        "reject" rules cause filterator to reject values--a
+        "blacklist" for values.  If a value passes any "reject" rule,
+        it's discarded and the iterator continues to the next value.
+
+        "only" rules are required for filterator to accept a
+        value--a "whitelist" for values.  A value must pass all
+        "only" rules, otherwise it's rejected.
+
+    There's one extra rule not described in the above: "stop_at_count",
+    an number.  This exhausts the iterator after yielding
+    "stop_at_count" items.  If "stop_at_count" is initially <= 0,
+    the iterator is immediately exhausted.
+    """
+
+    un = undefined
+
+    stop_at_value_active     = stop_at_value     is not un
+    stop_at_in_active        = stop_at_in        is not None
+    stop_at_predicate_active = stop_at_predicate is not None
+    stop_at_count_active     = stop_at_count     is not None
+    stop_at = stop_at_value_active or stop_at_in_active or stop_at_predicate_active or stop_at_count_active
+
+    reject_value_active     = reject_value     is not un
+    reject_in_active        = reject_in        is not None
+    reject_predicate_active = reject_predicate is not None
+    reject  = reject_value_active or reject_in_active or reject_predicate_active
+
+    only_value_active     = only_value     is not un
+    only_in_active        = only_in        is not None
+    only_predicate_active = only_predicate is not None
+    only    = only_value_active or only_in_active or only_predicate_active
+
+    for o in iterator:
+        if stop_at and (
+                (stop_at_value_active and (o == stop_at_value))
+                or
+                (stop_at_in_active and (o in stop_at_in))
+                or
+                (stop_at_predicate_active and stop_at_predicate(o))
+            ):
+            return
+
+        if reject and (
+                (reject_value_active and (o == reject_value))
+                or
+                (reject_in_active and (o in reject_in))
+                or
+                (reject_predicate_active and reject_predicate(o))
+            ):
+            continue
+
+        if only and (
+                (only_value_active and (o != only_value))
+                or
+                (only_in_active and (o not in only_in))
+                or
+                (only_predicate_active and (not only_predicate(o)))
+            ):
+            continue
+
+        if stop_at_count_active:
+            if stop_at_count <= 0:
+                return
+            stop_at_count -= 1
+
+        yield o
+
+filter_iterator = filterator
+
+# --8<-- end tidy itertools --8<--
