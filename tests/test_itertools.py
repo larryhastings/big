@@ -126,9 +126,11 @@ class TidyItertoolsTests(unittest.TestCase):
                     self.assertEqual(ctx.index, start)
                     self.assertEqual(ctx.countdown, start)
 
-                    self.assertEqual(ctx.previous, undefined)
+                    with self.assertRaises(AttributeError):
+                        print(ctx.previous)
                     self.assertEqual(ctx.current, o)
-                    self.assertEqual(ctx.next, undefined)
+                    with self.assertRaises(AttributeError):
+                        print(ctx.next)
 
 
         # iterator yields four things
@@ -159,9 +161,17 @@ class TidyItertoolsTests(unittest.TestCase):
                     buffer.pop(0)
                     buffer.append(next(my_iterator))
 
-                    self.assertEqual(ctx.previous, buffer[0])
+                    if is_first:
+                        with self.assertRaises(AttributeError):
+                            print(ctx.previous)
+                    else:
+                        self.assertEqual(ctx.previous, buffer[0])
                     self.assertEqual(ctx.current, buffer[1])
-                    self.assertEqual(ctx.next, buffer[2])
+                    if is_last:
+                        with self.assertRaises(AttributeError):
+                            print(ctx.next)
+                    else:
+                        self.assertEqual(ctx.next, buffer[2])
 
                     self.assertEqual(ctx.length, len(items))
 

@@ -111,9 +111,11 @@ class LoopContext:
         self.is_first = is_first
         self.is_last = is_last
 
-        self.previous = previous
+        if not is_first:
+            self.previous = previous
         self.current =current
-        self.next = _next
+        if not is_last:
+            self.next = _next
 
     @property
     def length(self):
@@ -145,12 +147,12 @@ def loop_context(iterator, start=0):
     ctx.previous contains the previous value yielded if
       this is the second or subsequent time this iterator
       has yielded a value.  (If this is the first time
-      the iterator has yielded, ctx.previous will be
-      an "undefined" value.)
+      the iterator has yielded, ctx.previous won't be set,
+      and accessing it will raise AttributeError.)
     ctx.next contains the next value to be yielded by
       this iterator if there is one.  (If 'o' is the last
-      value yielded by the iterator, ctx.previous will be
-      an "undefined" value.)
+      value yielded by the iterator, ctx.previous won't be
+      set, and accessing it will raise AttributeError.)
     ctx.index contains the index of this value.  The first
       time the iterator yields a value, this will be "start";
       the second time, it will be start + 1, etc.
@@ -319,6 +321,6 @@ def filterator(iterator,
 
         yield o
 
-filter_iterator = filterator
+f8r = filter_iterator = filterator
 
 # --8<-- end tidy itertools --8<--
