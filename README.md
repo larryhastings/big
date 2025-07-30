@@ -118,18 +118,19 @@ as long as you leave my copyright notice on the source code.
 
 Although **big** is *crammed full* of fabulous code, a few of
 its subsystems rise above the rest.  If you're curious what
-**big** might do for you, here are the five things in **big**
+**big** might do for you, here are the six things in **big**
 I'm proudest of:
 
 * [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
 * [`big.state`](#bigstate)
 * [**Bound inner classes**](#bound-inner-classes)
 * [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
-* [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
+* [**`string`**](#string)
+* [**`linked_list`**](#linked_list)
 
 And here are five little functions/classes I use all the time:
 
-* [`gently_title`](#gently_titles--apostrophesnone-double_quotesnone)
+* [`eval_template_string`](#eval_template_string)
 * [`Log`](#log-clocknone)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
@@ -166,11 +167,15 @@ And here are five little functions/classes I use all the time:
 
 [`big.state`](#bigstate)
 
+[`big.template`](#bigtemplate)
+
 [`big.text`](#bigtext)
+
+[`big.time`](#bigtime)
 
 [`big.tokens`](#bigtokens)
 
-[`big.time`](#bigtime)
+[`big.types`](#bigtypes)
 
 [`big.version`](#bigversion)
 
@@ -7046,6 +7051,12 @@ in the **big** test suite.
   is like an extended version of Python's `enumerate`,
   inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
   it wraps an iterator and provides convenient metadata.
+* Added `filterator` to *big.itertools*.  The name
+  `filterator` is a portmanteau of "filter" and "iterator";
+  it's a pass-through iterator that filters values.
+  You pass in an iterator, and rules for what values you
+  want to see / you don't want to see, and it returns
+  an iterator that only yields the values you want.
 * Added support for Python 3.14, mainly to support t-strings:
   * `python_delimiters` now recognizes all the new string
     prefixes containing `t` (or `T`).
