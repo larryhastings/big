@@ -40,6 +40,7 @@ for test_module in """
     test_metadata
     test_scheduler
     test_state
+    test_template
     test_text
     test_time
     test_tokens

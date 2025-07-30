@@ -77,6 +77,10 @@ from . import state
 __all__.extend(state.__all__)
 from .state import *
 
+from . import template
+__all__.extend(template.__all__)
+from .template import *
+
 from . import text
 __all__.extend(text.__all__)
 from .text import *

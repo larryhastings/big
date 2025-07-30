@@ -7013,9 +7013,11 @@ in the **big** test suite.
 
 *under development*
 
-* Added two new modules: *big.types*, which contains
-  core types, and *big.tokens*, useful functions and values
-  when working with Python's tokenizer.
+* Added three new modules: *big.types*, which contains
+  core types, *big.tokens*, useful functions and values
+  when working with Python's tokenizer, and *big.template*,
+  functions that parse strings containing a simple template
+  syntax.
 * Added `LinkedList` to *big.types*.  `LinkedList` is a
   thoughtful implementation of a standard linked list data
   structure, with an API and UX modeled on Python's `list`
@@ -7032,6 +7034,14 @@ in the **big** test suite.
   it's a *massive* upgrade.  `big.lines` will move to
   the `deprecated` module no sooner than November 2025,
   and will be removed no sooner than May 2026.
+* Added `parse_template_string` and `eval_template_string`
+  to *big.template*.  `parse_template_string` parses a string
+  containing Jinja-like interpolations, and returns an
+  iterator that yields strings and `Interpolation` objects.
+  (This is akin to "t-strings" in Python 3.14.)
+  `eval_template_string` calls `parse_template_string` to
+  parse a string, but then evaluates the expressions (and
+  filters) using `eval`, returning the rendered string.
 * Added `loop_context` to *big.itertools*.  `loop_context`
   is like an extended version of Python's `enumerate`,
   inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
