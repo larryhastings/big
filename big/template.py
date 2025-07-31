@@ -62,22 +62,34 @@ def parse_template_string(s):
             return
 
         stack = []
+        # Top Of Stack
+        tos = previous_was_rcurly = None
         start_offset = after.offset
+
         for t in after.generate_tokens():
             if t.type != _TOKEN_OP:
                 continue
             t_string = t.string
-            if stack:
-                if t_string == stack[-1]:
-                    stack.pop()
-                continue
+            offset = t_string.offset
+            is_rcurly = t_string == '}'
+            if is_rcurly:
+                if previous_was_rcurly:
+                    s = original_s[offset + 1:]
+                    offset -= 1
+                    break
+            else:
+                previous_was_rcurly = None
+
             right = _delimiter_map.get(t_string)
             if right:
-                stack.append(right)
+                if tos:
+                    stack.append(tos)
+                tos = right
                 continue
-            if stack:
+            if tos:
+                if t_string == tos:
+                    tos = stack.pop() if stack else None
                 continue
-            offset = t_string.offset
             if t_string == '|':
                 x = original_s[start_offset:offset]
                 if not x.strip():
@@ -86,12 +98,10 @@ def parse_template_string(s):
                 expression.append(x)
                 start_offset = offset + 1
                 continue
-            if (t_string == '}') and (length > (offset + 1)) and (original_s[offset + 1] == '}'):
-                s = original_s[offset + 2:]
-                break
+            previous_was_rcurly = is_rcurly
         else:
-            s = original_s[length:length]
-            offset = length
+            noun = 'filter' if expression else 'expression'
+            raise SyntaxError(f'unterminated {noun} at {after.where}')
         expression.append(original_s[start_offset:offset])
 
         # handle trailing =
@@ -117,6 +127,21 @@ _parse_template_string = parse_template_string
 
 @export
 def parse_template_string(s):
+    """
+    Parses a string containing templates, yields its components.
+
+    Returns a generator that yields the components of s.
+    parse_template_string always yields an odd number of
+    items, alternating between str objects and Interpolation
+    objects.  The first and last items yielded are always str
+    objects.
+
+    If an interpolation ends with a single '=' (optionally
+    followed by whitespace), the 'debug' attribute of that
+    Interpolation will contain the full text of the expression,
+    including the equals sign, and the expression will contain
+    the expression with the equals sign stripped.
+    """
     if not isinstance(s, str):
         raise TypeError('s must be a str')
 
@@ -129,27 +154,20 @@ def parse_template_string(s):
 @export
 def eval_template_string(s, globals):
     """
-    Reformats a string, replacing {{}} delimited expressions with their values.
+    Reformats a string, replacing {{}}-delimited expressions with their values.
 
-    s should be a string.  If s contains {{ followed by }}, the text
-    between the double curly braces will be evaluated as
-    a Python expression using eval(text, globals).  Everything
-    from the starting {{ to the ending }} will be replaced with
-    the str() of the value of the evaluated expression.
+    s should be a string.  It's parsed using big's
+    parse_template_string function, then evaluates the
+    Interpolation objects using eval(text, globals).
 
     globals should be a dictionary containing the namespace
     in which the expressions will be evaluated.
 
-    If the interpolation ends with a single '=' (optionally
-    followed by whitespace), interpolate_string will append
-    the text of the expression before appending the str()
-    of the value of the expression.
+    Note that eval() has special support for builtins;
+    see the documentation for eval for more information.
 
     Returns s with all interpolations evaluated and replaced.
     """
-    if not isinstance(globals, dict):
-        globals = dict(globals)
-
     result = []
     append = result.append
 

@@ -38,10 +38,15 @@ class BigTestTemplate(unittest.TestCase):
     maxDiff=None
 
     def test_parse_template_string(self):
+        i = list(parse_template_string('{{x}}'))[1]
+        self.assertEqual(i, Interpolation('x', debug=''))
+        self.assertEqual(repr(i), "Interpolation('x', debug='')")
+
         def t(s, expected):
             got = list(parse_template_string(s))
             self.assertEqual(expected, got)
 
+        t('', [''])
         t('hello there 1 2 3', ['hello there 1 2 3'])
         t('{{x}}', ['', Interpolation('x', debug=''), ''])
         t('{{x = }}', ['', Interpolation('x', debug='x = '), ''])
@@ -53,6 +58,14 @@ class BigTestTemplate(unittest.TestCase):
             Interpolation('foo(3 | 5, "bar")', 'filter1', 'filters[2]', debug='foo(3 | 5, "bar") = '),
             ' it worked?!',
             ])
+
+        with self.assertRaises(SyntaxError):
+            t('{{a', None)
+
+        with self.assertRaises(TypeError):
+            t(3.14156, None)
+        with self.assertRaises(TypeError):
+            t(['a', 'b', 'c'], None)
 
     def test_eval_template_string(self):
         def upper(s): return s.upper()
@@ -83,6 +96,8 @@ class BigTestTemplate(unittest.TestCase):
 
         t('wait we need a boolean or {{ (0 | 5) }}', 'wait we need a boolean or 5')
 
+        t('{{[1, 2, [3, 4, [5, 6]]]}}', '[1, 2, [3, 4, [5, 6]]]')
+
         t('{{len("abcde") = }}', 'len("abcde") = 5')
 
         my_builtins = {'len': lambda o: 88}
@@ -93,6 +108,10 @@ class BigTestTemplate(unittest.TestCase):
         with self.assertRaises(NameError):
             t('{{len("abcde") = }}', '')
 
+        with self.assertRaises(SyntaxError):
+            t('{{a|}}', '')
+        with self.assertRaises(SyntaxError):
+            t('{{|a}}', '')
 
 
 def run_tests():
