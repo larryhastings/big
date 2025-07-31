@@ -102,20 +102,20 @@ class TidyItertoolsTests(unittest.TestCase):
         self.assertFalse(undefined)
 
         # iterator yields zero things:
-        # loop_context should also never yield.
-        for ctx, i in loop_context( [] ): # pragma: nocover
+        # iterator_context should also never yield.
+        for ctx, i in iterator_context( [] ): # pragma: nocover
             self.assertTrue(False)
 
         # iterator yields one thing:
-        # loop_context should be is_first *and* is_last.
+        # iterator_context should be is_first *and* is_last.
         for start in range(-2, 5):
             with self.subTest(start=start):
                 first_time = True
-                for ctx, o in loop_context(('abc',), start):
+                for ctx, o in iterator_context(('abc',), start):
                     self.assertTrue(first_time)
                     first_time = False
 
-                    self.assertIsInstance(ctx, LoopContext)
+                    self.assertIsInstance(ctx, IteratorContext)
                     self.assertTrue(ctx.is_first)
                     self.assertTrue(ctx.is_last)
 
@@ -148,8 +148,8 @@ class TidyItertoolsTests(unittest.TestCase):
                 countdowns = []
                 indices = []
 
-                for ctx, o in loop_context(items, start):
-                    self.assertIsInstance(ctx, LoopContext)
+                for ctx, o in iterator_context(items, start):
+                    self.assertIsInstance(ctx, IteratorContext)
                     self.assertEqual(ctx.is_first, is_first)
                     is_last = (o == items[-1])
                     self.assertEqual(ctx.is_last, is_last)
@@ -185,11 +185,11 @@ class TidyItertoolsTests(unittest.TestCase):
                 reversed_countdowns.reverse()
                 self.assertEqual(reversed_countdowns, indices)
 
-    def test_filterator(self):
+    def test_iterator_filter(self):
         l = [1, 'a', 2, 'b', 3, 'c', 4, 'd', 5]
 
         def test(expected, **kwargs):
-            got = list(filterator(l, **kwargs))
+            got = list(iterator_filter(l, **kwargs))
             self.assertEqual(expected, got)
 
         test([1, 'a', 2, 'b'],         stop_at_value=3)
@@ -226,7 +226,7 @@ class TidyItertoolsTests(unittest.TestCase):
 
         # now test with all nine rules in play
         def test(l, expected):
-            got = list(filterator(l,
+            got = list(iterator_filter(l,
                 stop_at_value='stop1',
                 stop_at_in=set(('stop2', 'stop3', 'stop4')),
                 stop_at_predicate=lambda o: o=='stop5',

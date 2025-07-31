@@ -1260,14 +1260,13 @@ Functions and classes for working with iteration.
 
 </dd></dl>
 
-#### `loop_context(iterator, start=0)`
+#### `iterator_context(iterator, start=0)`
 
 <dl><dd>
 
 Iterates over `iterable`.  Yields `(ctx, o)` where `o`
 is each value yielded by `iterable`, and `ctx` is a
-"loop context" variable containing metadata
-about the iteration.
+"context" variable containing metadata about the iteration.
 
 <dl><dt>
 `ctx.is_first`
@@ -7043,19 +7042,18 @@ in the **big** test suite.
   to *big.template*.  `parse_template_string` parses a string
   containing Jinja-like interpolations, and returns an
   iterator that yields strings and `Interpolation` objects.
-  (This is akin to "t-strings" in Python 3.14.)
+  (This is similar to "t-strings" in Python 3.14+.)
   `eval_template_string` calls `parse_template_string` to
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
-* Added `loop_context` to *big.itertools*.  `loop_context`
+* Added `iterator_context` to *big.itertools*.  `iterator_context`
   is like an extended version of Python's `enumerate`,
   inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
   it wraps an iterator and provides convenient metadata.
-* Added `filterator` to *big.itertools*.  The name
-  `filterator` is a portmanteau of "filter" and "iterator";
-  it's a pass-through iterator that filters values.
+* Added `iterator_filter` to *big.itertools*.  `iterator_filter`
+  is a pass-through iterator that filters values.
   You pass in an iterator, and rules for what values you
-  want to see / you don't want to see, and it returns
+  want to see / don't want to see, and it returns
   an iterator that only yields the values you want.
 * Added support for Python 3.14, mainly to support t-strings:
   * `python_delimiters` now recognizes all the new string

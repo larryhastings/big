@@ -1,6 +1,6 @@
 import collections
 
-__all__ = ['PushbackIterator', 'LoopContext', 'loop_context', 'Undefined', 'undefined', 'filterator', 'filter_iterator']
+__all__ = ['PushbackIterator', 'IteratorContext', 'iterator_context', 'ix', 'Undefined', 'undefined', 'iterator_filter', 'filterator', 'f8r']
 
 class PushbackIterator:
     """
@@ -83,24 +83,8 @@ class PushbackIterator:
 
 # --8<-- start tidy itertools --8<--
 
-undefined = None
 
-class Undefined:
-    def __init__(self):
-        global undefined
-        if undefined is not None:
-            raise TypeError('only one instance of Undefined is allowed')
-
-    def __repr__(self):
-        return "<Undefined>"
-
-    def __bool__(self):
-        return False
-
-undefined = Undefined()
-
-
-class LoopContext:
+class IteratorContext:
     def __init__(self, iterator, start, index, is_first, is_last, previous, current, _next):
         self._iterator = iterator
         self._start = start
@@ -129,13 +113,16 @@ class LoopContext:
             self._length = len(self._iterator)
         return self._start + self._length - (1 + self.index - self._start)
 
+    def __repr__(self):
+        return f'IteratorContext(iterator={self.iterator!r}, start={self.start!r}, index={self.index!r}, is_first={self.is_first!r}, is_last={self.is_last!r}, previous={self.previous!r}, current={self.current!r}, next={self.next!r})'
 
-def loop_context(iterator, start=0):
+
+def iterator_context(iterator, start=0):
     """
     Iterates over iterable.  Yields (ctx, o) where o
     is each value yielded by iterable, and ctx is a
-    "loop context" variable containing metadata
-    about the iteration.
+    "context" variable containing metadata about
+    the iteration.
 
     ctx.is_first is true only for the first value yielded,
       and false otherwise.
@@ -192,7 +179,7 @@ def loop_context(iterator, start=0):
         current = _next
         _next = o
 
-        ctx = LoopContext(iterator, start, index, is_first, False, previous, current, _next)
+        ctx = IteratorContext(iterator, start, index, is_first, False, previous, current, _next)
 
         yield (ctx, current)
         index += 1
@@ -200,11 +187,30 @@ def loop_context(iterator, start=0):
 
     # if the iterator yielded *any* values, yield the final one
     if _next != undefined:
-        ctx = LoopContext(iterator, start, index, is_first, True, current, _next, undefined)
+        ctx = IteratorContext(iterator, start, index, is_first, True, current, _next, undefined)
         yield (ctx, _next)
 
+ix = iterator_context
 
-def filterator(iterator,
+
+undefined = None
+
+class Undefined:
+    def __init__(self):
+        global undefined
+        if undefined is not None:
+            raise TypeError('only one instance of Undefined is allowed')
+
+    def __repr__(self):
+        return "<Undefined>"
+
+    def __bool__(self):
+        return False
+
+undefined = Undefined()
+
+
+def iterator_filter(iterator,
     *,
     stop_at_value=undefined,
     stop_at_in=None,
@@ -218,14 +224,14 @@ def filterator(iterator,
     only_predicate=None,
     ):
     """
-    filterator accepts one positional parameter, iterator, and
+    iterator_filter accepts one positional parameter, iterator, and
     nine keyword-only parameters which constitute the "rules".
     The rules are formed from three prefixes: "stop_at", "reject",
     and "only", and three suffixes, "_value", "_in", and "_predicate".
     So for example, filterator accepts arguments with names like
     "stop_at_value", "reject_in", and "only_predicate".
 
-    filterator is itself an iterator.  It yields values from the
+    iterator_filter is itself an iterator.  It yields values from the
     iterator you pass in, but only values that are acceptable to
     all the rules you supply.
 
@@ -321,6 +327,6 @@ def filterator(iterator,
 
         yield o
 
-f8r = filter_iterator = filterator
+f8r = filterator = iterator_filter
 
 # --8<-- end tidy itertools --8<--
