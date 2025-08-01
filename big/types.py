@@ -2013,7 +2013,7 @@ class linked_list_base_iterator:
         self._match_predicate = None
 
     def __repr__(self):
-        return f"<{self.__class__.__name__} cursor={self._cursor!r}>"
+        return f"<{self.__class__.__name__} {hex(id(self))} cursor={self._cursor!r}>"
 
     def __del__(self):
         # drop our reference to the current node.
