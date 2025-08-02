@@ -1970,7 +1970,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
     If the inputs are valid, it calls this generator and returns the
     resulting iterator.
     """
-    buffer = []
+    text = s[0:0]
 
     quote = state
     # print(f"    >> {state=}")
@@ -1979,23 +1979,32 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
         literal, separator = pair
 
         if literal:
-            buffer.append(literal)
+            if text:
+                text += literal
+            else:
+                text = literal
         if not quote:
             # not currently quoted
             if separator not in all_quotes_set:
-                buffer.append(separator)
+                if text:
+                    text += separator
+                else:
+                    text = separator
                 continue
-            if buffer:
-                yield (empty, empty.join(buffer), empty)
-                buffer.clear()
+            if text:
+                yield (empty, text, empty)
+                length = len(text)
+                text = text[length:length]
             quote = separator
             continue
         # in quote
         if separator != quote:
-            buffer.append(separator)
+            if text:
+                text += separator
+            else:
+                text = separator
             continue
         # separator == quote
-        text = empty.join(buffer)
         if quote or text:
             if quote and text and (quote not in multiline_quotes):
                 # see treatise above
@@ -2008,21 +2017,20 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
             else:
                 # print(f"    <<2 {quote=}, {text=}, {quote=}")
                 yield (quote, text, quote)
-        buffer.clear()
+        length = len(text)
+        text = text[length:length]
         quote = empty
 
-    if buffer:
-        text = empty.join(buffer)
-        if text or quote:
-            if quote and text and (quote not in multiline_quotes):
-                # see treatise above
-                if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
-                    raise SyntaxError("unterminated quoted string, {s!r}")
-            if state:
-                state = None
-                quote = empty
-            # print(f"    <<3 {quote=}, {text=}, empty")
-            yield (quote, text, empty)
+    if text or quote:
+        if quote and text and (quote not in multiline_quotes):
+            # see treatise above
+            if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
+                raise SyntaxError(f"unterminated quoted string, {s!r}")
+        if state:
+            state = None
+            quote = empty
+        # print(f"    <<3 {quote=}, {text=}, empty")
+        yield (quote, text, empty)
 
 _split_quoted_strings = split_quoted_strings
 
@@ -5615,7 +5623,7 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         empty = ''
 
     for line in lines:
-        # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
+        # print(f"\n[!!!] {line=}\n[!!!] {quotes=} {escape=} {multiline_quotes=} {state=}")
 
         if quotes or multiline_quotes:
             i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
@@ -5629,6 +5637,7 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         offset = 0
 
         for leading_quote, segment, trailing_quote in i:
+            # print(f">>> {leading_quote=} {segment=} {trailing_quote=}")
             offset += previous_lengths
 
             previous_lengths = len(leading_quote) + len(segment) + len(trailing_quote)
