@@ -1594,7 +1594,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         self.assertEqual(it[0], 3)
-        self.assertEqual(repr(it), "<linked_list_iterator cursor=linked_list_node(3)>")
+        self.assertEqual(repr(it), f"<linked_list_iterator {hex(id(it))} cursor=linked_list_node(3)>")
         copy = it.copy()
         del(copy)
         self.assertEqual(it[0], 3)
