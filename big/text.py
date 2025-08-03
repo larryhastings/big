@@ -1992,9 +1992,11 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
                     text = separator
                 continue
             if text:
-                yield (empty, text, empty)
                 length = len(text)
-                text = text[length:length]
+                leading_empty = text[0:0]
+                trailing_empty = text[length:length]
+                yield (leading_empty, text, trailing_empty)
+                text = trailing_empty
             quote = separator
             continue
         # in quote
@@ -2013,13 +2015,13 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
             if state:
                 state = None
                 # print(f"    <<1 empty, {text=}, {quote=}")
-                yield (empty, text, quote)
+                yield (text[0:0], text, separator)
             else:
                 # print(f"    <<2 {quote=}, {text=}, {quote=}")
-                yield (quote, text, quote)
+                yield (quote, text, separator)
         length = len(text)
         text = text[length:length]
-        quote = empty
+        quote = text
 
     if text or quote:
         if quote and text and (quote not in multiline_quotes):
@@ -2027,10 +2029,11 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
             if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
                 raise SyntaxError(f"unterminated quoted string, {s!r}")
         if state:
-            state = None
-            quote = empty
+            # state = None
+            quote = text[0:0]
         # print(f"    <<3 {quote=}, {text=}, empty")
-        yield (quote, text, empty)
+        length = len(text)
+        yield (quote, text, text[length:length])
 
 _split_quoted_strings = split_quoted_strings
 
@@ -2180,7 +2183,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
         raise ValueError("either quotes or multiline_quotes must be non-empty")
 
     if state in (None, '', b''):
-        state = empty
+        state = s[0:0]
     else:
         if not isinstance(state, s_type):
             raise TypeError("state must match s (str or bytes), not {state!r}")
