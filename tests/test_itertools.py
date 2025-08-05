@@ -94,7 +94,7 @@ class BigItertoolsTests(unittest.TestCase):
 # --8<-- start tidy itertools tests --8<--
 
 class TidyItertoolsTests(unittest.TestCase):
-    def test_loop_context(self):
+    def test_iterator_context(self):
         self.assertEqual(repr(undefined), '<Undefined>')
         with self.assertRaises(TypeError):
             x = Undefined()
@@ -111,7 +111,7 @@ class TidyItertoolsTests(unittest.TestCase):
         for start in range(-2, 5):
             with self.subTest(start=start):
                 first_time = True
-                for ctx, o in iterator_context(('abc',), start):
+                for ctx, o in iterator_context((('abc',)), start):
                     self.assertTrue(first_time)
                     first_time = False
 
@@ -131,6 +131,8 @@ class TidyItertoolsTests(unittest.TestCase):
                     self.assertEqual(ctx.current, o)
                     with self.assertRaises(AttributeError):
                         print(ctx.next)
+
+                    self.assertEqual(repr(ctx), f"IteratorContext(iterator=('abc',), start={start}, index={start}, is_first=True, is_last=True, current='abc')")
 
 
         # iterator yields four things

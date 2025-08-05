@@ -85,13 +85,12 @@ class PushbackIterator:
 
 
 class IteratorContext:
-    def __init__(self, iterator, start, index, is_first, is_last, previous, current, _next):
+    def __init__(self, iterator, start, index, is_first, is_last, previous, current, next):
         self._iterator = iterator
-        self._start = start
         self._length = None
 
+        self.start = start
         self.index = index
-
         self.is_first = is_first
         self.is_last = is_last
 
@@ -99,7 +98,7 @@ class IteratorContext:
             self.previous = previous
         self.current =current
         if not is_last:
-            self.next = _next
+            self.next = next
 
     @property
     def length(self):
@@ -111,10 +110,15 @@ class IteratorContext:
     def countdown(self):
         if self._length is None:
             self._length = len(self._iterator)
-        return self._start + self._length - (1 + self.index - self._start)
+        return self.start + self._length - (1 + self.index - self.start)
 
     def __repr__(self):
-        return f'IteratorContext(iterator={self.iterator!r}, start={self.start!r}, index={self.index!r}, is_first={self.is_first!r}, is_last={self.is_last!r}, previous={self.previous!r}, current={self.current!r}, next={self.next!r})'
+        fields = []
+        for name in ('previous', 'current', 'next'):
+            if hasattr(self, name):
+                fields.append(f"{name}={getattr(self, name)!r}")
+        s = ", ".join(fields)
+        return f'IteratorContext(iterator={self._iterator!r}, start={self.start!r}, index={self.index!r}, is_first={self.is_first!r}, is_last={self.is_last!r}, {s})'
 
 
 def iterator_context(iterator, start=0):

@@ -50,10 +50,11 @@ import sys
 
 
 # define a TOKEN_X for every token.X in any supported version of Python.
-# if TOKEN_X isn't defined in the current version of Python, it'll be set to -1.
+# if TOKEN_X isn't defined in the current version of Python, it'll be set to TOKEN_INVALID (-1).
 # this lets you safely write
 #     if token[0] == TOKEN_X:
 # because token[0] will never be -1.
+TOKEN_INVALID = -1
 
 TOKEN_AMPER = token.AMPER
 TOKEN_AMPEREQUAL = token.AMPEREQUAL
@@ -119,8 +120,8 @@ try: # pragma: nocover
     TOKEN_AWAIT = token.AWAIT
     TOKEN_ASYNC = token.ASYNC
 except AttributeError: # pragma: nocover
-    TOKEN_AWAIT = -1
-    TOKEN_ASYNC = -1
+    TOKEN_AWAIT = TOKEN_INVALID
+    TOKEN_ASYNC = TOKEN_INVALID
 
 # these three are defined in 3.6, but in the "tokenize" module
 # instead of the "token" module
@@ -144,16 +145,16 @@ try: # pragma: nocover
     TOKEN_TYPE_IGNORE = token.TYPE_IGNORE
     TOKEN_TYPE_COMMENT = token.TYPE_COMMENT
 except AttributeError: # pragma: nocover
-    TOKEN_COLONEQUAL = -1
-    TOKEN_TYPE_IGNORE = -1
-    TOKEN_TYPE_COMMENT = -1
+    TOKEN_COLONEQUAL = TOKEN_INVALID
+    TOKEN_TYPE_IGNORE = TOKEN_INVALID
+    TOKEN_TYPE_COMMENT = TOKEN_INVALID
 
 
 # new in 3.10
 try: # pragma: nocover
     TOKEN_SOFT_KEYWORD = token.SOFT_KEYWORD
 except AttributeError: # pragma: nocover
-    TOKEN_SOFT_KEYWORD = -1
+    TOKEN_SOFT_KEYWORD = TOKEN_INVALID
 
 
 # new in 3.12
@@ -163,10 +164,10 @@ try: # pragma: nocover
     TOKEN_FSTRING_MIDDLE = token.FSTRING_MIDDLE
     TOKEN_FSTRING_END = token.FSTRING_END
 except AttributeError: # pragma: nocover
-    TOKEN_EXCLAMATION = -1
-    TOKEN_FSTRING_START = -1
-    TOKEN_FSTRING_MIDDLE = -1
-    TOKEN_FSTRING_END = -1
+    TOKEN_EXCLAMATION = TOKEN_INVALID
+    TOKEN_FSTRING_START = TOKEN_INVALID
+    TOKEN_FSTRING_MIDDLE = TOKEN_INVALID
+    TOKEN_FSTRING_END = TOKEN_INVALID
 
 
 # new in 3.14
@@ -175,9 +176,9 @@ try: # pragma: nocover
     TOKEN_TSTRING_MIDDLE = token.TSTRING_MIDDLE
     TOKEN_TSTRING_END = token.TSTRING_END
 except AttributeError: # pragma: nocover
-    TOKEN_TSTRING_START = -1
-    TOKEN_TSTRING_MIDDLE = -1
-    TOKEN_TSTRING_END = -1
+    TOKEN_TSTRING_START = TOKEN_INVALID
+    TOKEN_TSTRING_MIDDLE = TOKEN_INVALID
+    TOKEN_TSTRING_END = TOKEN_INVALID
 
 __all__ = [name for name in globals() if name.startswith('TOKEN_')]
 
