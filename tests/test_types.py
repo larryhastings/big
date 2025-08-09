@@ -1353,9 +1353,9 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(SpecialNodeError):
             it.popleft()
 
-        # and before it is None
-        before = it.before()
-        self.assertIsNone(before)
+        # and you can't go past head
+        with self.assertRaises(ValueError):
+            before = it.before()
 
         # an reverse iterator on a linked list always starts out at tail
         rit = reversed(t)
@@ -1368,9 +1368,9 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(SpecialNodeError):
             rit.popleft()
 
-        # and before it (reversed!) is None
-        before = rit.before()
-        self.assertIsNone(before)
+        # and you can't go past tail
+        with self.assertRaises(ValueError):
+            before = rit.before()
 
         initial = [1, 2, 3, 4, 5]
         t = linked_list(initial)
@@ -1465,13 +1465,17 @@ class BigLinkedListTests(unittest.TestCase):
             return t, rit
 
         t, rit = setup2()
+        self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit = rit.find(2)
+        self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit.extend('ABC')
         self.assertLinkedListEqual(t, [1, 'A', 'B', 'C', 2, 3])
         self.assertLength(t, 6)
 
         t, rit = setup2()
+        self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit = rit.find(2)
+        self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit.extendleft('ABC')
         self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
         self.assertLength(t, 6)
@@ -2715,6 +2719,75 @@ class BigLinkedListTests(unittest.TestCase):
         # __contains__
         self.assertIn(3, t)
         self.assertNotIn('x', t)
+
+    def test_truncate_cut_and_splice(self):
+        def setup():
+            t = linked_list(range(1, 11))
+            t2 = linked_list('abcde')
+            it_5 = t.find(5)
+            return t, it_5, t2
+
+        t, it_5, t2 = setup()
+        it_5.truncate()
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5])
+
+        t, it_5, t2 = setup()
+        it_5.rtruncate()
+        self.assertLinkedListEqual(t, [5, 6, 7, 8, 9, 10])
+
+        for test_reversed in (False, True):
+            for splice_at_tail in (False, True):
+                with self.subTest(test_reversed=test_reversed, splice_at_tail=splice_at_tail):
+                    t, it_5, t2 = setup()
+                    it_7 = t.find(7)
+
+                    snippet = it_5.cut(end=it_7)
+                    self.assertIsInstance(snippet, linked_list)
+                    self.assertLinkedListEqual(snippet, [5, 6])
+                    self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9, 10])
+
+                    if splice_at_tail:
+                        if test_reversed:
+                            splice_here = reversed(t2)
+                            splice_here.to_head()
+                        else:
+                            splice_here = iter(t2)
+                            splice_here.to_tail()
+                    else:
+                        splice_here = t2.find('c')
+                        if test_reversed:
+                            splice_here = reversed(splice_here)
+                        self.assertEqual(splice_here[0], 'c')
+
+                    splice_here.splice(snippet)
+                    self.assertLinkedListEqual(snippet, [])
+
+                    if splice_at_tail:
+                        if test_reversed:
+                            self.assertLinkedListEqual(t2, [5, 6, 'a', 'b', 'c', 'd', 'e'])
+                        else:
+                            self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 5, 6])
+
+                        self.assertFalse(splice_here.is_head)
+                        self.assertFalse(splice_here.is_tail)
+                        self.assertTrue(splice_here.is_special)
+                    else:
+                        if test_reversed:
+                            self.assertLinkedListEqual(t2, ['a', 'b', 5, 6, 'c', 'd', 'e'])
+                        else:
+                            self.assertLinkedListEqual(t2, ['a', 'b', 'c', 5, 6, 'd', 'e'])
+
+
+        t, it_5, t2 = setup()
+        rit_5 = reversed(it_5)
+        snippet = rit_5.cut()
+        self.assertIsInstance(snippet, linked_list)
+
+        t2.splice(snippet)
+        self.assertLinkedListEqual(snippet, [])
+        self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 1, 2, 3, 4, 5])
+
+
 
 def run_tests():
     bigtestlib.run(name="big.types", module=__name__)
