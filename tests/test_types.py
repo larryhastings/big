@@ -1694,6 +1694,29 @@ class BigLinkedListTests(unittest.TestCase):
         del it._cursor
         del it
 
+        t, it = setup()
+        with self.assertRaises(IndexError):
+            it[-3]
+        self.assertEqual(it[-2], 1)
+        self.assertEqual(it[-1], 2)
+
+        self.assertEqual(it[ 0], 3)
+
+        self.assertEqual(it[ 1], 4)
+        self.assertEqual(it[ 2], 5)
+        with self.assertRaises(IndexError):
+            it[3]
+
+        self.assertLinkedListEqual(it[-2: 3: 2], [1, 3, 5])
+        self.assertLinkedListEqual(it[ 2:-3:-2], [5, 3, 1])
+        with self.assertRaises(IndexError):
+            it[-6: 2: 3]
+        with self.assertRaises(IndexError):
+            it[ 2:-6: 3]
+        with self.assertRaises(ValueError):
+            it[ 2:-3: 0]
+        self.assertLinkedListEqual(it[ 2:-3: 2], [])
+        self.assertLinkedListEqual(it[-2: 3:-2], [])
 
     def testPrependAndAppendAndExtendAndExtendLeft(self):
         #

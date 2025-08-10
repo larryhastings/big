@@ -1174,13 +1174,12 @@ class linked_list_node:
 
         return value
 
-    def index(self, index, allow_head_and_tail=False, clamp=False):
+    def index(self, index, allow_head_and_tail=False):
         # return a cursor (pointer to a node),
         # starting at the current position,
         # relative to index.  ignores special nodes.
         # if we attempt to iterate past the end of the list
-        # in either direction, return None--
-        # except if clamp is False, in which case we return the last node before the end.
+        # in either direction, return None.
 
         index = index.__index__()
         cursor = self
@@ -1189,7 +1188,8 @@ class linked_list_node:
             while index:
                 c = cursor.previous
                 if c is None:
-                    return cursor if clamp else None
+                    # went off the end
+                    return None
                 cursor = c
                 if c.special:
                     if (not allow_head_and_tail) or (c.special != 'head'):
@@ -1200,7 +1200,8 @@ class linked_list_node:
         while index:
             c = cursor.next
             if c is None:
-                return cursor if clamp else None
+                # went off the end
+                return None
             cursor = c
             if c.special:
                 if (not allow_head_and_tail) or (c.special != 'tail'):
@@ -1239,7 +1240,7 @@ class linked_list_node:
 
     nodes_iterator = nodes
 
-    def nodes(self, start, stop, step, *, clamp=False):
+    def nodes(self, start, stop, step):
         """
         Returns None if either start or stop is out of range.
         Iterator, yields nodes.
@@ -1252,8 +1253,8 @@ class linked_list_node:
         start = start.__index__()
         stop = stop.__index__()
 
-        first = self.index(start, clamp=clamp)
-        last = self.index(stop, allow_head_and_tail=True, clamp=clamp)
+        first = self.index(start)
+        last = self.index(stop, allow_head_and_tail=True)
         if (first is None) or (last is None):
             return None
 
