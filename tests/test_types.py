@@ -2758,6 +2758,12 @@ class BigLinkedListTests(unittest.TestCase):
         it_5.rtruncate()
         self.assertLinkedListEqual(t, [5, 6, 7, 8, 9, 10])
 
+        t, it_5, t2 = setup()
+        snippet = it_5.cut()
+        self.assertIsInstance(snippet, linked_list)
+        self.assertLinkedListEqual(t,       [1, 2, 3, 4])
+        self.assertLinkedListEqual(snippet,             [5, 6, 7, 8, 9, 10])
+
         for test_reversed in (False, True):
             for splice_at_tail in (False, True):
                 with self.subTest(test_reversed=test_reversed, splice_at_tail=splice_at_tail):
@@ -2800,15 +2806,45 @@ class BigLinkedListTests(unittest.TestCase):
                         else:
                             self.assertLinkedListEqual(t2, ['a', 'b', 'c', 5, 6, 'd', 'e'])
 
-
         t, it_5, t2 = setup()
         rit_5 = reversed(it_5)
         snippet = rit_5.cut()
         self.assertIsInstance(snippet, linked_list)
+        self.assertLinkedListEqual(snippet, [1, 2, 3, 4,  5])
+        self.assertLinkedListEqual(t,                       [6, 7, 8, 9, 10])
 
         t2.splice(snippet)
         self.assertLinkedListEqual(snippet, [])
         self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 1, 2, 3, 4, 5])
+
+        t, it_5, t2 = setup()
+        rit_5 = reversed(it_5)
+        it_2 = t.find(2)
+        with self.assertRaises(ValueError):
+            rit_5.cut(it_2)
+        rit_2 = reversed(it_2)
+        snippet = rit_5.cut(rit_2)
+        self.assertLinkedListEqual(t,       [1, 2,         6, 7, 8, 9, 10])
+        self.assertLinkedListEqual(snippet,       [3, 4, 5])
+
+        with self.assertRaises(IndexError):
+            t.cut(rit_5)
+        with self.assertRaises(IndexError):
+            t.cut(end=rit_5)
+
+        t2 = t.cut(end=t.head())
+        self.assertLinkedListEqual(t2, [])
+
+        t, it_5, t2 = setup()
+        it_2 = t.find(2)
+        with self.assertRaises(ValueError):
+            # end comes before start
+            t.cut(it_5, it_2)
+        rit_5 = reversed(it_5)
+        rit_2 = reversed(it_2)
+        with self.assertRaises(ValueError):
+            # end comes before start
+            t.cut(rit_2, rit_5)
 
 
 
