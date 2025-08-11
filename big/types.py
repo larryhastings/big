@@ -1825,8 +1825,6 @@ class linked_list:
 
     def cut(self, start=None, end=None):
         """
-    
-
         After the cut, start and end will still point at
         the same nodes; however, start will point at the
         first node in the returned linked list, and end
@@ -1891,12 +1889,12 @@ class linked_list:
             #     end     start
             # But don't move the iterators passed in!  Those are the
             # user's, the cut shouldn't move them.
-            if (not start_is_none) and (start._cursor != self._head):
+            if (not start_is_none) and (start._cursor is not self._head):
                 tmp = iter(self)
                 tmp._cursor = start._cursor.next
                 start = tmp
 
-            if (not end_is_none) and (end._cursor != self._tail):
+            if (not end_is_none) and (end._cursor is not self._tail):
                 tmp = iter(self)
                 tmp._cursor = end._cursor.next
                 end = tmp
@@ -1908,7 +1906,7 @@ class linked_list:
         else:
             start = start._cursor
             if start.linked_list is not self:
-                raise IndexError("start is not an iterator over this linked_list")
+                raise ValueError("start is not an iterator over this linked_list")
 
         if end_is_none:
             # if end is None, we cut the entire end of the list,
@@ -1917,20 +1915,20 @@ class linked_list:
         else:
             end = end._cursor
             if end.linked_list is not self:
-                raise IndexError("end is not an iterator over this linked_list")
+                raise ValueError("end is not an iterator over this linked_list")
 
             # if the user specified both ends of the range,
             # make sure start comes before end
             if not start_is_none:
                 cursor = start
-                while cursor and (cursor != end):
+                while cursor and (cursor is not end):
                     cursor = cursor.next
                 if not cursor:
                     raise ValueError("end points to a node before start")
 
             # adjust end so it points to the last node to cut.
             # (rather than one node past it, at the first node not cut.)
-            if end != self._head:
+            if end is not self._head:
                 end = end.previous
 
         # start and end are now references to the *nodes*,
@@ -1946,14 +1944,16 @@ class linked_list:
         cls = type(self)
         t2 = cls()
 
-        if start == end:
+        if start is end:
             return t2
 
         new_head = linked_list_node(self, None, 'head') if start is self._head else None
         new_tail = linked_list_node(self, None, 'tail') if end is self._tail else None
 
         # all our allocations are done! modify self.
-        # print(f"{start=} {end=}\n{new_head=} {new_tail=}")
+        #
+        # "previous" points to the node in t just before the cut, and
+        # "next" points to the node in t just after the cut.
 
         if new_head:
             # start is currently self._head.
@@ -1987,23 +1987,20 @@ class linked_list:
             next = end.next
             end.next = tail
 
-        # print(f"{previous=} {next=}")
-
-        # at this point,
-        # previous points to the node in t just before the cut,
-        # and next points to the node in t just after the cut.
         previous.next = next
         next.previous = previous
 
-        while start != end:
+        while start is not end:
             start.linked_list = t2
             start = start.next
 
         return t2
 
-    def splice(self, other, where=None):
+    def splice(self, other, *, where=None):
         if not isinstance(other, linked_list):
-            raise ValueError('other must be a linked_list')
+            raise TypeError('other must be a linked_list')
+        if other is self:
+            raise ValueError("other and self are the same linked_list")
 
         # do allocations first
         new_head = linked_list_node(other, None, 'head')
@@ -2015,11 +2012,11 @@ class linked_list:
             cursor = self._tail.previous
         else:
             if not isinstance(where, linked_list_base_iterator):
-                raise ValueError('where must be a linked_list iterator')
+                raise TypeError('where must be a linked_list iterator over self')
 
             cursor = where._cursor
             if cursor.linked_list != self:
-                raise ValueError("where must be an iterator over self")
+                raise ValueError("where must be a linked_list iterator over self")
 
             if isinstance(where, linked_list_reverse_iterator):
                 if cursor.special == 'head':
@@ -2078,6 +2075,10 @@ class linked_list_base_iterator:
         self._stop_at_cursor = None
         self._find_value = _sentinel
         self._match_predicate = None
+
+    @property
+    def linked_list(self):
+        return self._cursor.linked_list
 
     def __repr__(self):
         return f"<{self.__class__.__name__} {hex(id(self))} cursor={self._cursor!r}>"
@@ -2145,9 +2146,6 @@ class linked_list_base_iterator:
 
         for _ in range(index):
             advance()
-
-    def linked_list(self):
-        return self._cursor.linked_list
 
     def __next__(self):
         cursor = self._cursor
@@ -2252,7 +2250,7 @@ class linked_list_base_iterator:
     def before(self, count=1):
         original_count = count
         if count < 0:
-            return self.after(-count)
+            raise ValueError("count can't be negative")
         cursor = self._cursor
         while count:
             cursor = cursor.previous
@@ -2265,7 +2263,7 @@ class linked_list_base_iterator:
 
     def after(self, count=1):
         if count < 0:
-            return self.before(-count)
+            raise ValueError("count can't be negative")
         cursor = self._cursor
         while count:
             cursor = cursor.next
@@ -2341,15 +2339,22 @@ class linked_list_base_iterator:
         cursor.remove()
 
     def insert(self, index, object):
-        cursor = self._item_lookup(key)
-        # support for sloppy insert here:
-        # if you have an iterator IT pointed at head,
-        # you can call IT.prepend(value)
-        # and that creates the special node etc etc.
-        # therefore, inserting a node before head is ok.
-        # therefore, it should be okay here, and do the same thing.
-        if cursor.special == 'head':
-            cursor = cursor.next
+        if index:
+            cursor = self._item_lookup(index)
+        else:
+            cursor = self._cursor
+            # support for sloppy insert here:
+            # if you have an iterator IT pointed at head,
+            # you can call IT.prepend(value)
+            # and that creates the special node etc etc.
+            # therefore, inserting a node before head is ok.
+            # therefore, it should be okay here, and do the same thing.
+            #
+            # (btw, cursor can only point to head if index is 0.
+            # _item_lookup won't return head or tail, it refuses to
+            # return special nodes.)
+            if cursor.special == 'head':
+                cursor = cursor.next
         cursor.insert_before(object)
 
     def count(self, value):
@@ -2681,25 +2686,28 @@ class linked_list_base_iterator:
 
     def truncate(self):
         """
-        Truncates the linked_list at the current node, discarding all data in subsequent nodes.
+        Truncates the linked_list at the current node,
+        discarding the current node and all subsequent nodes.
 
-        If the current node is a data node (not a special node), it will become the last data
-        node in the list.
+        After this operation, the iterator will point to the linked list's tail.
         """
         cursor = self._cursor
         t = cursor.linked_list
         tail = t._tail
 
-        if cursor == tail:
+        if cursor is tail:
             return
 
-        previous = cursor
-        cursor = cursor.next
+        if cursor is t._head:
+            cursor = cursor.next
 
-        while cursor != tail:
+        previous = cursor.previous
+        while cursor is not tail:
             next = cursor.next
             cursor.value = None
             if cursor.iterator_refcount:
+                cursor.special = 'special'
+                cursor.value = None
                 previous.next = cursor
                 cursor.previous = previous
                 previous = cursor
@@ -2709,27 +2717,32 @@ class linked_list_base_iterator:
         tail.previous = previous
         previous.next = tail
 
+        self._cursor = tail
+
     def rtruncate(self):
         """
-        Reverse-truncates the linked_list at the current node, discarding all data in previous nodes.
+        Truncates the linked_list at the current node,
+        discarding the current node and all previous nodes.
 
-        If the current node is a data node (not a special node), it will become the first data
-        node in the list.
+        After this operation, the iterator will point to the linked list's head.
         """
         cursor = self._cursor
         t = cursor.linked_list
         head = t._head
 
-        if cursor == head:
+        if cursor is head:
             return
+        if cursor is t._tail:
+            cursor = cursor.previous
 
-        next = cursor
-        cursor = cursor.previous
+        next = cursor.next
 
-        while cursor != head:
+        while cursor is not head:
             previous = cursor.previous
             cursor.value = None
             if cursor.iterator_refcount:
+                cursor.special = 'special'
+                cursor.value = None
                 next.previous = cursor
                 cursor.next = next
                 next = cursor
@@ -2738,6 +2751,8 @@ class linked_list_base_iterator:
             cursor = previous
         head.next = next
         next.previous = head
+
+        self._cursor = head
 
 
     def cut(self, end=None):
@@ -2755,7 +2770,7 @@ class linked_list_base_iterator:
         return self._cursor.linked_list.cut(self, end)
 
 
-    def rcut(self):
+    def rcut(self, start=None):
         """
         Bisects the list at the current node.  Returns the new list.
 
@@ -2770,7 +2785,7 @@ class linked_list_base_iterator:
         return self._cursor.linked_list.cut(start, self)
 
     def splice(self, other):
-        self._cursor.linked_list.splice(other, self)
+        self._cursor.linked_list.splice(other, where=self)
 
 
 
@@ -2856,6 +2871,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
             if not cursor.special:
                 length += 1
             cursor = cursor.previous
+        return length
 
 
 del export
