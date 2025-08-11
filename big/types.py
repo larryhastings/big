@@ -1825,6 +1825,11 @@ class linked_list:
 
     def cut(self, start=None, end=None):
         """
+        If start is None or head, this will cut head,
+        and self will grow a new head.
+        If end is None, this will cut tail, and self
+        will grow a new tail.
+
         After the cut, start and end will still point at
         the same nodes; however, start will point at the
         first node in the returned linked list, and end
@@ -1832,10 +1837,10 @@ class linked_list:
 
         start and end may be reverse iterators, however the
         linked list resulting from a cut will have the elements
-        in forward order.  Also, swap "head" and "tail" in
-        all of the descriptions above.  (For example,
-        if start is None and end is specified, start will
-        default to "tail".)
+        in forward order.  (In general, you just swap "head"
+        and "tail" in all of the descriptions above.  For
+        example, if start is None and end is specified,
+        start will default to "tail".)
         """
         # first, check that start and end are legal values,
         # while also converting them to be pointers to nodes,
@@ -1903,15 +1908,19 @@ class linked_list:
             # if start is None, we cut the entire start of the list,
             # *including* head.
             start = self._head
+            start_is_head = True
         else:
             start = start._cursor
             if start.linked_list is not self:
                 raise ValueError("start is not an iterator over this linked_list")
+            start_is_head = start is self._head
+            assert start is not None
 
         if end_is_none:
             # if end is None, we cut the entire end of the list,
             # *including* tail.
             end = self._tail
+            end_is_tail = True
         else:
             end = end._cursor
             if end.linked_list is not self:
@@ -1931,12 +1940,17 @@ class linked_list:
             if end is not self._head:
                 end = end.previous
 
-        # start and end are now references to the *nodes*,
-        # not references to *iterators*.  start points to
-        # the first node to cut, end points to the last
-        # node to cut, and start comes before end in the list.
+            # because we retreat one node, end can never be tail here.
+            assert end is not None
+            end_is_tail = False
+
+        # start and end are now references to *nodes*, not *iterators*.
+        # start points to the first node to cut, inclusive.
+        # end points to the last node to cut, inclusive.
+        # we've guaranteed that start comes before end in the list.
         #
-        # everything checks out--we can cut.
+        # everything checks out--we can cut!
+        #
         # do all our memory allocation before changing anything,
         # so that if an allocation fails we don't leave the orignal linked list
         # in an incomplete state.
@@ -1947,49 +1961,54 @@ class linked_list:
         if start is end:
             return t2
 
-        new_head = linked_list_node(self, None, 'head') if start is self._head else None
-        new_tail = linked_list_node(self, None, 'tail') if end is self._tail else None
+        new_head = t2._head
+        new_tail = t2._tail
 
         # all our allocations are done! modify self.
         #
-        # "previous" points to the node in t just before the cut, and
-        # "next" points to the node in t just after the cut.
+        # "previous" points to the node in self just before the cut, and
+        # "next" points to the node in self just after the cut.
 
-        if new_head:
-            # start is currently self._head.
-            # set t2._head to be start, and
-            # give self a new _head.
-            # print("start is _head, swap heads around")
-            self._head = new_head
-            t2._head = start
+        if start_is_head:
+            # start is self._head; swap heads.
             previous = new_head
+            self._head = new_head
+            new_head.linked_list = self
+            t2._head = start
         else:
-            # splice in start after t2._head
-            # print("splice in start after t2._head")
-            head = t2._head
-            head.next = start
+            # start is not self._head;
+            # self and t2 both keep their own heads.
             previous = start.previous
-            start.previous = head
+            new_head.next = start
+            start.previous = new_head
 
-        if new_tail:
-            # end is currently self._tail.
-            # set t2._tail to be end, and
-            # give self a new _tail.
-            # print("end is _tail, swap tails around")
-            self._tail = new_tail
-            t2._tail = end
+        if end_is_tail:
+            # end is self._tail; swap tails.
             next = new_tail
+            self._tail = new_tail
+            new_tail.linked_list = self
+            t2._tail = end
+            end.linked_list = t2
+            assert end.next == None
         else:
-            # splice in end before t2._tail
-            # print("splice in end before t2._tail")
-            tail = t2._tail
-            tail.previous = end
+            # end is not self.tail;
+            # self and t2 both keep their own tails.
             next = end.next
-            end.next = tail
+            new_tail.previous = end
+            end.next = new_tail
 
+        # assert previous is not None
+        # assert     next is not None
         previous.next = next
         next.previous = previous
 
+        # assert self._head.previous is None
+        # assert   t2._head.previous is None
+        # assert self._tail.next     is None
+        # assert   t2._tail.next     is None
+
+        # at this point, we're guaranteed end is not None.
+        end = end.next
         while start is not end:
             start.linked_list = t2
             start = start.next
