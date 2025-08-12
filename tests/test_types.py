@@ -3037,8 +3037,18 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it_5, t2 = setup()
         snippet = it_5.rcut()
-        self.assertLinkedListEqual(t,       [5, 6, 7, 8, 9, 10])
-        self.assertLinkedListEqual(snippet, [1, 2, 3, 4,])
+        self.assertLinkedListEqual(t,       [6, 7, 8, 9, 10])
+        self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5])
+        self.assertIs(it_5.linked_list, snippet)
+        check_linked_list_was_set(t)
+        check_linked_list_was_set(snippet)
+
+        t, it_5, t2 = setup()
+        it = t.tail()
+        snippet = it.rcut()
+        self.assertLinkedListEqual(t,       [])
+        self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertIs(it.linked_list, snippet)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 

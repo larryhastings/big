@@ -2019,7 +2019,7 @@ class linked_list:
         if not isinstance(other, linked_list):
             raise TypeError('other must be a linked_list')
         if other is self:
-            raise ValueError("other and self are the same linked_list")
+            raise ValueError("other and self are the same")
 
         # do allocations first
         new_head = linked_list_node(other, None, 'head')
@@ -2086,7 +2086,7 @@ class linked_list_base_iterator:
 
     def __init__(self, node):
         if type(self) == linked_list_base_iterator:
-            raise TypeError("instances of linked_list_base_iterator are not permitted")
+            raise TypeError("linked_list_base_iterator is an abstract base class")
         node.iterator_refcount += 1
         self._cursor = node
 
@@ -2193,7 +2193,7 @@ class linked_list_base_iterator:
 
     def next(self, default=_undefined, *, count=1):
         if count < 0:
-            raise ValueError("next count can't be negative")
+            raise ValueError("count can't be negative")
         if count == 0:
             return None
 
@@ -2239,7 +2239,7 @@ class linked_list_base_iterator:
 
     def previous(self, default=_undefined, *, count=1):
         if count < 0:
-            raise ValueError("previous count can't be negative")
+            raise ValueError("count can't be negative")
         if count == 0:
             return None
 
@@ -2776,32 +2776,60 @@ class linked_list_base_iterator:
 
     def cut(self, end=None):
         """
-        Bisects the list at the current node.  Returns the new list.
+        Bisects the list at the current node.  Returns a new list.
 
-        Creates a new linked_list, and moves the node pointed to by this iterator
-        and all subsequent nodes (including "tail") to the new linked_list.
-        All iterators pointing at nodes moved to the new list continue to point
-        to those nodes, meaning that they also move to the new list.
+        Cuts nodes from the linked list being iterated over.  Creates
+        a new linked list, moves all cut nodes to this new linked_list,
+        and returns this new linked list.
 
-        The current node becomes the first node after 'head' of this new linked_list;
-        the previous node becomes the last node before 'tail' of the existing linked_list.
+        If end is not None, it must be an iterator pointing to either
+        the same node or a subsequent node in the same linked list;
+        it's an error if end points to a preceding node, or to a node
+        in a different list.  The node pointed at by end and all
+        subsequent nodes are not cut.
+
+        If end is None, all subsequent nodes are cut, including "tail".
+        (The linked list is given a new "tail".)
+
+        If cut cuts any nodes, it always cuts the node pointed to by
+        self.
+
+        All iterators pointing at nodes moved to the new list continue to
+        point to those nodes.  This means they also move to the new list.
         """
         return self._cursor.linked_list.cut(self, end)
 
 
     def rcut(self, start=None):
         """
-        Bisects the list at the current node.  Returns the new list.
+        Bisects the list at the current node.  Returns a new list.
 
-        Creates a new linked_list, and moves the node pointed to by this iterator
-        and all previous nodes (including "head") to the new linked_list.
-        All iterators pointing at nodes moved to the new list continue to point
-        to those nodes, meaning that they also move to the new list.
+        Cuts nodes from the linked list being iterated over.  Creates
+        a new linked list, moves all cut nodes to this new linked_list,
+        and returns this new linked list.
 
-        The current node becomes the last node before 'tail' of this new linked_list;
-        the next node becomes the first node after 'head' of the existing linked_list.
+        If end is not None, it must be an iterator pointing to either
+        the same node or a preceding node in the same linked list;
+        it's an error if end points to a preceding node, or to a node
+        in a different list.  The node pointed at by end and all
+        preceding nodes are not cut.
+
+        If end is None, all preceding nodes are cut, including "head".
+        (The linked list is given a new "head".)
+
+        If cut cuts any nodes, it always cuts the node pointed to by
+        self.
+
+        All iterators pointing at nodes moved to the new list continue to
+        point to those nodes.  This means they also move to the new list.
         """
-        return self._cursor.linked_list.cut(start, self)
+
+        cursor = self._cursor
+        if cursor.special == 'tail':
+            after = None
+        else:
+            after = self.__class__(cursor.next)
+        return cursor.linked_list.cut(start, after)
 
     def splice(self, other):
         self._cursor.linked_list.splice(other, where=self)
