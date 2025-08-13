@@ -25,8 +25,9 @@ functionality.
 **big** is chock full of the sort of little functions and classes
 we've all hacked together a million times--only with all the
 API gotchas fixed, and thoroughly tested with 100% coverage.
+It's the missing batteries Python never shippet.
 It's the code you *would* have written... if only you had the time.
-It's a real pleasure to use!
+And every API is a pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
 required dependencies to run.  (**big**'s test suite
