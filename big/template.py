@@ -1,5 +1,6 @@
 import builtins
 from .types import string
+from .text import split_quoted_strings
 import token
 
 
@@ -40,8 +41,23 @@ class Interpolation:
             and (self.debug == other.debug)
             )
 
+@export
+class Statement:
+    def __init__(self, statement):
+        self.statement = statement
 
-def parse_template_string(s):
+    def __repr__(self):
+        return f'Statement(statement={self.statement!r})'
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, Statement)
+            and (self.statement == other.statement)
+            )
+
+
+def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_eater, quotes, multiline_quotes, escape):
+    "internal iterator for public big.parse_template_string"
     if not s:
         yield s
 
@@ -49,17 +65,94 @@ def parse_template_string(s):
     length = len(original_s)
 
     stack = []
+    stack_push = stack.append
+    stack_pop = stack.pop
+
+    text = []
+    text_append = text.append
+    text_clear = text.clear
+    empty_join = "".join
+
     expression = []
+    expression_append = expression.append
+    expression_clear = expression.clear
     debug = None
-    yielded_str = True
+
+    statement = []
+    statement_append = statement.append
+    statement_clear = statement.clear
+
+    # CHANGE API TO MORE CONVENIENT?
+    #     ALLOW NOT HANDLING EXPRESSIONS?
+    # COVERAGE
 
     while s:
-        before, delimiter, after = s.partition('{{')
-        yield before
-        yielded_str = True
+        before, delimiter, after = s.partition('{')
+        if before:
+            text_append(before)
 
         if not delimiter:
-            return
+            break
+
+        if not after:
+            text_append(delimiter)
+            break
+
+        after0 = after[0]
+        after = after[1:]
+
+        if parse_comments and (after0 == '#'):
+            # comment
+            comment, delimiter, s2 = after.partition('#}')
+            if not delimiter:
+                break
+            s = s2
+            continue
+
+        if parse_whitespace_eater and (after0 == '>') and (after.startswith('}')):
+            s = after[1:].lstrip()
+            continue
+
+        is_statement = parse_statements and (after0 == '%')
+        is_expression = (after0 == '{')
+
+        if not (is_statement or is_expression):
+            if delimiter:
+                text_append(delimiter)
+                text_append(after0)
+            s = after
+            continue
+
+        # flush text
+        if text:
+            length = len(text)
+            if length == 1:
+                yield text[0]
+            else:
+                yield empty_join(text)
+            text_clear()
+
+        if is_statement:
+            if after:
+                for opening_quote, t, closing_quote in split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape):
+                    if opening_quote:
+                        statement_append(opening_quote)
+                        statement_append(t)
+                        statement_append(closing_quote)
+                        continue
+
+                    before, delimiter, after = t.partition('%}')
+                    if delimiter:
+                        if before:
+                            statement_append(before)
+                        break
+            s = after
+            st = empty_join(statement)
+            statement_clear()
+            yield Statement(st)
+            continue
+
+        # it's {{, an expression
 
         stack = []
         # Top Of Stack
@@ -83,26 +176,26 @@ def parse_template_string(s):
             right = _delimiter_map.get(t_string)
             if right:
                 if tos:
-                    stack.append(tos)
+                    stack_push(tos)
                 tos = right
                 continue
             if tos:
                 if t_string == tos:
-                    tos = stack.pop() if stack else None
+                    tos = stack_pop() if stack else None
                 continue
             if t_string == '|':
                 x = original_s[start_offset:offset]
                 if not x.strip():
                     noun = 'filter' if expression else 'expression'
                     raise SyntaxError(f'empty {noun} at {x.where}')
-                expression.append(x)
+                expression_append(x)
                 start_offset = offset + 1
                 continue
             previous_was_rcurly = is_rcurly
         else:
             noun = 'filter' if expression else 'expression'
             raise SyntaxError(f'unterminated {noun} at {after.where}')
-        expression.append(original_s[start_offset:offset])
+        expression_append(original_s[start_offset:offset])
 
         # handle trailing =
         x = expression[0]
@@ -113,24 +206,35 @@ def parse_template_string(s):
         else:
             l = len(x)
             debug = x[l:l]
-        expression = [x.strip() for x in expression]
-        yield Interpolation(*expression, debug=debug)
-        expression = []
+        stripped = [x.strip() for x in expression]
+        yield Interpolation(*stripped, debug=debug)
+        expression_clear()
         debug = None
-        yielded_str = False
 
-    if not yielded_str:
-        yield original_s[length:length]
+    # flush text
+    if text:
+        length = len(text)
+        if length == 1:
+            yield text[0]
+        else:
+            yield empty_join(text)
 
 _parse_template_string = parse_template_string
 
 
 @export
-def parse_template_string(s):
+def parse_template_string(s, *,
+    parse_comments=True,
+    parse_statements=False,
+    parse_whitespace_eater=False,
+    quotes=('"', "'"),
+    multiline_quotes=(),
+    escape='\\',
+    ):
     """
-    Parses a string containing templates, yields its components.
+    Parses a string containing simple markup, yielding its components.
 
-    Returns a generator that yields the components of s.
+    Returns a generator yielding the components of s.
     parse_template_string always yields an odd number of
     items, alternating between str objects and Interpolation
     objects.  The first and last items yielded are always str
@@ -148,11 +252,18 @@ def parse_template_string(s):
     if not isinstance(s, string):
         s = string(s)
 
-    return _parse_template_string(s)
+    return _parse_template_string(s, parse_comments, parse_statements, parse_whitespace_eater, quotes, multiline_quotes, escape)
 
 
 @export
-def eval_template_string(s, globals):
+def eval_template_string(s, globals, locals=None, *,
+    parse_comments=True,
+    parse_statements=False,
+    parse_whitespace_eater=False,
+    quotes=('"', "'"),
+    multiline_quotes=(),
+    escape='\\',
+    ):
     """
     Reformats a string, replacing {{}}-delimited expressions with their values.
 
@@ -171,15 +282,22 @@ def eval_template_string(s, globals):
     result = []
     append = result.append
 
-    for o in parse_template_string(s):
+    for o in parse_template_string(s,
+        parse_comments=parse_comments,
+        parse_statements=parse_statements,
+        parse_whitespace_eater=parse_whitespace_eater,
+        quotes=quotes,
+        multiline_quotes=multiline_quotes,
+        escape=escape,
+        ):
         if isinstance(o, str):
             append(o)
             continue
 
         # interpolation
-        value = eval(o.expression, globals)
+        value = eval(o.expression, globals, locals)
         for f in o.filters:
-            filter = eval(f, globals)
+            filter = eval(f, globals, locals)
             value = filter(value)
         if o.debug:
             append(o.debug)

@@ -38,9 +38,10 @@ class BigTestTemplate(unittest.TestCase):
     maxDiff=None
 
     def test_parse_template_string(self):
-        i = list(parse_template_string('{{x}}'))[1]
-        self.assertEqual(i, Interpolation('x', debug=''))
-        self.assertEqual(repr(i), "Interpolation('x', debug='')")
+        l = list(parse_template_string('{{x}}'))
+        self.assertEqual(len(l), 1)
+        self.assertEqual(l[0], Interpolation('x', debug=''))
+        self.assertEqual(repr(l[0]), "Interpolation('x', debug='')")
 
         def t(s, expected):
             got = list(parse_template_string(s))
@@ -48,8 +49,8 @@ class BigTestTemplate(unittest.TestCase):
 
         t('', [''])
         t('hello there 1 2 3', ['hello there 1 2 3'])
-        t('{{x}}', ['', Interpolation('x', debug=''), ''])
-        t('{{x = }}', ['', Interpolation('x', debug='x = '), ''])
+        t('{{x}}', [Interpolation('x', debug='')])
+        t('{{x = }}', [Interpolation('x', debug='x = ')])
         t('try a filter {{a|times3}} and another {{foo(3 | 5, "bar") = | filter1 | filters[2]}} it worked?!',
             [
             'try a filter ',
