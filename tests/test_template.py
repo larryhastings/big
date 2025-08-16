@@ -29,7 +29,8 @@ bigtestlib.preload_local_big()
 
 import builtins
 import big.all as big
-from big.all import Interpolation, parse_template_string, eval_template_string
+from big.template import Interpolation, Statement
+from big.template import parse_template_string, eval_template_string
 import unittest
 
 
@@ -37,7 +38,7 @@ class BigTestTemplate(unittest.TestCase):
 
     maxDiff=None
 
-    def test_parse_template_string(self):
+    def test_parse_template_expression(self):
         l = list(parse_template_string('{{x}}'))
         self.assertEqual(len(l), 1)
         self.assertEqual(l[0], Interpolation('x', debug=''))
@@ -68,6 +69,7 @@ class BigTestTemplate(unittest.TestCase):
         with self.assertRaises(TypeError):
             t(['a', 'b', 'c'], None)
 
+
     def test_eval_template_string(self):
         def upper(s): return s.upper()
 
@@ -81,8 +83,13 @@ class BigTestTemplate(unittest.TestCase):
             'filters': [None, None, upper, None],
         }
 
-        def t(s, expected):
-            got = eval_template_string(s, globals)
+        locals = {
+            'a': 65,
+            'bar': lambda *a: 'xyz',
+        }
+
+        def t(s, expected, *, locals=None):
+            got = eval_template_string(s, globals, locals)
             self.assertEqual(expected, got)
 
         t('hello there 1 2 3', 'hello there 1 2 3')
@@ -113,6 +120,80 @@ class BigTestTemplate(unittest.TestCase):
             t('{{a|}}', '')
         with self.assertRaises(SyntaxError):
             t('{{|a}}', '')
+
+        t('{{a}}', '65', locals=locals)
+        t('{{a|bar}}', 'xyz', locals=locals)
+
+    def test_parse_template_everything(self):
+
+        def t(s, expected):
+
+            got = list(parse_template_string(s,
+                parse_expressions=True,
+                parse_comments=True,
+                parse_statements=True,
+                parse_whitespace_eater=True,
+                ))
+            self.assertEqual(expected, got)
+            return got
+
+        t('{{a }}{>}   {% be kind, rewind %}{>}{{z|upper}}',
+            [
+            Interpolation('a'),
+            Statement(' be kind, rewind '),
+            Interpolation('z', 'upper'),
+            ]
+            )
+
+        l = t('{%hello world!%}', [Statement('hello world!')])
+        self.assertEqual(repr(l[0]), "Statement('hello world!')")
+
+        t('{>}   bcf {% now from the high timberline to the deserts dry %} qqq {>}  zqf',
+            [
+            'bcf ',
+            Statement(' now from the high timberline to the deserts dry '),
+            ' qqq zqf',
+            ]
+            )
+
+        t("force {# x #} multiple strings before {{ expr }}",
+            [
+            'force  multiple strings before ',
+            Interpolation('expr'),
+            ]
+            )
+
+        # quoted delimiters are ignored in statements
+        t(" clear {%close now? '%}' nope, chuck testa %} ",
+            [
+            ' clear ',
+            Statement("close now? '%}' nope, chuck testa "),
+            ' ',
+            ]
+            )
+
+        # comment
+        t("I wish I was a lit{# HARK HARK #}tle bit taller, I wish I was a bal{# FOO BAR #}{>}  ler",
+            [
+            "I wish I was a little bit taller, I wish I was a baller",
+            ]
+            )
+
+        # not a delimiter!
+        t("I guess I {x can't {[ complain",
+            [
+            "I guess I {x can't {[ complain",
+            ]
+            )
+
+        # unterminated stuff
+
+        # ending with { is fine
+        t("Closing curly {", ["Closing curly {"])
+
+        with self.assertRaises(SyntaxError):
+            t("Unterminated comment {# argle bargle", None)
+
 
 
 def run_tests():

@@ -47,7 +47,7 @@ class Statement:
         self.statement = statement
 
     def __repr__(self):
-        return f'Statement(statement={self.statement!r})'
+        return f'Statement({self.statement!r})'
 
     def __eq__(self, other):
         return (
@@ -56,7 +56,7 @@ class Statement:
             )
 
 
-def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_eater, quotes, multiline_quotes, escape):
+def parse_template_string(s, parse_expressions, parse_comments, parse_statements, parse_whitespace_eater, quotes, multiline_quotes, escape):
     "internal iterator for public big.parse_template_string"
     if not s:
         yield s
@@ -82,12 +82,9 @@ def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_
     statement_append = statement.append
     statement_clear = statement.clear
 
-    # CHANGE API TO MORE CONVENIENT?
-    #     ALLOW NOT HANDLING EXPRESSIONS?
-    # COVERAGE
-
     while s:
         before, delimiter, after = s.partition('{')
+        # print(f">> {before=} {delimiter=} {after=} {text=}")
         if before:
             text_append(before)
 
@@ -105,7 +102,7 @@ def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_
             # comment
             comment, delimiter, s2 = after.partition('#}')
             if not delimiter:
-                break
+                raise SyntaxError(f"{delimiter.where}: unterminated comment")
             s = s2
             continue
 
@@ -114,7 +111,7 @@ def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_
             continue
 
         is_statement = parse_statements and (after0 == '%')
-        is_expression = (after0 == '{')
+        is_expression = parse_expressions and (after0 == '{')
 
         if not (is_statement or is_expression):
             if delimiter:
@@ -135,16 +132,19 @@ def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_
         if is_statement:
             if after:
                 for opening_quote, t, closing_quote in split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape):
+                    # print(f">> {opening_quote=} {t=} {closing_quote=}")
                     if opening_quote:
                         statement_append(opening_quote)
-                        statement_append(t)
+                        if t:
+                            statement_append(t)
                         statement_append(closing_quote)
                         continue
 
+                    # opening_quote is false, ergo so is closing quote, we only care about t
                     before, delimiter, after = t.partition('%}')
+                    if before:
+                        statement_append(before)
                     if delimiter:
-                        if before:
-                            statement_append(before)
                         break
             s = after
             st = empty_join(statement)
@@ -152,8 +152,8 @@ def parse_template_string(s, parse_comments, parse_statements, parse_whitespace_
             yield Statement(st)
             continue
 
-        # it's {{, an expression
-
+        # it's an expression
+        assert is_expression
         stack = []
         # Top Of Stack
         tos = previous_was_rcurly = None
@@ -224,7 +224,8 @@ _parse_template_string = parse_template_string
 
 @export
 def parse_template_string(s, *,
-    parse_comments=True,
+    parse_expressions=True,
+    parse_comments=False,
     parse_statements=False,
     parse_whitespace_eater=False,
     quotes=('"', "'"),
@@ -252,17 +253,14 @@ def parse_template_string(s, *,
     if not isinstance(s, string):
         s = string(s)
 
-    return _parse_template_string(s, parse_comments, parse_statements, parse_whitespace_eater, quotes, multiline_quotes, escape)
+    return _parse_template_string(s, parse_expressions, parse_comments, parse_statements, parse_whitespace_eater, quotes, multiline_quotes, escape)
 
 
 @export
 def eval_template_string(s, globals, locals=None, *,
-    parse_comments=True,
-    parse_statements=False,
+    parse_expressions=True,
+    parse_comments=False,
     parse_whitespace_eater=False,
-    quotes=('"', "'"),
-    multiline_quotes=(),
-    escape='\\',
     ):
     """
     Reformats a string, replacing {{}}-delimited expressions with their values.
@@ -283,12 +281,10 @@ def eval_template_string(s, globals, locals=None, *,
     append = result.append
 
     for o in parse_template_string(s,
+        parse_expressions=parse_expressions,
         parse_comments=parse_comments,
-        parse_statements=parse_statements,
+        parse_statements=False,
         parse_whitespace_eater=parse_whitespace_eater,
-        quotes=quotes,
-        multiline_quotes=multiline_quotes,
-        escape=escape,
         ):
         if isinstance(o, str):
             append(o)
