@@ -194,6 +194,15 @@ class BigTestTemplate(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             t("Unterminated comment {# argle bargle", None)
 
+        with self.assertRaises(SyntaxError):
+            t("Unterminated expansion {{ jibber_jabber ", None)
+
+        with self.assertRaises(SyntaxError):
+            t("Unterminated expansion with filter {{ fiddle | faddle ", None)
+
+        with self.assertRaises(SyntaxError):
+            t("Unterminated statement {% bishi bashi ", None)
+
 
 
 def run_tests():

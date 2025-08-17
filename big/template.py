@@ -3,6 +3,10 @@ from .types import string
 from .text import split_quoted_strings
 import token
 
+# TODO
+# test all unclosed open delimiters
+# close delimiter inside a quoted string?
+# if no quotes defined, don't use split quoted strings
 
 __all__ = []
 
@@ -130,6 +134,7 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
             text_clear()
 
         if is_statement:
+            where = delimiter
             if after:
                 for opening_quote, t, closing_quote in split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape):
                     # print(f">> {opening_quote=} {t=} {closing_quote=}")
@@ -146,6 +151,8 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                         statement_append(before)
                     if delimiter:
                         break
+                else:
+                    raise SyntaxError(f'unterminated statement at {where.where}')
             s = after
             st = empty_join(statement)
             statement_clear()
