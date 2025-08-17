@@ -86,6 +86,8 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
     statement_append = statement.append
     statement_clear = statement.clear
 
+    split_statement = bool(quotes) or bool(multiline_quotes)
+
     while s:
         before, delimiter, after = s.partition('{')
         # print(f">> {before=} {delimiter=} {after=} {text=}")
@@ -136,7 +138,11 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
         if is_statement:
             where = delimiter
             if after:
-                for opening_quote, t, closing_quote in split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape):
+                if split_statement:
+                    iterator = split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
+                else:
+                    iterator = (('', after, ''),)
+                for opening_quote, t, closing_quote in iterator:
                     # print(f">> {opening_quote=} {t=} {closing_quote=}")
                     if opening_quote:
                         statement_append(opening_quote)

@@ -126,13 +126,14 @@ class BigTestTemplate(unittest.TestCase):
 
     def test_parse_template_everything(self):
 
-        def t(s, expected):
+        def t(s, expected, *, quotes=('"', "'")):
 
             got = list(parse_template_string(s,
                 parse_expressions=True,
                 parse_comments=True,
                 parse_statements=True,
                 parse_whitespace_eater=True,
+                quotes=quotes,
                 ))
             self.assertEqual(expected, got)
             return got
@@ -172,6 +173,24 @@ class BigTestTemplate(unittest.TestCase):
             ]
             )
 
+        # don't process quotes in statements
+        t("I {%was%} out of options",
+            [
+            'I ',
+            Statement("was"),
+            ' out of options',
+            ],
+            quotes=(),
+            )
+        t("Hard {%Rock'%}' cafe",
+            [
+            'Hard ',
+            Statement("Rock'"),
+            "' cafe",
+            ],
+            quotes=(),
+            )
+
         # comment
         t("I wish I was a lit{# HARK HARK #}tle bit taller, I wish I was a bal{# FOO BAR #}{>}  ler",
             [
@@ -202,6 +221,9 @@ class BigTestTemplate(unittest.TestCase):
 
         with self.assertRaises(SyntaxError):
             t("Unterminated statement {% bishi bashi ", None)
+
+        with self.assertRaises(SyntaxError):
+            t("Unterminated statement {% splish splash ", None, quotes=())
 
 
 
