@@ -355,11 +355,14 @@ try:
     import test
     from test import test_graphlib
     # the API has changed and they are now invalid.
+    t = test.test_graphlib.TestTopologicalSort
     for fn_name in """
         test_calls_before_prepare
         test_prepare_multiple_times
+        test_prepare_after_pass_out
         """.strip().split():
-        delattr(test.test_graphlib.TestTopologicalSort, fn_name)
+        if hasattr(t, fn_name):
+            delattr(t, fn_name)
     have_test_graphlib = True
 except ImportError: # pragma: no cover
     have_test_graphlib = False
