@@ -19,7 +19,7 @@ class PushbackIterator:
 
     It's supported to push values that were never yielded by the wrapped
     iterator.  If you create x = PushbackIterator(range(1, 20)), you may
-    call x.push(33) or x.push('xyz') or x.push(None) or anything else.
+    call x.push(33), or x.push('xyz'), or x.push(None), etc.
     """
 
     __slots__ = ('i', 'stack')
@@ -242,16 +242,16 @@ def iterator_filter(iterator,
     ten keyword-only parameters which constitute tests for the values
     called "rules".  The rules are formed from three prefixes: "stop_at",
     "reject", and "only", and three suffixes, "_value", "_in", and
-    "_predicate". So for example, iterator_filter accepts arguments
+    "_predicate".  For example, iterator_filter accepts arguments
     with names like "stop_at_value", "reject_in", and "only_predicate".
 
     iterator_filter is itself an iterator.  It yields values from the
-    iterator you pass in, but only values that pass all the rules you
-    supplied when you called it.
+    iterator you pass in, but only if they pass all the rules you
+    supplied.
 
     To "pass" a rule means "the test using this rule returned
-    a true value".  There are three varieties of tests, specified
-    with the end of the rule's name.
+    a true value".  There are three varieties of tests, differentiated
+    with the suffix at the end of the rule's name.
 
         A rule that ends in "_value" means "pass if the value == this argument".
         For example, stop_at_value=5 would mean "if the inner iterator
@@ -267,22 +267,22 @@ def iterator_filter(iterator,
         be callable.  For example, "only_predicate=lambda o: isinstance(o, str)"
         would only accept values that were instances of str.
 
-    There are three categories of rule actions, specified by the start
-    of the rule's name.  They're examined in this order:
+    There are three categories of rule actions, differentiated by the
+    prefix of the rule's name.  They're examined in this order:
     "stop_at", "reject", "only".
 
         "stop_at" rules cause iterator_filter to become exhausted.
         If a value yielded by iterator passes a "stop_at" rule,
         the iterator immediately goes into its "exhausted" state.
-        (It doesn't yield the value that caused it to stop.)
+        (It doesn't yield the value that caused it to become exhausted.)
 
         "reject" rules cause iterator_filter to reject values--a
         "blacklist" for values.  If a value passes any "reject" rule,
         it's discarded and the iterator continues to the next value.
 
         "only" rules are required for iterator_filter to accept a
-        value--a "whitelist" for values.  A value must pass all
-        "only" rules, otherwise it's rejected.
+        value--a "whitelist" for values.  If a value doesn't pass all
+        "only" rules, it's rejected.
 
     There's one additional rule not described in the above:
     "stop_at_count", an number.  This exhausts the iterator after

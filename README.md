@@ -1346,6 +1346,11 @@ at which point the `PushBackIterator` can be iterated over again.
 In addition to the following methods, `PushbackIterator` supports
 the iterator protocol and testing for truth.  A `PushbackIterator`
 is true if iterating over it will yield at least one value.
+
+
+It's supported to push values that were never yielded by the wrapped
+iterator.  If you create `x = PushbackIterator(range(1, 20))`, you may
+call `x.push(33)`, or `x.push('xyz')`, or `x.push(None)`, etc.
 </dd></dl>
 
 #### `PushbackIterator.next(default=None)`
