@@ -265,6 +265,21 @@ class TidyItertoolsTests(unittest.TestCase):
         got = list(it)
         self.assertEqual(got, [])
 
+        # regression:
+        #       iterator_filter(i, stop_at_count=0)
+        #   should *not* iterate over i!
+        #   it should start out in an "exhausted" state and never touch i.
+        def fail_immediately(): # pragma: nocover
+            raise RuntimeError('you should not call next on me!')
+            yield 1
+
+        for stop_value in range(-20, 1):
+            with self.subTest(stop_value=stop_value):
+                for i in f8r(fail_immediately(), stop_at_count=stop_value): # pragma: nocover
+                    raise RuntimeError(f"we shouldn't have entered the body of this for loop! i={i!r}")
+
+
+
 
 # --8<-- end tidy itertools tests --8<--
 
