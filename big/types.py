@@ -83,141 +83,26 @@ _re_linebreaks = "|".join(sorted(linebreaks, key=lambda s: -len(s)))
 _re_linebreaks_finditer = re.compile(_re_linebreaks).finditer
 del _re_linebreaks
 
+_linebreaks_and_tab_set = set(linebreaks) | set('\t')
 
-@export
-class string(str):
-    """
-    A subclass of str that maintains line, column, and offset information.
 
-    string is a drop-in replacement for Python's str that automatically
-    computes the line, column, and offset of any substring.  It's a subclass
-    of str, and implements every str method.
+class Origin:
+    # an Origin is an original Python string with some extra metadata.
+    __slots__ = ('s', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', 
+)
 
-    Additional features of string:
-    * Every string knows its line number, column number, and offset from the
-      beginning of the original string.
-    * You may also specify a "source" parameter to the constructor,
-      which should indicate where the text came from (e.g. the filename).
+    def __init__(self, s, source, *, line_number=1, column_number=1, first_column_number=1, tab_width=8):
+        self.s = s
+        self.source = source
+        self.line_number = line_number
+        self.column_number = column_number
+        self.first_column_number = first_column_number
+        self.tab_width = tab_width
+        self.linebreak_offsets = None
 
-    Additional attributes of string:
-    * s.line_number is the line number of the first character of this string.
-    * s.column_number is the column number of the first character of this string.
-    * s.offset is the index of the first character of this string from where it
-      came from in the original string.  (e.g. if the original string was 'abcde',
-      'e' would have an offset of 4.)
-    * s.where is a string designed for error messages.  if the original string
-      was initialized with a source, this will be in the format
-          "<source>" line <line_number> column <column_number>
-      If no source was supplied, this will be in the format
-          line <line_number> column <column_number>
-      This makes writing error messages easy.  If err contains a syntax error,
-      you can raise
-          SyntaxError(f"{err.where}: {err}")
-    """
 
-    __slots__ = ('_source', '_origin', '_offset', '_line_number', '_column_number', '_first_line_number', '_first_column_number', '_tab_width', '_linebreak_offsets', '_line')
-
-    def __new__(cls, s, *, source=None, origin=None, offset=0, line_number=1, column_number=1, first_line_number=1, first_column_number=1, tab_width=8):
-        if isinstance(s, string):
-            return s
-        if not isinstance(s, str):
-            raise TypeError("string: s must be a str or string object")
-
-        if not ((origin is None) or isinstance(origin, string)):
-            raise TypeError(f"string: origin must be string or None, not {type(origin)}")
-
-        if isinstance(source, str):
-            if isinstance(source, string):
-                source = str(source)
-        elif source == None:
-            if origin is not None:
-                source = origin.source
-        else:
-            raise TypeError(f"string: source must be str or None, not {type(source)}")
-
-        ex = None
-
-        if not isinstance(offset, int):
-            ex = TypeError
-        elif offset < 0:
-            ex = ValueError
-        if ex:
-            raise ex(f"string: offset must be an int >= 0, not {offset}")
-
-        if not isinstance(first_line_number, int):
-            ex = TypeError
-        elif first_line_number < 0:
-            ex = ValueError
-        if ex:
-            raise ex("string: first_line_number must be an int >= 0")
-
-        if not isinstance(first_column_number, int):
-            ex = TypeError
-        elif first_column_number < 0:
-            ex = ValueError
-        if ex:
-            raise ex("string: first_column_number must be an int >= 0")
-
-        # secret API: if you pass in None for line_number and column_number,
-        # it's lazy-calculated
-        if not (line_number == column_number == None):
-            if not isinstance(line_number, int):
-                ex = TypeError
-            elif line_number < 0:
-                ex = ValueError
-            if ex:
-                raise ex("string: line_number must be an int >= 0")
-
-            if not isinstance(column_number, int):
-                ex = TypeError
-            elif column_number < 0:
-                ex = ValueError
-            if ex:
-                raise ex(f"string: column_number must be an int >= 0, not {column_number}")
-
-            if line_number < first_line_number:
-                raise ValueError("string: line_number can't be less than first_line_number")
-
-            if column_number < first_column_number:
-                raise ValueError("string: column_number can't be less than first_column_number")
-
-        if not isinstance(tab_width, int):
-            ex = TypeError
-        elif tab_width < 1:
-            ex = ValueError
-        if ex:
-            raise ex("string: tab_width must be an int >= 1")
-
-        self = super().__new__(cls, s)
-        self._source = source
-        if origin is None:
-            self._origin = self
-        else:
-            self._origin = origin
-        self._offset = offset
-        self._line_number = line_number
-        self._column_number = column_number
-        self._first_line_number = first_line_number
-        self._first_column_number = first_column_number
-        self._tab_width = tab_width
-        self._linebreak_offsets = self._line = None
-
-        return self
-
-    # OK?
-    # comparisons behave like str for the purposes of comparison
-    # if l is a string, l == str(l), l < str(l) + 'x', l + 'x' > str(l), etc
-
-    @property
-    def source(self):
-        return self._source
-
-    @property
-    def origin(self):
-        return self._origin
-
-    def _compute_linebreak_offsets(self):
-        #     self._linebreak_offsets[line_number_offset]
+    def compute_linebreak_offsets(self):
+        #     self.linebreak_offsets[line_number_offset]
         # is the offset of the first character of the line after
         #     self.line_number + line_number_offset
         #
@@ -227,34 +112,36 @@ class string(str):
         # assuming first_line_number is 1:
         # line 1 always starts at offset 0, we don't write it down
         # line 2 starts at self._linebreak_offsets[0]
-        self._linebreak_offsets = offsets = tuple(match.end() for match in _re_linebreaks_finditer(str(self)))
+        x = self.s
+        self.linebreak_offsets = linebreak_offsets = tuple(match.end() for match in _re_linebreaks_finditer(self.s))
         if 0:
             print()
             print(repr(str(self)))
             print(list(_re_linebreaks_finditer(str(self))))
-            print(offsets)
+            print(linebreak_offsets)
             print()
-        return offsets
+        return linebreak_offsets
 
-    def _calculate_line_and_column_numbers(self):
-        assert self._line_number == self._column_number == None
-        origin = self._origin
-
-        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
-
-        linebreak_index = bisect_right(linebreak_offsets, self._offset)
-        self._line_number = self._first_line_number + linebreak_index
-
+    def compute_line_and_column(self, offset):
+        linebreak_offsets = self.linebreak_offsets
+        if linebreak_offsets is None:
+            linebreak_offsets = self.compute_linebreak_offsets()
+        linebreak_index = bisect_right(linebreak_offsets, offset)
+        line_number = self.line_number + linebreak_index
         # either 0 or the offset of the previous line
         line_start_offset = linebreak_index and linebreak_offsets[linebreak_index - 1]
 
-        column_number = first_column_number = self._first_column_number
-        tab_width = self._tab_width
+        s = self.s
+        first_column_number = self.first_column_number
+        if not linebreak_index:
+            column_number = self.column_number
+        else:
+            column_number = first_column_number
+        tab_width = self.tab_width
 
-        s = str(origin)
-
-        for offset in range(line_start_offset, self._offset):
-            c = s[offset]
+        for o in range(line_start_offset, offset):
+            c = s[o]
+            # print(f"{line_start_offset=} {offset=} {s=} {o=} {c=}")
             # assert c not in linebreaks
 
             if c != '\t':
@@ -267,322 +154,286 @@ class string(str):
             remainder = (column_number - first_column_number) % tab_width
             distance_to_next_tab_stop = tab_width - remainder
             column_number += distance_to_next_tab_stop
-        self._column_number = column_number
+        return line_number, column_number
 
-    @property
-    def line_number(self):
-        if self._line_number is None:
-            self._calculate_line_and_column_numbers()
-        return self._line_number
+    def __len__(self):
+        return self.s.__len__()
 
-    @property
-    def column_number(self):
-        if self._column_number is None:
-            self._calculate_line_and_column_numbers()
-        return self._column_number
+    def __repr__(self):
+        return f"<Origin s={self.s!r} source={self.source}>"
 
-    @property
-    def offset(self):
-        return self._offset
 
-    @property
-    def first_line_number(self):
-        return self._first_line_number
+class Range:
+    # a Range is a reference to a range of characters in an Origin.
+    __slots__ = ('origin', 'start', 'stop')
 
-    @property
-    def first_column_number(self):
-        return self._first_column_number
+    def __init__(self, origin, start, stop):
+        assert start <= stop
+        self.origin = origin
+        self.start = start
+        self.stop = stop
 
-    @property
-    def tab_width(self):
-        return self._tab_width
+    def __len__(self):
+        return self.stop - self.start
+
+    def __repr__(self):
+        return f"<Range origin={self.origin!r} start={self.start} stop={self.stop}>"
+
+
+@export
+class string(str):
+    # string is a subclass of str whose value is a sequence of Range objects.
+    # these Range objects don't necessarily point to the same Origin object(s).
+    __slots__ = ('_ranges', '_len', '_line_number', '_column_number', '_line')
+
+    def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
+        if isinstance(s, string):
+            return s
+
+        if not isinstance(s, str):
+            raise TypeError(f"unhandled type {type(s).__name__} for initializer s")
+
+        origin = Origin(s, source, line_number=line_number, column_number=column_number, first_column_number=first_column_number, tab_width=tab_width)
+        ranges = [Range(origin, 0, len(s))]
+
+        self = super().__new__(cls, s)
+        self._ranges = ranges
+        self._len = len(s)
+        self._line_number = self._column_number = self._line = None
+        return self
+
+    def __repr__(self):
+        return f"<string {str(self)!r} _ranges={self._ranges} _len={self._len}, _line_number={self._line_number}, _column_number={self._column_number}>"
+
+    def _compute_line_and_column(self):
+        r = self._ranges[0]
+        self._line_number, self._column_number = r.origin.compute_line_and_column(r.start)
 
     @property
     def where(self):
         if self._line_number is None:
-            self._calculate_line_and_column_numbers()
-        if self._source:
-            return f'"{self._source}" line {self._line_number} column {self._column_number}'
+            self._compute_line_and_column()
+        source = self.source
+        if source:
+            return f'{self.source} line {self._line_number} column {self._column_number}'
         return f'line {self._line_number} column {self._column_number}'
 
+    @property
+    def line_number(self):
+        if self._line_number is None:
+            self._compute_line_and_column()
+        return self._line_number
 
-    def is_followed_by(self, other):
-        if not isinstance(other, string):
-            return False
+    @property
+    def column_number(self):
+        if self._line_number is None:
+            self._compute_line_and_column()
+        return self._column_number
 
-        if self.origin != other.origin:
-            return False
+    @property
+    def offset(self):
+        return self._ranges[0].start
 
-        return self._offset + len(self) == other._offset
+    @property
+    def origin(self):
+        return self._ranges[0].origin.s
+
+    @property
+    def source(self):
+        return self._ranges[0].origin.source
+
+    @property
+    def first_column_number(self):
+        return self._ranges[0].origin.first_column_number
+
+    @property
+    def tab_width(self):
+        return self._ranges[0].origin.tab_width
+
+    @property
+    def where(self):
+        if self._line_number is None:
+            self._compute_line_and_column()
+        source = self._ranges[0].origin.source
+        if source:
+            prefix = f'{source} '
+        else:
+            prefix = ''
+        return f'{prefix}line {self._line_number} column {self._column_number}'
+
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            start = index.start
+            stop = index.stop
+            step = index.step
+
+            length = self._len
+
+            # slice clamps >:(
+            if start is None:
+                start = 0
+            else:
+                if start < 0:
+                    start += length
+                    if start < 0:
+                        start = 0
+                elif start > length:
+                    start = length
+
+            if stop is None:
+                stop = length
+            else:
+                if stop < 0:
+                    stop += length
+                    if stop < 0:
+                        stop = 0
+                elif stop > length:
+                    stop = length
+
+            if stop < start:
+                stop = start
+
+            if step is None:
+                step = 1
+            else:
+                assert step > 0
+
+            if step == 1:
+                start_stops = ((start, stop),)
+                length = stop - start
+            else:
+                start_stops = tuple((x, x+1) for x in list(range(start, stop, step)))
+                length = len(start_stops)
+
+        else:
+            if index < 0:
+                index += self._len
+                if index < 0:
+                    raise IndexError("string index out of range")
+            if index >= self._len:
+                raise IndexError("string index out of range")
+            start_stops = ((index, index+1),)
+            length = 1
+
+        # print()
+        # print(f">> {start_stops=}")
+        ranges = []
+        strings = []
+        for start, stop in start_stops:
+            # print(f"{start=} {stop=}")
+            for r in self._ranges:
+                r_length = r.stop - r.start
+                if (start > r_length) or (stop > r_length):
+                    start -= r_length
+                    stop -= r_length
+                    continue
+
+                    # print(f">> {start=} {stop=}")
+                    # print(f">> r length {r_length} {r}")
+
+                last_one = length <= r_length
+                if last_one:
+                    stop_at = stop + r.start
+                else:
+                    stop_at = r.stop
+
+                new_range = Range(r.origin, start + r.start, stop_at)
+                ranges.append(new_range)
+                strings.append(r.origin.s[start + r.start:stop_at])
+
+                if last_one:
+                    break
+                start = 0
+                stop -= r_length
+                length -= r_length
+
+        # print(f">> {len(ranges)=} {ranges=}")
+
+        new = super().__new__(self.__class__, ''.join(strings))
+        new._ranges = ranges
+        new._len = length
+        new._line_number = new._column_number = new._line = None
+        return new
+
+    def __iter__(self):
+        new_call = super().__new__
+        cls = self.__class__
+        for r in self._ranges:
+            compute_line_and_column_counter = 1
+            for start in range(r.start, r.stop):
+                c = r.origin.s[start]
+
+                new = new_call(cls, c)
+                new._ranges = [Range(r.origin, start, start+1)]
+                new._len = 1
+                new._line = None
+
+                # origin.compute_line_and_column is slow,
+                # only call it for tricky characters
+                if (c == '\t') or (c in _linebreaks_and_tab_set):
+                    compute_line_and_column_counter = 2
+
+                if compute_line_and_column_counter:
+                    compute_line_and_column_counter -= 1
+                    new._line_number = new._column_number = None
+                    line_number = new.line_number
+                    column_number = new.column_number
+                else:
+                    new._line_number = line_number
+                    new._column_number = column_number
+                column_number += 1
+                yield new
 
     def __add__(self, other):
-        if not isinstance(other, str):
-            raise TypeError(f'can only concatenate str (not "{type(other)}") to string')
-        if not other:
-            return self
+        if isinstance(other, string):
+            pass
+        elif isinstance(other, str):
+            other = string(other)
+        else:
+            raise TypeError(f'can only concatenate str or string (not "{type(other)}") to string')
 
+        ranges = list(self._ranges)
+
+        # if we're contiguous, simply extend the range
+        self_last = self._ranges[-1]
+        other_first = other._ranges[0]
+        if (self_last.origin == other_first.origin) and (self_last.stop == other_first.start):
+            contiguous = Range(self_last.origin, self_last.start, other_first.stop)
+            ranges[-1] = contiguous
+            if len(other._ranges) > 1:
+                ranges.extend(other._ranges[1:])
+        else:
+            ranges.extend(other._ranges)
         s = str(self) + str(other)
 
-        if self.is_followed_by(other):
-            origin = self.origin
-            offset = self._offset
-        else:
-            origin = None
-            offset = 0
+        new = super().__new__(self.__class__, s)
+        new._ranges = ranges
+        new._len = self._len + other._len
+        new._line_number = new._column_number = new._line = None
 
-        result = self.__class__(s,
-            source = self._source,
-            origin = origin,
-            offset = offset,
-            line_number = self._line_number,
-            column_number = self._column_number,
-            first_line_number = self._first_line_number,
-            first_column_number = self._first_column_number,
-            tab_width = self._tab_width,
-            )
-        if origin is None:
-            result._origin = result
-        return result
+        return new
 
     def __radd__(self, other):
         if not isinstance(other, str):
-            raise TypeError(f'unsupported operand type(s) for +: "{type(other)}" and string')
+            return NotImplemented
+            # raise TypeError(f'unsupported operand type(s) for +: "{type(other)}" and string')
         if not other:
             return self
 
         # if other were a string, then we'd be in other.__add__, not self.__radd__
         assert not isinstance(other, string)
 
-        s = other + str(self)
+        left = string(other)
+        return left + self
 
-        left_lines = other.splitlines()
 
-        # if we're prepending with a string that contains a tab on the same line,
-        # we literally don't know what the resulting starting column should be.
-        # with a tab_width of 8, it could be one of eight values.
-        # and, faced with ambiguity, we decline to guess.
-        # so we just return a str, not a string.
-        if '\t' in left_lines[-1]:
-            return s
+    ##########################################################################################
+    ##########################################################################################
+    ##########################################################################################
+    ##########################################################################################
+    ##########################################################################################
 
-        if self._line_number is None:
-            self._calculate_line_and_column_numbers()
-
-        if len(left_lines) > 1:
-            last_segment = left_lines[-1]
-            if (self._column_number - len(last_segment)) != self._first_column_number:
-                return s
-            line_number = self._line_number - (len(left_lines) - 1)
-            if line_number < self._first_line_number:
-                return s
-            column_number = self._first_column_number
-        else:
-            line_number = self._line_number
-            column_number = self._column_number - len(other)
-            if column_number < self._first_column_number:
-                return s
-
-        result = self.__class__(s,
-            source = self._source,
-            origin = None,
-            offset = 0,
-            line_number = line_number,
-            column_number = column_number,
-            first_line_number = self._first_line_number,
-            first_column_number = self._first_column_number,
-            tab_width = self._tab_width,
-            )
-        result._origin = result
-        return result
-
-    def __getitem__(self, index):
-        s = str(self)
-        length = len(s)
-
-        # if index is illegal, this will raise for us
-        result = s[index]
-        # if we reached here, index must be a legal value!
-
-        result_length = len(result)
-
-        if isinstance(index, slice):
-            if (result_length > 1) and (index.step not in (1, None)):
-                # this slice of the original can't be a viable string
-                return result
-            index = index.start or 0
-
-            # slicing *clamps* to an acceptable range!
-            if index < 0:
-                index += length
-                if index < 0:
-                    index = 0
-            elif index > length:
-                index -= length
-                if index > length:
-                    index = length
-        else:
-            # indexing *raises an exception* if the index is out of range.
-            if index < 0:
-                index += length
-
-        o = self.__class__(result,
-            offset=self._offset + index,
-            origin=self.origin,
-            source=self._source,
-            line_number=None,
-            column_number=None,
-            first_line_number=self._first_line_number,
-            first_column_number=self._first_column_number,
-            tab_width=self._tab_width,
-            )
-        return o
-
-    # this is all we need to implement to support pickle!
-    def __getnewargs_ex__(self):
-        if self._origin == self:
-            origin = None
-        else:
-            origin = self._origin
-        return (
-            (str(self),),
-            {
-                'source': self._source,
-                'origin': origin,
-                'offset': self._offset,
-                'line_number': self._line_number,
-                'column_number': self._column_number,
-                'first_line_number': self._first_line_number,
-                'first_column_number': self._first_column_number,
-                'tab_width': self._tab_width,
-            },
-            )
-
-    def __iter__(self):
-        "also computes linebreak offsets if they haven't been cached yet"
-        if self._line_number is None:
-            self._calculate_line_and_column_numbers()
-
-        klass = self.__class__
-        origin = self._origin
-        source = self._source
-        line_number = self._line_number
-        column_number = self._column_number
-        offset = self._offset
-        first_line_number = self._first_line_number
-        first_column_number = self._first_column_number
-        tab_width = self._tab_width
-
-        compute_linebreak_offsets = (self._origin == self) and (self._linebreak_offsets is None)
-        if compute_linebreak_offsets:
-            linebreak_offsets = []
-
-        waiting = None
-        for s in str(self):
-            if waiting:
-                assert waiting == '\r'
-                is_crlf = s == '\n'
-
-                o = klass(waiting,
-                    source=source,
-                    origin=origin,
-                    offset=offset,
-                    line_number=line_number,
-                    column_number=column_number,
-                    first_line_number=first_line_number,
-                    first_column_number=first_column_number,
-                    tab_width=tab_width,
-                    )
-                yield o
-
-                offset += 1
-
-                if is_crlf:
-                    # don't end the line until after s
-                    column_number += 1
-                else:
-                    # end the line after waiting and before s
-                    if compute_linebreak_offsets:
-                        linebreak_offsets.append(offset)
-                    line_number += 1
-                    column_number = first_column_number
-
-                o = klass(s,
-                    source=source,
-                    origin=origin,
-                    offset=offset,
-                    line_number=line_number,
-                    column_number=column_number,
-                    first_line_number=first_line_number,
-                    first_column_number=first_column_number,
-                    tab_width=tab_width,
-                    )
-                yield o
-                offset += 1
-
-                if s in linebreaks:
-                    # new line for s
-                    if compute_linebreak_offsets:
-                        linebreak_offsets.append(offset)
-                    line_number += 1
-                    column_number = first_column_number
-                else:
-                    # advance normally for s
-                    if s != '\t':
-                        column_number += 1
-                    else:
-                        remainder = (column_number - first_column_number) % tab_width
-                        distance_to_next_tab_stop = tab_width - remainder
-                        column_number += distance_to_next_tab_stop
-
-                waiting = None
-            elif s == '\r':
-                waiting = s
-            else:
-                o = klass(s,
-                    source=source,
-                    origin=origin,
-                    offset=offset,
-                    line_number=line_number,
-                    column_number=column_number,
-                    first_line_number=first_line_number,
-                    first_column_number=first_column_number,
-                    tab_width=tab_width,
-                    )
-                yield o
-                offset += 1
-
-                if s in linebreaks:
-                    # new line for s
-                    if compute_linebreak_offsets:
-                        linebreak_offsets.append(offset)
-                    line_number += 1
-                    column_number = first_column_number
-                else:
-                    if s != '\t':
-                        column_number += 1
-                    else:
-                        remainder = (column_number - first_column_number) % tab_width
-                        distance_to_next_tab_stop = tab_width - remainder
-                        column_number += distance_to_next_tab_stop
-
-        if compute_linebreak_offsets:
-            if waiting:
-                # last character is a linebreak, add that offset
-                linebreak_offsets.append(offset + 1)
-            self._linebreak_offsets = tuple(linebreak_offsets)
-
-        if waiting:
-            o = klass(s,
-                source=source,
-                origin=origin,
-                offset=offset,
-                line_number=line_number,
-                column_number=column_number,
-                first_line_number=first_line_number,
-                first_column_number=first_column_number,
-                tab_width=tab_width,
-                )
-            yield o
 
 
 
@@ -612,11 +463,20 @@ class string(str):
         return mutated
 
     def ljust(self, width, fillchar=' '):
-        s = str(self)
-        mutated = s.ljust(width, fillchar)
-        if s == mutated:
+        if not isinstance(fillchar, str):
+            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
+        if len(fillchar) != 1:
+            # why is it TypeError?  blame str.
+            raise TypeError("The fill character must be exactly one character long")
+
+        length = len(self)
+        if length >= width:
             return self
-        return mutated
+
+        needed = width - length
+        spacer = fillchar * needed
+
+        return self + spacer
 
     def lower(self):
         s = str(self)
@@ -633,11 +493,20 @@ class string(str):
         return mutated
 
     def rjust(self, width, fillchar=' '):
-        s = str(self)
-        mutated = s.rjust(width, fillchar)
-        if s == mutated:
+        if not isinstance(fillchar, str):
+            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
+        if len(fillchar) != 1:
+            # why is it TypeError?  blame str.
+            raise TypeError("The fill character must be exactly one character long")
+
+        length = len(self)
+        if length >= width:
             return self
-        return mutated
+
+        needed = width - length
+        spacer = fillchar * needed
+
+        return spacer + self
 
     def title(self):
         s = str(self)
@@ -868,7 +737,7 @@ class string(str):
             return string.cat(*iterable)
         return str(self).join(iterable)
 
-    def serialized(self):
+    def x_serialized(self):
         """
         Returns a string that, if executed in Python, recreates this string object.
 
@@ -926,9 +795,12 @@ class string(str):
     ##
 
     def _calculate_line(self, line_number):
-        origin = self._origin
-        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
-        line_offset = line_number - self._first_line_number
+        r = self._ranges[0]
+        origin = r.origin
+        linebreak_offsets = origin.linebreak_offsets
+        if linebreak_offsets is None:
+            linebreak_offsets = origin.compute_linebreak_offsets()
+        line_offset = line_number - origin.line_number
         # print("\nLINE", line_number, linebreak_offsets)
         if not line_offset:
             starting_offset = 0
@@ -940,124 +812,60 @@ class string(str):
             ending_offset = linebreak_offsets[line_offset]
         # print(f"{self=} {len(self)=}")
         # print(f"{line_offset=} {starting_offset=} {ending_offset=}")
-        return origin[starting_offset:ending_offset]
+        return origin.s[starting_offset:ending_offset]
 
     @property
     def line(self):
-        if self._line is None:
-            if self._line_number is None:
-                self._calculate_line_and_column_numbers()
-            line = self._calculate_line(self._line_number)
-            if self:
-                last_character = self[-1]
-                if last_character._line_number is None:
-                    last_character._calculate_line_and_column_numbers()
-            else:
-                last_character = self
-            if last_character._line_number != self._line_number:
-                ending_line = self._calculate_line(last_character._line_number)
-                origin = self._origin
-                line = origin[line._offset:ending_line._offset + len(ending_line)]
-            self._line = line
-        return self._line
+        if len(self._ranges) > 1:
+            raise ValueError("string is not simply a slice of a larger string")
+        l = self._line
+        if l is not None:
+            return l
+        return self._calculate_line(self.line_number)
 
     @property
     def previous_line(self):
-        if self._line_number is None:
-            self._calculate_line_and_column_numbers()
-        if self._line_number == self._first_line_number:
+        if len(self._ranges) > 1:
+            raise ValueError("string is not simply a slice of a larger string")
+        line_number = self.line_number
+        r = self._ranges[0]
+        origin = r.origin
+        if line_number == origin.line_number:
             raise ValueError("self is already the first line")
-        return self._calculate_line(self._line_number - 1)
+        return self._calculate_line(line_number - 1)
 
     @property
     def next_line(self):
-        if self._line is None:
-            line = self.line
-        else:
-            line = self._line
-        last_character = line[-1]
-        origin = self._origin
-        linebreak_offsets = origin._linebreak_offsets or origin._compute_linebreak_offsets()
-        if last_character._line_number is None:
-            last_character._calculate_line_and_column_numbers()
-        last_character_line_number = last_character._line_number
-        if (last_character_line_number - self._first_line_number) >= len(linebreak_offsets):
+        if len(self._ranges) > 1:
+            raise ValueError("string is not simply a slice of a larger string")
+        line_number = self.line_number
+        r = self._ranges[0]
+        origin = r.origin
+        linebreak_offsets = origin.linebreak_offsets
+        if linebreak_offsets is None:
+            linebreak_offsets = origin.compute_linebreak_offsets()
+        if (line_number - origin.line_number) >= len(linebreak_offsets):
             raise ValueError("self is already the last line")
-        return self._calculate_line(last_character_line_number + 1)
-
+        return self._calculate_line(line_number + 1)
 
     def bisect(self, index):
         return self[:index], self[index:]
 
     @staticmethod
-    def cat(*strings, metadata=None, line_number=None, column_number=None):
+    def cat(*strings):
         if not strings:
-            return ''
-
-        first = strings[0]
-        if metadata is None:
-            if not isinstance(first, string):
-                raise ValueError(f"if the first argument is not a string, you must explicitly specify metadata")
-            # if they only specify one string to concatenate,
-            # and don't specify metadata,
-            # all we're gonna return is the first string, unmodified.
-            if len(strings) == 1:
-                return first
-            metadata = first
-        elif not isinstance(metadata, string):
-            raise TypeError("metadata must be either string or None")
-        elif metadata._line_number is None:
-            metadata._calculate_line_and_column_numbers()
-
-        origin = None
-
-        if len(strings) == 1:
-            s = first
-            origin = metadata.origin
-        else:
-            s = "".join(strings)
-
-            previous = None
-            for l in strings:
-                if not (isinstance(l, string) and ((previous is None) or previous.is_followed_by(l))):
-                    break
-                previous = l
+            return string()
+        result = None
+        for s in strings:
+            if not isinstance(s, str):
+                raise("arguments to cat must be str or string objects")
+            if result is None:
+                result = s
             else:
-                # contiguous!
-                origin = first.origin
+                result += s
+        return result
 
-        ex = None
-        if line_number == None:
-            line_number = metadata._line_number
-        else:
-            if not isinstance(line_number, int):
-                ex = TypeError
-            elif line_number < metadata._first_line_number:
-                ex = ValueError
-            if ex:
-                raise ex(f"line_number must be an int >= first_line_number ({metadata._first_line_number}), not {line_number}")
 
-        if column_number == None:
-            column_number = metadata._column_number
-        else:
-            if not isinstance(column_number, int):
-                ex = TypeError
-            elif column_number < metadata._first_column_number:
-                ex = ValueError
-            if ex:
-                raise ex(f"column_number must be an int >= first_column_number ({metadata._first_column_number}), not {column_number}")
-
-        o = string(s,
-            source=metadata._source,
-            offset=metadata._offset,
-            origin=origin,
-            line_number=line_number,
-            column_number=column_number,
-            first_line_number=metadata._first_line_number,
-            first_column_number=metadata._first_column_number,
-            tab_width=metadata._tab_width,
-            )
-        return o
 
     def multisplit(self, separators, *,
         keep=False,
@@ -1079,7 +887,6 @@ class string(str):
 
     def compile(self, flags=0):
         return Pattern(self, flags)
-
 
 
 ######################################################
