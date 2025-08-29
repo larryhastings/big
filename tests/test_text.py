@@ -4572,46 +4572,34 @@ class BigTextTests(unittest.TestCase):
         def L(indent, line, line_number, column_number, offset, origin):
             if isinstance(line, str):
             # origin=origin, 
-                return (indent, string(line, source=origin, line_number=line_number, column_number=column_number, offset=offset))
+                return (indent, string(line, source=origin, line_number=line_number, column_number=column_number))
             return (indent, line)
 
-
-        lines = dedent("""
-            left margin
-            if 3:
-                text
-            else:
-                if 1:
-                      other text
-                      other text
-                more text
-                  different indent
-                outdent
-            outdent
-              new indent
-            qoutdent
-            """)
+        #                                                                                                                     11111111111111111111111 111111111111 11111111 1111111111111 111111111 1
+        #                   111 111111 122222222 223333 3333334444 444444555555555566666 666667777777777888888 88889999999999 00000000001111111111222 222222233333 33333444 4444444555555 555566666 6
+        #        0 123456789012 345678 901234567 890123 4567890123 456789012345678901234 567890123456789012345 67890123456789 01234567890123456789012 345678901234 56789012 3456789012345 678901234 5
+        lines = "\nleft margin\nif 3:\n    text\nelse:\n    if 1:\n          other text\n          other text\n    more text\n      different indent\n    outdent\noutdent\n  new indent\nqoutdent\n"
 
         s = string(lines)
         i = string(lines).split('\n')
         i = big.text.strip_indents(i)
 
         expected = [
-            L(0, '',                  1,  1,   0, s),
-            L(0, 'left margin',       2,  1,   1, s),
-            L(0, 'if 3:',             3,  1,  13, s),
-            L(1, 'text',              4,  5,  23, s),
-            L(0, 'else:',             5,  1,  28, s),
-            L(1, 'if 1:',             6,  5,  38, s),
-            L(2, 'other text',        7, 11,  54, s),
-            L(2, 'other text',        8, 11,  75, s),
-            L(1, 'more text',         9,  5,  90, s),
-            L(2, 'different indent', 10,  7, 106, s),
-            L(1, 'outdent',          11,  5, 127, s),
-            L(0, 'outdent',          12,  1, 135, s),
-            L(1, 'new indent',       13,  3, 145, s),
-            L(0, 'qoutdent',         14,  1, 156, s),
-            L(0, '',                 15,  1, 167, s),
+            (0, s[0:0]),
+            (0, s[1:12]),
+            (0, s[13:18]),
+            (1, s[23:27]),
+            (0, s[28:33]),
+            (1, s[38:43]),
+            (2, s[54:64]),
+            (2, s[75:85]),
+            (1, s[90:99]),
+            (2, s[106:122]),
+            (1, s[127:134]),
+            (0, s[135:142]),
+            (1, s[145:155]),
+            (0, s[156:164]),
+            (0, s[165:165]),
             ]
         test(i, expected)
 

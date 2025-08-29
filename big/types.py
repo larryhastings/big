@@ -88,8 +88,7 @@ _linebreaks_and_tab_set = set(linebreaks) | set('\t')
 
 class Origin:
     # an Origin is an original Python string with some extra metadata.
-    __slots__ = ('s', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', 
-)
+    __slots__ = ('s', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', )
 
     def __init__(self, s, source, *, line_number=1, column_number=1, first_column_number=1, tab_width=8):
         self.s = s
@@ -182,9 +181,39 @@ class Range:
 
 @export
 class string(str):
+
+    """
+    A subclass of str that maintains line, column, and offset information.
+
+    string is a drop-in replacement for Python's str that automatically
+    computes the line, column, and offset of any substring.  It's a subclass
+    of str, and implements every str method.
+
+    Additional features of string:
+    * Every string knows its line number, column number, and offset from the
+      beginning of the original string.
+    * You may also specify a "source" parameter to the constructor,
+      which should indicate where the text came from (e.g. the filename).
+
+    Additional attributes of string:
+    * s.line_number is the line number of the first character of this string.
+    * s.column_number is the column number of the first character of this string.
+    * s.offset is the index of the first character of this string from where it
+      came from in the original string.  (e.g. if the original string was 'abcde',
+      'e' would have an offset of 4.)
+    * s.where is a string designed for error messages.  if the original string
+      was initialized with a source, this will be in the format
+          "<source>" line <line_number> column <column_number>
+      If no source was supplied, this will be in the format
+          line <line_number> column <column_number>
+      This makes writing error messages easy.  If err contains a syntax error,
+      you can raise
+          SyntaxError(f"{err.where}: {err}")
+    """
+
     # string is a subclass of str whose value is a sequence of Range objects.
     # these Range objects don't necessarily point to the same Origin object(s).
-    __slots__ = ('_ranges', '_len', '_line_number', '_column_number', '_line')
+    __slots__ = ('_ranges', '_len', '_line_number', '_column_number')
 
     def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
         if isinstance(s, string):
@@ -193,17 +222,45 @@ class string(str):
         if not isinstance(s, str):
             raise TypeError(f"unhandled type {type(s).__name__} for initializer s")
 
+        if not ((source is None) or isinstance(source, str)):
+            raise TypeError(f"source must be str, not {type(source).__name__}")
+
+        if not isinstance(line_number, int):
+            raise TypeError(f"line_number must be int, not {type(line_number).__name__}")
+        if line_number < 0:
+            raise ValueError(f"line_number must be >= 0, not {line_number}")
+
+        if not isinstance(column_number, int):
+            raise TypeError(f"column_number must be int, not {type(column_number).__name__}")
+        if column_number < 0:
+            raise ValueError(f"column_number must be >= 0, not {column_number}")
+
+        if not isinstance(first_column_number, int):
+            raise TypeError(f"first_column_number must be int, not {type(first_column_number).__name__}")
+        if first_column_number < 0:
+            raise ValueError(f"first_column_number must be >= 0, not {first_column_number}")
+        if column_number < first_column_number:
+            raise ValueError(f"column_number is {column_number}, must be >= first_column_number which is {first_column_number}")
+
+
+        if not isinstance(tab_width, int):
+            raise TypeError(f"tab_width must be int, not {type(tab_width).__name__}")
+        if tab_width < 1:
+            raise ValueError(f"tab_width must be >= 1, not {tab_width}")
+
         origin = Origin(s, source, line_number=line_number, column_number=column_number, first_column_number=first_column_number, tab_width=tab_width)
         ranges = [Range(origin, 0, len(s))]
 
         self = super().__new__(cls, s)
         self._ranges = ranges
         self._len = len(s)
-        self._line_number = self._column_number = self._line = None
+        self._line_number = self._column_number = None
         return self
 
     def __repr__(self):
-        return f"<string {str(self)!r} _ranges={self._ranges} _len={self._len}, _line_number={self._line_number}, _column_number={self._column_number}>"
+        # return f"<string {str(self)!r} _ranges={self._ranges} _len={self._len}, _line_number={self._line_number}, _column_number={self._column_number}>"
+        # not doing this breaks too much code, sorry
+        return repr(str(self))
 
     def _compute_line_and_column(self):
         r = self._ranges[0]
@@ -353,7 +410,7 @@ class string(str):
         new = super().__new__(self.__class__, ''.join(strings))
         new._ranges = ranges
         new._len = length
-        new._line_number = new._column_number = new._line = None
+        new._line_number = new._column_number = None
         return new
 
     def __iter__(self):
@@ -367,7 +424,6 @@ class string(str):
                 new = new_call(cls, c)
                 new._ranges = [Range(r.origin, start, start+1)]
                 new._len = 1
-                new._line = None
 
                 # origin.compute_line_and_column is slow,
                 # only call it for tricky characters
@@ -385,32 +441,42 @@ class string(str):
                 column_number += 1
                 yield new
 
-    def __add__(self, other):
-        if isinstance(other, string):
-            pass
-        elif isinstance(other, str):
-            other = string(other)
+    @staticmethod
+    def _append_ranges(r, r2):
+        # if we're contiguous, simply extend the range
+        r_last = r[-1]
+        r2_first = r2[0]
+        if (r_last.origin == r2_first.origin) and (r_last.stop == r2_first.start):
+            contiguous = Range(r_last.origin, r_last.start, r2_first.stop)
+            r[-1] = contiguous
+            if len(r2) > 1:
+                r.extend(r2[1:])
         else:
+            r.extend(r2)
+
+    def __add__(self, other):
+        other_is_str =    isinstance(other, str)
+        other_is_string = isinstance(other, string)
+        if not (other_is_str or other_is_string):
             raise TypeError(f'can only concatenate str or string (not "{type(other)}") to string')
 
-        ranges = list(self._ranges)
+        if not other:
+            return self
 
-        # if we're contiguous, simply extend the range
-        self_last = self._ranges[-1]
-        other_first = other._ranges[0]
-        if (self_last.origin == other_first.origin) and (self_last.stop == other_first.start):
-            contiguous = Range(self_last.origin, self_last.start, other_first.stop)
-            ranges[-1] = contiguous
-            if len(other._ranges) > 1:
-                ranges.extend(other._ranges[1:])
-        else:
-            ranges.extend(other._ranges)
+        if other_is_str:
+            other = string(other)
+        if not self._len:
+            return other
+
         s = str(self) + str(other)
+
+        ranges = list(self._ranges)
+        self._append_ranges(ranges, other._ranges)
 
         new = super().__new__(self.__class__, s)
         new._ranges = ranges
         new._len = self._len + other._len
-        new._line_number = new._column_number = new._line = None
+        new._line_number = new._column_number = None
 
         return new
 
@@ -418,23 +484,14 @@ class string(str):
         if not isinstance(other, str):
             return NotImplemented
             # raise TypeError(f'unsupported operand type(s) for +: "{type(other)}" and string')
-        if not other:
-            return self
 
         # if other were a string, then we'd be in other.__add__, not self.__radd__
         assert not isinstance(other, string)
 
         left = string(other)
-        return left + self
-
-
-    ##########################################################################################
-    ##########################################################################################
-    ##########################################################################################
-    ##########################################################################################
-    ##########################################################################################
-
-
+        if not self:
+            return left
+        return left.__add__(self)
 
 
     # these functions might return the same string,
@@ -794,76 +851,122 @@ class string(str):
     ## extensions
     ##
 
-    def _calculate_line(self, line_number):
-        r = self._ranges[0]
-        origin = r.origin
-        linebreak_offsets = origin.linebreak_offsets
-        if linebreak_offsets is None:
-            linebreak_offsets = origin.compute_linebreak_offsets()
-        line_offset = line_number - origin.line_number
-        # print("\nLINE", line_number, linebreak_offsets)
-        if not line_offset:
-            starting_offset = 0
-        else:
-            starting_offset = linebreak_offsets[line_offset - 1]
-        if line_offset == len(linebreak_offsets):
-            ending_offset = len(origin)
-        else:
-            ending_offset = linebreak_offsets[line_offset]
-        # print(f"{self=} {len(self)=}")
-        # print(f"{line_offset=} {starting_offset=} {ending_offset=}")
-        return origin.s[starting_offset:ending_offset]
+    # def _calculate_line(self, line_number):
+    #     r = self._ranges[0]
+    #     origin = r.origin
+    #     linebreak_offsets = origin.linebreak_offsets
+    #     if linebreak_offsets is None:
+    #         linebreak_offsets = origin.compute_linebreak_offsets()
+    #     line_offset = line_number - origin.line_number
+    #     # print("\nLINE", line_number, linebreak_offsets)
+    #     if not line_offset:
+    #         starting_offset = 0
+    #     else:
+    #         starting_offset = linebreak_offsets[line_offset - 1]
+    #     if line_offset == len(linebreak_offsets):
+    #         ending_offset = len(origin)
+    #     else:
+    #         ending_offset = linebreak_offsets[line_offset]
+    #     # print(f"{self=} {len(self)=}")
+    #     # print(f"{line_offset=} {starting_offset=} {ending_offset=}")
+    #     s = origin.s[starting_offset:ending_offset]
+    #     ranges = [Range(origin, starting_offset, ending_offset)]
 
-    @property
-    def line(self):
-        if len(self._ranges) > 1:
-            raise ValueError("string is not simply a slice of a larger string")
-        l = self._line
-        if l is not None:
-            return l
-        return self._calculate_line(self.line_number)
+    #     cls = self.__class__
+    #     new = cls.__new__(cls, s)
+    #     new._ranges = ranges
+    #     new._len = ending_offset - starting_offset
+    #     new._line_number = line_number
+    #     if line_number == origin.line_number:
+    #         new._column_number = origin.column_number
+    #     else:
+    #         new._column_number = origin.first_column_number
+    #     new._line = new
+    #     return new
 
-    @property
-    def previous_line(self):
-        if len(self._ranges) > 1:
-            raise ValueError("string is not simply a slice of a larger string")
-        line_number = self.line_number
-        r = self._ranges[0]
-        origin = r.origin
-        if line_number == origin.line_number:
-            raise ValueError("self is already the first line")
-        return self._calculate_line(line_number - 1)
+    # @property
+    # def line(self):
+    #     if len(self._ranges) > 1:
+    #         raise ValueError("string is not simply a slice of a larger string")
+    #     l = self._line
+    #     if l is not None:
+    #         return l
+    #     return self._calculate_line(self.line_number)
 
-    @property
-    def next_line(self):
-        if len(self._ranges) > 1:
-            raise ValueError("string is not simply a slice of a larger string")
-        line_number = self.line_number
-        r = self._ranges[0]
-        origin = r.origin
-        linebreak_offsets = origin.linebreak_offsets
-        if linebreak_offsets is None:
-            linebreak_offsets = origin.compute_linebreak_offsets()
-        if (line_number - origin.line_number) >= len(linebreak_offsets):
-            raise ValueError("self is already the last line")
-        return self._calculate_line(line_number + 1)
+    # @property
+    # def previous_line(self):
+    #     if len(self._ranges) > 1:
+    #         raise ValueError("string is not simply a slice of a larger string")
+    #     line_number = self.line_number
+    #     r = self._ranges[0]
+    #     origin = r.origin
+    #     if line_number == origin.line_number:
+    #         raise ValueError("self is already the first line")
+    #     return self._calculate_line(line_number - 1)
+
+    # @property
+    # def next_line(self):
+    #     if len(self._ranges) > 1:
+    #         raise ValueError("string is not simply a slice of a larger string")
+    #     line_number = self.line_number
+    #     r = self._ranges[0]
+    #     origin = r.origin
+    #     linebreak_offsets = origin.linebreak_offsets
+    #     if linebreak_offsets is None:
+    #         linebreak_offsets = origin.compute_linebreak_offsets()
+    #     if (line_number - origin.line_number) >= len(linebreak_offsets):
+    #         raise ValueError("self is already the last line")
+    #     return self._calculate_line(line_number + 1)
 
     def bisect(self, index):
         return self[:index], self[index:]
 
-    @staticmethod
-    def cat(*strings):
+    @classmethod
+    def cat(cls, *strings):
+        """
+        Always returns a string.
+        """
         if not strings:
             return string()
-        result = None
+
         for s in strings:
             if not isinstance(s, str):
                 raise("arguments to cat must be str or string objects")
-            if result is None:
-                result = s
+
+        if len(strings) == 1:
+            s = strings[0]
+            if not isinstance(s, string):
+                s = string(s)
+            return s
+
+        ranges = None
+        length = 0
+        first_origin = None
+        for s in strings:
+            if not s:
+                continue
+            if isinstance(s, string):
+                s = string(s)
+            length += len(s)
+            r = s._ranges
+            if ranges is None:
+                first_origin = r[0].origin
+                ranges = list(r)
             else:
-                result += s
-        return result
+                cls._append_ranges(ranges, r)
+
+        if not length:
+            return string()
+
+        s = ''.join(str(_) for _ in strings)
+
+        new = cls.__new__(cls, s)
+        new._ranges = ranges
+        new._len = length
+        new._line_number = first_origin.line_number
+        new._column_number = first_origin.column_number
+
+        return new
 
 
 

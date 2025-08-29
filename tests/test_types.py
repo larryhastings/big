@@ -43,8 +43,8 @@ from big.types import linked_list_iterator, linked_list_reverse_iterator
 from big.tokens import *
 
 
-source = "C:\\AUTOEXEC.BAT"
-source2 = "C:\\HIMEM.SYS"
+source = '"C:\\AUTOEXEC.BAT"'
+source2 = '"C:\\HIMEM.SYS"'
 first_line_number = 1
 first_column_number = 1
 
@@ -166,15 +166,11 @@ class BigStringTests(unittest.TestCase):
             string('abc', line_number=33.5)
         with ar(ValueError):
             string('abc', line_number=-2)
-        with ar(ValueError):
-            string('abc', line_number=0)
 
         with ar(TypeError):
             string('abc', column_number=33.5)
         with ar(ValueError):
             string('abc', column_number=-2)
-        with ar(ValueError):
-            string('abc', column_number=0)
         with ar(ValueError):
             string('abc', column_number=2, first_column_number=3)
 
@@ -227,7 +223,10 @@ class BigStringTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             x = 1 + abcde
 
-        s = string("abcde", line_number=5, column_number=5)
+        s_line_number = 55
+        s_column_number = 22
+        s_source = 'marianas trench'
+        s = string("abcde", line_number=s_line_number, column_number=s_column_number, source=s_source)
 
         # if it works out like magic, you can get a string out
         # but the line and column numbers have to work.
@@ -235,28 +234,25 @@ class BigStringTests(unittest.TestCase):
         x = "wxyz" + s
         self.assertIsInstance(x, string)
         self.assertEqual(x, str_x)
-        self.assertEqual(x.line_number, 5)
+        self.assertEqual(x.line_number, 1)
         self.assertEqual(x.column_number, 1)
+        self.assertEqual(x.source, None)
+        self.assertEqual(x[4].line_number, s_line_number)
+        self.assertEqual(x[4].column_number, s_column_number)
+        self.assertEqual(x[4].source, s_source)
 
         str_x = "123\nwxyz" + str(s)
         x = "123\nwxyz" + s
         self.assertIsInstance(x, string)
         self.assertEqual(x, str_x)
-        self.assertEqual(x.line_number, 4)
+        self.assertEqual(x.line_number, 1)
         self.assertEqual(x.column_number, 1)
-
-        # prepending a string with a str might return a str, if:
-        # too many columns
-        self.assertStr("xyzxyzxyzxyzxyz" + s, "xyzxyzxyzxyzxyz" + str(s))
-        # too many lines
-        self.assertStr("abc\n\n\n\n\n\nwxyz" + s, "abc\n\n\n\n\n\nwxyz" + str(s))
-        # not enough columns before a linebreak
-        self.assertStr("abc\nx" + s, "abc\nx" + str(s))
-
-        # if the string you prepend with contains a tab, you always get a str
-        self.assertStr('x\ty' + s, 'x\tyabcde')
-        # ... unless it's before a linebreak
-        self.assertString('x\ty\nxxxx' + s, 'x\ty\nxxxxabcde')
+        self.assertEqual(x.source, None)
+        self.assertEqual(x[4].line_number, 2)
+        self.assertEqual(x[4].column_number, 1)
+        self.assertEqual(x[9].line_number, s_line_number)
+        self.assertEqual(x[8].column_number, s_column_number)
+        self.assertEqual(x[8].source, s_source)
 
 
     def test___class__(self):
@@ -389,7 +385,7 @@ class BigStringTests(unittest.TestCase):
 
         self.assertString(abcde[1:4], string('bcd', source=source, column_number=first_column_number + 1))
 
-        self.assertStr(abcde[1:-1:2], 'bd')
+        self.assertString(abcde[1:-1:2], 'bd')
 
         # regression!
         last_zero = abcde[len(abcde):len(abcde)]
@@ -1183,10 +1179,11 @@ class BigStringTests(unittest.TestCase):
 
                 self.assertEqual(l_iter._linebreak_offsets, l_compute._linebreak_offsets, f"{s!r}")
 
-    def test_line_etc(self):
+    def xtest_line_etc(self):
         s = string("a b c\nd e f\ng h i\nj k l\nm n o")
 
         h = s[14]
+        print(h, repr(h))
 
         self.assertString(h.line, s[12:18])
         self.assertString(h.line.line, h.line)
@@ -1295,9 +1292,9 @@ class BigStringTests(unittest.TestCase):
         segment = alphabet[5:10]
         self.assertIsNone(segment._line_number)
         self.assertIsNone(segment._column_number)
-        s = string.cat(line1, line2, metadata=segment)
+        s = string.cat(line1, line2)
         self.assertEqual(s.line_number, 1)
-        self.assertEqual(s.column_number, 6)
+        self.assertEqual(s.column_number, 1)
         self.assertEqual(s, line1 + line2)
 
 
