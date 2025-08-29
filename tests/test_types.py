@@ -199,7 +199,7 @@ class BigStringTests(unittest.TestCase):
         self.assertInt(s.column_number, 4)
         self.assertInt(s.first_column_number, 2)
         self.assertInt(s.tab_width, 4)
-        self.assertStr(s.origin, s_origin)
+        self.assertIs(s.origin, s)
         self.assertStr(s.where, '"source" line 3 column 4')
 
         s = string(s_origin, line_number=3, column_number=4, first_column_number=2, tab_width=4)
@@ -209,8 +209,12 @@ class BigStringTests(unittest.TestCase):
         self.assertInt(s.column_number, 4)
         self.assertInt(s.first_column_number, 2)
         self.assertInt(s.tab_width, 4)
-        self.assertStr(s.origin, s_origin)
+        self.assertIs(s.origin, s)
         self.assertStr(s.where, 'line 3 column 4')
+
+        slice = s[1:-1]
+        self.assertString(slice, "bcd")
+        self.assertString(slice.origin, s)
 
     def test___add__(self):
         self.assertString(l + " xyz", 'abcde xyz')

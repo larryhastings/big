@@ -88,7 +88,7 @@ _linebreaks_and_tab_set = set(linebreaks) | set('\t')
 
 class Origin:
     # an Origin is an original Python string with some extra metadata.
-    __slots__ = ('s', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', )
+    __slots__ = ('s', 'string', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', )
 
     def __init__(self, s, source, *, line_number=1, column_number=1, first_column_number=1, tab_width=8):
         self.s = s
@@ -98,7 +98,9 @@ class Origin:
         self.first_column_number = first_column_number
         self.tab_width = tab_width
         self.linebreak_offsets = None
-
+        # this is a reference to the big.string which contains just this Origin.
+        # we have to set this manually later.
+        self.string = None
 
     def compute_linebreak_offsets(self):
         #     self.linebreak_offsets[line_number_offset]
@@ -249,6 +251,9 @@ class string(str):
         self._ranges = ranges
         self._len = len(s)
         self._line_number = self._column_number = None
+
+        origin.string = self
+
         return self
 
     def __repr__(self):
@@ -278,7 +283,7 @@ class string(str):
 
     @property
     def origin(self):
-        return self._ranges[0].origin.s
+        return self._ranges[0].origin.string
 
     @property
     def source(self):
