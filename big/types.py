@@ -155,10 +155,7 @@ class Origin:
             column_number += distance_to_next_tab_stop
         return line_number, column_number
 
-    def __len__(self):
-        return self.s.__len__()
-
-    def __repr__(self):
+    def __repr__(self): # pragma: nocover
         return f"<Origin s={self.s!r} source={self.source}>"
 
 
@@ -172,10 +169,7 @@ class Range:
         self.start = start
         self.stop = stop
 
-    def __len__(self):
-        return self.stop - self.start
-
-    def __repr__(self):
+    def __repr__(self): # pragma: nocover
         return f"<Range origin={self.origin!r} start={self.start} stop={self.stop}>"
 
 
@@ -265,15 +259,6 @@ class string(str):
     def _compute_line_and_column(self):
         r = self._ranges[0]
         self._line_number, self._column_number = r.origin.compute_line_and_column(r.start)
-
-    @property
-    def where(self):
-        if self._line_number is None:
-            self._compute_line_and_column()
-        source = self.source
-        if source:
-            return f'{self.source} line {self._line_number} column {self._column_number}'
-        return f'line {self._line_number} column {self._column_number}'
 
     @property
     def line_number(self):
@@ -794,44 +779,6 @@ class string(str):
             return string.cat(*iterable)
         return str(self).join(iterable)
 
-    def x_serialized(self):
-        """
-        Returns a string that, if executed in Python, recreates this string object.
-
-        Traditionally this is what repr would produce; however, it's simply too
-        inconvenient for repr(string_object) to produce anything except the
-        traditional str repr.
-        """
-        if self._line_number is None:
-            self._calculate_line_and_column_numbers()
-
-        extras = []
-        append = extras.append
-        if self._source != None:
-            append(f"source={self._source!r}")
-        append(f"line_number={self._line_number}")
-        append(f"column_number={self._column_number}")
-        o = self._origin
-        assert o != None
-        if o != self:
-            o = repr(str(o))
-            # elide origin if it's more than 20 characters? ... naah.
-            # if len(o) > 20:
-            #     o = o[:15] + "[...]" + o[-1]
-            append(f"origin=string({o})")
-        if self._offset:
-            append(f"offset={self._offset}")
-        if self._first_line_number != 1:
-            append(f"first_line_number={self._first_line_number}")
-        if self._first_column_number != 1:
-            append(f"first_column_number={self._first_column_number}")
-        if self._tab_width != 8:
-            append(f"tab_width={self._tab_width}")
-
-        s = ", ".join(extras)
-
-        return f"string({repr(str(self))}, {s})"
-
     ##
     ## isascii was added in 3.7.
     ## if we have a real isascii, use that, it's faster.
@@ -851,73 +798,6 @@ class string(str):
     ## extensions
     ##
 
-    # def _calculate_line(self, line_number):
-    #     r = self._ranges[0]
-    #     origin = r.origin
-    #     linebreak_offsets = origin.linebreak_offsets
-    #     if linebreak_offsets is None:
-    #         linebreak_offsets = origin.compute_linebreak_offsets()
-    #     line_offset = line_number - origin.line_number
-    #     # print("\nLINE", line_number, linebreak_offsets)
-    #     if not line_offset:
-    #         starting_offset = 0
-    #     else:
-    #         starting_offset = linebreak_offsets[line_offset - 1]
-    #     if line_offset == len(linebreak_offsets):
-    #         ending_offset = len(origin)
-    #     else:
-    #         ending_offset = linebreak_offsets[line_offset]
-    #     # print(f"{self=} {len(self)=}")
-    #     # print(f"{line_offset=} {starting_offset=} {ending_offset=}")
-    #     s = origin.s[starting_offset:ending_offset]
-    #     ranges = [Range(origin, starting_offset, ending_offset)]
-
-    #     cls = self.__class__
-    #     new = cls.__new__(cls, s)
-    #     new._ranges = ranges
-    #     new._len = ending_offset - starting_offset
-    #     new._line_number = line_number
-    #     if line_number == origin.line_number:
-    #         new._column_number = origin.column_number
-    #     else:
-    #         new._column_number = origin.first_column_number
-    #     new._line = new
-    #     return new
-
-    # @property
-    # def line(self):
-    #     if len(self._ranges) > 1:
-    #         raise ValueError("string is not simply a slice of a larger string")
-    #     l = self._line
-    #     if l is not None:
-    #         return l
-    #     return self._calculate_line(self.line_number)
-
-    # @property
-    # def previous_line(self):
-    #     if len(self._ranges) > 1:
-    #         raise ValueError("string is not simply a slice of a larger string")
-    #     line_number = self.line_number
-    #     r = self._ranges[0]
-    #     origin = r.origin
-    #     if line_number == origin.line_number:
-    #         raise ValueError("self is already the first line")
-    #     return self._calculate_line(line_number - 1)
-
-    # @property
-    # def next_line(self):
-    #     if len(self._ranges) > 1:
-    #         raise ValueError("string is not simply a slice of a larger string")
-    #     line_number = self.line_number
-    #     r = self._ranges[0]
-    #     origin = r.origin
-    #     linebreak_offsets = origin.linebreak_offsets
-    #     if linebreak_offsets is None:
-    #         linebreak_offsets = origin.compute_linebreak_offsets()
-    #     if (line_number - origin.line_number) >= len(linebreak_offsets):
-    #         raise ValueError("self is already the last line")
-    #     return self._calculate_line(line_number + 1)
-
     def bisect(self, index):
         return self[:index], self[index:]
 
@@ -931,7 +811,7 @@ class string(str):
 
         for s in strings:
             if not isinstance(s, str):
-                raise("arguments to cat must be str or string objects")
+                raise TypeError("arguments to cat must be str or string objects")
 
         if len(strings) == 1:
             s = strings[0]
@@ -945,7 +825,7 @@ class string(str):
         for s in strings:
             if not s:
                 continue
-            if isinstance(s, string):
+            if isinstance(s, str):
                 s = string(s)
             length += len(s)
             r = s._ranges

@@ -188,22 +188,25 @@ class BigStringTests(unittest.TestCase):
 
 
     def test_attributes(self):
-        s = string("abcde", source='"source"', line_number=3, column_number=4, first_column_number=2, tab_width=4)
+        s_origin = "abcde"
+        s = string(s_origin, source='"source"', line_number=3, column_number=4, first_column_number=2, tab_width=4)
         self.assertString(s, "abcde")
         self.assertStr(s.source, '"source"')
         self.assertInt(s.line_number, 3)
         self.assertInt(s.column_number, 4)
         self.assertInt(s.first_column_number, 2)
         self.assertInt(s.tab_width, 4)
+        self.assertStr(s.origin, s_origin)
         self.assertStr(s.where, '"source" line 3 column 4')
 
-        s = string("abcde", line_number=3, column_number=4, first_column_number=2, tab_width=4)
+        s = string(s_origin, line_number=3, column_number=4, first_column_number=2, tab_width=4)
         self.assertString(s, "abcde")
         self.assertEqual(s.source, None)
         self.assertInt(s.line_number, 3)
         self.assertInt(s.column_number, 4)
         self.assertInt(s.first_column_number, 2)
         self.assertInt(s.tab_width, 4)
+        self.assertStr(s.origin, s_origin)
         self.assertStr(s.where, 'line 3 column 4')
 
     def test___add__(self):
@@ -218,6 +221,17 @@ class BigStringTests(unittest.TestCase):
             x = abcde + 55.0
         with self.assertRaises(TypeError):
             x = abcde + (1, 2)
+
+        # whitebox testing: _append_ranges joins contiguous ranges, and rhs has >1 subsequent ranges
+        s = fghij + abcde + himem
+        result = abcde + s
+        self.assertString(result, 'abcdefghijabcdeQEMM\n')
+
+        # whitebox testing: radd on an empty string just returns the lhs, but *as a string*
+        s = string()
+        t = 'abcd' + s
+        self.assertString(t, 'abcd')
+
 
     def test___radd__(self):
         with self.assertRaises(TypeError):
@@ -302,37 +316,44 @@ class BigStringTests(unittest.TestCase):
             del l.source
 
     def test___dir__(self):
-        # TODO fix this test
-        # (disabled until the interface stabilizes)
-        return
         str_dir = dir('')
         str_dir.extend(
             (
+            '__firstlineno__',
             '__module__',
             '__radd__',
             '__slots__',
-            '_add',
-            '_are_contiguous',
+            '__static_attributes__',
+            '_append_ranges',
             '_column_number',
-            '_compute_linebreak_offsets',
-            '_first_column_number',
+            '_compute_line_and_column',
+            '_isascii',
+            '_len',
             '_line_number',
-            '_linebreak_offsets',
-            '_source',
             '_partition',
+            '_ranges',
             '_split',
             'bisect',
+            'cat',
             'column_number',
+            'compile',
             'first_column_number',
+            'generate_tokens',
             'line_number',
+            'multisplit',
+            'multipartition',
+            'offset',
+            'origin',
             'source',
+            'tab_width',
+            'where',
             )
         )
         str_dir.sort()
 
-        Line_dir = dir(l)
-        Line_dir.sort()
-        self.assertEqual(str_dir, Line_dir)
+        string_dir = dir(abcde)
+        string_dir.sort()
+        self.assertEqual(str_dir, string_dir)
 
     def test___doc__(self):
         self.assertIsInstance(l.__doc__, str)
@@ -398,9 +419,12 @@ class BigStringTests(unittest.TestCase):
         with self.assertRaises(IndexError):
             abcde[33]
 
-        # *sliciing* out of range clamps to allowed range.
+        # *slicing* out of range clamps to allowed range.
         self.assertString(abcde[-20:], abcde)
-        self.assertString(abcde[448:], abcde[length:length])
+        self.assertString(abcde[448:], '')
+        self.assertString(abcde[:10_000], abcde)
+        self.assertString(abcde[:-8724], '')
+        self.assertString(abcde[1:-50], '')
 
         # regression: if the string ended with a linebreak,
         # getting the zero-length string after that linebreak
@@ -569,19 +593,10 @@ class BigStringTests(unittest.TestCase):
         # part of the pickling machinery, don't touch it!
         pass
 
-    # TODO fixme
-    def xtest___repr__(self):
+    def test___repr__(self):
         for value_name, value in values.items():
             with self.subTest(value=value_name):
-                self.assertStr(repr(value)[:11], repr(str(value))[:11])
-                # self.assertTrue(f"line_number={value.line_number}, " in value.serialized())
-        long_source = string('x' * 90)
-        s = string('abcde\ndefgh', source=long_source, line_number=2, column_number=3, first_column_number=3, tab_width=5)
-        s2 = s[8:]
-
-        # self.assertEqual(s.serialized(), "string('abcde\\ndefgh', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=2, column_number=3, first_column_number=3, tab_width=5)")
-        # self.assertEqual(s2.serialized(), "string('fgh', source='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', line_number=3, column_number=5, first_column_number=3, tab_width=5)")
-
+                self.assertStr(repr(value), repr(str(value)))
 
     def test___rmul__(self):
         for value_name, value in values.items():
@@ -758,6 +773,11 @@ class BigStringTests(unittest.TestCase):
         self.assertString(got, abcde)
         got = abcde.ljust(5, 'x')
         self.assertString(got, abcde)
+
+        with self.assertRaises(TypeError):
+            abcde.ljust(5, 352)
+        with self.assertRaises(TypeError):
+            abcde.ljust(5, 'xyz')
 
 
     def test_lower(self):
@@ -971,6 +991,11 @@ class BigStringTests(unittest.TestCase):
     def test_rjust(self):
         self.assertEqual(himem.rstrip().rjust(8), "    QEMM")
         self.assertString(himem.rstrip().rjust(4), "QEMM")
+        with self.assertRaises(TypeError):
+            abcde.rjust(5, 352)
+        with self.assertRaises(TypeError):
+            abcde.rjust(5, 'xyz')
+
 
     def test_rpartition(self):
         # see test_partitino
@@ -1113,106 +1138,23 @@ class BigStringTests(unittest.TestCase):
             self.assertTrue(alphabet.startswith(a))
             self.assertEqual(a + b, alphabet)
 
-    def xtest_cat(self):
-        self.assertStr(string.cat(), '')
+    def test_cat(self):
+        self.assertString(string.cat(), '')
         self.assertString(string.cat(abcde), abcde)
         self.assertString(string.cat(abcde, 'xyz'), 'abcdexyz')
         self.assertString(string.cat(abcde[:2], abcde[2:]), abcde)
         self.assertString(string.cat(abcde[:2], abcde[:2]), 'abab')
 
-        xyz = string.cat('xyz', metadata=abcde)
-        self.assertString(xyz, 'xyz')
-        self.assertEqual(xyz.source, abcde.source)
-        self.assertEqual(xyz.line_number, abcde.line_number)
-        self.assertEqual(xyz.column_number, abcde.column_number)
-
-        xyz = string.cat('xyz', metadata=abcde, line_number=77, column_number=88)
-        self.assertString(xyz, 'xyz')
-        self.assertEqual(xyz.source, abcde.source)
-        self.assertEqual(xyz.line_number, 77)
-        self.assertEqual(xyz.column_number, 88)
-
-        with self.assertRaises(ValueError):
-            string.cat('xyz', 'zooo')
-
         with self.assertRaises(TypeError):
-            string.cat('xyz', metadata=3.5)
-
+            string.cat(3, 4, 5)
         with self.assertRaises(TypeError):
-            string.cat('xyz', metadata=xyz, line_number=33.5)
-        with self.assertRaises(ValueError):
-            string.cat('xyz', metadata=xyz, line_number=-20)
+            string.cat('a', 'b', 5.2)
 
-        with self.assertRaises(TypeError):
-            string.cat('xyz', metadata=xyz, column_number=33.5)
-        with self.assertRaises(ValueError):
-            string.cat('xyz', metadata=xyz, column_number=-20)
+        t = string.cat('a')
+        self.assertString(t, 'a')
 
-
-    def xtest_linebreak_offsets_generation(self):
-        # TODO fix
-        # a string can generate and cache linebreak offsets two different ways:
-        #     * iterating over a string
-        #     * calling split or partition, which call __compute_linebreak_offsets
-        for value_name, value in values.items():
-            with self.subTest(value=value_name):
-                s = str(value)
-
-                l_iter = string(s, source="z")
-                self.assertEqual(l_iter._linebreak_offsets, None)
-                [c for c in l_iter]
-                self.assertNotEqual(l_iter._linebreak_offsets, None)
-
-
-                l_compute = string(s, source="z")
-                self.assertEqual(l_compute._linebreak_offsets, None)
-                l_compute._compute_linebreak_offsets()
-                self.assertNotEqual(l_compute._linebreak_offsets, None)
-
-                if 0:
-                    print("l_iter")
-                    l_iter.print_linebreak_offsets()
-                    print("")
-                    print("l_compute")
-                    l_compute.print_linebreak_offsets()
-                    print()
-
-                self.assertEqual(l_iter._linebreak_offsets, l_compute._linebreak_offsets, f"{s!r}")
-
-    def xtest_line_etc(self):
-        s = string("a b c\nd e f\ng h i\nj k l\nm n o")
-
-        h = s[14]
-        print(h, repr(h))
-
-        self.assertString(h.line, s[12:18])
-        self.assertString(h.line.line, h.line)
-        self.assertString(h.line.line.line, h.line)
-        self.assertString(h.previous_line, s[6:12])
-        self.assertString(h.previous_line.previous_line, s[0:6])
-        self.assertString(h.next_line, s[18:24])
-        self.assertString(h.next_line.next_line, s[24:])
-
-        with self.assertRaises(ValueError):
-            print(repr(h.previous_line.previous_line.previous_line))
-        with self.assertRaises(ValueError):
-            print(repr(h.next_line.next_line.next_line))
-
-        # if s is a string, and x = s[i:j], and there are linebreaks in x,
-        # x.line extends from the beginning of the first line in x
-        # to the linebreak that ends the last line in x.
-        hijk = s[14:21] # "h i\nj k"
-        self.assertString(hijk.line, s[12:24]) # "g h i\nj k l\n"
-        self.assertString(hijk.previous_line, s[6:12]) # previous to the first line in hijk, "d e f\n"
-        self.assertString(hijk.next_line, s[24:]) # next after the last line in hijk, "m n o"
-
-        almost_everything = s[1:-1]
-        self.assertString(almost_everything.line, s)
-
-        # regression! if we have a zero-length slice of a string named x,
-        # x.line used to crash.
-        s_end = s[len(s):]
-        self.assertEqual(s_end.line, "m n o")
+        t = string.cat('', '', '', string(), '')
+        self.assertString(t, '')
 
 
     def test_generate_tokens(self):
