@@ -43,6 +43,21 @@ from big.types import linked_list_iterator, linked_list_reverse_iterator
 from big.tokens import *
 
 
+# [
+#   'capitalize',
+#   'casefold',
+#   'center',
+#   'count',
+#   'encode',
+#   'endswith',
+#   'expandtabs',
+#   'find',
+#   'format',
+#   'format_map',
+#   'index',
+#   'isalnum', 'isalpha', 'isascii', 'isdecimal', 'isdigit', 'isidentifier', 'islower', 'isnumeric', 'isprintable', 'isspace', 'istitle', 'isupper', 'join', 'ljust', 'lower', 'lstrip', 'maketrans', 'partition', 'removeprefix', 'removesuffix', 'replace', 'rfind', 'rindex', 'rjust', 'rpartition', 'rsplit', 'rstrip', 'split', 'splitlines', 'startswith', 'strip', 'swapcase', 'title', 'translate', 'upper', 'zfill']
+
+
 source = '"C:\\AUTOEXEC.BAT"'
 source2 = '"C:\\HIMEM.SYS"'
 first_line_number = 1
