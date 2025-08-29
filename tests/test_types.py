@@ -43,20 +43,6 @@ from big.types import linked_list_iterator, linked_list_reverse_iterator
 from big.tokens import *
 
 
-# [
-#   'capitalize',
-#   'casefold',
-#   'center',
-#   'count',
-#   'encode',
-#   'endswith',
-#   'expandtabs',
-#   'find',
-#   'format',
-#   'format_map',
-#   'index',
-#   'isalnum', 'isalpha', 'isascii', 'isdecimal', 'isdigit', 'isidentifier', 'islower', 'isnumeric', 'isprintable', 'isspace', 'istitle', 'isupper', 'join', 'ljust', 'lower', 'lstrip', 'maketrans', 'partition', 'removeprefix', 'removesuffix', 'replace', 'rfind', 'rindex', 'rjust', 'rpartition', 'rsplit', 'rstrip', 'split', 'splitlines', 'startswith', 'strip', 'swapcase', 'title', 'translate', 'upper', 'zfill']
-
 
 source = '"C:\\AUTOEXEC.BAT"'
 source2 = '"C:\\HIMEM.SYS"'
@@ -87,6 +73,7 @@ l2 = string("ab\ncd\nef", source='xz')
 
 chipmunk = string('🐿️', source='tic e tac')
 
+numbers_only = string('12345', source='letterman')
 
 l = abcde
 
@@ -106,6 +93,7 @@ values = {
     "kooky1" : kooky1,
     "kooky2" : kooky2,
     "kooky3" : kooky3,
+    'numbers_only': numbers_only,
     }
 
 
@@ -340,6 +328,7 @@ class BigStringTests(unittest.TestCase):
             '__slots__',
             '__static_attributes__',
             '_append_ranges',
+            '_cat',
             '_column_number',
             '_compute_line_and_column',
             '_isascii',
@@ -645,18 +634,12 @@ class BigStringTests(unittest.TestCase):
     def test_capitalize(self):
         for value_name, value in values.items():
             with self.subTest(value=value_name):
-                self.assertStr(value.capitalize(), str(value).capitalize())
+                self.assertEqual(value.capitalize(), str(value).capitalize())
 
     def test_casefold(self):
         for value_name, value in values.items():
             with self.subTest(value=value_name):
-                self.assertStr(value.casefold(), str(value).casefold())
-
-    def test_center(self):
-        for value_name, value in values.items():
-            with self.subTest(value=value_name):
-                self.assertStr(value.center(30), str(value).center(30))
-                self.assertStr(value.center(30, 'Z'), str(value).center(30, 'Z'))
+                self.assertEqual(value.casefold(), str(value).casefold())
 
     def test_count(self):
         for value_name, value in values.items():
@@ -775,7 +758,23 @@ class BigStringTests(unittest.TestCase):
 
         a = abcde[0]
         result = a.join(list(abcde))
-        self.assertStr(result, 'aabacadae')
+        self.assertString(result, 'aabacadae')
+
+    def test_center(self):
+        for value_name, value in values.items():
+            with self.subTest(value=value_name):
+                self.assertString(value.center(30), str(value).center(30))
+                self.assertString(value.center(30, 'Z'), str(value).center(30, 'Z'))
+                self.assertString(value.center(31), str(value).center(31))
+                self.assertString(value.center(31, 'Z'), str(value).center(31, 'Z'))
+                self.assertString(value.center(1), str(value).center(1))
+                self.assertString(value.center(1, 'Z'), str(value).center(1, 'Z'))
+
+        with self.assertRaises(TypeError):
+            abcde.center(33, 352)
+        with self.assertRaises(TypeError):
+            abcde.center(33, 'xyz')
+
 
     def test_ljust(self):
         got = abcde.ljust(10)
@@ -991,9 +990,13 @@ class BigStringTests(unittest.TestCase):
                 with self.subTest(value=value_name, src=src):
                     result = value.replace(src, str(chipmunk))
                     if src in value:
-                        self.assertStr(result, str(value).replace(src, chipmunk))
+                        self.assertString(result, str(value).replace(src, chipmunk))
                     else:
-                        self.assertIs(result, value)
+                        self.assertString(result, value)
+
+        self.assertString(abcde.replace('c', 'x', 0), abcde)
+        wackyland_ampersand = string('wackyland ampersand')
+        self.assertString(wackyland_ampersand.replace('a', 'AAA', 3), 'wAAAckylAAAnd AAAmpersand')
 
     def test_rfind(self):
         # see test___contains__
@@ -1099,7 +1102,7 @@ class BigStringTests(unittest.TestCase):
     def test_swapcase(self):
         for value_name, value in values.items():
             with self.subTest(value=value_name):
-                self.assertStr(value.swapcase(), str(value).swapcase())
+                self.assertEqual(value.swapcase(), str(value).swapcase())
 
     def test_title(self):
         # see test_lower

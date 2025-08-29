@@ -478,11 +478,94 @@ class string(str):
             return left
         return left.__add__(self)
 
+    #
+    # these pad the string.  so, we can just add stuff,
+    # but contain the original string too.
+    #
+    def ljust(self, width, fillchar=' '):
+        if not isinstance(fillchar, str):
+            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
+        if len(fillchar) != 1:
+            # why is it TypeError?  blame str.
+            raise TypeError("The fill character must be exactly one character long")
 
+        length = len(self)
+        if length >= width:
+            return self
+
+        needed = width - length
+        spacer = fillchar * needed
+
+        return self + spacer
+
+    def rjust(self, width, fillchar=' '):
+        if not isinstance(fillchar, str):
+            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
+        if len(fillchar) != 1:
+            # why is it TypeError?  blame str.
+            raise TypeError("The fill character must be exactly one character long")
+
+        length = len(self)
+        if length >= width:
+            return self
+
+        needed = width - length
+        spacer = fillchar * needed
+
+        return spacer + self
+
+    def zfill(self, width):
+        return self.rjust(width, '0')
+
+    def center(self, width, fillchar=' '):
+        if not isinstance(fillchar, str):
+            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
+        if len(fillchar) != 1:
+            # why is it TypeError?  blame str.
+            raise TypeError("The fill character must be exactly one character long")
+
+        if self._len >= width:
+            return self
+
+        width -= self._len
+        left_width = right_width = width // 2
+        if width != (left_width + right_width):
+            # we need an extra space on either left or right.
+            assert width == (left_width + right_width) + 1
+            # if self is an odd number of characters, add the extra char on the right
+            if self._len % 2:
+                right_width += 1
+            else:
+                left_width += 1
+        left_padding = fillchar * left_width
+        if left_width == right_width:
+            right_padding = left_padding
+        else:
+            right_padding = fillchar * right_width
+        return left_padding + self + right_padding
+
+
+
+    #
     # these functions might return the same string,
     # or they might return a mutated string.
     # if the string doesn't change, return self.
-    # otherwise return a str.
+    # otherwise return a new string.
+    #
+    def capitalize(self):
+        s = str(self)
+        mutated = s.capitalize()
+        if s == mutated:
+            return self
+        return mutated
+
+    def casefold(self):
+        s = str(self)
+        mutated = s.casefold()
+        if s == mutated:
+            return self
+        return mutated
+
     def expandtabs(self, tabsize=8):
         s = str(self)
         mutated = s.expandtabs(tabsize)
@@ -504,22 +587,6 @@ class string(str):
             return self
         return mutated
 
-    def ljust(self, width, fillchar=' '):
-        if not isinstance(fillchar, str):
-            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
-        if len(fillchar) != 1:
-            # why is it TypeError?  blame str.
-            raise TypeError("The fill character must be exactly one character long")
-
-        length = len(self)
-        if length >= width:
-            return self
-
-        needed = width - length
-        spacer = fillchar * needed
-
-        return self + spacer
-
     def lower(self):
         s = str(self)
         mutated = s.lower()
@@ -528,27 +595,37 @@ class string(str):
         return mutated
 
     def replace(self, old, new, count=-1):
+        # big.string++!
+        # preserve the substrings of the original.
+
+        if count == 0:
+            return self
         s = str(self)
-        mutated = s.replace(old, new, count)
+        if s.find(old) == -1:
+            return self
+
+        old_length = len(old)
+        start = 0
+        result = []
+        append = result.append
+
+        while True:
+            index = s.find(old, start)
+            if (count == 0) or (index == -1):
+                append(self[start:])
+                break
+            append(self[start:index])
+            append(new)
+            count -= 1
+            start = index + old_length
+        return self._cat(result)
+
+    def swapcase(self):
+        s = str(self)
+        mutated = s.swapcase()
         if s == mutated:
             return self
         return mutated
-
-    def rjust(self, width, fillchar=' '):
-        if not isinstance(fillchar, str):
-            raise TypeError(f"The fill character must be a unicode character, not {type(fillchar).__name__}")
-        if len(fillchar) != 1:
-            # why is it TypeError?  blame str.
-            raise TypeError("The fill character must be exactly one character long")
-
-        length = len(self)
-        if length >= width:
-            return self
-
-        needed = width - length
-        spacer = fillchar * needed
-
-        return spacer + self
 
     def title(self):
         s = str(self)
@@ -564,16 +641,9 @@ class string(str):
             return self
         return mutated
 
-    def zfill(self, width):
-        s = str(self)
-        mutated = s.zfill(width)
-        if s == mutated:
-            return self
-        return mutated
-
     #
-    # if lstrip/rstrip/strip doesn't remove anything, return self.
-    # otherwise, we can still return a string!
+    # these return substrings of the original string.
+    # we can always return string objects!
     #
     def lstrip(self, chars=None):
         s = str(self)
@@ -776,8 +846,14 @@ class string(str):
     def join(self, iterable):
         l = list(iterable)
         if not self:
-            return string.cat(*iterable)
-        return str(self).join(iterable)
+            return string._cat(l)
+        l2 = list()
+        append = l2.append
+        for o in l:
+            append(o)
+            append(self)
+        l2.pop()
+        return string._cat(l2)
 
     ##
     ## isascii was added in 3.7.
@@ -802,10 +878,7 @@ class string(str):
         return self[:index], self[index:]
 
     @classmethod
-    def cat(cls, *strings):
-        """
-        Always returns a string.
-        """
+    def _cat(cls, strings):
         if not strings:
             return string()
 
@@ -848,7 +921,12 @@ class string(str):
 
         return new
 
-
+    @classmethod
+    def cat(cls, *strings):
+        """
+        Always returns a string.
+        """
+        return cls._cat(strings)
 
     def multisplit(self, separators, *,
         keep=False,
