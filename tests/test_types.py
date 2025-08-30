@@ -336,7 +336,7 @@ class BigStringTests(unittest.TestCase):
             '_column_number',
             '_compute_line_and_column',
             '_isascii',
-            '_len',
+            '_length',
             '_line_number',
             '_offset',
             '_origin',
@@ -1274,30 +1274,22 @@ class BigLinkedListTests(unittest.TestCase):
         expected = list(expected)
         got = list(t)
         self.assertEqual(expected, got)
+        self.assertEqual(len(t), len(expected))
 
     def assertIsSpecial(self, it):
         self.assertIsNotNone(it)
-        self.assertTrue(it)
         self.assertTrue(it.is_special)
         self.assertFalse(it.is_head)
         self.assertFalse(it.is_tail)
 
     def assertIsHead(self, it):
         self.assertIsNotNone(it)
-        if isinstance(it, linked_list_iterator):
-            self.assertTrue(it)
-        else:
-            self.assertFalse(it)
         self.assertTrue(it.is_special)
         self.assertTrue(it.is_head)
         self.assertFalse(it.is_tail)
 
     def assertIsTail(self, it):
         self.assertIsNotNone(it)
-        if isinstance(it, linked_list_iterator):
-            self.assertFalse(it)
-        else:
-            self.assertTrue(it)
         self.assertTrue(it.is_special)
         self.assertFalse(it.is_head)
         self.assertTrue(it.is_tail)
@@ -1342,13 +1334,20 @@ class BigLinkedListTests(unittest.TestCase):
         # an iterator on a linked list always starts out at head
         it = iter(t)
         self.assertIsHead(it)
-        self.assertTrue(it)
+        self.assertFalse(it)
         with self.assertRaises(SpecialNodeError):
             it[0]
         with self.assertRaises(SpecialNodeError):
             it.pop()
         with self.assertRaises(SpecialNodeError):
             it.popleft()
+        # iterator only returns True if you can call next and it doesn't raise.
+        # so, when pointing to either head or tail of an empty list, it returns false.
+        self.assertFalse(it)
+        it.to_tail()
+        self.assertFalse(it)
+        it.to_head()
+        self.assertFalse(it)
 
         # and you can't go past head
         with self.assertRaises(ValueError):
@@ -1357,13 +1356,21 @@ class BigLinkedListTests(unittest.TestCase):
         # an reverse iterator on a linked list always starts out at tail
         rit = reversed(t)
         self.assertIsTail(rit)
-        self.assertTrue(rit)
+        self.assertFalse(rit)
         with self.assertRaises(SpecialNodeError):
             rit[0]
         with self.assertRaises(SpecialNodeError):
             rit.pop()
         with self.assertRaises(SpecialNodeError):
             rit.popleft()
+
+        # iterator only returns True if you can call next and it doesn't raise.
+        # so, when pointing to either head or tail of an empty list, it returns false.
+        self.assertFalse(rit)
+        rit.to_head()
+        self.assertFalse(rit)
+        rit.to_tail()
+        self.assertFalse(rit)
 
         # and you can't go past tail
         with self.assertRaises(ValueError):
@@ -1390,11 +1397,13 @@ class BigLinkedListTests(unittest.TestCase):
         # "after" head is tail
         it = iter(t)
         self.assertIsHead(it)
+        self.assertFalse(it)
+
         after = it.after()
         self.assertIsTail(after)
+        self.assertFalse(after)
 
         # if you run next on it, it goes to tail and stays there
-        self.assertTrue(it)
         result = next(it, 5)
         self.assertEqual(result, 5)
         self.assertIsTail(it)
@@ -1410,8 +1419,10 @@ class BigLinkedListTests(unittest.TestCase):
         # after tail (reversed) is head
         rit = reversed(t)
         self.assertIsTail(rit)
+        self.assertFalse(rit)
         after = rit.after()
         self.assertIsHead(after)
+        self.assertFalse(after)
 
         # if you run next on it, it goes to head and stays there
         result = next(rit, 5)
@@ -1704,11 +1715,12 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(IndexError):
             it[3]
 
+        t, it = setup()
         self.assertLinkedListEqual(it[-2: 3: 2], [1, 3, 5])
         self.assertLinkedListEqual(it[ 2:-3:-2], [5, 3, 1])
-        with self.assertRaises(IndexError):
+        with self.assertRaises(ValueError):
             it[-6: 2: 3]
-        with self.assertRaises(IndexError):
+        with self.assertRaises(ValueError):
             it[ 2:-6: 3]
         with self.assertRaises(ValueError):
             it[ 2:-3: 0]
@@ -2531,7 +2543,7 @@ class BigLinkedListTests(unittest.TestCase):
         # self.assertLinkedListEqual(rit[:3], [0, 1, 2, 3])
         # self.assertLinkedListEqual(rit[-3:], [3, 4, 5])
 
-    def test_dunder_item(self):
+    def test___getitem__(self):
         # __getitem__ and slicing
         initializer = (1, 2, 3, 4, 5)
         a = linked_list(initializer)
@@ -2558,7 +2570,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(a[-4:-1],    [2, 3, 4])
         self.assertLinkedListEqual(a[-1:-4:-1], [5, 4, 3])
         # rules are different for slices!
-        # Python just 'em clamps for you, YOU'RE WELCOME
+        # Python lists just clamps 'em for you.
+        # so linked_list does too! YOU'RE WELCOME
         self.assertLinkedListEqual(a[9999:999999], [])
         self.assertLinkedListEqual(a[9999:999999:-1], [])
 
@@ -2632,6 +2645,174 @@ class BigLinkedListTests(unittest.TestCase):
         t = linked_list(initializer)
         self.assertLinkedListEqual(t[:3], (1, 2, 3))
         self.assertLinkedListEqual(t[2:], (3, 4, 5))
+
+        # and now--the iterator!
+        def setup():
+            t = linked_list(range(1, 10))
+            it = t.find(5)
+            rit = reversed(it)
+            return t, it, rit
+
+        t, it, rit = setup()
+        self.assertEqual(it[-1], 4)
+        self.assertEqual(it[ 0], 5)
+        self.assertEqual(it[ 1], 6)
+        self.assertEqual(it[ 2], 7)
+        self.assertLinkedListEqual(it[-1:3], [4, 5, 6, 7])
+
+        # remove node pointed at by it
+        rit.pop()
+        self.assertLinkedListEqual(it[-1:3], [4,    6, 7])
+
+        t, it, rit = setup()
+        self.assertEqual(rit[-1], 6)
+        self.assertEqual(rit[ 0], 5)
+        self.assertEqual(rit[ 1], 4)
+        self.assertEqual(rit[ 2], 3)
+        self.assertLinkedListEqual(rit[-1:3], [6, 5, 4, 3])
+
+        # remove node pointed at by rit
+        it.pop()
+        self.assertLinkedListEqual(rit[-1:3], [6,    4, 3])
+
+        # the rules are different for slices *on iterators*.
+        # for one--I *don't* clamp!  YOU'RE WELCOME.
+        with self.assertRaises(ValueError):
+            it[1:100]
+        with self.assertRaises(ValueError):
+            it[1000:2000]
+        with self.assertRaises(ValueError):
+            it[-100:2]
+        with self.assertRaises(ValueError):
+            it[-500:-100]
+
+        with self.assertRaises(ValueError):
+            rit[1:100]
+        with self.assertRaises(ValueError):
+            rit[1000:2000]
+        with self.assertRaises(ValueError):
+            rit[-100:2]
+        with self.assertRaises(ValueError):
+            rit[-500:-100]
+
+        # iterator setitem too
+        t, it, rit = setup()
+        it[-1] = 'a'
+        it[ 0] = 'b'
+        it[ 1] = 'c'
+        self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 7, 8, 9])
+
+        t, it, rit = setup()
+        rit[-1] = 'a'
+        rit[ 0] = 'b'
+        rit[ 1] = 'c'
+        self.assertLinkedListEqual(t, [1, 2, 3, 'c', 'b', 'a', 7, 8, 9])
+
+        # assign to slice with the same number of values as items in the slice
+        t, it, rit = setup()
+        it[-1:3] = 'abcd'
+        self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 'd', 8, 9])
+
+        # assign to slice with the same number of values as items in the slice
+        t, it, rit = setup()
+        it[-1:4] = 'ab'
+        self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 9])
+
+        # assign to slice with more values than items in the slice
+        t, it, rit = setup()
+        it[-1:1] = 'abcde'
+        self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 'd', 'e', 6, 7, 8, 9])
+
+        # assign correctly to "extended slice"
+        t, it, rit = setup()
+        it2 = t.find(2)
+        it4 = t.find(4)
+        it6 = t.find(6)
+        it2[0:6:2] = 'abc'
+        self.assertLinkedListEqual(t, [1, 'a', 3, 'b', 5, 'c', 7, 8, 9])
+        # and the iterators don't move
+        self.assertEqual(it2[0], 'a')
+        self.assertEqual(it4[0], 'b')
+        self.assertEqual(it6[0], 'c')
+
+        # assign too many values to an "extended slice"
+        t, it, rit = setup()
+        it = t.find(1)
+        with self.assertRaises(ValueError):
+            it[0:6:2] = 'abcdefghijkl'
+        # and too few
+        with self.assertRaises(ValueError):
+            it[0:6:2] = 'ab'
+
+        # now... reversed!
+        # assign to slice with the same number of values as items in the slice
+        t, it, rit = setup()
+        rit[-1:3] = 'abcd'
+        self.assertLinkedListEqual(t, [1, 2, 'd', 'c', 'b', 'a', 7, 8, 9])
+
+        # assign to slice with the same number of values as items in the slice
+        t, it, rit = setup()
+        rit[-1:4] = 'ab'
+        self.assertLinkedListEqual(t, [1, 'b', 'a', 7, 8, 9])
+
+        # assign to slice with more values than items in the slice
+        t, it, rit = setup()
+        rit[-1:1] = 'abcde'
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 'e', 'd', 'c', 'b', 'a', 7, 8, 9])
+
+        t, it, rit = setup()
+        with self.assertRaises(ValueError):
+            it[0:8:2] = 'abcdefghijkl'
+
+        # assign correctly to "extended slice"
+        t, it, rit = setup()
+        it8 = reversed(t.find(8))
+        it6 = reversed(t.find(6))
+        it4 = reversed(t.find(4))
+        it8[0:6:2] = 'abc'
+        self.assertLinkedListEqual(t, [1, 2, 3, 'c', 5, 'b', 7, 'a', 9])
+        # and the iterators don't move
+        self.assertEqual(it8[0], 'a')
+        self.assertEqual(it6[0], 'b')
+        self.assertEqual(it4[0], 'c')
+
+        # assign too many values to an "extended slice"
+        t, it, rit = setup()
+        it = t.find(8)
+        rit = reversed(it)
+        with self.assertRaises(ValueError):
+            rit[0:6:2] = 'abcdefghijkl'
+        # and too few
+        with self.assertRaises(ValueError):
+            rit[0:6:2] = 'ab'
+
+        # and iterator delitem
+        t, it, rit = setup()
+        del it[-1]
+        self.assertLinkedListEqual(t, [1, 2, 3,    5, 6, 7, 8, 9])
+        t, it, rit = setup()
+        del it[ 0]
+        self.assertLinkedListEqual(t, [1, 2, 3, 4,    6, 7, 8, 9])
+        t, it, rit = setup()
+        del it[ 1]
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5,    7, 8, 9])
+        t, it, rit = setup()
+        del it[-1:3]
+        self.assertLinkedListEqual(t, [1, 2, 3,             8, 9])
+
+        t, it, rit = setup()
+        del rit[-1]
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5,    7, 8, 9])
+        t, it, rit = setup()
+        del rit[ 0]
+        self.assertLinkedListEqual(t, [1, 2, 3, 4,    6, 7, 8, 9])
+        t, it, rit = setup()
+        del rit[ 1]
+        self.assertLinkedListEqual(t, [1, 2, 3,    5, 6, 7, 8, 9])
+        t, it, rit = setup()
+        del rit[-1:3]
+        self.assertLinkedListEqual(t, [1, 2,             7, 8, 9])
+
 
     def test_misc_methods(self):
         # sort
@@ -2849,8 +3030,8 @@ class BigLinkedListTests(unittest.TestCase):
     def test_truncate_cut_and_splice(self):
         def setup():
             t = linked_list(range(1, 11))
-            t2 = linked_list('abcde')
             it_5 = t.find(5)
+            t2 = linked_list('abcde')
             return t, it_5, t2
 
         def check_linked_list_was_set(t):
@@ -2864,15 +3045,20 @@ class BigLinkedListTests(unittest.TestCase):
 
         # truncate no nodes
         t, it_5, t2 = setup()
+        self.assertEqual(len(t), 10)
         it = t.tail()
         it.truncate()
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 10)
+        self.assertTrue(t)
         self.assertIsTail(it)
 
         t, it_5, t2 = setup()
         it = t.head()
         it.rtruncate()
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 10)
+        self.assertTrue(t)
         self.assertIsHead(it)
 
         # truncate all the nodes!
@@ -2880,12 +3066,16 @@ class BigLinkedListTests(unittest.TestCase):
         it = t.find(1)
         it.truncate()
         self.assertLinkedListEqual(t, [])
+        self.assertEqual(len(t), 0)
+        self.assertFalse(t)
         self.assertIsTail(it)
 
         t, it_5, t2 = setup()
         it = t.find(10)
         it.rtruncate()
         self.assertLinkedListEqual(t, [])
+        self.assertEqual(len(t), 0)
+        self.assertFalse(t)
         self.assertIsHead(it)
 
         # truncating at "head" is the same as truncating at the first data node.
@@ -2893,6 +3083,8 @@ class BigLinkedListTests(unittest.TestCase):
         it = t.head()
         it.truncate()
         self.assertLinkedListEqual(t, [])
+        self.assertEqual(len(t), 0)
+        self.assertFalse(t)
         self.assertIsTail(it)
 
         # rtruncating at "tail" is the same as truncating at the last data node.
@@ -2900,6 +3092,8 @@ class BigLinkedListTests(unittest.TestCase):
         it = t.tail()
         it.rtruncate()
         self.assertLinkedListEqual(t, [])
+        self.assertEqual(len(t), 0)
+        self.assertFalse(t)
         self.assertIsHead(it)
 
         # truncate some nodes, ensuring we have an iterator
@@ -2908,20 +3102,39 @@ class BigLinkedListTests(unittest.TestCase):
         it_7 = t.find(7)
         it_5.truncate()
         self.assertLinkedListEqual(t, [1, 2, 3, 4])
+        self.assertEqual(len(t), 4)
+        self.assertTrue(t)
         self.assertIsTail(it_5)
 
         t, it_5, t2 = setup()
         it_2 = t.find(2)
         it_5.rtruncate()
         self.assertLinkedListEqual(t, [6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 5)
+        self.assertTrue(t)
         self.assertIsHead(it_5)
+
+        # splice empty does nothing
+        t, it_5, t2 = setup()
+        t_list = list(t)
+
+        t2 = linked_list()
+        t.splice(t2)
+        self.assertLinkedListEqual(t, t_list)
+        it_5.splice(t2)
+        self.assertLinkedListEqual(t, t_list)
+        rit = reversed(it_5)
+        rit.splice(t2)
+        self.assertLinkedListEqual(t, t_list)
 
 
         t, it_5, t2 = setup()
         snippet = it_5.cut()
         self.assertIsInstance(snippet, linked_list)
         self.assertLinkedListEqual(t,       [1, 2, 3, 4])
+        self.assertEqual(len(t), 4)
         self.assertLinkedListEqual(snippet,             [5, 6, 7, 8, 9, 10])
+        self.assertEqual(len(snippet), 6)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
@@ -2931,10 +3144,12 @@ class BigLinkedListTests(unittest.TestCase):
                     t, it_5, t2 = setup()
                     it_7 = t.find(7)
 
-                    snippet = it_5.cut(end=it_7)
+                    snippet = it_5.cut(stop=it_7)
                     self.assertIsInstance(snippet, linked_list)
                     self.assertLinkedListEqual(snippet, [5, 6])
+                    self.assertEqual(len(snippet), 2)
                     self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9, 10])
+                    self.assertEqual(len(t), 8)
                     check_linked_list_was_set(t)
                     check_linked_list_was_set(snippet)
 
@@ -2970,19 +3185,26 @@ class BigLinkedListTests(unittest.TestCase):
                             self.assertLinkedListEqual(t2, ['a', 'b', 'c', 5, 6, 'd', 'e'])
                     check_linked_list_was_set(t)
                     check_linked_list_was_set(t2)
+                    self.assertEqual(len(t2), 7)
+                    self.assertEqual(len(snippet), 0)
+
 
         t, it_5, t2 = setup()
         rit_5 = reversed(it_5)
         snippet = rit_5.cut()
         self.assertIsInstance(snippet, linked_list)
         self.assertLinkedListEqual(snippet, [1, 2, 3, 4,  5])
+        self.assertEqual(len(snippet), 5)
         self.assertLinkedListEqual(t,                       [6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 5)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
         t2.splice(snippet)
         self.assertLinkedListEqual(snippet, [])
+        self.assertEqual(len(snippet), 0)
         self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 1, 2, 3, 4, 5])
+        self.assertEqual(len(t2), 10)
         check_linked_list_was_set(t)
         check_linked_list_was_set(t2)
         check_linked_list_was_set(snippet)
@@ -2995,19 +3217,28 @@ class BigLinkedListTests(unittest.TestCase):
         rit_2 = reversed(it_2)
         snippet = rit_5.cut(rit_2)
         self.assertLinkedListEqual(t,       [1, 2,         6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 7)
         self.assertLinkedListEqual(snippet,       [3, 4, 5])
+        self.assertEqual(len(snippet), 3)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
+        # these cuts raised! which means NOTHING CHANGED, RIGHT?
         with self.assertRaises(ValueError):
             t.cut(rit_5)
         with self.assertRaises(ValueError):
-            t.cut(end=rit_5)
+            t.cut(stop=rit_5)
         self.assertLinkedListEqual(t,       [1, 2,         6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 7)
         self.assertLinkedListEqual(snippet,       [3, 4, 5])
+        self.assertEqual(len(snippet), 3)
+        check_linked_list_was_set(t)
+        check_linked_list_was_set(snippet)
 
-        t2 = t.cut(end=t.head())
+        t2 = t.cut(stop=t.head())
+        self.assertEqual(len(t), 7)
         self.assertLinkedListEqual(t2, [])
+        self.assertEqual(len(t2), 0)
 
         t, it_5, t2 = setup()
         it_2 = t.find(2)
@@ -3023,7 +3254,9 @@ class BigLinkedListTests(unittest.TestCase):
         t, it_5, t2 = setup()
         snippet = it_5.rcut()
         self.assertLinkedListEqual(t,       [6, 7, 8, 9, 10])
+        self.assertEqual(len(t), 5)
         self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5])
+        self.assertEqual(len(snippet), 5)
         self.assertIs(it_5.linked_list, snippet)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
@@ -3032,7 +3265,9 @@ class BigLinkedListTests(unittest.TestCase):
         it = t.tail()
         snippet = it.rcut()
         self.assertLinkedListEqual(t,       [])
+        self.assertEqual(len(t), 0)
         self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual(len(snippet), 10)
         self.assertIs(it.linked_list, snippet)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
@@ -3057,9 +3292,43 @@ class BigLinkedListTests(unittest.TestCase):
         t2_tail = t2.tail()
         t.splice(t2)
         check_linked_list_was_set(t)
+        self.assertEqual(len(t), 15)
+        self.assertEqual(len(t2), 0)
 
         with self.assertRaises(ValueError):
             t.splice(t)
+
+        # rsplice without where
+        t, it_5, t2 = setup()
+        t.rsplice(t2)
+        self.assertLinkedListEqual(t, ['a', 'b', 'c', 'd', 'e', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+        # reverse iterator splice and rsplice
+        t, it_5, t2 = setup()
+        rit = reversed(it_5)
+        rit.splice(t2)
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 'a', 'b', 'c', 'd', 'e', 5, 6, 7, 8, 9, 10])
+
+        t, it_5, t2 = setup()
+        rit = reversed(it_5)
+        rit.rsplice(t2)
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'a', 'b', 'c', 'd', 'e', 6, 7, 8, 9, 10])
+
+        # splice does NOT move head and tail.
+        t = linked_list()
+        t2 = linked_list('abcde')
+        head = t2.head()
+        tail = t2.tail()
+        t.splice(t2)
+        self.assertLinkedListEqual(t, ['a', 'b', 'c', 'd', 'e'])
+        self.assertLinkedListEqual(t2, [])
+        t2.append('X')
+        head.next()
+        tail.previous()
+        self.assertEqual(head[0], 'X')
+        self.assertEqual(tail[0], 'X')
+
+
 
         # kooky boundary condition here.
         # Under what circumstances do "head" and "tail"
@@ -3076,37 +3345,38 @@ class BigLinkedListTests(unittest.TestCase):
             return t, t.head(), middle, t.tail()
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=None, end=middle)
+        snippet = t.cut(start=None, stop=middle)
         self.assertIs(head.linked_list, snippet)
         self.assertIs(tail.linked_list, t)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=head, end=middle)
+        snippet = t.cut(start=head, stop=middle)
         self.assertIs(head.linked_list, snippet)
         self.assertIs(tail.linked_list, t)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=t.find(1), end=middle)
+        snippet = t.cut(start=t.find(1), stop=middle)
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
 
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, end=None)
+        snippet = t.cut(start=middle, stop=None)
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, snippet)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, end=tail)
+        snippet = t.cut(start=middle, stop=tail)
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, end=t.find(5))
+        snippet = t.cut(start=middle, stop=t.find(5))
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
+
 
         # while we're at it, test this same thing
         # with reverse iterators.
