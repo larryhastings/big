@@ -55,8 +55,8 @@ def export(o):
 
 ##
 ## string uses _re_linebreaks_finditer to split lines by linebreaks.
-## string implements Python's rules about where to split a line,
-## and Python recognizes the DOS '\r\n' sequence as *one linebreak*.
+## string obeys Python's rules about where to split a line, and
+## Python recognizes the DOS '\r\n' sequence as *one linebreak*.
 ##
 ##    >>> ' a \n b \r c \r\n d \n\r e '.splitlines(True)
 ##    [' a \n', ' b \r', ' c \r\n', ' d \n', '\r', ' e ']
@@ -87,10 +87,13 @@ _linebreaks_and_tab_set = set(linebreaks) | set('\t')
 
 
 class Origin:
-    # an Origin is an original Python string with some extra metadata.
+    """
+    An Origin object is the building block of big.string objects.
+    It contains an original Python string with some extra metadata.
+    """
     __slots__ = ('s', 'string', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', )
 
-    def __init__(self, s, source, *, line_number=1, column_number=1, first_column_number=1, tab_width=8):
+    def __init__(self, s, source, line_number, column_number, first_column_number, tab_width):
         self.s = s
         self.source = source
         self.line_number = line_number
@@ -113,7 +116,6 @@ class Origin:
         # assuming first_line_number is 1:
         # line 1 always starts at offset 0, we don't write it down
         # line 2 starts at self._linebreak_offsets[0]
-        x = self.s
         self.linebreak_offsets = linebreak_offsets = tuple(match.end() for match in _re_linebreaks_finditer(self.s))
         if 0:
             print()
@@ -162,7 +164,10 @@ class Origin:
 
 
 class Range:
-    # a Range is a reference to a range of characters in an Origin.
+    """
+    A Range is a reference to a range of characters in an Origin.
+    A big.string is mainly a sequence of Range objects.
+    """
     __slots__ = ('origin', 'start', 'stop')
 
     def __init__(self, origin, start, stop):
@@ -177,39 +182,81 @@ class Range:
 
 @export
 class string(str):
-
     """
     A subclass of str that maintains line, column, and offset information.
 
-    string is a drop-in replacement for Python's str that automatically
-    computes the line, column, and offset of any substring.  It's a subclass
-    of str, and implements every str method.
+    string is a drop-in replacement for Python's str that knows its own
+    line and column number.  It's a subclass of str and implements every
+    str method.  Every operation that returns a substring, like partition
+    or split or [], returns a big.string that knows *its* line and column
+    information too.
 
     Additional features of string:
     * Every string knows its line number, column number, and offset from the
       beginning of the original string.
     * You may also specify a "source" parameter to the constructor,
       which should indicate where the text came from (e.g. the filename).
+    * If you add big.string objects together, the substrings remember their
+      original line / column / offset.
+
+    Parameters:
+    * source is a human-readable string describing where this string
+      came from.  It's presented unquoted, so if you want quote marks
+      around it (e.g. "C:\\AUTOEXEC.BAT") you should add those yourself.
+    * line_number and column_number are the line and column numbers
+      of the first character of the string.
+    * first_column_number is what the column number is reset to when
+      big.string encounters a linebreak in the string.
+    * tab_width is the distance between tab columns used for calculating
+      column numbers.  It's the same as the "tabsize" parameter for
+      str.expandtabs.
 
     Additional attributes of string:
-    * s.line_number is the line number of the first character of this string.
-    * s.column_number is the column number of the first character of this string.
+    * s.line_number and s.column_number are the line and column numbers
+      of this string.
+    * s.origin is the original big.string object this string was extracted from.
     * s.offset is the index of the first character of this string from where it
-      came from in the original string.  (e.g. if the original string was 'abcde',
-      'e' would have an offset of 4.)
-    * s.where is a string designed for error messages.  if the original string
+      came from in the s.offset string.  (s.origin[s.offset] == s[0])
+    * s.where is a string designed for error messages.  If the original string
       was initialized with a source, this will be in the format
-          "<source>" line <line_number> column <column_number>
+          <source> line <line_number> column <column_number>
       If no source was supplied, this will be in the format
           line <line_number> column <column_number>
-      This makes writing error messages easy.  If err contains a syntax error,
-      you can raise
-          SyntaxError(f"{err.where}: {err}")
+      This makes writing error messages easy.  Let's say you're parsing a file
+      and you hit a syntax error.  token is a big.string containing the bad
+      token.  Simply raise
+          SyntaxError(f"{token.where}: {token}")
+    * s.source, s.first_column_number, and s.tab_width are the values passed
+      in to big.string when this string was created.  (s.origin.source == s.source,
+      etc.)
+
+    If you pass a big.string into certain Python modules (implemented in C),
+    it will return substrings as str objects and not big.string objects.
+    big.string provides wrappers for two of these:
+        * string.generate_tokens wraps tokenizer.generate_tokens, and
+        * string.compile wraps re.compile.
+
+    If you add two big.string objects together that came from different origins:
+        a = big.string('abcde', source='foo')
+        b = big.string('vwxyz', source='bar')
+        c = a + b
+    the resulting big.string remembers the line, column, source, origin, and
+    offset for each individual character in the result:
+        >>> print(c.where)
+        "foo line 1 column 1"
+        >>> print(c[5].where)
+        "bar line 1 column 1"
     """
 
-    # string is a subclass of str whose value is a sequence of Range objects.
-    # these Range objects don't necessarily point to the same Origin object(s).
-    __slots__ = ('_ranges', '_len', '_line_number', '_column_number')
+    __slots__ = (
+        '_ranges',
+        '_len',
+        '_line_number',
+        '_column_number',
+        '_source',
+        '_origin',
+        '_offset',
+        )
 
     def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
         if isinstance(s, string):
@@ -244,13 +291,20 @@ class string(str):
         if tab_width < 1:
             raise ValueError(f"tab_width must be >= 1, not {tab_width}")
 
-        origin = Origin(s, source, line_number=line_number, column_number=column_number, first_column_number=first_column_number, tab_width=tab_width)
-        ranges = [Range(origin, 0, len(s))]
+        origin = Origin(s, source, line_number, column_number, first_column_number, tab_width)
+        length = len(s)
+        ranges = [Range(origin, 0, length)]
 
         self = super().__new__(cls, s)
         self._ranges = ranges
-        self._len = len(s)
-        self._line_number = self._column_number = None
+        self._len = length
+
+        self._line_number = line_number
+        self._column_number = column_number
+        self._source = source
+
+        self._origin = self
+        self._offset = 0
 
         origin.string = self
 
@@ -258,7 +312,7 @@ class string(str):
 
     def __repr__(self):
         # return f"<string {str(self)!r} _ranges={self._ranges} _len={self._len}, _line_number={self._line_number}, _column_number={self._column_number}>"
-        # not doing this breaks too much code, sorry
+        # sorry--but if the repr doesn't look *exactly* like str's repr, it breaks too much code.
         return repr(str(self))
 
     def _compute_line_and_column(self):
@@ -279,16 +333,17 @@ class string(str):
 
     @property
     def offset(self):
-        return self._ranges[0].start
+        return self._offset
 
     @property
     def origin(self):
-        return self._ranges[0].origin.string
+        return self._origin
 
     @property
     def source(self):
-        return self._ranges[0].origin.source
+        return self._source
 
+    # these are rarely used, so don't cache them in the string
     @property
     def first_column_number(self):
         return self._ranges[0].origin.first_column_number
@@ -301,13 +356,12 @@ class string(str):
     def where(self):
         if self._line_number is None:
             self._compute_line_and_column()
-        source = self._ranges[0].origin.source
+        source = self._source
         if source:
             prefix = f'{source} '
         else:
             prefix = ''
         return f'{prefix}line {self._line_number} column {self._column_number}'
-
 
     def __getitem__(self, index):
         if isinstance(index, slice):
@@ -396,23 +450,39 @@ class string(str):
                 length -= r_length
 
         # print(f">> {len(ranges)=} {ranges=}")
+        range0 = ranges[0]
+        origin = range0.origin
 
         new = super().__new__(self.__class__, ''.join(strings))
         new._ranges = ranges
         new._len = length
+
         new._line_number = new._column_number = None
+        new._source = origin.source
+
+        new._offset = range0.start
+        new._origin = origin.string
+
         return new
 
     def __iter__(self):
         new_call = super().__new__
         cls = self.__class__
         for r in self._ranges:
+            origin = r.origin
+            s = origin.s
+            source = origin.source
+            first_column_number = origin.first_column_number
+            tab_width = origin.tab_width
+            origin_string = origin.string
+
             compute_line_and_column_counter = 1
+
             for start in range(r.start, r.stop):
-                c = r.origin.s[start]
+                c = s[start]
 
                 new = new_call(cls, c)
-                new._ranges = [Range(r.origin, start, start+1)]
+                new._ranges = [Range(origin, start, start+1)]
                 new._len = 1
 
                 # origin.compute_line_and_column is slow,
@@ -423,12 +493,20 @@ class string(str):
                 if compute_line_and_column_counter:
                     compute_line_and_column_counter -= 1
                     new._line_number = new._column_number = None
+                    # this causes a call to origin.compute_line_and_column,
+                    # and we cache the results
                     line_number = new.line_number
                     column_number = new.column_number
                 else:
                     new._line_number = line_number
                     new._column_number = column_number
                 column_number += 1
+
+                new._source = source
+
+                new._offset = start
+                new._origin = origin_string
+
                 yield new
 
     @staticmethod
@@ -463,10 +541,22 @@ class string(str):
         ranges = list(self._ranges)
         self._append_ranges(ranges, other._ranges)
 
+        range0 = ranges[0]
+        origin = range0.origin
+
         new = super().__new__(self.__class__, s)
         new._ranges = ranges
         new._len = self._len + other._len
-        new._line_number = new._column_number = None
+
+        # if they cached it, we get their cached copies.
+        # otherwise, we're no worse off.
+        new._line_number = self._line_number
+        new._column_number = self._column_number
+
+        new._source = origin.source
+
+        new._offset = range0.start
+        new._origin = origin.string
 
         return new
 
@@ -899,6 +989,8 @@ class string(str):
 
         ranges = None
         length = 0
+        first_s = None
+        first_range = None
         first_origin = None
         for s in strings:
             if not s:
@@ -908,7 +1000,9 @@ class string(str):
             length += len(s)
             r = s._ranges
             if ranges is None:
-                first_origin = r[0].origin
+                first_s = s
+                first_range = r[0]
+                first_origin = first_range.origin
                 ranges = list(r)
             else:
                 cls._append_ranges(ranges, r)
@@ -921,15 +1015,22 @@ class string(str):
         new = cls.__new__(cls, s)
         new._ranges = ranges
         new._len = length
-        new._line_number = first_origin.line_number
-        new._column_number = first_origin.column_number
+        new._line_number = first_s._line_number
+        new._column_number = first_s._column_number
+
+        new._source = first_origin.source
+
+        new._offset = first_range.start
+        new._origin = first_origin.string
 
         return new
 
     @classmethod
     def cat(cls, *strings):
         """
-        Always returns a string.
+        Concatenates the str / big.string objects passed in.
+        Roughly equivalent to big.string('').join().
+        Always returns a big.string.
         """
         return cls._cat(strings)
 
@@ -1150,6 +1251,25 @@ class linked_list_node:
 
 @export
 class linked_list:
+    """
+    A feature-complete linked list object for Python.
+
+    linked_list objects have an interface similar to
+    the list or collections.deque objects.  You can
+    prepend() or append() nodes, or insert() at any index.
+    (You can also extend() or extendleft() an iterable.)
+
+    You can also extract ranges of nodes using cut(),
+    and merge one linked list into another using splice().
+
+    In addition, an *iterator* over a linked list object
+    is something like a database cursor.  It behaves like
+    a list object, relative to the node it's pointing to.
+    (When a linked_list iterator yields the value N, it
+    continues to point to the node containing the value N
+    until you call next on it.)
+    """
+
     __slots__ = ('_head', '_tail', '_length')
 
     def __init__(self, iterable=()):
@@ -1176,13 +1296,13 @@ class linked_list:
         return ''.join(buffer)
 
     ##
-    ## implement rich compare using *only*
-    ## the relevant operator and ==:
+    ## implement the six rich comparison methods
+    ## using *only* the relevant operator and ==:
     ##
-    ##     * in __lt__, use <  and ==
-    ##     * in __le__, use <= and ==
-    ##     * in __ge__, use >= and ==
-    ##     * in __gt__, use >  and ==
+    ##     * in __lt__, only use <  and ==
+    ##     * in __le__, only use <= and ==
+    ##     * in __ge__, only use >= and ==
+    ##     * in __gt__, only use >  and ==
     ##     * in __eq__, only use ==
     ##     * in __ne__, only use !=
     ##
@@ -1359,6 +1479,10 @@ class linked_list:
         # because it's emulating foolish garbage comprised
         # of bewildering bad ideas committed against
         # the list object decades ago.
+        #
+        # (slicing should *not clamp*.  that's a staggering
+        # misfeature.  linked_list emulates the behavior
+        # simply because backwards compatibility is so important.)
 
         start = slice.start
         stop = slice.stop
@@ -2711,6 +2835,22 @@ class linked_list_base_iterator:
 
 @export
 class linked_list_iterator(linked_list_base_iterator):
+    """
+    Iterates over the nodes of a linked list, yielding its data in order.
+
+    Note that indexing and slicing into a linked_list iterator behaves
+    differently from how slicing into a linked_list (or list) behaves.
+    If i is a linked_list iterator over the linked_list j:
+        * Negative indices access previous values, instead of starting
+          at the end of the list and working backwards.  i[-1] returns
+          the *previous* data item, not the *last* data item in the list.
+        * Slicing (e.g. i[-3:5]) doesn't "clamp".  If j contains 5
+          items, and i points to the middle item, you can say
+              j[-9999:9999]
+          without an error, but
+              i[-9999:9999]
+          raises a ValueError.
+    """
     def __reversed__(self):
         return linked_list_reverse_iterator(self._cursor)
 
