@@ -1200,7 +1200,6 @@ class linked_list_node:
         index = start
 
         for i in range(start, stop, step):
-
             if i == 0:
                 # index 0 is *always* self.
                 # if self is deleted, we *just skip over it.*
@@ -1214,14 +1213,20 @@ class linked_list_node:
                     # we pre-measured, we should never be tail
                     assert cursor.special != 'tail'
                     cursor = cursor.next
-                    if not cursor.special:
+                    # regression: if cursor is self,
+                    # we don't simply skip past it.
+                    # it's always counted as index 0.
+                    if (cursor is self) or (not cursor.special):
                         index += 1
             elif index > i:
                 while index > i:
                     # we pre-measured, we should never be head
                     assert cursor.special != 'head'
                     cursor = cursor.previous
-                    if not cursor.special:
+                    # regression: if cursor is self,
+                    # we don't simply skip past it.
+                    # it's always counted as index 0.
+                    if (cursor is self) or (not cursor.special):
                         index -= 1
 
             assert index == i

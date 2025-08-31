@@ -2695,6 +2695,13 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rit[-500:-100]
 
+        # regression: I had a bug where this returned [2, 4, 7, 9]
+        ll = linked_list(range(1, 10))
+        it = ll.find(5)
+        del it[0]
+        sl = it[-3:5:2]
+        self.assertLinkedListEqual(it[-3:5:2], [2, 4, 6, 8])
+
         # iterator setitem too
         t, it, rit = setup()
         it[-1] = 'a'
