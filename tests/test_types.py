@@ -2662,7 +2662,9 @@ class BigLinkedListTests(unittest.TestCase):
 
         # remove node pointed at by it
         rit.pop()
-        self.assertLinkedListEqual(it[-1:3], [4,    6, 7])
+        # and now it raises
+        with self.assertRaises(SpecialNodeError):
+            it[-1:3]
 
         t, it, rit = setup()
         self.assertEqual(rit[-1], 6)
@@ -2673,7 +2675,9 @@ class BigLinkedListTests(unittest.TestCase):
 
         # remove node pointed at by rit
         it.pop()
-        self.assertLinkedListEqual(rit[-1:3], [6,    4, 3])
+        # and now it raises
+        with self.assertRaises(SpecialNodeError):
+            rit[-1:3]
 
         # the rules are different for slices *on iterators*.
         # for one--I *don't* clamp!  YOU'RE WELCOME.
@@ -2695,10 +2699,26 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rit[-500:-100]
 
-        # regression: I had a bug where this returned [2, 4, 7, 9]
+        # when indexing into an *iterator*,
+        # it[0] ALWAYS ALWAYS ALWAYS refers to the node
+        # the iterator is currently pointing at.
+        #
+        # q: but what if it's pointing at a special node?
+        # a: we raise an exception at you.
         ll = linked_list(range(1, 10))
         it = ll.find(5)
         del it[0]
+
+        with self.assertRaises(SpecialNodeError):
+            it[0]
+        with self.assertRaises(SpecialNodeError):
+            it[0:1]
+        with self.assertRaises(SpecialNodeError):
+            it[-1:3]
+
+        # regression: I had a bug where this returned [2, 4, 7, 9].
+        # it should return [2, 4, 6, 8] as per the below.  note that
+        # it *doesn't* examine it[0] so it's fine.
         sl = it[-3:5:2]
         self.assertLinkedListEqual(it[-3:5:2], [2, 4, 6, 8])
 

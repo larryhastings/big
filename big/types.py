@@ -1206,7 +1206,7 @@ class linked_list_node:
                 cursor = self
                 index = 0
                 if self.special:
-                    continue
+                    raise SpecialNodeError()
 
             elif index < i:
                 while index < i:
@@ -1766,7 +1766,7 @@ class linked_list:
         if it is None:
             if default is not _undefined:
                 return default
-            raise ValueError('linked_list.remove(x): x not in linked list')
+            raise ValueError('{value!r} not in linked list')
         assert not it._cursor.special # find should never return a special node
         return it._cursor.remove()
 
@@ -1775,7 +1775,7 @@ class linked_list:
         if it is None:
             if default is not _undefined:
                 return default
-            raise ValueError('linked_list.remove(x): x not in linked list')
+            raise ValueError(f'{value!r} not in linked list')
         assert not it._cursor.special # find should never return a special node
         return it._cursor.remove()
 
