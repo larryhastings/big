@@ -1278,7 +1278,7 @@ class linked_list:
     linked_list objects have an interface similar to
     the list or collections.deque objects.  You can
     prepend() or append() nodes, or insert() at any index.
-    (You can also extend() or extendleft() an iterable.)
+    (You can also extend() or rextend() an iterable.)
 
     You can also extract ranges of nodes using cut(),
     and merge one linked list into another using splice().
@@ -1684,20 +1684,29 @@ class linked_list:
     def append(self, object):
         self._tail.insert_before(object)
 
+    def prepend(self, object):
+        self._head.next.insert_before(object)
+
+    # some aliases for you
+    appendleft = prepend
+    rappend = prepend
+
     def extend(self, iterable):
         insert_before = self._tail.insert_before
         for value in iterable:
             insert_before(value)
 
-    def appendleft(self, object):
-        self._head.next.insert_before(object)
-
-    def extendleft(self, iterable):
+    def rextend(self, iterable):
         insert_before = self._head.next.insert_before
         for value in iterable:
             insert_before(value)
 
-    prepend = appendleft
+    # don't alias "rextend" as "appendleft", they have different semantics!
+    # collections.deque.appendleft inserts the items in reverse order,
+    #   which is dumb and is behavior nobody wants.
+    # linked_list.rextend inserts the items in forwards order,
+    #   which is smart and is the behavior everybody actually wants.
+
 
     def clear(self):
         head = self._head
@@ -2800,17 +2809,6 @@ class linked_list_base_iterator:
             return default
         raise ValueError(f'value {value!r} not found')
 
-    def prepend(self, value):
-        # -- handle self pointing at head, or not --
-        cursor = self._cursor
-        if cursor.special == 'head':
-            cursor.iterator_refcount -= 1
-            cursor = cursor.next
-            self._cursor = cursor = cursor.insert_before(None, 'special')
-            cursor.iterator_refcount += 1
-        # -- actually append value --
-        cursor.insert_before(value)
-
     def append(self, value):
         # -- handle self pointing at tail, or not --
         cursor = self._cursor
@@ -2822,6 +2820,19 @@ class linked_list_base_iterator:
             cursor = cursor.next
         # -- actually append value --
         cursor.insert_before(value)
+
+    def prepend(self, value):
+        # -- handle self pointing at head, or not --
+        cursor = self._cursor
+        if cursor.special == 'head':
+            cursor.iterator_refcount -= 1
+            cursor = cursor.next
+            self._cursor = cursor = cursor.insert_before(None, 'special')
+            cursor.iterator_refcount += 1
+        # -- actually append value --
+        cursor.insert_before(value)
+
+    appendleft = rappend = prepend
 
     def extend(self, iterable):
         # -- handle self pointing at tail, or not --
@@ -2839,7 +2850,7 @@ class linked_list_base_iterator:
             counter += 1
             insert_before(value)
 
-    def extendleft(self, iterable):
+    def rextend(self, iterable):
         # handle self pointing at head, or not --
         cursor = self._cursor
         if cursor.special == 'head':
@@ -3075,7 +3086,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     the nodes
 
     Note that inserting or extracting a range of nodes
-    (e.g. the extend, extendleft, )
+    (e.g. extend, rextend, )
     """
     ##
     ## the super() methods that return iterators instantiate them
@@ -3140,9 +3151,9 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         super().prepend(value)
 
     def extend(self, value):
-        super().extendleft(value)
+        super().rextend(value)
 
-    def extendleft(self, value):
+    def rextend(self, value):
         super().extend(value)
 
     def pop(self):

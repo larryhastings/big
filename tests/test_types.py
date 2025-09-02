@@ -1460,7 +1460,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 6)
 
         t, it = setup()
-        t.extendleft('ABC')
+        t.rextend('ABC')
         self.assertLinkedListEqual(t, ['A', 'B', 'C', 1, 2, 3])
         self.assertLength(t, 6)
 
@@ -1472,7 +1472,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         it = it.find(3)
-        it.extendleft('ABC')
+        it.rextend('ABC')
         self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
         self.assertLength(t, 6)
 
@@ -1493,7 +1493,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit = rit.find(2)
         self.assertIsInstance(rit, linked_list_reverse_iterator)
-        rit.extendleft('ABC')
+        rit.rextend('ABC')
         self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
         self.assertLength(t, 6)
 
@@ -1736,7 +1736,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(it[ 2:-3: 2], [])
         self.assertLinkedListEqual(it[-2: 3:-2], [])
 
-    def test_prepend_and_append_and_extend_and_extendleft(self):
+    def test_prepend_and_append_and_extend_and_rextend(self):
         #
         # test all our verbs in the middle of the list
         #
@@ -1759,7 +1759,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(it[0], 2)
 
         t, it = setup()
-        it.extendleft((1.25, 1.5, 1.75))
+        it.rextend((1.25, 1.5, 1.75))
         self.assertLinkedListEqual(t, [1, 1.25, 1.5, 1.75, 2, 3])
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 2)
@@ -1803,7 +1803,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsHead(it)
 
         t, it = setup()
-        it.extendleft('FGH')
+        it.rextend('FGH')
         self.assertLinkedListEqual(t, ['F', 'G', 'H', 1, 2, 3])
         self.assertIsSpecial(it)
         worker = it.copy()
@@ -1843,7 +1843,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(it[0], 'J')
 
         t, it = setup()
-        it.extendleft('KLM')
+        it.rextend('KLM')
         self.assertLinkedListEqual(t, [1, 2, 3, 'K', 'L', 'M'])
         self.assertIsTail(it)
 
@@ -1912,7 +1912,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 'Z')
 
-        # now with extend and extendleft
+        # now with extend and rextend
 
         # appending to head obviously works
         t, it = setup_at_head()
@@ -1922,7 +1922,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         # prepending before head also works, this creates a new special node
         t, it = setup_at_head()
-        it.extendleft('vwx')
+        it.rextend('vwx')
         self.assertLinkedListEqual(t, ['v', 'w', 'x'])
         self.assertIsSpecial(it)
         worker = it.copy()
@@ -1934,7 +1934,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         # prepending before tail obviously works
         t, it = setup_at_tail()
-        it.extendleft('wxy')
+        it.rextend('wxy')
         self.assertLinkedListEqual(t, ['w', 'x', 'y'])
         self.assertIsTail(it)
 
@@ -3554,7 +3554,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 'a', 'b', 'c', 5, 6, 7, 8, 9])
 
         t, it, rit = setup()
-        rit.extendleft('abc')
+        rit.rextend('abc')
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'a', 'b', 'c', 6, 7, 8, 9])
 
         t, it, rit = setup()
