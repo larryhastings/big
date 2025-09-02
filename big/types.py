@@ -3151,10 +3151,10 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         super().prepend(value)
 
     def extend(self, value):
-        super().rextend(value)
+        super().rextend(reversed(value))
 
     def rextend(self, value):
-        super().extend(value)
+        super().extend(reversed(value))
 
     def pop(self):
         return self._pop(self._cursor.next)

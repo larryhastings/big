@@ -1481,12 +1481,22 @@ class BigLinkedListTests(unittest.TestCase):
             rit = reversed(t)
             return t, rit
 
+        # surprise! extending and rextending on a *reverse iterator*
+        # inserts the nodes in *reverse order*.
+        #
+        # sorry!  but
+        #   i.extend(iterable)
+        # and
+        #   for o in iterable:
+        #       i.append(o)
+        # must always produce the same result, for both forwards
+        # and reverse iterators.
         t, rit = setup2()
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit = rit.find(2)
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit.extend('ABC')
-        self.assertLinkedListEqual(t, [1, 'A', 'B', 'C', 2, 3])
+        self.assertLinkedListEqual(t, [1, 'C', 'B', 'A', 2, 3])
         self.assertLength(t, 6)
 
         t, rit = setup2()
@@ -1494,7 +1504,7 @@ class BigLinkedListTests(unittest.TestCase):
         rit = rit.find(2)
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit.rextend('ABC')
-        self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
+        self.assertLinkedListEqual(t, [1, 2, 'C', 'B', 'A', 3])
         self.assertLength(t, 6)
 
 
@@ -3574,11 +3584,11 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it, rit = setup()
         rit.extend('abc')
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 'a', 'b', 'c', 5, 6, 7, 8, 9])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 'c', 'b', 'a', 5, 6, 7, 8, 9])
 
         t, it, rit = setup()
         rit.rextend('abc')
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'a', 'b', 'c', 6, 7, 8, 9])
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'c', 'b', 'a', 6, 7, 8, 9])
 
         t, it, rit = setup()
         value = rit.pop()
