@@ -2106,7 +2106,7 @@ class linked_list:
             stop = tmp
 
 
-        print(f"CALLING  _CUT {start=} {stop=} {start_is_reversed=}")
+        # print(f"CALLING  _CUT {start=} {stop=} {start_is_reversed=}")
         return self._cut(start, stop, start_is_reversed)
 
     def rcut(self, start=None, stop=None):

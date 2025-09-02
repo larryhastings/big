@@ -41,8 +41,9 @@ from big.types import string, Pattern
 from big.types import linked_list, SpecialNodeError, linked_list_base_iterator
 from big.types import linked_list_iterator, linked_list_reverse_iterator
 from big.tokens import *
+from big.version import Version
 
-
+python_version = Version(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
 
 source = '"C:\\AUTOEXEC.BAT"'
 source2 = '"C:\\HIMEM.SYS"'
@@ -323,14 +324,12 @@ class BigStringTests(unittest.TestCase):
             del l.source
 
     def test___dir__(self):
-        str_dir = dir('')
+        str_dir = list(dir(''))
         str_dir.extend(
             (
-            '__firstlineno__',
             '__module__',
             '__radd__',
             '__slots__',
-            '__static_attributes__',
             '_append_ranges',
             '_cat',
             '_column_number',
@@ -360,6 +359,16 @@ class BigStringTests(unittest.TestCase):
             'where',
             )
         )
+
+        if python_version < Version("3.7"): # pragma: nocover
+            str_dir.append('isascii')
+        if python_version < Version("3.9"): # pragma: nocover
+            str_dir.append('removeprefix')
+            str_dir.append('removesuffix')
+        if python_version >= Version("3.13"): # pragma: nocover
+            str_dir.append('__firstlineno__')
+            str_dir.append('__static_attributes__')
+
         str_dir.sort()
 
         string_dir = dir(abcde)
