@@ -3487,6 +3487,29 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(snippet, [4, 5])
         self.assertLinkedListEqual(t, [1, 2, 3])
 
+        # test cutting only special nodes!
+        def setup():
+            t = linked_list((1,))
+            it = t.find(1)
+            del it[0]
+            return t, it
+
+        t, it = setup()
+        t2 = t.cut()
+        self.assertEqual(it.linked_list, t2)
+
+        t, it = setup()
+        t2 = it.cut()
+        self.assertEqual(it.linked_list, t2)
+
+        t, it = setup()
+        t2 = t.rcut()
+        self.assertEqual(it.linked_list, t2)
+
+        t, it = setup()
+        t2 = it.rcut()
+        self.assertEqual(it.linked_list, t2)
+
 
     def test_reverse_iterators(self):
         def setup():
