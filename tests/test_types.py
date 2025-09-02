@@ -3054,21 +3054,12 @@ class BigLinkedListTests(unittest.TestCase):
         it.insert(0, 'oo')
         self.assertLinkedListEqual(t, ['xx', 1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 'yy', 10, 'oo'])
 
-    def test_truncate_cut_and_splice(self):
+    def test_truncate(self):
         def setup():
             t = linked_list(range(1, 11))
             it_5 = t.find(5)
             t2 = linked_list('abcde')
             return t, it_5, t2
-
-        def check_linked_list_was_set(t):
-            it = iter(t)
-            self.assertIsHead(it)
-            self.assertIs(it.linked_list, t, "failed on t.head")
-            for _ in it:
-                self.assertIs(it.linked_list, t, f"failed on it={it!r}")
-            self.assertIsTail(it)
-            self.assertIs(it.linked_list, t, "failed on t.tail")
 
         # truncate no nodes
         t, it_5, t2 = setup()
@@ -3105,23 +3096,26 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertFalse(t)
         self.assertIsHead(it)
 
-        # truncating at "head" is the same as truncating at the first data node.
+        # can't truncate head
         t, it_5, t2 = setup()
         it = t.head()
-        it.truncate()
-        self.assertLinkedListEqual(t, [])
-        self.assertEqual(len(t), 0)
-        self.assertFalse(t)
-        self.assertIsTail(it)
+        with self.assertRaises(SpecialNodeError):
+            it.truncate()
+        # can't rtruncate a reverse iterator pointing at head.
+        # (say *that* three times fast!)
+        rit = reversed(it)
+        with self.assertRaises(SpecialNodeError):
+            rit.rtruncate()
 
         # rtruncating at "tail" is the same as truncating at the last data node.
         t, it_5, t2 = setup()
         it = t.tail()
-        it.rtruncate()
-        self.assertLinkedListEqual(t, [])
-        self.assertEqual(len(t), 0)
-        self.assertFalse(t)
-        self.assertIsHead(it)
+        with self.assertRaises(SpecialNodeError):
+            it.rtruncate()
+        # can't truncate a reverse iterator pointing at tail.
+        rit = reversed(it)
+        with self.assertRaises(SpecialNodeError):
+            rit.truncate()
 
         # truncate some nodes, ensuring we have an iterator
         # pointing to one of the nodes we throw away
@@ -3141,7 +3135,23 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertTrue(t)
         self.assertIsHead(it_5)
 
-        # splice empty does nothing
+    def test_cut_and_splice(self):
+        def setup():
+            t = linked_list(range(1, 11))
+            it_5 = t.find(5)
+            t2 = linked_list('abcde')
+            return t, it_5, t2
+
+        def check_linked_list_was_set(t):
+            it = iter(t)
+            self.assertIsHead(it)
+            self.assertIs(it.linked_list, t, "failed on t.head")
+            for _ in it:
+                self.assertIs(it.linked_list, t, f"failed on it={it!r}")
+            self.assertIsTail(it)
+            self.assertIs(it.linked_list, t, "failed on t.tail")
+
+        # splicing an empty linked_list does nothing
         t, it_5, t2 = setup()
         t_list = list(t)
 
@@ -3153,6 +3163,80 @@ class BigLinkedListTests(unittest.TestCase):
         rit = reversed(it_5)
         rit.splice(t2)
         self.assertLinkedListEqual(t, t_list)
+
+        # on a forward iterator, can't cut head
+        t, it_5, t2 = setup()
+        it_head = iter(t)
+        with self.assertRaises(SpecialNodeError):
+            it_head.cut()
+        with self.assertRaises(SpecialNodeError):
+            t.cut(it_head, None)
+
+        # on a reversed iterator, can't cut tail
+        rit_tail = reversed(t)
+        with self.assertRaises(SpecialNodeError):
+            rit_tail.cut()
+        with self.assertRaises(SpecialNodeError):
+            t.cut(rit_tail)
+
+        # on a forward iterator, can't rcut tail
+        t, it_5, t2 = setup()
+        it_tail = t.tail()
+        with self.assertRaises(SpecialNodeError):
+            it_tail.rcut()
+        with self.assertRaises(SpecialNodeError):
+            t.rcut(it_tail, None)
+
+        # on a reverse iterator, can't rcut head
+        t, it_5, t2 = setup()
+        rit_head = reversed(t.head())
+        with self.assertRaises(SpecialNodeError):
+            rit_head.rcut()
+        with self.assertRaises(SpecialNodeError):
+            t.rcut(rit_head, None)
+
+        # if start and stop both point to head,
+        # cut returns an empty list.
+        unchanged_t = list(t)
+        head = t.head()
+
+        got = t.cut(head, head)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        got = head.cut(head)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        head = reversed(head)
+        got = t.cut(head, head)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        got = head.cut(head)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        # if start and stop both point to tail,
+        # cut returns an empty list.
+        tail = t.tail()
+
+        got = t.cut(tail, tail)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        got = tail.cut(tail)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        tail = reversed(tail)
+        got = t.cut(tail, tail)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
+
+        got = tail.cut(tail)
+        self.assertLinkedListEqual(t, unchanged_t)
+        self.assertLinkedListEqual(got, [])
 
 
         t, it_5, t2 = setup()
@@ -3250,7 +3334,8 @@ class BigLinkedListTests(unittest.TestCase):
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
-        # these cuts raised! which means NOTHING CHANGED, RIGHT?
+        # rit moved to snippet when the nodes were cut.  which means
+        # these calls raise an exception! which means NOTHING CHANGED, RIGHT?
         with self.assertRaises(ValueError):
             t.cut(rit_5)
         with self.assertRaises(ValueError):
@@ -3262,7 +3347,8 @@ class BigLinkedListTests(unittest.TestCase):
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
-        t2 = t.cut(stop=t.head())
+        it = t.head().after()
+        t2 = t.cut(stop=it)
         self.assertEqual(len(t), 7)
         self.assertLinkedListEqual(t2, [])
         self.assertEqual(len(t2), 0)
@@ -3289,7 +3375,7 @@ class BigLinkedListTests(unittest.TestCase):
         check_linked_list_was_set(snippet)
 
         t, it_5, t2 = setup()
-        it = t.tail()
+        it = t.tail().before()
         snippet = it.rcut()
         self.assertLinkedListEqual(t,       [])
         self.assertEqual(len(t), 0)
@@ -3357,15 +3443,6 @@ class BigLinkedListTests(unittest.TestCase):
 
 
 
-        # kooky boundary condition here.
-        # Under what circumstances do "head" and "tail"
-        # get cut by t.cut()?
-        # answer: it's like always in Python, ranges
-        # are inclusive of start but non-inclusive of end.
-        #
-        # "head" gets cut if start in (None, head).
-        # "tail" gets cut *only* if end is None.
-        # If end == tail, we cut the last data node, but we leave tail.
         def setup():
             t = linked_list((1, 2, 3, 4, 5))
             middle = t.find(3)
@@ -3373,40 +3450,33 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, head, middle, tail = setup()
         snippet = t.cut(start=None, stop=middle)
-        self.assertIs(head.linked_list, snippet)
+        self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=head, stop=middle)
-        self.assertIs(head.linked_list, snippet)
-        self.assertIs(tail.linked_list, t)
-
-        t, head, middle, tail = setup()
-        snippet = t.cut(start=t.find(1), stop=middle)
+        snippet = t.cut(start=head.after(), stop=middle)
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
+
 
 
         t, head, middle, tail = setup()
         snippet = t.cut(start=middle, stop=None)
         self.assertIs(head.linked_list, t)
-        self.assertIs(tail.linked_list, snippet)
+        self.assertIs(tail.linked_list, t)
 
         t, head, middle, tail = setup()
         snippet = t.cut(start=middle, stop=tail)
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
 
+        # test rcut with start=None!
         t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, stop=t.find(5))
-        self.assertIs(head.linked_list, t)
-        self.assertIs(tail.linked_list, t)
-
-
-        # while we're at it, test this same thing
-        # with reverse iterators.
+        snippet = t.rcut(None, middle)
+        self.assertLinkedListEqual(snippet, [4, 5])
+        self.assertLinkedListEqual(t, [1, 2, 3])
 
 
     def test_reverse_iterators(self):

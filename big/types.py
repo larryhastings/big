@@ -1073,6 +1073,7 @@ class string(str):
 
 _undefined = object()
 
+@export
 class SpecialNodeError(LookupError):
     pass
 
@@ -1840,6 +1841,177 @@ class linked_list:
         segment_2_tail.next = segment_1_head
         segment_1_head.previous = segment_2_tail
 
+
+    def _cut(self, start, stop, is_rcut):
+        """
+        if is_rcut is true, then start comes after stop.
+            start is still inclusive.
+            stop is still exclusive.
+        """
+        # print()
+        # print("_" * 69)
+        # print(f"_cut {start=} {stop=} {is_rcut=}")
+        start_is_none = start is None
+        stop_is_none = stop is None
+
+        # compute this now, before we potentially invert is_rcut
+        _cut = "rcut" if is_rcut else "cut"
+
+        # {name}_directions is a bitfield indicating supported iterator directions:
+        #   1 means "forward"
+        #   2 means "reverse"
+        #   3 means both "forward" and "reverse"
+
+        if start_is_none:
+            start_directions = 3
+        else:
+            if start._cursor.linked_list is not self:
+                raise ValueError(f"start is not an iterator over this linked_list, start={start!r}")
+            start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
+
+        if stop_is_none:
+            stop_directions = 3
+        else:
+            if stop._cursor.linked_list is not self:
+                raise ValueError(f"stop is not an iterator over this linked_list, stop={stop!r}")
+            stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1
+
+        if not (start_directions & stop_directions):
+            raise ValueError("mismatched forward and reverse iterators for start and stop, start={start!r}, stop={stop!r}")
+
+        if (start_directions == 2) or (stop_directions == 2):
+            # if the user is cutting using reverse iterators,
+            # negate is_rcut *here*
+            is_rcut = not is_rcut
+            # print(f">> reverse iterators detected! negating is_rcut. is_rcut is now {is_rcut}")
+
+        t2 = self.__class__()
+
+        if not is_rcut:
+            # cut
+            # print(f">> CUT")
+            # print(f">>     {start=}")
+            # print(f">>     {start_is_none=}")
+            # print(f">>     {stop=}")
+            # print(f">>     {stop_is_none=}")
+            # print(f">> (note start should be BEFORE or EQUAL TO stop right now)")
+            if start_is_none:
+                start = self._head.next
+            else:
+                if start._cursor is self._head:
+                    # only permissible if stop is also _head
+                    if start == stop:
+                        return t2
+                    raise SpecialNodeError(f"can't {_cut} head")
+                start = start._cursor
+
+            # convert stop to a cursor, and make it inclusive
+            if stop_is_none:
+                stop = self._tail
+            else:
+                stop = stop._cursor
+
+            if start == stop:
+                return t2
+
+            # print(f"BEFORE WE MAKE STOP INCLUSIVE {start=} {stop=}")
+            stop = stop.previous
+        else:
+            # rcut
+            # print(f">> RCUT")
+            # print(f">>     {start=}")
+            # print(f">>     {start_is_none=}")
+            # print(f">>     {stop=}")
+            # print(f">>     {stop_is_none=}")
+            # print( ">> (note start should be EQUAL TO or AFTER stop right now)")
+            if start_is_none:
+                start = self._tail.previous
+                # print("START IS NOW", start)
+            else:
+                if start._cursor is self._tail:
+                    # only permissible if stop is also _tail
+                    if start == stop:
+                        return t2
+                    raise SpecialNodeError(f"can't {_cut} tail")
+                start = start._cursor
+
+            # print(f"BEFORE CURSOR {start=} {stop=}")
+
+            # convert stop to a cursor, and make it inclusive
+            if stop_is_none:
+                stop = self._head
+                # print(f">> STOP IS NOW {stop}")
+            else:
+                stop = stop._cursor
+
+            if start == stop:
+                return t2
+
+            # print(f"BEFORE WE MAKE STOP INCLUSIVE {start=} {stop=}")
+
+            stop = stop.next
+
+            # print(f"BEFORE SWAP {start=} {stop=}")
+
+            # now swap start and stop
+            tmp = start
+            start = stop
+            stop = tmp
+
+        # print(f">> [1] {start=} {stop=}")
+
+        if not (start_is_none or stop_is_none):
+            # if the user specified both ends of the range,
+            # confirm that start comes before stop
+            cursor = start
+            while cursor and (cursor is not stop):
+                cursor = cursor.next
+            if not cursor:
+                raise ValueError(f"stop points to a node before start")
+
+        # print(f">> [2] {start=} {stop=}")
+
+        # everything checks out, and everything is prepared--we can cut!
+        # start and stop are now cursors (direct references to nodes),
+        # and are inclusive.
+        #
+        # and, we've already done all our memory allocation, before changing anything.
+        # (in case an allocation fails, we won't leave the original linked list
+        # in an incomplete state.)
+
+        # "previous" points to the node in self just before the cut, and
+        # "next" points to the node in self just after the cut.
+        # since first can't be head, and last can't be tail, we know
+        # previous and next are both defined.
+
+        previous = start.previous
+        next = stop.next
+
+        new_head = t2._head
+        new_tail = t2._tail
+
+        new_head.next = start
+        start.previous = new_head
+        new_tail.previous = stop
+        stop.next = new_tail
+
+        previous.next = next
+        next.previous = previous
+
+        count = 0
+        while start is not new_tail:
+            assert start is not None
+            start.linked_list = t2
+            if start.special is None:
+                count += 1
+            start = start.next
+
+        self._length -= count
+        t2._length = count
+
+        return t2
+
+
     def cut(self, start=None, stop=None):
         """
         If start is None or head, this will cut head,
@@ -1859,184 +2031,86 @@ class linked_list:
         example, if start is None and stop is specified,
         start will default to "tail".)
         """
-        # first, check that start and stop are legal values,
-        # while also converting them to be pointers to nodes,
-        # and changing stop so it points to the last node to cut.
+        return self._cut(start, stop, is_rcut=False)
 
-        if start is None:
-            start_is_none = True
-            start_is_reversed = None
+
+        # make stop inclusive.
+        #
+        # this is confusing enough that I had to draw a diagram to make sure I got it right.
+        # in both diagrams, we have a linked list containing [1, 2, 3, 4, 5], and
+        # start and stop both point to the first and last nodes.
+        if not start_is_reversed:
+            # both are forward iterators:
+            #
+            #                            next->
+            #                        <-previous
+            #               head - 1 - 2 - 3 - 4 - 5 - tail
+            #                      ^           ^   ^
+            #                      |           :   |
+            #                     start        :  stop
+            #                      :           :
+            #  first actual node cut           :
+            #                                  last actual node cut
+            #
+            #     * start is already inclusive.  it can't be head.
+            #       but we check that in _cut, so skip it here.
+            #     * stop *retreats* one node to 4 (stop = stop.previous)
+            #       to make it inclusive.
+            #     * if stop points to head, this is only legal if start
+            #       points to head too.  but we already handled start = stop,
+            #       so that can't be true here.  therefore, if we reach here
+            #       and stop is head, then it's an error.
+            #       (_cut checks this too, but we're about to advance stop,
+            #       so we have to redundantly check it here.)
+            #
+            if stop is self._head:
+                raise ValueError(f"stop points to a node before start")
+
+            if stop is not None:
+                stop = stop.previous
         else:
-            start_is_none = False
-            start_is_reversed = isinstance(start, linked_list_reverse_iterator)
+            # both are reverse iterators:
+            #
+            #                          <-next
+            #                          previous->
+            #               tail - 5 - 4 - 3 - 2 - 1 - head
+            #                      ^           ^   ^
+            #                      |           :   |
+            #                     start        :  stop
+            #                      :           :
+            #  first actual node cut           :
+            #                                  last actual node cut
+            #
+            #     * start is already inclusive.  it can't be tail.
+            #       but we check that in _cut, so skip it here.
+            #     * stop *advances* one node to 2 (stop = stop.next)
+            #       to make it inclusive.
+            #     * if stop points to tail, this is only legal if start
+            #       points to tail too.  but we already handled start = stop,
+            #       so that can't be true here.  therefore, if we reach here
+            #       and stop is tail, then it's an error.
+            #       (_cut checks this too, but we're about to advance stop,
+            #       so we have to redundantly check it here.)
+            #
+            if stop is self._tail:
+                raise ValueError(f"stop points to a node after start (and they're both reverse iterators)")
+            if stop is not None:
+                stop = stop.next
 
-        if stop is None:
-            stop_is_none = True
-            stop_is_reversed = None
-        else:
-            stop_is_none = False
-            stop_is_reversed = isinstance(stop, linked_list_reverse_iterator)
-
-        if start_is_reversed or stop_is_reversed:
-            # if start is None, start_is_reversed is None.
-            # start_is_reversed is only False if start is not None
-            # and it's genuinely a forward iterator.
-            if ((start_is_reversed is False) or (stop_is_reversed is False)):
-                raise ValueError("mismatched forward and reverse iterators")
-
-            # swap start and stop
+            # and *now* we swap start and stop.
+            # (why not swap first?  it makes the error messages confusing.
+            # if start is tail, raise "stop can't be tail". feh.)
+            #
             tmp = start
             start = stop
             stop = tmp
 
-            # ... and start_is_none and stop_is_none
-            tmp = start_is_none
-            start_is_none = stop_is_none
-            stop_is_none = tmp
 
-            # Python iteration is closed at start and open at stop.
-            # Since we swapped the two stops, we need to also advance
-            # both iterators (if they're pointing at interior nodes).
-            #
-            # For example, here's reverse iterators starting at 6
-            # and stopping at 2:
-            #   1 2 3 4 5 6 7 8
-            #     ^       ^
-            #     stop    start
-            # That gets you [6, 5, 4, 3].  To address the same segment
-            # with forwards iterators, you need to swap start and stop,
-            # reverse them (of course), and advance them both to next.
-            #   1 2 3 4 5 6 7 8
-            #       ^       ^
-            #     stop    start
-            # But don't move the iterators passed in!  Those are the
-            # user's, the cut shouldn't move them.
-            if (not start_is_none) and (start._cursor is not self._head):
-                tmp = iter(self)
-                tmp._cursor = start._cursor.next
-                start = tmp
+        print(f"CALLING  _CUT {start=} {stop=} {start_is_reversed=}")
+        return self._cut(start, stop, start_is_reversed)
 
-            if (not stop_is_none) and (stop._cursor is not self._tail):
-                tmp = iter(self)
-                tmp._cursor = stop._cursor.next
-                stop = tmp
-
-        if start_is_none:
-            # if start is None, we cut the entire start of the list,
-            # *including* head.
-            start = self._head
-            start_is_head = True
-        else:
-            start = start._cursor
-            if start.linked_list is not self:
-                raise ValueError("start is not an iterator over this linked_list")
-            start_is_head = start is self._head
-            assert start is not None
-
-        if stop_is_none:
-            # if stop is None, we cut all the subsequent nodes in the list,
-            # *including* tail.
-            stop = self._tail
-            stop_is_tail = True
-        else:
-            stop = stop._cursor
-            if stop.linked_list is not self:
-                raise ValueError("stop is not an iterator over this linked_list")
-
-            # if the user specified both ends of the range,
-            # make sure start comes before stop
-            if not start_is_none:
-                cursor = start
-                while cursor and (cursor is not stop):
-                    cursor = cursor.next
-                if not cursor:
-                    raise ValueError("stop points to a node before start")
-
-            # adjust stop so it points to the last node to cut.
-            # (rather than one node past it, at the first node not cut.)
-            if stop is not self._head:
-                stop = stop.previous
-
-            # because we retreat one node, stop can never be tail here.
-            assert stop is not None
-            stop_is_tail = False
-
-        # start and stop are now references to *nodes*, not *iterators*.
-        # start points to the first node to cut, inclusive.
-        # stop points to the last node to cut, inclusive.
-        # and we've guaranteed that start comes before stop in the list.
-        #
-        # everything checks out--we can cut!
-        #
-        # do all our memory allocation before changing anything,
-        # so that if an allocation fails we don't leave the orignal linked list
-        # in an incomplete state.
-
-        cls = type(self)
-        t2 = cls()
-
-        if start is stop:
-            return t2
-
-        new_head = t2._head
-        new_tail = t2._tail
-
-        # all our allocations are done! modify self.
-        #
-        # "previous" points to the node in self just before the cut, and
-        # "next" points to the node in self just after the cut.
-
-        if start_is_head:
-            # start is self._head; swap heads.
-            previous = new_head
-            self._head = new_head
-            new_head.linked_list = self
-            t2._head = start
-        else:
-            # start is not self._head;
-            # self and t2 both keep their own heads.
-            previous = start.previous
-            new_head.next = start
-            start.previous = new_head
-
-        if stop_is_tail:
-            # stop is self._tail; swap tails.
-            next = new_tail
-            self._tail = new_tail
-            new_tail.linked_list = self
-            t2._tail = stop
-            stop.linked_list = t2
-            assert stop.next == None
-        else:
-            # stop is not self.tail;
-            # self and t2 both keep their own tails.
-            next = stop.next
-            new_tail.previous = stop
-            stop.next = new_tail
-
-        # assert previous is not None
-        # assert     next is not None
-        previous.next = next
-        next.previous = previous
-
-        # assert self._head.previous is None
-        # assert   t2._head.previous is None
-        # assert self._tail.next     is None
-        # assert   t2._tail.next     is None
-
-        # at this point, we're guaranteed stop is not None.
-        stop = stop.next
-        count = 0
-        while start is not stop:
-            start.linked_list = t2
-            if start.special is None:
-                count += 1
-            start = start.next
-
-        self._length -= count
-        t2._length = count
-
-        return t2
+    def rcut(self, start=None, stop=None):
+        return self._cut(start, stop, is_rcut=True)
 
     def _splice(self, other, where, cursor, special):
         """
@@ -2068,7 +2142,7 @@ class linked_list:
         if (where is not None) and (special is not None):
             where._cursor = special
 
-    def _splice_checks(self, other, where):
+    def _splice_preflight_checks(self, other, where):
         if not isinstance(other, linked_list):
             raise TypeError('other must be a linked_list')
         if other is self:
@@ -2094,7 +2168,7 @@ class linked_list:
         *after* the node pointed to by where.  if where
         is None, the nodes are appended to self.
         """
-        self._splice_checks(other, where)
+        self._splice_preflight_checks(other, where)
 
         if not other:
             return
@@ -2112,7 +2186,7 @@ class linked_list:
         self._splice(other, where, cursor, special)
 
     def rsplice(self, other, *, where=None):
-        self._splice_checks(other, where)
+        self._splice_preflight_checks(other, where)
 
         if not other:
             return
@@ -2847,7 +2921,7 @@ class linked_list_base_iterator:
             return
 
         if cursor is t._head:
-            cursor = cursor.next
+            raise SpecialNodeError("can't truncate head")
 
         previous = cursor.previous
         count = 0
@@ -2885,7 +2959,7 @@ class linked_list_base_iterator:
         if cursor is head:
             return
         if cursor is t._tail:
-            cursor = cursor.previous
+            raise SpecialNodeError("can't rtruncate tail")
 
         next = cursor.next
 
@@ -2936,8 +3010,7 @@ class linked_list_base_iterator:
         """
         return self._cursor.linked_list.cut(self, stop)
 
-
-    def rcut(self, start=None):
+    def rcut(self, stop=None):
         """
         Bisects the list at the current node.  Returns a new list.
 
@@ -2960,13 +3033,7 @@ class linked_list_base_iterator:
         All iterators pointing at nodes moved to the new list continue to
         point to those nodes.  This means they also move to the new list.
         """
-
-        cursor = self._cursor
-        if cursor.special == 'tail':
-            after = None
-        else:
-            after = self.__class__(cursor.next)
-        return cursor.linked_list.cut(start, after)
+        return self._cursor.linked_list.rcut(self, stop)
 
     def splice(self, other):
         self._cursor.linked_list.splice(other, where=self)
@@ -3102,13 +3169,87 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     def rtruncate(self):
         super().truncate()
 
-    # reverse support is baked in for cut & rcut
-    #
-    # def cut(self):
-    #     super().rcut()
 
-    # def rcut(self):
-    #     super().cut()
+    # This gets confusing.  So here's a diagram of cut with reverse iterators:
+    #
+    #                          <-next
+    #                          previous->
+    #               tail - 5 - 4 - 3 - 2 - 1 - head
+    #                      ^           ^   ^
+    #                      |           :   |
+    #                     start        :  stop
+    #                      :           :
+    #  first actual node cut           :
+    #                                  last actual node cut
+    #
+    # for these four defined values:
+    #    forward_start = (a forward iterator over t)
+    #    forward_end   = (a forward iterator over t)
+    #    reverse_start = reversed(forward_start)
+    #    reverse_end   = reversed(forward_end)
+    #
+    # these produce the same result:
+    #    t.cut(forward_start, forward_end)
+    #    t.rcut(reverse_start, reverse_end)
+    #
+    # and these too:
+    #    t.rcut(forward_end, forward_start)
+    #    t.cut(reverse_end, reverse_start)
+    #
+    # def cut(self, stop=None):
+    #     """
+    #     Bisects the list at the current node.  Returns a new list.
+
+    #     Cuts nodes from the linked list being iterated over.  Creates
+    #     a new linked list, moves all cut nodes to this new linked_list,
+    #     and returns this new linked list.
+
+    #     If end is not None, it must be an iterator pointing to either
+    #     the same node or a preceding node in the same linked list;
+    #     it's an error if end points to a preceding node, or to a node
+    #     in a different list.  The node pointed at by end and all
+    #     preceding nodes are not cut.
+
+    #     If end is None, all preceding nodes are cut, including "head".
+    #     (The linked list is given a new "head".)
+
+    #     If cut cuts any nodes, it always cuts the node pointed to by
+    #     self.
+
+    #     All iterators pointing at nodes moved to the new list continue to
+    #     point to those nodes.  This means they also move to the new list.
+    #     """
+    #     return self._cursor.linked_list._cut(self, stop, is_rcut=False, swapped=False)
+
+    # def rcut(self, stop=None):
+    #     """
+    #     Bisects the list at the current node.  Returns a new list.
+
+    #     Cuts nodes from the linked list being iterated over.  Creates
+    #     a new linked list, moves all cut nodes to this new linked_list,
+    #     and returns this new linked list.
+
+    #     If end is not None, it must be an iterator pointing to either
+    #     the same node or a subsequent node in the same linked list;
+    #     it's an error if end points to a preceding node, or to a node
+    #     in a different list.  The node pointed at by end and all
+    #     subsequent nodes are not cut.
+
+    #     If end is None, all subsequent nodes are cut, including "tail".
+    #     (The linked list is given a new "tail".)
+
+    #     If cut cuts any nodes, it always cuts the node pointed to by
+    #     self.
+
+    #     All iterators pointing at nodes moved to the new list continue to
+    #     point to those nodes.  This means they also move to the new list.
+    #     """
+    #     # rcut on a reverse iterator is cut, not rcut
+    #     return self._cursor.linked_list._cut(self, stop, is_rcut=True, swapped=False)
+
+    # cut logic is sufficiently complicated, we handle all the reverse-iterator
+    # and reversing stuff inside linked_list itself.  we don't even need to
+    # swap them here, linked_list.cut/rcut will handle it.
 
     def splice(self, other):
         super().rsplice(other)
