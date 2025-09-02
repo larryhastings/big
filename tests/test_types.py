@@ -1285,6 +1285,16 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(expected, got)
         self.assertEqual(len(t), len(expected))
 
+    def assertNoSpecials(self, t):
+        # white box testing
+        head = t._head
+        tail = t._tail
+
+        cursor = head.next
+        while cursor != tail:
+            self.assertIsNone(cursor.special)
+            cursor = cursor.next
+
     def assertIsSpecial(self, it):
         self.assertIsNotNone(it)
         self.assertTrue(it.is_special)
@@ -1335,6 +1345,7 @@ class BigLinkedListTests(unittest.TestCase):
 
     def test_iterator_basics(self):
         t = linked_list()
+        self.assertNoSpecials(t)
 
         with self.assertRaises(TypeError):
             # white box testing
@@ -1361,6 +1372,7 @@ class BigLinkedListTests(unittest.TestCase):
         # and you can't go past head
         with self.assertRaises(ValueError):
             before = it.before()
+        self.assertNoSpecials(t)
 
         # an reverse iterator on a linked list always starts out at tail
         rit = reversed(t)
@@ -1385,6 +1397,8 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             before = rit.before()
 
+        self.assertNoSpecials(t)
+
         initial = [1, 2, 3, 4, 5]
         t = linked_list(initial)
         self.assertLength(t, 5)
@@ -1396,6 +1410,7 @@ class BigLinkedListTests(unittest.TestCase):
         rit = reversed(t)
         result = list(rit)
         self.assertEqual(reversed_initial, result)
+        self.assertNoSpecials(t)
 
 
     def test_empty_list(self):
@@ -1447,6 +1462,8 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(IndexError):
             t.popleft()
 
+        self.assertNoSpecials(t)
+
     def test_extend(self):
         def setup():
             t = linked_list((1, 2, 3))
@@ -1458,23 +1475,27 @@ class BigLinkedListTests(unittest.TestCase):
         t.extend('ABC')
         self.assertLinkedListEqual(t, [1, 2, 3, 'A', 'B', 'C'])
         self.assertLength(t, 6)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         t.rextend('ABC')
         self.assertLinkedListEqual(t, ['A', 'B', 'C', 1, 2, 3])
         self.assertLength(t, 6)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it = it.find(1)
         it.extend('ABC')
         self.assertLinkedListEqual(t, [1, 'A', 'B', 'C', 2, 3])
         self.assertLength(t, 6)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it = it.find(3)
         it.rextend('ABC')
         self.assertLinkedListEqual(t, [1, 2, 'A', 'B', 'C', 3])
         self.assertLength(t, 6)
+        self.assertNoSpecials(t)
 
         def setup2():
             t = linked_list((1, 2, 3))
@@ -1498,6 +1519,7 @@ class BigLinkedListTests(unittest.TestCase):
         rit.extend('ABC')
         self.assertLinkedListEqual(t, [1, 'C', 'B', 'A', 2, 3])
         self.assertLength(t, 6)
+        self.assertNoSpecials(t)
 
         t, rit = setup2()
         self.assertIsInstance(rit, linked_list_reverse_iterator)
@@ -1506,6 +1528,7 @@ class BigLinkedListTests(unittest.TestCase):
         rit.rextend('ABC')
         self.assertLinkedListEqual(t, [1, 2, 'C', 'B', 'A', 3])
         self.assertLength(t, 6)
+        self.assertNoSpecials(t)
 
 
     def test_linked_list_methods(self):
@@ -1521,6 +1544,8 @@ class BigLinkedListTests(unittest.TestCase):
         copy.remove(2)
         self.assertNotEqual(t, copy)
         self.assertNotEqual(t, (1, 2, 4))
+        self.assertNoSpecials(t)
+        self.assertNoSpecials(copy)
 
         with self.assertRaises(ValueError):
             t.remove('abcde')
@@ -1530,10 +1555,12 @@ class BigLinkedListTests(unittest.TestCase):
         t, it = setup()
         t.append('xyz')
         self.assertLinkedListEqual(t, (1, 2, 3, 'xyz'))
+        self.assertNoSpecials(t)
 
         t, it = setup()
         t.prepend('abc')
         self.assertLinkedListEqual(t, ('abc', 1, 2, 3))
+        self.assertNoSpecials(t)
 
 
     def test_with_deleted_nodes(self):
@@ -1629,6 +1656,7 @@ class BigLinkedListTests(unittest.TestCase):
         copy = it.copy()
         del(copy)
         self.assertEqual(it[0], 3)
+        self.assertNoSpecials(t)
 
         got = it.next()
         self.assertEqual(got, 4)
@@ -1647,6 +1675,7 @@ class BigLinkedListTests(unittest.TestCase):
         got = it.next(None)
         self.assertIsNone(got)
         self.assertIsTail(it)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         self.assertEqual(it[0], 3)
@@ -1667,13 +1696,14 @@ class BigLinkedListTests(unittest.TestCase):
         got = it.previous(None)
         self.assertIsNone(got)
         self.assertIsHead(it)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         before = it.before()
         self.assertEqual(it[0], 3)
         self.assertEqual(before[0], 2)
         copy = before.copy()
-        copy.pop() # now before points at a deleted node
+        copy.pop() # before now points at a deleted node
         before2 = it.before() # skips over deleted node
         self.assertEqual(before2[0], 1)
 
@@ -1693,7 +1723,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(it[0], 3)
         self.assertEqual(after[0], 4)
         copy = after.copy()
-        copy.pop() # now after points at a deleted node
+        copy.pop() # after now points at a deleted node
         after2 = it.after() # skips over deleted node
         self.assertEqual(after2[0], 5)
 
@@ -1745,6 +1775,7 @@ class BigLinkedListTests(unittest.TestCase):
             it[ 2:-3: 0]
         self.assertLinkedListEqual(it[ 2:-3: 2], [])
         self.assertLinkedListEqual(it[-2: 3:-2], [])
+        self.assertNoSpecials(t)
 
     def test_prepend_and_append_and_extend_and_rextend(self):
         #
@@ -1761,24 +1792,28 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 1.5, 2, 3])
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 2)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.append(2.5)
         self.assertLinkedListEqual(t, [1, 2, 2.5, 3])
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 2)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.rextend((1.25, 1.5, 1.75))
         self.assertLinkedListEqual(t, [1, 1.25, 1.5, 1.75, 2, 3])
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 2)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.extend((2.25, 2.5, 2.75))
         self.assertLinkedListEqual(t, [1, 2, 2.25, 2.5, 2.75, 3])
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 2)
+        self.assertNoSpecials(t)
 
         #
         # now test when we're pointed at head
@@ -1794,6 +1829,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.append('A')
         self.assertLinkedListEqual(t, ['A', 1, 2, 3])
         self.assertIsHead(it)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.prepend('B')
@@ -1806,11 +1842,13 @@ class BigLinkedListTests(unittest.TestCase):
         it.next(None)
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 1)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.extend('CDE')
         self.assertLinkedListEqual(t, ['C', 'D', 'E', 1, 2, 3])
         self.assertIsHead(it)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.rextend('FGH')
@@ -1823,6 +1861,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.next(None)
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 1)
+        self.assertNoSpecials(t)
 
 
         #
@@ -1839,6 +1878,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.prepend('I')
         self.assertLinkedListEqual(t, [1, 2, 3, 'I'])
         self.assertIsTail(it)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.append('J')
@@ -1851,11 +1891,13 @@ class BigLinkedListTests(unittest.TestCase):
         it.next(None)
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 'J')
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.rextend('KLM')
         self.assertLinkedListEqual(t, [1, 2, 3, 'K', 'L', 'M'])
         self.assertIsTail(it)
+        self.assertNoSpecials(t)
 
         t, it = setup()
         it.extend('NOP')
@@ -1868,6 +1910,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.next(None)
         self.assertIsNormalNode(it)
         self.assertEqual(it[0], 'N')
+        self.assertNoSpecials(t)
 
 
         #
@@ -1891,6 +1934,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.append('W')
         self.assertLinkedListEqual(t, ['W'])
         self.assertIsHead(it)
+        self.assertNoSpecials(t)
 
         # prepending before head also works, this creates a new special node
         t, it = setup_at_head()
@@ -1909,6 +1953,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.prepend('Y')
         self.assertLinkedListEqual(t, ['Y'])
         self.assertIsTail(it)
+        self.assertNoSpecials(t)
 
         # appending to tail also works, this creates a new special node
         t, it = setup_at_tail()
@@ -1929,6 +1974,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.extend('uvw')
         self.assertLinkedListEqual(t, ['u', 'v', 'w'])
         self.assertIsHead(it)
+        self.assertNoSpecials(t)
 
         # prepending before head also works, this creates a new special node
         t, it = setup_at_head()
@@ -1947,6 +1993,7 @@ class BigLinkedListTests(unittest.TestCase):
         it.rextend('wxy')
         self.assertLinkedListEqual(t, ['w', 'x', 'y'])
         self.assertIsTail(it)
+        self.assertNoSpecials(t)
 
         # appending to tail also works, this creates a new special node
         t, it = setup_at_tail()
@@ -1967,7 +2014,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(repr(t), "linked_list(['a'])")
 
         it = iter(t).after()
-        copy = it.copy(); copy.pop()
+        copy = it.copy()
+        copy.pop()
         # test repr with a deleted node
         self.assertEqual(repr(t), "linked_list([])")
         self.assertFalse(t)
@@ -2627,18 +2675,22 @@ class BigLinkedListTests(unittest.TestCase):
         t = linked_list(initializer)
         t[2] = 'rem lezar'
         self.assertLinkedListEqual(t, (1, 2, 'rem lezar', 4, 5))
+        self.assertNoSpecials(t)
 
         t = linked_list(initializer)
-        t[1:4] = iter('abc')
+        t[1:4] = 'abc'
         self.assertLinkedListEqual(t, (1, 'a', 'b', 'c', 5))
+        self.assertNoSpecials(t)
 
         t = linked_list(initializer)
-        t[3:0:-1] = iter('abc')
+        t[3:0:-1] = 'abc'
         self.assertLinkedListEqual(t, (1, 'c', 'b', 'a', 5))
+        self.assertNoSpecials(t)
 
         t = linked_list(initializer)
-        t[0:5:2] = iter('abc')
+        t[0:5:2] = 'abc'
         self.assertLinkedListEqual(t, ('a', 2, 'b', 4, 'c'))
+        self.assertNoSpecials(t)
 
         t = linked_list(initializer)
         with self.assertRaises(TypeError):
@@ -2650,20 +2702,24 @@ class BigLinkedListTests(unittest.TestCase):
         t = linked_list(initializer)
         t[3:3] = []
         self.assertLinkedListEqual(t, initializer)
+        self.assertNoSpecials(t)
 
         # __delitem__
         t = linked_list(initializer)
         del t[2]
         self.assertLinkedListEqual(t, (1, 2, 4, 5))
+        self.assertNoSpecials(t)
 
         t = linked_list(initializer)
         del t[1:4]
         self.assertLinkedListEqual(t, (1, 5))
+        self.assertNoSpecials(t)
 
         # none as initializer in slice
         t = linked_list(initializer)
         self.assertLinkedListEqual(t[:3], (1, 2, 3))
         self.assertLinkedListEqual(t[2:], (3, 4, 5))
+        self.assertNoSpecials(t)
 
         # and now--the iterator!
         def setup():
@@ -2724,8 +2780,8 @@ class BigLinkedListTests(unittest.TestCase):
         #
         # q: but what if it's pointing at a special node?
         # a: we raise an exception at you.
-        ll = linked_list(range(1, 10))
-        it = ll.find(5)
+        t = linked_list(range(1, 10))
+        it = t.find(5)
         del it[0]
 
         with self.assertRaises(SpecialNodeError):
@@ -2736,8 +2792,8 @@ class BigLinkedListTests(unittest.TestCase):
             it[-1:3]
 
         # regression: I had a bug where this returned [2, 4, 7, 9].
-        # it should return [2, 4, 6, 8] as per the below.  note that
-        # it *doesn't* examine it[0] so it's fine.
+        # it should return [2, 4, 6, 8] as per the below.
+        # note that it *doesn't* examine it[0], so it works fine.
         sl = it[-3:5:2]
         self.assertLinkedListEqual(it[-3:5:2], [2, 4, 6, 8])
 
@@ -2747,27 +2803,40 @@ class BigLinkedListTests(unittest.TestCase):
         it[ 0] = 'b'
         it[ 1] = 'c'
         self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 7, 8, 9])
+        self.assertNoSpecials(t)
 
         t, it, rit = setup()
         rit[-1] = 'a'
         rit[ 0] = 'b'
         rit[ 1] = 'c'
         self.assertLinkedListEqual(t, [1, 2, 3, 'c', 'b', 'a', 7, 8, 9])
+        self.assertNoSpecials(t)
 
         # assign to slice with the same number of values as items in the slice
         t, it, rit = setup()
         it[-1:3] = 'abcd'
         self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 'd', 8, 9])
+        self.assertNoSpecials(t)
 
         # assign to slice with the same number of values as items in the slice
         t, it, rit = setup()
         it[-1:4] = 'ab'
         self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 9])
+        self.assertNoSpecials(t)
 
         # assign to slice with more values than items in the slice
         t, it, rit = setup()
         it[-1:1] = 'abcde'
         self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 'd', 'e', 6, 7, 8, 9])
+        self.assertNoSpecials(t)
+
+        # white box testing:
+        # also do it with an iterator, rather than a string,
+        # because that forces us internally to cast to a list
+        t, it, rit = setup()
+        it[-1:1] = iter('abcde')
+        self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 'd', 'e', 6, 7, 8, 9])
+        self.assertNoSpecials(t)
 
         # assign correctly to "extended slice"
         t, it, rit = setup()
@@ -2780,6 +2849,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(it2[0], 'a')
         self.assertEqual(it4[0], 'b')
         self.assertEqual(it6[0], 'c')
+        self.assertNoSpecials(t)
 
         # assign too many values to an "extended slice"
         t, it, rit = setup()
@@ -2795,16 +2865,19 @@ class BigLinkedListTests(unittest.TestCase):
         t, it, rit = setup()
         rit[-1:3] = 'abcd'
         self.assertLinkedListEqual(t, [1, 2, 'd', 'c', 'b', 'a', 7, 8, 9])
+        self.assertNoSpecials(t)
 
         # assign to slice with the same number of values as items in the slice
         t, it, rit = setup()
         rit[-1:4] = 'ab'
         self.assertLinkedListEqual(t, [1, 'b', 'a', 7, 8, 9])
+        self.assertNoSpecials(t)
 
         # assign to slice with more values than items in the slice
         t, it, rit = setup()
         rit[-1:1] = 'abcde'
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 'e', 'd', 'c', 'b', 'a', 7, 8, 9])
+        self.assertNoSpecials(t)
 
         t, it, rit = setup()
         with self.assertRaises(ValueError):
@@ -2821,6 +2894,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(it8[0], 'a')
         self.assertEqual(it6[0], 'b')
         self.assertEqual(it4[0], 'c')
+        self.assertNoSpecials(t)
 
         # assign too many values to an "extended slice"
         t, it, rit = setup()
@@ -2836,12 +2910,14 @@ class BigLinkedListTests(unittest.TestCase):
         t, it, rit = setup()
         del it[-1]
         self.assertLinkedListEqual(t, [1, 2, 3,    5, 6, 7, 8, 9])
+        self.assertNoSpecials(t)
         t, it, rit = setup()
         del it[ 0]
         self.assertLinkedListEqual(t, [1, 2, 3, 4,    6, 7, 8, 9])
         t, it, rit = setup()
         del it[ 1]
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5,    7, 8, 9])
+        self.assertNoSpecials(t)
         t, it, rit = setup()
         del it[-1:3]
         self.assertLinkedListEqual(t, [1, 2, 3,             8, 9])
@@ -2849,12 +2925,14 @@ class BigLinkedListTests(unittest.TestCase):
         t, it, rit = setup()
         del rit[-1]
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5,    7, 8, 9])
+        self.assertNoSpecials(t)
         t, it, rit = setup()
         del rit[ 0]
         self.assertLinkedListEqual(t, [1, 2, 3, 4,    6, 7, 8, 9])
         t, it, rit = setup()
         del rit[ 1]
         self.assertLinkedListEqual(t, [1, 2, 3,    5, 6, 7, 8, 9])
+        self.assertNoSpecials(t)
         t, it, rit = setup()
         del rit[-1:3]
         self.assertLinkedListEqual(t, [1, 2,             7, 8, 9])
