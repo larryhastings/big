@@ -2227,11 +2227,6 @@ class linked_list_base_iterator:
         node.iterator_refcount += 1
         self._cursor = node
 
-        self._filtering = False
-        self._stop_at_cursor = None
-        self._find_value = _sentinel
-        self._match_predicate = None
-
     @property
     def linked_list(self):
         return self._cursor.linked_list
@@ -2282,7 +2277,10 @@ class linked_list_base_iterator:
         return self.find(value) is not None
 
     def __copy__(self):
-        return self.copy()
+        return self.__class__(self._cursor)
+
+    def copy(self):
+        return self.__copy__()
 
     def __len__(self):
         length = 0
@@ -2402,14 +2400,6 @@ class linked_list_base_iterator:
         except StopIteration:
             return default
 
-    def copy(self):
-        it = self.__class__(self._cursor)
-        it._filtering = self._filtering
-        it._stop_at_cursor = self._stop_at_cursor
-        it._find_value = self._find_value
-        it._match_predicate = self._match_predicate
-        return it
-
     def before(self, count=1):
         original_count = count
         if count < 0:
@@ -2437,19 +2427,15 @@ class linked_list_base_iterator:
             count -= 1
         return self.__class__(cursor)
 
-    def to_head(self):
+    def reset(self):
         self._cursor = self._cursor.linked_list._head
 
-    def to_tail(self):
+    def exhaust(self):
         self._cursor = self._cursor.linked_list._tail
 
     @property
-    def is_head(self):
-        return self._cursor.special == 'head'
-
-    @property
-    def is_tail(self):
-        return self._cursor.special == 'tail'
+    def special(self):
+        return self._cursor.special
 
     @property
     def is_special(self):
@@ -3121,6 +3107,12 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
 
     def __delitem__(self, index):
         return super().__delitem__(self._reverse_index(index))
+
+    def reset(self):
+        self._cursor = self._cursor.linked_list._tail
+
+    def exhaust(self):
+        self._cursor = self._cursor.linked_list._head
 
     def before(self, count=1):
         return super().after(count)
