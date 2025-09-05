@@ -126,14 +126,24 @@ class BigTestTemplate(unittest.TestCase):
 
     def test_parse_template_everything(self):
 
-        def t(s, expected, *, quotes=('"', "'")):
+        def t(s, expected, *,
+            parse_expressions=True,
+            parse_comments=True,
+            parse_statements=True,
+            parse_whitespace_eater=True,
+            quotes=('"', "'"),
+            multiline_quotes=(),
+            escape="\\",
+            ):
 
             got = list(parse_template_string(s,
-                parse_expressions=True,
-                parse_comments=True,
-                parse_statements=True,
-                parse_whitespace_eater=True,
+                parse_expressions=parse_expressions,
+                parse_comments=parse_comments,
+                parse_statements=parse_statements,
+                parse_whitespace_eater=parse_whitespace_eater,
                 quotes=quotes,
+                multiline_quotes=multiline_quotes,
+                escape=escape,
                 ))
             self.assertEqual(expected, got)
             return got
@@ -212,18 +222,40 @@ class BigTestTemplate(unittest.TestCase):
 
         with self.assertRaises(SyntaxError):
             t("Unterminated comment {# argle bargle", None)
+        t("Unterminated comment {# argle bargle",
+            ["Unterminated comment {# argle bargle",],
+            parse_comments=False)
 
         with self.assertRaises(SyntaxError):
             t("Unterminated expansion {{ jibber_jabber ", None)
+        t("Unterminated expansion {{ jibber_jabber ",
+            ["Unterminated expansion {{ jibber_jabber ",],
+            parse_expressions=False)
 
         with self.assertRaises(SyntaxError):
             t("Unterminated expansion with filter {{ fiddle | faddle ", None)
+        t("Unterminated expansion with filter {{ fiddle | faddle ",
+            ["Unterminated expansion with filter {{ fiddle | faddle ",],
+            parse_expressions=False)
 
         with self.assertRaises(SyntaxError):
             t("Unterminated statement {% bishi bashi ", None)
+        t("Unterminated statement {% bishi bashi ",
+            ["Unterminated statement {% bishi bashi ",],
+            parse_statements=False)
 
         with self.assertRaises(SyntaxError):
-            t("Unterminated statement {% splish splash ", None, quotes=())
+            t("Unterminated statement with quotes disabled {% splish splash ", None, quotes=())
+        t("Unterminated statement with quotes disabled {% splish splash ",
+            ["Unterminated statement with quotes disabled {% splish splash ",],
+            parse_statements=False,
+            quotes=(),)
+
+        with self.assertRaises(SyntaxError):
+            t("Unterminated quote in statement {% 'beep boop %}", None)
+        t("Unterminated quote in statement {% 'beep boop %}",
+            ["Unterminated quote in statement {% 'beep boop %}",],
+            parse_statements=False)
 
 
 
