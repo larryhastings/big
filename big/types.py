@@ -1603,9 +1603,9 @@ class linked_list:
             stop = start
 
         if slice_length:
-            assert  0 <= start <= last_element, f"failed:  0 <= start={start} <= {last_element}  isn't true ({slice_length=})"
+            assert  0 <= start <= last_element, f"failed:  0 <= start={start} <= {last_element}  isn't true (slice_length={slice_length})"
         else:
-            assert -1 <= start <= length, f"failed: -1 <= start={start} <= {length}  isn't true ({slice_length=})"
+            assert -1 <= start <= length, f"failed: -1 <= start={start} <= {length}  isn't true (slice_length={slice_length})"
         assert -1 <=  stop <= length, f"failed: -1 <= stop={stop} <= {length}  isn't true"
 
         # print(f">> [start {start:>2}] [stop {stop:>2}] [step {step:>2}] {slice_length=} [slice {slice}]")
