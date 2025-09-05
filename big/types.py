@@ -1197,6 +1197,8 @@ class linked_list_node:
         doesn't incref/decref iterator_refcount, and it doesn't check to see if a
         node's iterator_refcount drops to 0.
         """
+        # print(f">> nodes {start=} {stop=} {step=} {first=} {last=}")
+
         cursor = first
         index = start
 
@@ -1231,6 +1233,7 @@ class linked_list_node:
                         index -= 1
 
             assert index == i
+            # print(">> yield", cursor)
             yield cursor
 
     nodes_iterator = nodes
@@ -1240,6 +1243,7 @@ class linked_list_node:
         Returns None if either start or stop is out of range.
         Iterator, yields nodes.
         """
+        # print(f"nodes {start=} {stop=} {step=}")
 
         step = step.__index__()
         if not step:
@@ -1248,7 +1252,7 @@ class linked_list_node:
         start = start.__index__()
         stop = stop.__index__()
 
-        first = self.index(start)
+        first = self.index(start, allow_head_and_tail=True)
         last = self.index(stop, allow_head_and_tail=True)
         if (first is None) or (last is None):
             return None
@@ -1259,6 +1263,7 @@ class linked_list_node:
         elif start >= stop:
             return iter(())
 
+        # print("returning an iterator")
         return self.nodes_iterator(start, first, stop, last, step)
 
 
@@ -1465,27 +1470,43 @@ class linked_list:
     def __contains__(self, value):
         return self.find(value) is not None
 
+    def _cursor_at_index(self, index):
+        """
+        index can be -1, in which case it points to head.
+        index can be length, in which case it points to tail.
+        this is to accommodate slicing semantics copied from list.
+        """
+        # index = index.__index__()
+        length = self._length
+        assert -1 <= index <= length, f"index should be >= 0 and < {length} but it's {index}"
+
+        assert index >= 0
+        if index == length:
+            return self._tail
+
+        halfway = self._length // 2
+        if index > halfway:
+            cursor = self._tail
+            index -= length
+            for _ in range(index, 0, 1):
+                cursor = cursor.previous
+        else:
+            cursor = self._head.next
+            for _ in range(index, 0, -1):
+                cursor = cursor.next
+
+        return cursor
+
     def _it_at_index(self, index):
         """
         index can be -1, in which case it points to head.
         index can be length, in which case it points to tail.
         this is to accommodate slicing semantics copied from list.
         """
-        length = self._length
-        assert -1 <= index <= length, f"index should be >= 0 and < {length} but it's {index}"
+        cursor = self._cursor_at_index(index)
 
         it = iter(self)
-        if index == -1:
-            return it
-
-        halfway = self._length // 2
-        if index > halfway:
-            it._cursor = self._tail
-            index -= length
-        else:
-            it._cursor = self._head.next
-
-        it._to_index(index)
+        it._cursor = cursor
         return it
 
 
@@ -1521,29 +1542,44 @@ class linked_list:
         length = self._length
         negative_length = -length
 
+        last_element = length - 1
+
         if start is None:
-            # start = sys.maxsize * step_is_negative
-            start = length * step_is_negative
+            if step_is_positive:
+                start = 0
+            else:
+                start = last_element
         elif start < 0:
             if start >= negative_length:
                 start += length
+            elif step_is_negative:
+                start = -1
             else:
-                # 0 if step is positive, -1 if step is negative
-                start = -step_is_negative
+                start = 0
         elif start >= length:
-            start = length - step_is_negative
+            if step_is_negative:
+                start = last_element
+            else:
+                start = length
 
         if stop is None:
-            # stop = sys.maxsize * (1 - (step_is_negative * 2))
-            stop = length if step_is_positive else -1
+            if step_is_positive:
+                stop = length
+            else:
+                stop = -1
         elif stop < 0:
             if stop >= negative_length:
                 stop += length
             else:
-                # 0 if step is positive, -1 if step is negative
-                stop = -step_is_negative
+                if step_is_negative:
+                    stop = -1
+                else:
+                    stop = 0
         elif stop >= length:
-            stop = length - step_is_negative
+            if step_is_negative:
+                stop = last_element
+            else:
+                stop = length
 
         if step_is_negative and (stop < start):
             slice_length = ((start - stop - 1) // -step) + 1
@@ -1551,13 +1587,15 @@ class linked_list:
             slice_length = ((stop - start - 1) // step) + 1
         else:
             slice_length = 0
-            if for_assignment:
-                # Make sure s[5:2] = [..] inserts at the right place:
-                # before 5, not before 2.
-                stop = start
+            stop = start
 
-        assert -1 <= start <= length, f"failed: 0 <= {start} <= {length}"
-        assert -1 <= stop <= length, f"failed: -1 <= {stop} <= {length}"
+        if slice_length:
+            assert  0 <= start <= last_element, f"failed:  0 <= start={start} <= {last_element}  isn't true ({slice_length=})"
+        else:
+            assert -1 <= start <= length, f"failed: -1 <= start={start} <= {length}  isn't true ({slice_length=})"
+        assert -1 <=  stop <= length, f"failed: -1 <= stop={stop} <= {length}  isn't true"
+
+        # print(f">> [start {start:>2}] [stop {stop:>2}] [step {step:>2}] {slice_length=} [slice {slice}]")
 
         return start, stop, step, slice_length
 
@@ -1581,7 +1619,7 @@ class linked_list:
         if key is not a slice, stop, step, and slice_length
         will all be None.
 
-        enforces Python semantics for indexing with ints vs slices.
+        emulates Python list semantics for indexing with ints vs slices.
         for example, if a has 3 elements, a[5] is an IndexError,
         but a[5:1000] evaluates to an empty list.  (sigh.)
         so, _parse_key will raise the IndexError for you in
@@ -1590,6 +1628,8 @@ class linked_list:
         """
         if isinstance(key, slice):
             start, stop, step, slice_length = self._unpack_and_adjust_slice(key, for_assignment=for_assignment)
+            node = self._head.next
+            it = node.nodes(start, stop, step)
         else:
             length = self._length
             original_start = key
@@ -1599,24 +1639,59 @@ class linked_list:
             if not (0 <= start < length):
                 raise IndexError(f'linked_list index {original_start} out of range')
             stop = step = slice_length = None
+            it = None
+            node = self._cursor_at_index(start)
 
-        it = self._it_at_index(start)
-
-        return it, start, stop, step, slice_length
+        return it, node, start, stop, step, slice_length
 
     def __getitem__(self, key):
-        it, start, stop, step, slice_length = self._parse_key(key)
+        it, node, start, stop, step, slice_length = self._parse_key(key)
 
-        if stop is None:
-            return it._cursor.value
+        if it is None: # then key is not a slice
+            return node.value
 
-        stop -= start
-        return it.slice(0, stop, step)
+        return self.__class__(o.value for o in it)
 
     def __setitem__(self, key, value):
-        it, start, stop, step, slice_length = self._parse_key(key, for_assignment=True)
-        if stop is None:
-            it.replace(value)
+        it, node, start, stop, step, slice_length = self._parse_key(key, for_assignment=True)
+
+        if it is None: # then key is not a slice
+            node.value = value
+            return
+
+        if step == 1:
+            # in case we don't ever iterate, pre-initialize node
+            # to point to start
+            sentinel = object()
+            next_node = None
+            last = node
+            remove_me = None
+            try:
+                values = iter(value)
+            except TypeError:
+                raise TypeError('must assign iterable to slice') from None
+
+            for node, value in zip_longest(it, values, fillvalue=sentinel):
+                # print(f">> {node=} {value=} {sentinel=}")
+                if node == sentinel:
+                    if next_node is None:
+                        next_node = last.next
+                    next_node.insert_before(value)
+                    continue
+                if value == sentinel:
+                    # linked_list_node.nodes is the nodes iterator here.
+                    # it doesn't handle removing the node it just yielded.
+                    # So, add a one-node delay to removing the nodes.
+                    if remove_me is not None:
+                        remove_me.remove()
+                    remove_me = node
+                    continue
+
+                node.value = value
+                last = node
+
+            if remove_me is not None:
+                remove_me.remove()
             return
 
         try:
@@ -1632,46 +1707,32 @@ class linked_list:
         if slice_length != values_length:
             raise ValueError(f"attempt to assign sequence of size {values_length} to extended slice of size {slice_length}")
 
-        if slice_length == 0:
-            # overwrite a zero-length slice with a zero-length iterable? okay!
-            return
-
-        index = start
-        advance = it.next
-        retreat = it.previous
-        indices = range(start, stop, step)
-
-        for i, v in zip(indices, values):
-            # I think it's impossible to overshoot
-            # try:
-                if (index + 1) == i:
-                    # (hopefully) fast path
-                    index = i
-                    advance()
-                else:
-                    # slow path
-                    while i > index:
-                        advance()
-                        index += 1
-                    while i < index:
-                        retreat()
-                        index -= 1
-                it.replace(v)
-            # except StopIteration:
-            #     raise IndexError("linked_list index out of range") from None
+        for node, v in zip(it, values):
+            node.value = v
 
     def __delitem__(self, key):
-        it, start, stop, step, slice_length = self._parse_key(key)
-        if stop is None:
-            it.pop()
+        it, node, start, stop, step, slice_length = self._parse_key(key)
+
+        if it is None: # then key is not a slice
+            node.remove()
             return
 
-        stop -= start
-        it.popslice(0, stop, step)
+        # linked_list_node.nodes is the nodes iterator here.
+        # it doesn't handle removing the node it just yielded.
+        # So, add a one-node delay to removing the nodes.
+        remove_me = None
+        for node in it:
+            if remove_me is not None:
+                remove_me.remove()
+            remove_me = node
+
+        if remove_me is not None:
+            remove_me.remove()
 
     def insert(self, index, object):
         length = self._length
         # convert index to range 0 <= index <= length
+        index = index.__index__()
         if index <= -length:
             index = 0
         elif index < 0:
@@ -2290,24 +2351,6 @@ class linked_list_base_iterator:
                 length += 1
             cursor = cursor.next
 
-    def _to_index(self, index):
-        # starting at the current position,
-        # advances or rewinds by index nodes.
-
-        index = index.__index__()
-
-        if not index:
-            return
-
-        if index < 0:
-            advance = self.previous
-            index = -index
-        else:
-            advance = self.next
-
-        for _ in range(index):
-            advance()
-
     def __next__(self):
         cursor = self._cursor
         special = cursor.special
@@ -2630,154 +2673,154 @@ class linked_list_base_iterator:
             cursor = cursor.next
         return self._pop(cursor)
 
-    def _slice(self, start, stop, step, pop):
+    # def _slice(self, start, stop, step, pop):
 
-        # deliberately not the same as list slicing mechanics.
-        # in particular, this does not clamp for you.
+    #     # deliberately not the same as list slicing mechanics.
+    #     # in particular, this does not clamp for you.
 
-        linked_list = self._cursor.linked_list
+    #     linked_list = self._cursor.linked_list
 
-        step = step.__index__()
-        if not step:
-            raise ValueError("step must not be 0")
+    #     step = step.__index__()
+    #     if not step:
+    #         raise ValueError("step must not be 0")
 
-        start = start.__index__()
+    #     start = start.__index__()
 
-        if stop is not None:
-            stop = stop.__index__()
-        else:
-            if start >= 0:
-                # slice(0), slice(5), etc
-                # start at it[0] and grab N values
-                stop = start
-                start = 0
-            else:
-                # slice(-1), slice(-5)
-                # start at (1+N) and grab N values
-                # so that the last value is it[0]
-                start += 1
-                stop = 1
+    #     if stop is not None:
+    #         stop = stop.__index__()
+    #     else:
+    #         if start >= 0:
+    #             # slice(0), slice(5), etc
+    #             # start at it[0] and grab N values
+    #             stop = start
+    #             start = 0
+    #         else:
+    #             # slice(-1), slice(-5)
+    #             # start at (1+N) and grab N values
+    #             # so that the last value is it[0]
+    #             start += 1
+    #             stop = 1
 
-        # at this point stop is guaranteed to not be None
-        result = self._cursor.linked_list.__class__()
-        step_is_negative = step < 0
+    #     # at this point stop is guaranteed to not be None
+    #     result = self._cursor.linked_list.__class__()
+    #     step_is_negative = step < 0
 
 
-        # print(f">> {start=} {stop=} {step=}")
+    #     # print(f">> {start=} {stop=} {step=}")
 
-        if step_is_negative:
-            if start <= stop:
-                return result
-        elif start >= stop:
-            return result
+    #     if step_is_negative:
+    #         if start <= stop:
+    #             return result
+    #     elif start >= stop:
+    #         return result
 
-        append = result.append
+    #     append = result.append
 
-        it = self.copy()
-        index = 0
-        advance = it.next
-        retreat = it.previous
-        if pop:
-            if step > 0:
-                pop = it.pop
-            else:
-                pop = it.popleft
+    #     it = self.copy()
+    #     index = 0
+    #     advance = it.next
+    #     retreat = it.previous
+    #     if pop:
+    #         if step > 0:
+    #             pop = it.pop
+    #         else:
+    #             pop = it.popleft
 
-        # print(">>", it, start, stop, step)
+    #     # print(">>", it, start, stop, step)
 
-        popped_zero = False
+    #     popped_zero = False
 
-        for i in range(start, stop, step):
-            if i == 0:
-                # index 0 is *always* self,
-                # and it's always an error if self is a special node.
-                if self._cursor.special:
-                    raise SpecialNodeError()
-                append(self._cursor.value)
+    #     for i in range(start, stop, step):
+    #         if i == 0:
+    #             # index 0 is *always* self,
+    #             # and it's always an error if self is a special node.
+    #             if self._cursor.special:
+    #                 raise SpecialNodeError()
+    #             append(self._cursor.value)
 
-                # fast path to update it and index
-                index = 0
-                it._cursor = self._cursor
+    #             # fast path to update it and index
+    #             index = 0
+    #             it._cursor = self._cursor
 
-                if pop:
-                    pop()
-                    popped_zero = True
+    #             if pop:
+    #                 pop()
+    #                 popped_zero = True
 
-                continue
+    #             continue
 
-            try:
-                if (index + 1) == i:
-                    # (hopefully) fast path
-                    index = i
-                    append(advance())
-                else:
-                    # slow path
-                    while i > index:
-                        advance()
-                        index += 1
-                    while i < index:
-                        retreat()
-                        index -= 1
-                    append(it._cursor.value)
-                if pop:
-                    pop()
-            except StopIteration:
-                raise IndexError(f"linked_list index {index} out of range") from None
+    #         try:
+    #             if (index + 1) == i:
+    #                 # (hopefully) fast path
+    #                 index = i
+    #                 append(advance())
+    #             else:
+    #                 # slow path
+    #                 while i > index:
+    #                     advance()
+    #                     index += 1
+    #                 while i < index:
+    #                     retreat()
+    #                     index -= 1
+    #                 append(it._cursor.value)
+    #             if pop:
+    #                 pop()
+    #         except StopIteration:
+    #             raise IndexError(f"linked_list index {index} out of range") from None
 
-        # don't do this until after we're done popping nodes,
-        # we want to skip over all deleted nodes here.
-        if popped_zero:
-            self.previous(None)
+    #     # don't do this until after we're done popping nodes,
+    #     # we want to skip over all deleted nodes here.
+    #     if popped_zero:
+    #         self.previous(None)
 
-        return result
+    #     return result
 
-    def slice(self, start, stop=None, step=1):
-        """
-        Returns a slice of the linked list, relative to the current node.
+    # def slice(self, start, stop=None, step=1):
+    #     """
+    #     Returns a slice of the linked list, relative to the current node.
 
-        The rules for handling arguments and default values:
-          * step must be an integer, and defaults to 1.
-          * start is required, and stop defaults to None.
-          * start and stop cannot both be None.
-          * if stop is a value and start is None, it swaps
-            stop and start, then returns the value described
-            in the next bullet point.
-          * if start is a value and stop is None, slice returns
-            abs(start) values, either starting or ending with index 0.
-            if start is greater than 0, it returns values from
-            range(0, start - 1, step). if start is less than 0,
-            it returns values from indices range(start + 1, 1, step).
+    #     The rules for handling arguments and default values:
+    #       * step must be an integer, and defaults to 1.
+    #       * start is required, and stop defaults to None.
+    #       * start and stop cannot both be None.
+    #       * if stop is a value and start is None, it swaps
+    #         stop and start, then returns the value described
+    #         in the next bullet point.
+    #       * if start is a value and stop is None, slice returns
+    #         abs(start) values, either starting or ending with index 0.
+    #         if start is greater than 0, it returns values from
+    #         range(0, start - 1, step). if start is less than 0,
+    #         it returns values from indices range(start + 1, 1, step).
 
-        Raises SpecialNodeError if the slice crosses index 0
-        and the iterator is pointing at a special node.
-        """
-        return self._slice(start, stop, step, False)
+    #     Raises SpecialNodeError if the slice crosses index 0
+    #     and the iterator is pointing at a special node.
+    #     """
+    #     return self._slice(start, stop, step, False)
 
-    def popslice(self, start, stop=None, step=1):
-        """
-        Pops a slice of the linked list, relative to the current node.
+    # def popslice(self, start, stop=None, step=1):
+    #     """
+    #     Pops a slice of the linked list, relative to the current node.
 
-        This removes the slice from the linked list.  If this pops the
-        node the iterator is currently pointing at, the cursor is moved
-        to the previous node (which may be 'head').
+    #     This removes the slice from the linked list.  If this pops the
+    #     node the iterator is currently pointing at, the cursor is moved
+    #     to the previous node (which may be 'head').
 
-        The rules for handling arguments and default values:
-          * step must be an integer, and defaults to 1.
-          * start is required, and stop defaults to None.
-          * start and stop cannot both be None.
-          * if stop is a value and start is None, it swaps
-            stop and start, then returns the value described
-            in the next bullet point.
-          * if start is a value and stop is None, slice returns
-            abs(start) values, either starting or ending with index 0.
-            if start is greater than 0, it returns values from
-            range(0, start - 1, step). if start is less than 0,
-            it returns values from indices range(start + 1, 1, step).
+    #     The rules for handling arguments and default values:
+    #       * step must be an integer, and defaults to 1.
+    #       * start is required, and stop defaults to None.
+    #       * start and stop cannot both be None.
+    #       * if stop is a value and start is None, it swaps
+    #         stop and start, then returns the value described
+    #         in the next bullet point.
+    #       * if start is a value and stop is None, slice returns
+    #         abs(start) values, either starting or ending with index 0.
+    #         if start is greater than 0, it returns values from
+    #         range(0, start - 1, step). if start is less than 0,
+    #         it returns values from indices range(start + 1, 1, step).
 
-        Raises SpecialNodeError if the slice crosses index 0
-        and the iterator is pointing at a special node.
-        """
-        return self._slice(start, stop, step, True)
+    #     Raises SpecialNodeError if the slice crosses index 0
+    #     and the iterator is pointing at a special node.
+    #     """
+    #     return self._slice(start, stop, step, True)
 
     def remove(self, value, default=_undefined):
         it = self.find(value)

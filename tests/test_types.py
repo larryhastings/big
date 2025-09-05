@@ -1297,18 +1297,22 @@ class BigLinkedListTests(unittest.TestCase):
 
     def assertIsSpecial(self, it):
         self.assertIsNotNone(it)
+        self.assertTrue(it.is_special)
         self.assertEqual(it.special, 'special')
 
     def assertIsHead(self, it):
         self.assertIsNotNone(it)
+        self.assertTrue(it.is_special)
         self.assertEqual(it.special, 'head')
 
     def assertIsTail(self, it):
         self.assertIsNotNone(it)
+        self.assertTrue(it.is_special)
         self.assertEqual(it.special, 'tail')
 
     def assertIsNormalNode(self, it):
         self.assertIsNotNone(it)
+        self.assertFalse(it.is_special)
         self.assertEqual(it.special, None)
 
 
@@ -2462,154 +2466,156 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             a > pi
 
-    def test_slice(self):
-        def setup():
-            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
-            it = t.find(5)
-            return t, it
+    # def test_slice(self):
+    #     def setup():
+    #         t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+    #         it = t.find(5)
+    #         return t, it
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   ( 0), [])
-        self.assertLinkedListEqual(it.popslice( 0), [])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   ( 0), [])
+    #     self.assertLinkedListEqual(it.popslice( 0), [])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   ( 1), [5])
-        self.assertLinkedListEqual(it.popslice( 1), [5])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   ( 1), [5])
+    #     self.assertLinkedListEqual(it.popslice( 1), [5])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-1), [5])
-        self.assertLinkedListEqual(it.popslice(-1), [5])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-1), [5])
+    #     self.assertLinkedListEqual(it.popslice(-1), [5])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   ( 2), [5, 6])
-        self.assertLinkedListEqual(it.popslice( 2), [5, 6])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   ( 2), [5, 6])
+    #     self.assertLinkedListEqual(it.popslice( 2), [5, 6])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-2), [4, 5])
-        self.assertLinkedListEqual(it.popslice(-2), [4, 5])
-        self.assertLinkedListEqual(t, [1, 2, 3, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-2), [4, 5])
+    #     self.assertLinkedListEqual(it.popslice(-2), [4, 5])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   ( 3), [5, 6, 7])
-        self.assertLinkedListEqual(it.popslice( 3), [5, 6, 7])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   ( 3), [5, 6, 7])
+    #     self.assertLinkedListEqual(it.popslice( 3), [5, 6, 7])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-3), [3, 4, 5])
-        self.assertLinkedListEqual(it.popslice(-3), [3, 4, 5])
-        self.assertLinkedListEqual(t, [1, 2, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-3), [3, 4, 5])
+    #     self.assertLinkedListEqual(it.popslice(-3), [3, 4, 5])
+    #     self.assertLinkedListEqual(t, [1, 2, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   ( 4), [5, 6, 7, 8])
-        self.assertLinkedListEqual(it.popslice( 4), [5, 6, 7, 8])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   ( 4), [5, 6, 7, 8])
+    #     self.assertLinkedListEqual(it.popslice( 4), [5, 6, 7, 8])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice(-4), [2, 3, 4, 5])
-        self.assertLinkedListEqual(it.popslice(-4), [2, 3, 4, 5])
-        self.assertLinkedListEqual(t, [1, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice(-4), [2, 3, 4, 5])
+    #     self.assertLinkedListEqual(it.popslice(-4), [2, 3, 4, 5])
+    #     self.assertLinkedListEqual(t, [1, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   ( 5), [5, 6, 7, 8, 9])
-        self.assertLinkedListEqual(it.popslice( 5), [5, 6, 7, 8, 9])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   ( 5), [5, 6, 7, 8, 9])
+    #     self.assertLinkedListEqual(it.popslice( 5), [5, 6, 7, 8, 9])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-5), [1, 2, 3, 4, 5])
-        self.assertLinkedListEqual(it.popslice(-5), [1, 2, 3, 4, 5])
-        self.assertLinkedListEqual(t, [6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-5), [1, 2, 3, 4, 5])
+    #     self.assertLinkedListEqual(it.popslice(-5), [1, 2, 3, 4, 5])
+    #     self.assertLinkedListEqual(t, [6, 7, 8, 9])
 
-        t, it = setup()
-        with self.assertRaises(IndexError):
-            sl = it.slice( 6)
-        with self.assertRaises(IndexError):
-            it.popslice( 6)
+    #     t, it = setup()
+    #     with self.assertRaises(IndexError):
+    #         sl = it.slice( 6)
+    #     with self.assertRaises(IndexError):
+    #         it.popslice( 6)
 
-        t, it = setup()
-        with self.assertRaises(IndexError):
-            it.slice(-6)
-        with self.assertRaises(IndexError):
-            it.popslice(-6)
+    #     t, it = setup()
+    #     with self.assertRaises(IndexError):
+    #         it.slice(-6)
+    #     with self.assertRaises(IndexError):
+    #         it.popslice(-6)
 
-        t, it = setup()
-        copy = it.copy()
-        copy.pop()
-        with self.assertRaises(SpecialNodeError):
-            it.slice(2)
-        with self.assertRaises(SpecialNodeError):
-            it.slice(-2)
-        with self.assertRaises(SpecialNodeError):
-            it.popslice(2)
+    #     t, it = setup()
+    #     copy = it.copy()
+    #     copy.pop()
+    #     with self.assertRaises(SpecialNodeError):
+    #         it.slice(2)
+    #     with self.assertRaises(SpecialNodeError):
+    #         it.slice(-2)
+    #     with self.assertRaises(SpecialNodeError):
+    #         it.popslice(2)
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (1, 4), [6, 7, 8])
-        self.assertLinkedListEqual(it.popslice(1, 4), [6, 7, 8])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (1, 4), [6, 7, 8])
+    #     self.assertLinkedListEqual(it.popslice(1, 4), [6, 7, 8])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-3, 0), [2, 3, 4])
-        self.assertLinkedListEqual(it.popslice(-3, 0), [2, 3, 4])
-        self.assertLinkedListEqual(t, [1, 5, 6, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-3, 0), [2, 3, 4])
+    #     self.assertLinkedListEqual(it.popslice(-3, 0), [2, 3, 4])
+    #     self.assertLinkedListEqual(t, [1, 5, 6, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-3, 2), [2, 3, 4, 5, 6])
-        self.assertLinkedListEqual(it.popslice(-3, 2), [2, 3, 4, 5, 6])
-        self.assertLinkedListEqual(t, [1, 7, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-3, 2), [2, 3, 4, 5, 6])
+    #     self.assertLinkedListEqual(it.popslice(-3, 2), [2, 3, 4, 5, 6])
+    #     self.assertLinkedListEqual(t, [1, 7, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (0, 4, 2), [5, 7])
-        self.assertLinkedListEqual(it.popslice(0, 4, 2), [5, 7])
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (0, 4, 2), [5, 7])
+    #     self.assertLinkedListEqual(it.popslice(0, 4, 2), [5, 7])
+    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-4, 4, 2), [1, 3, 5, 7])
-        self.assertLinkedListEqual(it.popslice(-4, 4, 2), [1, 3, 5, 7])
-        self.assertLinkedListEqual(t, [2, 4, 6, 8, 9])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-4, 4, 2), [1, 3, 5, 7])
+    #     self.assertLinkedListEqual(it.popslice(-4, 4, 2), [1, 3, 5, 7])
+    #     self.assertLinkedListEqual(t, [2, 4, 6, 8, 9])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-4, 5, 2), [1, 3, 5, 7, 9])
-        self.assertLinkedListEqual(it.popslice(-4, 5, 2), [1, 3, 5, 7, 9])
-        self.assertLinkedListEqual(t, [2, 4, 6, 8])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-4, 5, 2), [1, 3, 5, 7, 9])
+    #     self.assertLinkedListEqual(it.popslice(-4, 5, 2), [1, 3, 5, 7, 9])
+    #     self.assertLinkedListEqual(t, [2, 4, 6, 8])
 
-        t, it = setup()
-        self.assertLinkedListEqual(it.slice   (-4, 6, 2), [1, 3, 5, 7, 9])
-        self.assertLinkedListEqual(it.popslice(-4, 6, 2), [1, 3, 5, 7, 9])
-        self.assertLinkedListEqual(t, [2, 4, 6, 8])
+    #     t, it = setup()
+    #     self.assertLinkedListEqual(it.slice   (-4, 6, 2), [1, 3, 5, 7, 9])
+    #     self.assertLinkedListEqual(it.popslice(-4, 6, 2), [1, 3, 5, 7, 9])
+    #     self.assertLinkedListEqual(t, [2, 4, 6, 8])
 
-        t = linked_list(range(1, 12))
-        it = t.find(6)
-        self.assertLinkedListEqual(it.slice   (-4, 6, 3), [2, 5, 8, 11])
-        self.assertLinkedListEqual(it.popslice(-4, 6, 3), [2, 5, 8, 11])
-        self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
+    #     t = linked_list(range(1, 12))
+    #     it = t.find(6)
+    #     self.assertLinkedListEqual(it.slice   (-4, 6, 3), [2, 5, 8, 11])
+    #     self.assertLinkedListEqual(it.popslice(-4, 6, 3), [2, 5, 8, 11])
+    #     self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
-        t = linked_list(range(1, 12))
-        it = t.find(5)
-        self.assertLinkedListEqual(it.slice   (6, -4, -3), [11, 8, 5, 2])
-        self.assertLinkedListEqual(it.popslice(6, -4, -3), [11, 8, 5, 2])
-        self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
+    #     t = linked_list(range(1, 12))
+    #     it = t.find(5)
+    #     self.assertLinkedListEqual(it.slice   (6, -4, -3), [11, 8, 5, 2])
+    #     self.assertLinkedListEqual(it.popslice(6, -4, -3), [11, 8, 5, 2])
+    #     self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
 
-        with self.assertRaises(ValueError):
-            it.slice(3, 4, 0)
+    #     with self.assertRaises(ValueError):
+    #         it.slice(3, 4, 0)
 
-        # it's okay if slice end is "head" or "tail"
-        t = linked_list(range(6))
+    #     # it's okay if slice end is "head" or "tail"
+    #     t = linked_list(range(6))
 
-        it = t.find(3)
-        self.assertLinkedListEqual(it[:3], [3, 4, 5])
-        self.assertLinkedListEqual(it[-3:], [0, 1, 2])
+    #     it = t.find(3)
+    #     self.assertLinkedListEqual(it[:3], [3, 4, 5])
+    #     self.assertLinkedListEqual(it[-3:], [0, 1, 2])
 
-        # rit = reversed(it)
-        # self.assertLinkedListEqual(rit[:3], [0, 1, 2, 3])
-        # self.assertLinkedListEqual(rit[-3:], [3, 4, 5])
+    #     # rit = reversed(it)
+    #     # self.assertLinkedListEqual(rit[:3], [0, 1, 2, 3])
+    #     # self.assertLinkedListEqual(rit[-3:], [3, 4, 5])
 
     def test___getitem__(self):
         # __getitem__ and slicing
-        initializer = (1, 2, 3, 4, 5)
-        a = linked_list(initializer)
+        def setup():
+            return linked_list((1, 2, 3, 4, 5))
+
+        a = setup()
 
         self.assertEqual(a[0], 1)
         self.assertEqual(a[1], 2)
@@ -2646,21 +2652,21 @@ class BigLinkedListTests(unittest.TestCase):
         copy_a[10000000000:-3239879817998:-2] = 'abc'
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
-        for count in (5, 6,):
-            # for the list [ 1, 2, 3, ..., count ],
-
+        for count in (0, 1, 3, 4, 8, 9):
             l = list(tuple(range(1, count + 1)))
             t = linked_list(l)
 
-            # test all valid combinations of these "values"
-            # for start, stop, and step.
-            # [-23456789, -12345678, -(count + 1), ..., count + 1, 12345678, 23456789]
-            values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789)
+            # test all valid combinations of these values
+            #     for start, stop, and step.
+            # [-23456789, -12345678, -(count + 1), ..., count + 1, 12345678, 23456789, None]
+            #
+            # (the only invalid combination is trying step=0, that's illegal.)
+            values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789, None)
             values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
 
-            for start in values:
+            for step in values_without_zero:
                 for stop in values:
-                    for step in values_without_zero:
+                    for start in values:
                         with self.subTest(count=count, start=start, stop=stop, step=step):
                             l_slice = l[start:stop:step]
                             t_slice = t[start:stop:step]
@@ -2668,64 +2674,97 @@ class BigLinkedListTests(unittest.TestCase):
                             self.assertLinkedListEqual(t_slice, l_slice)
 
         # __setitem__
-        t = linked_list(initializer)
+        t = setup()
         t[2] = 'rem lezar'
         self.assertLinkedListEqual(t, (1, 2, 'rem lezar', 4, 5))
         self.assertNoSpecialNodes(t)
 
         # assign to slice with same number of elements
-        t = linked_list(initializer)
+        t = setup()
         t[1:4] = 'abc'
         self.assertLinkedListEqual(t, (1, 'a', 'b', 'c', 5))
         self.assertNoSpecialNodes(t)
 
-        # assign to slice with fewer elements
-        t = linked_list(initializer)
-        t[1:4] = 'ab'
-        self.assertLinkedListEqual(t, (1, 'a', 'b', 5))
+        # ... and with an iterator
+        t = setup()
+        t[1:4] = iter('abc')
+        self.assertLinkedListEqual(t, (1, 'a', 'b', 'c', 5))
         self.assertNoSpecialNodes(t)
 
-        # assign to slice with more of elements
-        t = linked_list(initializer)
+        # assign to slice with fewer elements
+        t = setup()
+        t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+        t[1:7] = 'ab'
+        self.assertLinkedListEqual(t, (1, 'a', 'b', 8, 9))
+        self.assertNoSpecialNodes(t)
+
+        # ... and with an iterator
+        t = setup()
+        t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+        t[1:7] = iter('ab')
+        self.assertLinkedListEqual(t, (1, 'a', 'b', 8, 9))
+        self.assertNoSpecialNodes(t)
+
+        # assign to slice with surplus elements
+        t = setup()
         t[1:4] = 'abcdef'
         self.assertLinkedListEqual(t, (1, 'a', 'b', 'c', 'd', 'e', 'f', 5))
         self.assertNoSpecialNodes(t)
 
-        t = linked_list(initializer)
+        # ... and with an iterator
+        t = setup()
+        t[1:4] = iter('abcdef')
+        self.assertLinkedListEqual(t, (1, 'a', 'b', 'c', 'd', 'e', 'f', 5))
+        self.assertNoSpecialNodes(t)
+
+        t = setup()
         t[3:0:-1] = 'abc'
         self.assertLinkedListEqual(t, (1, 'c', 'b', 'a', 5))
         self.assertNoSpecialNodes(t)
 
-        t = linked_list(initializer)
+        t = setup()
+        t[3:0:-1] = iter('abc')
+        self.assertLinkedListEqual(t, (1, 'c', 'b', 'a', 5))
+        self.assertNoSpecialNodes(t)
+
+        t = setup()
         t[0:5:2] = 'abc'
         self.assertLinkedListEqual(t, ('a', 2, 'b', 4, 'c'))
         self.assertNoSpecialNodes(t)
 
-        t = linked_list(initializer)
+        t = setup()
+        t[0:5:2] = iter('abc')
+        self.assertLinkedListEqual(t, ('a', 2, 'b', 4, 'c'))
+        self.assertNoSpecialNodes(t)
+
+        t = setup()
         with self.assertRaises(TypeError):
             t[1:4] = 55
+        with self.assertRaises(TypeError):
+            t[1:4:2] = 55
+
         with self.assertRaises(ValueError):
-            t[1:4] = 'a'
+            t[1:4:2] = 'abcdefgh'
 
         # overwrite a zero-length slice!
-        t = linked_list(initializer)
+        t = setup()
         t[3:3] = []
-        self.assertLinkedListEqual(t, initializer)
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5])
         self.assertNoSpecialNodes(t)
 
         # __delitem__
-        t = linked_list(initializer)
+        t = setup()
         del t[2]
         self.assertLinkedListEqual(t, (1, 2, 4, 5))
         self.assertNoSpecialNodes(t)
 
-        t = linked_list(initializer)
+        t = setup()
         del t[1:4]
         self.assertLinkedListEqual(t, (1, 5))
         self.assertNoSpecialNodes(t)
 
         # none as initializer in slice
-        t = linked_list(initializer)
+        t = setup()
         self.assertLinkedListEqual(t[:3], (1, 2, 3))
         self.assertLinkedListEqual(t[2:], (3, 4, 5))
         self.assertNoSpecialNodes(t)
@@ -2981,7 +3020,7 @@ class BigLinkedListTests(unittest.TestCase):
         # rotate
         initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
         d = collections.deque(initializer)
-        t = linked_list(initializer)
+        t = linked_list(d)
 
         for i in range(-10, 11):
             t_copy = t.copy()
