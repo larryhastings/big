@@ -1986,6 +1986,18 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(SpecialNodeError):
             it.popleft()
 
+        # you also can't include a deleted node in a slice
+        with self.assertRaises(SpecialNodeError):
+            it[-1:2]
+        with self.assertRaises(SpecialNodeError):
+            it[-2:4:2]
+        with self.assertRaises(SpecialNodeError):
+            it[1:-2:-1]
+        with self.assertRaises(SpecialNodeError):
+            it[2:-4:-2]
+        # ... but if you carefully step over it, it's fine!
+        self.assertLinkedListEqual(it[-3:4:2], [1, 3, 4, 6])
+
         copy = it.copy()
         value = copy.previous()
         self.assertIsNormalNode(copy)
