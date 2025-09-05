@@ -42,19 +42,25 @@ def export(o):
 
 
 
-#############################################
-#############################################
-##         _        _
-##     ___| |_ _ __(_)_ __   __ _
-##    / __| __| '__| | '_ \ / _` |
-##    \__ \ |_| |  | | | | | (_| |
-##    |___/\__|_|  |_|_| |_|\__, |
-##                          |___/
-##
-#############################################
-#############################################
+#####################################################################################################
+#####################################################################################################
+###
+###
+###                  .             o8o
+###                .o8             `"'
+###      .oooo.o .o888oo oooo d8b oooo  ooo. .oo.    .oooooooo
+###     d88(  "8   888   `888""8P `888  `888P"Y88b  888' `88b
+###     `"Y88b.    888    888      888   888   888  888   888
+###     o.  )88b   888 .  888      888   888   888  `88bod8P
+###     8""888P'   "888" d888b    o888o o888o o888o `8oooooo
+###                                                 d"     YD
+###                                                 "Y88888P
+###
+###
+#####################################################################################################
+#####################################################################################################
 
-##
+
 ## string uses _re_linebreaks_finditer to split lines by linebreaks.
 ## string obeys Python's rules about where to split a line, and
 ## Python recognizes the DOS '\r\n' sequence as *one linebreak*.
@@ -1057,25 +1063,32 @@ class string(str):
         return Pattern(self, flags)
 
 
-######################################################
-######################################################
-##
-##      _ _       _            _     _ _     _
-##     | (_)_ __ | | _____  __| |   | (_)___| |_
-##     | | | '_ \| |/ / _ \/ _` |   | | / __| __|
-##     | | | | | |   <  __/ (_| |   | | \__ \ |_
-##     |_|_|_| |_|_|\_\___|\__,_|   |_|_|___/\__|
-##
-##
-######################################################
-######################################################
+#####################################################################################################
+#####################################################################################################
+###
+###
+###     oooo   o8o              oooo                        .o8       oooo   o8o               .
+###     `888   `"'              `888                       "888       `888   `"'             .o8
+###      888  oooo  ooo. .oo.    888  oooo   .ooooo.   .oooo888        888  oooo   .oooo.o .o888oo
+###      888  `888  `888P"Y88b   888 .8P'   d88' `88b d88' `888        888  `888  d88(  "8   888
+###      888   888   888   888   888888.    888ooo888 888   888        888   888  `"Y88b.    888
+###      888   888   888   888   888 `88b.  888    .o 888   888        888   888  o.  )88b   888 .
+###     o888o o888o o888o o888o o888o o888o `Y8bod8P' `Y8bod88P"      o888o o888o 8""888P'   "888
+###
+###
+#####################################################################################################
+#####################################################################################################
 
 
 _undefined = object()
 
 @export
 class SpecialNodeError(LookupError):
-    pass
+    "Special nodes don't support this operation."
+
+@export
+class UndefinedIndexError(LookupError):
+    "You accessed an undefined index in a linked_list (before head or after tail)."
 
 # implementation detail, no public APIs expose nodes
 _legal_special_values = set((None, 'special', 'head', 'tail'))
@@ -1637,7 +1650,7 @@ class linked_list:
             if start < 0:
                 start += length
             if not (0 <= start < length):
-                raise IndexError(f'linked_list index {original_start} out of range')
+                raise UndefinedIndexError(f'index {original_start} out of range')
             stop = step = slice_length = None
             it = None
             node = self._cursor_at_index(start)
@@ -1806,7 +1819,7 @@ class linked_list:
         while node_before_tail.special == 'special':
             node_before_tail = node_before_tail.previous
         if node_before_tail == self._head:
-            raise IndexError('pop from empty linked_list')
+            raise ValueError('pop from empty linked_list')
         return node_before_tail.remove()
 
     def popleft(self):
@@ -1814,7 +1827,7 @@ class linked_list:
         while node_after_head.special == 'special':
             node_after_head = node_after_head.next
         if node_after_head == self._tail:
-            raise IndexError('pop from empty linked_list')
+            raise ValueError('pop from empty linked_list')
         return node_after_head.remove()
 
     def count(self, value):
@@ -2451,7 +2464,7 @@ class linked_list_base_iterator:
         while count:
             cursor = cursor.previous
             if cursor is None:
-                raise ValueError("can't go past head")
+                raise UndefinedIndexError("can't go past head")
             if cursor.special == 'special':
                 continue
             count -= 1
@@ -2464,7 +2477,7 @@ class linked_list_base_iterator:
         while count:
             cursor = cursor.next
             if cursor is None:
-                raise ValueError("can't go past tail")
+                raise UndefinedIndexError("can't go past tail")
             if cursor.special == 'special':
                 continue
             count -= 1
@@ -2673,155 +2686,6 @@ class linked_list_base_iterator:
             cursor = cursor.next
         return self._pop(cursor)
 
-    # def _slice(self, start, stop, step, pop):
-
-    #     # deliberately not the same as list slicing mechanics.
-    #     # in particular, this does not clamp for you.
-
-    #     linked_list = self._cursor.linked_list
-
-    #     step = step.__index__()
-    #     if not step:
-    #         raise ValueError("step must not be 0")
-
-    #     start = start.__index__()
-
-    #     if stop is not None:
-    #         stop = stop.__index__()
-    #     else:
-    #         if start >= 0:
-    #             # slice(0), slice(5), etc
-    #             # start at it[0] and grab N values
-    #             stop = start
-    #             start = 0
-    #         else:
-    #             # slice(-1), slice(-5)
-    #             # start at (1+N) and grab N values
-    #             # so that the last value is it[0]
-    #             start += 1
-    #             stop = 1
-
-    #     # at this point stop is guaranteed to not be None
-    #     result = self._cursor.linked_list.__class__()
-    #     step_is_negative = step < 0
-
-
-    #     # print(f">> {start=} {stop=} {step=}")
-
-    #     if step_is_negative:
-    #         if start <= stop:
-    #             return result
-    #     elif start >= stop:
-    #         return result
-
-    #     append = result.append
-
-    #     it = self.copy()
-    #     index = 0
-    #     advance = it.next
-    #     retreat = it.previous
-    #     if pop:
-    #         if step > 0:
-    #             pop = it.pop
-    #         else:
-    #             pop = it.popleft
-
-    #     # print(">>", it, start, stop, step)
-
-    #     popped_zero = False
-
-    #     for i in range(start, stop, step):
-    #         if i == 0:
-    #             # index 0 is *always* self,
-    #             # and it's always an error if self is a special node.
-    #             if self._cursor.special:
-    #                 raise SpecialNodeError()
-    #             append(self._cursor.value)
-
-    #             # fast path to update it and index
-    #             index = 0
-    #             it._cursor = self._cursor
-
-    #             if pop:
-    #                 pop()
-    #                 popped_zero = True
-
-    #             continue
-
-    #         try:
-    #             if (index + 1) == i:
-    #                 # (hopefully) fast path
-    #                 index = i
-    #                 append(advance())
-    #             else:
-    #                 # slow path
-    #                 while i > index:
-    #                     advance()
-    #                     index += 1
-    #                 while i < index:
-    #                     retreat()
-    #                     index -= 1
-    #                 append(it._cursor.value)
-    #             if pop:
-    #                 pop()
-    #         except StopIteration:
-    #             raise IndexError(f"linked_list index {index} out of range") from None
-
-    #     # don't do this until after we're done popping nodes,
-    #     # we want to skip over all deleted nodes here.
-    #     if popped_zero:
-    #         self.previous(None)
-
-    #     return result
-
-    # def slice(self, start, stop=None, step=1):
-    #     """
-    #     Returns a slice of the linked list, relative to the current node.
-
-    #     The rules for handling arguments and default values:
-    #       * step must be an integer, and defaults to 1.
-    #       * start is required, and stop defaults to None.
-    #       * start and stop cannot both be None.
-    #       * if stop is a value and start is None, it swaps
-    #         stop and start, then returns the value described
-    #         in the next bullet point.
-    #       * if start is a value and stop is None, slice returns
-    #         abs(start) values, either starting or ending with index 0.
-    #         if start is greater than 0, it returns values from
-    #         range(0, start - 1, step). if start is less than 0,
-    #         it returns values from indices range(start + 1, 1, step).
-
-    #     Raises SpecialNodeError if the slice crosses index 0
-    #     and the iterator is pointing at a special node.
-    #     """
-    #     return self._slice(start, stop, step, False)
-
-    # def popslice(self, start, stop=None, step=1):
-    #     """
-    #     Pops a slice of the linked list, relative to the current node.
-
-    #     This removes the slice from the linked list.  If this pops the
-    #     node the iterator is currently pointing at, the cursor is moved
-    #     to the previous node (which may be 'head').
-
-    #     The rules for handling arguments and default values:
-    #       * step must be an integer, and defaults to 1.
-    #       * start is required, and stop defaults to None.
-    #       * start and stop cannot both be None.
-    #       * if stop is a value and start is None, it swaps
-    #         stop and start, then returns the value described
-    #         in the next bullet point.
-    #       * if start is a value and stop is None, slice returns
-    #         abs(start) values, either starting or ending with index 0.
-    #         if start is greater than 0, it returns values from
-    #         range(0, start - 1, step). if start is less than 0,
-    #         it returns values from indices range(start + 1, 1, step).
-
-    #     Raises SpecialNodeError if the slice crosses index 0
-    #     and the iterator is pointing at a special node.
-    #     """
-    #     return self._slice(start, stop, step, True)
-
     def remove(self, value, default=_undefined):
         it = self.find(value)
         if it:
@@ -2842,11 +2706,8 @@ class linked_list_base_iterator:
         # -- handle self pointing at tail, or not --
         cursor = self._cursor
         if cursor.special == 'tail':
-            cursor.iterator_refcount -= 1
-            self._cursor = special_node = cursor.insert_before(None, 'special')
-            special_node.iterator_refcount += 1
-        else:
-            cursor = cursor.next
+            raise UndefinedIndexError("can't append to tail")
+        cursor = cursor.next
         # -- actually append value --
         cursor.insert_before(value)
 
@@ -2854,10 +2715,7 @@ class linked_list_base_iterator:
         # -- handle self pointing at head, or not --
         cursor = self._cursor
         if cursor.special == 'head':
-            cursor.iterator_refcount -= 1
-            cursor = cursor.next
-            self._cursor = cursor = cursor.insert_before(None, 'special')
-            cursor.iterator_refcount += 1
+            raise UndefinedIndexError("can't insert before head")
         # -- actually append value --
         cursor.insert_before(value)
 
@@ -2867,11 +2725,8 @@ class linked_list_base_iterator:
         # -- handle self pointing at tail, or not --
         cursor = self._cursor
         if cursor.special == 'tail':
-            cursor.iterator_refcount -= 1
-            self._cursor = special_node = cursor.insert_before(None, 'special')
-            special_node.iterator_refcount += 1
-        else:
-            cursor = cursor.next
+            raise UndefinedIndexError("can't append to tail")
+        cursor = cursor.next
         # -- actually extend from iterator --
         counter = 0
         insert_before = cursor.insert_before
@@ -2883,10 +2738,7 @@ class linked_list_base_iterator:
         # handle self pointing at head, or not --
         cursor = self._cursor
         if cursor.special == 'head':
-            cursor.iterator_refcount -= 1
-            cursor = cursor.next
-            self._cursor = cursor = cursor.insert_before(None, 'special')
-            cursor.iterator_refcount += 1
+            raise UndefinedIndexError("can't insert before head")
         # -- actually extend from iterator --
         counter = 0
         insert_before = cursor.insert_before
