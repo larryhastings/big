@@ -26,6 +26,17 @@ _delimiter_map = {
 
 @export
 class Interpolation:
+    """
+    Represents a {{ }} expression interpolation
+    in a parsed template.  See big.parse_template_string.
+
+    The expression attribute contains the text of the
+    expression.  The filters attribute is a list, containing
+    the text of all filter expressions (if any).  If the
+    expression ended with '=', the debug attribute will contain
+    the text of the expression along with the '=' and all
+    whitespace, otherwise it will be an empty string.
+    """
     def __init__(self, expression, *filters, debug=''):
         self.expression = expression
         self.filters = filters
@@ -47,6 +58,15 @@ class Interpolation:
 
 @export
 class Statement:
+    """
+    Represents a {% %} statement interpolation
+    in a parsed template.  See big.parse_template_string.
+
+    The statement attribute contains the text of the
+    statement, including all leading and trailing
+    whitespace.
+    """
+
     def __init__(self, statement):
         self.statement = statement
 
@@ -145,6 +165,10 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                 for opening_quote, t, closing_quote in iterator:
                     # print(f">> {opening_quote=} {t=} {closing_quote=}")
                     if opening_quote:
+                        if not closing_quote:
+                            # this is going to be the last thing yielded,
+                            # and we don't have a close quote.  nerts!
+                            raise SyntaxError(f'unterminated quoted string at {opening_quote.where}')
                         statement_append(opening_quote)
                         if t:
                             statement_append(t)
@@ -248,17 +272,42 @@ def parse_template_string(s, *,
     """
     Parses a string containing simple markup, yielding its components.
 
-    Returns a generator yielding the components of s.
-    parse_template_string always yields an odd number of
-    items, alternating between str objects and Interpolation
-    objects.  The first and last items yielded are always str
-    objects.
+    The markup is patterened after Django Templates and Jinja.
+    parse_template_string supports the following delimiters:
+        * {{ ... }} represents an "expression", a Python expression.
+          A template library generally calls eval() on this string
+          and replaces the text of the expression with the resulting
+          value.
+            * The expression can also specify "filters".
+        * {% ... %} represents a "statement", a Python (or other)
+          statement.  A template library generally parses the text
+          of the statement and performs the action specified, like
+          "iterate over this for loop" or "apply html.escape to all
+          expressions after this statement".
+            * When parsing statements, parse_template_string can
+              optionally preserve quoted strings.  You may specify
+              quote delimiters, multi-line quote delimiters, and
+              the escape character.  Quoted strings only have two
+              effects on parsing:
+                * The close delimiter ( %} ) is ignored when
+                    present in a quoted string.
+                * Quote marks must be balanced; every quoted string
+                  must be closed before the end of the statement.
+        * {# #} represents a "comment".  The delimiters and all text
+          between them is discarded.
+        * {>} is the "whitespace eater".  Those three characters, and
+          all subsequent whitespace, are discarded, stopping when reaching
+          either a non-whitespace character or the end of the string.
 
-    If an interpolation ends with a single '=' (optionally
-    followed by whitespace), the 'debug' attribute of that
-    Interpolation will contain the full text of the expression,
-    including the equals sign, and the expression will contain
-    the expression with the equals sign stripped.
+    Each of these delimiters can be individually enabled or disabled
+    with boolean keyword-only parameters, e.g. "parse_expression",
+    "parse_whitespace_eater".  By default only parse_expression is true.
+
+    Returns a generator yielding the components of s.  These components
+    can be:
+        * a str object, representing literal text in the template,
+        * an Expression object, representing a parsed expression, or
+        * a Statement object, representing a parsed statement.
     """
     if not isinstance(s, str):
         raise TypeError('s must be a str')
@@ -276,17 +325,25 @@ def eval_template_string(s, globals, locals=None, *,
     parse_whitespace_eater=False,
     ):
     """
-    Reformats a string, replacing {{}}-delimited expressions with their values.
+    Reformats a string, replacing {{}}-delimited Python expressions with their values.
 
     s should be a string.  It's parsed using big's
     parse_template_string function, then evaluates the
     Interpolation objects using eval(text, globals).
+    This means eval_template_string supports {{ ... }}
+    to specify expressions, including supporting filters.
+    Optionally you may also enable parsing "comments" and
+    the "whitespace eater"; parsing these are disabled by
+    default.
 
-    globals should be a dictionary containing the namespace
-    in which the expressions will be evaluated.
+    globals and locals (if specified) should be dictionaries
+    containing the namespace in which the expressions will
+    be evaluated.
 
-    Note that eval() has special support for builtins;
-    see the documentation for eval for more information.
+    Uses Python's built-in function eval() to evaluate the
+    expressions, which means the expressions are full Python
+    expressions. Note that eval() has special support for
+    builtins; see the documentation for eval() for more information.
 
     Returns s with all interpolations evaluated and replaced.
     """
@@ -303,16 +360,15 @@ def eval_template_string(s, globals, locals=None, *,
             append(o)
             continue
 
+        if o.debug:
+            append(o.debug)
+
         # interpolation
         value = eval(o.expression, globals, locals)
         for f in o.filters:
             filter = eval(f, globals, locals)
             value = filter(value)
-        if o.debug:
-            append(o.debug)
-        if not isinstance(value, str):
-            value = str(value)
-        append(value)
+        append(str(value))
 
     return ''.join(result)
 
