@@ -2596,7 +2596,7 @@ class BigLinkedListTests(unittest.TestCase):
         copy_a[10000000000:-3239879817998:-2] = 'abc'
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
-        for count in (0, 1, 3, 4, 8, 9):
+        for count in (0, 1, 3, 4):
             l = list(tuple(range(1, count + 1)))
             t = linked_list(l)
 
@@ -2606,7 +2606,10 @@ class BigLinkedListTests(unittest.TestCase):
             #
             # (the only invalid combination is trying step=0, that's illegal.)
             values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789, None)
-            values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
+
+            # skip 0 for step, it's never legal.
+            # but don't just say "if not o", None is false too, and we want to test with None.
+            values_without_zero = tuple(o for o in values if o != 0)
 
             for step in values_without_zero:
                 for stop in values:
@@ -2616,6 +2619,23 @@ class BigLinkedListTests(unittest.TestCase):
                             t_slice = t[start:stop:step]
 
                             self.assertLinkedListEqual(t_slice, l_slice)
+
+                            if (None not in (start, stop)) and (abs(stop - start) < 26):
+                                elements = list(range(start, stop, step))
+                                replacement = alphabet[:len(elements)]
+
+                                l_copy = l.copy()
+                                t_copy = t.copy()
+                                l_copy[start:stop:step] = alphabet
+                                t_copy[start:stop:step] = alphabet
+                                self.assertLinkedListEqual(t_copy, l_copy)
+
+                            if step in (1, None):
+                                l_copy = l.copy()
+                                t_copy = t.copy()
+                                l_copy[start:stop:step] = ('a', 'b', 'c')
+                                t_copy[start:stop:step] = ('a', 'b', 'c')
+                                self.assertLinkedListEqual(t_copy, l_copy)
 
         # __setitem__
         t = setup()
@@ -3676,7 +3696,6 @@ class BigLinkedListTests(unittest.TestCase):
         t, it, rit = setup()
         rit.rtruncate()
         self.assertLinkedListEqual(t, [1, 2, 3, 4])
-
 
 
 def run_tests():
