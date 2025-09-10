@@ -1076,6 +1076,11 @@ class string(str):
 ###     o888o o888o o888o o888o o888o o888o `Y8bod8P' `Y8bod88P"      o888o o888o 8""888P'   "888
 ###
 ###
+###  Terminology:
+###      * a "cursor" is a moveable pointer into the linked list.  Really it's just
+###        a reference to a node.  But I call such variables "cursor" instead of "node"
+###        to communicate intent, that they by design can move around the list.
+###
 #####################################################################################################
 #####################################################################################################
 
@@ -1087,7 +1092,7 @@ class SpecialNodeError(LookupError):
     "Special nodes don't support this operation."
 
 @export
-class UndefinedIndexError(LookupError):
+class UndefinedIndexError(IndexError):
     "You accessed an undefined index in a linked_list (before head or after tail)."
 
 # implementation detail, no public APIs expose nodes
@@ -1106,9 +1111,9 @@ class linked_list_node:
     def insert_before(self, value, special=None):
         "inserts value into the linked list in front of self."
 
-        # should never attempt to insert before head
+        if self.special == 'head':
+            raise UndefinedIndexError("can't insert before head")
         assert self.previous
-        assert self.special != 'head'
 
         linked_list = self.linked_list
 
@@ -1291,7 +1296,7 @@ class linked_list_node:
 @export
 class linked_list:
     """
-    A feature-complete linked list object for Python.
+    A Python linked list.
 
     linked_list objects have an interface similar to
     the list or collections.deque objects.  You can
@@ -1485,36 +1490,50 @@ class linked_list:
 
     def _cursor_at_index(self, index):
         """
-        index can be -1, in which case it points to head.
-        index can be length, in which case it points to tail.
-        this is to accommodate slicing semantics copied from list.
+        Returns a cursor at the node requested.
+        index can be -1, in which case it returns head.
+        index can be length, in which case it returns tail.
+        (This is to accommodate slicing semantics copied from list.)
         """
         # index = index.__index__()
         length = self._length
-        assert -1 <= index <= length, f"index should be >= 0 and < {length} but it's {index}"
+        assert -1 <= index <= length, f"index should be >= -1 and < {length} but it's {index}"
 
-        assert index >= 0
+        if index == -1:
+            return self._head
         if index == length:
             return self._tail
 
         halfway = self._length // 2
         if index > halfway:
+            # faster to start at tail and work backwards.
+            # if t is 'abcdefg', length is 7.
+            # if we want 'e', index is 4, 7 - 4 is 3,
+            # and that's how many times we need to retreat from tail.
+            #
+            #              v
+            # HEAD a b c d e f g TAIL
+            #      0 1 2 3 4 5 6       index
+            #      7 6 5 4 3 2 1 0     offset from tail
+            #
             cursor = self._tail
-            index -= length
-            for _ in range(index, 0, 1):
+            countdown = length - index
+            for _ in range(countdown):
                 cursor = cursor.previous
         else:
             cursor = self._head.next
-            for _ in range(index, 0, -1):
+            for _ in range(index):
                 cursor = cursor.next
 
         return cursor
 
     def _it_at_index(self, index):
         """
+        Indexes into a linked list.  Returns an iterator.
+
         index can be -1, in which case it points to head.
         index can be length, in which case it points to tail.
-        this is to accommodate slicing semantics copied from list.
+        This is to accommodate slicing semantics copied from 'list'.
         """
         cursor = self._cursor_at_index(index)
 
@@ -1617,32 +1636,50 @@ class linked_list:
         Parses the "key" argument from a __{get,set,del}item__ call,
         which must be either an index or a slice object.
 
-        Returns a 5-tuple:
-            (it, start, stop, step, slice_length)
-        it is an iterator pointing at the start'th entry.
+        Returns a 6-tuple:
+            (it, node, start, stop, step, slice_length)
+
         start is the index of the first element we want;
         it will be in the range 0 <= start < length.
 
-        if key is a slice, stop, step, and slice_length
+        If key is a slice, stop, step, and slice_length
         will be integers.  stop will be in the same range
         as start, and step will not be zero.  slice_length
         will be how many numbers would be in the list
         if you called list(range(start, stop, step)).
 
-        if key is not a slice, stop, step, and slice_length
-        will all be None.
+        And then there's it and node!  If key is a slice,
+        we're gonna try and return an iterator.  If the 
+        it will be an iterator yielding the nodes specified
+        by key.  If that iterator yields one or more nodes,
+        then node will be None.  But if that iterator never
+        yields anything, 
 
-        emulates Python list semantics for indexing with ints vs slices.
-        for example, if a has 3 elements, a[5] is an IndexError,
-        but a[5:1000] evaluates to an empty list.  (sigh.)
-        so, _parse_key will raise the IndexError for you in
-        the first case, but will clamp the slice values
+        if key is not a slice, it, stop, step, and slice_length
+        will all be None.  node will point at the node.
+
+        it is an iterator pointing at the start'th entry.
+
+        Emulates Python list semantics for indexing with ints vs
+        slices. for example, if a has 3 elements, a[5] raises
+        IndexError, but a[5:1000] evaluates to an empty list.
+        (sigh.)  So, _parse_key will raise the IndexError for
+        you in the first case, but will clamp the slice values
         like list does in the second case.
         """
         if isinstance(key, slice):
             start, stop, step, slice_length = self._unpack_and_adjust_slice(key, for_assignment=for_assignment)
-            node = self._head.next
-            it = node.nodes(start, stop, step)
+            node_after_head = self._head.next
+            it = node_after_head.nodes(start, stop, step)
+            if it is None:
+                calculate_node = True
+            else:
+                # test start stop step, does it yield anything?
+                for _ in range(start, stop, step):
+                    calculate_node = False
+                    break
+                else:
+                    calculate_node = True
         else:
             length = self._length
             original_start = key
@@ -1653,7 +1690,13 @@ class linked_list:
                 raise UndefinedIndexError(f'index {original_start} out of range')
             stop = step = slice_length = None
             it = None
+            calculate_node = True
             node = self._cursor_at_index(start)
+
+        if calculate_node:
+            node = self._cursor_at_index(start)
+        else:
+            node = None
 
         return it, node, start, stop, step, slice_length
 
@@ -2497,7 +2540,7 @@ class linked_list_base_iterator:
     def is_special(self):
         return self._cursor.special is not None
 
-    def _item_lookup(self, key):
+    def _cursor_at_index(self, key):
         """
         Only returns a valid data node.
         If key indexes to a special node, or overshoots head/tail,
@@ -2507,11 +2550,13 @@ class linked_list_base_iterator:
         cursor = self._cursor
         if key == 0:
             if cursor.special:
-                raise SpecialNodeError()
+                if cursor.special == 'special':
+                    raise SpecialNodeError()
+                raise UndefinedIndexError()
         else:
             c2 = cursor.index(key)
             if (c2 is None) or c2.special:
-                raise IndexError()
+                raise UndefinedIndexError()
             cursor = c2
         return cursor
 
@@ -2542,16 +2587,21 @@ class linked_list_base_iterator:
             it = self._slice_iterator(key)
             cls = type(self._cursor.linked_list)
             return cls(node.value for node in it)
-        cursor = self._item_lookup(key)
+        cursor = self._cursor_at_index(key)
+        if cursor.special:
+            if cursor.special == 'special':
+                raise SpecialNodeError()
+            raise UndefinedIndexError()
         return cursor.value
 
 
     def __setitem__(self, key, value):
         if not isinstance(key, slice):
-            cursor = self._item_lookup(key)
+            cursor = self._cursor_at_index(key)
             cursor.value = value
             return
 
+        start, stop, step = self._unpack_slice(key)
         it = self._slice_iterator(key)
         nodes_list = list(it)
         nodes_list_length = len(nodes_list)
@@ -2564,7 +2614,6 @@ class linked_list_base_iterator:
         is_reverse = isinstance(self, linked_list_reverse_iterator)
 
         if nodes_list_length != values_list_length:
-            start, stop, step = self._unpack_slice(key)
             allowable_step = -1 if is_reverse else 1
             if step != allowable_step:
                 raise ValueError(f"attempt to assign sequence of size {values_list_length} to extended slice of size {nodes_list_length}")
@@ -2583,19 +2632,25 @@ class linked_list_base_iterator:
             for n in delete_me:
                 n.remove()
         elif insert_me:
-            last_node = nodes_list[-1]
+            if nodes_list:
+                last_node = nodes_list[-1]
+            else:
+                last_node = self._cursor_at_index(stop)
             if is_reverse:
                 # last_node is actually the earliest node in the list!
                 while insert_me:
                     last_node.insert_before(insert_me.pop())
             else:
-                node = last_node.next
+                node = last_node
+                if node.special == 'tail':
+                    raise UndefinedIndexError("can't append to tail")
+                node = node.next
                 for v in insert_me:
                     node.insert_before(v)
 
     def __delitem__(self, key):
         if not isinstance(key, slice):
-            cursor = self._item_lookup(key)
+            cursor = self._cursor_at_index(key)
             cursor.remove()
             return
 
@@ -2612,22 +2667,13 @@ class linked_list_base_iterator:
             waiting.remove()
 
     def insert(self, index, object):
-        if index:
-            cursor = self._item_lookup(index)
+        index = index.__index__()
+        if index != 0:
+            cursor = self._cursor_at_index(index)
         else:
             cursor = self._cursor
-            # support for sloppy insert here:
-            # if you have an iterator IT pointed at head,
-            # you can call IT.prepend(value)
-            # and that creates the special node etc etc.
-            # therefore, inserting a node before head is ok.
-            # therefore, it should be okay here, and do the same thing.
-            #
-            # (btw, cursor can only point to head if index is 0.
-            # _item_lookup won't return head or tail, it refuses to
-            # return special nodes.)
-            if cursor.special == 'head':
-                cursor = cursor.next
+        if cursor.special == 'head':
+            raise UndefinedIndexError("can't insert before head")
         cursor.insert_before(object)
 
     def count(self, value):
@@ -2653,7 +2699,7 @@ class linked_list_base_iterator:
     def replace(self, value):
         cursor = self._cursor
         if cursor.special:
-            raise SpecialNodeError
+            raise SpecialNodeError()
         cursor.value = value
 
     def _pop(self, destination):
@@ -2661,7 +2707,9 @@ class linked_list_base_iterator:
         # moves to destination, and returns the popped node's value.
         cursor = self._cursor
         if cursor.special:
-            raise SpecialNodeError
+            if cursor.special == 'special':
+                raise SpecialNodeError()
+            raise UndefinedIndexError()
         cursor.iterator_refcount -= 1
         value = cursor.remove()
         self._cursor = destination
@@ -2670,8 +2718,8 @@ class linked_list_base_iterator:
 
     def pop(self):
         cursor = self._cursor
-        if cursor.special:
-            raise SpecialNodeError
+        if cursor.special == 'head':
+            raise UndefinedIndexError()
         cursor = cursor.previous
         while cursor.special == 'special':
             cursor = cursor.previous
@@ -2679,8 +2727,8 @@ class linked_list_base_iterator:
 
     def popleft(self):
         cursor = self._cursor
-        if cursor.special:
-            raise SpecialNodeError
+        if cursor.special == 'tail':
+            raise UndefinedIndexError()
         cursor = cursor.next
         while cursor.special == 'special':
             cursor = cursor.next

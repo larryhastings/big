@@ -1350,11 +1350,11 @@ class BigLinkedListTests(unittest.TestCase):
         it = iter(t)
         self.assertIsHead(it)
         self.assertFalse(it)
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             it[0]
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             it.pop()
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             it.popleft()
         # iterator only returns True if you can call next and it doesn't raise.
         # so, when pointing to either head or tail of an empty list, it returns false.
@@ -1373,11 +1373,11 @@ class BigLinkedListTests(unittest.TestCase):
         rit = reversed(t)
         self.assertIsTail(rit)
         self.assertFalse(rit)
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             rit[0]
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             rit.pop()
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             rit.popleft()
 
         # iterator only returns True if you can call next and it doesn't raise.
@@ -1752,7 +1752,7 @@ class BigLinkedListTests(unittest.TestCase):
         del it
 
         t, it = setup()
-        with self.assertRaises(IndexError):
+        with self.assertRaises(UndefinedIndexError):
             it[-3]
         self.assertEqual(it[-2], 1)
         self.assertEqual(it[-1], 2)
@@ -1952,9 +1952,9 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(repr(t), "linked_list([])")
         self.assertFalse(t)
 
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             iter(t).pop()
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             reversed(t).pop()
         with self.assertRaises(SpecialNodeError):
             it.pop()
@@ -2410,150 +2410,6 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             a > pi
 
-    # def test_slice(self):
-    #     def setup():
-    #         t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
-    #         it = t.find(5)
-    #         return t, it
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   ( 0), [])
-    #     self.assertLinkedListEqual(it.popslice( 0), [])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   ( 1), [5])
-    #     self.assertLinkedListEqual(it.popslice( 1), [5])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-1), [5])
-    #     self.assertLinkedListEqual(it.popslice(-1), [5])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   ( 2), [5, 6])
-    #     self.assertLinkedListEqual(it.popslice( 2), [5, 6])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-2), [4, 5])
-    #     self.assertLinkedListEqual(it.popslice(-2), [4, 5])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   ( 3), [5, 6, 7])
-    #     self.assertLinkedListEqual(it.popslice( 3), [5, 6, 7])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-3), [3, 4, 5])
-    #     self.assertLinkedListEqual(it.popslice(-3), [3, 4, 5])
-    #     self.assertLinkedListEqual(t, [1, 2, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   ( 4), [5, 6, 7, 8])
-    #     self.assertLinkedListEqual(it.popslice( 4), [5, 6, 7, 8])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice(-4), [2, 3, 4, 5])
-    #     self.assertLinkedListEqual(it.popslice(-4), [2, 3, 4, 5])
-    #     self.assertLinkedListEqual(t, [1, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   ( 5), [5, 6, 7, 8, 9])
-    #     self.assertLinkedListEqual(it.popslice( 5), [5, 6, 7, 8, 9])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-5), [1, 2, 3, 4, 5])
-    #     self.assertLinkedListEqual(it.popslice(-5), [1, 2, 3, 4, 5])
-    #     self.assertLinkedListEqual(t, [6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     with self.assertRaises(IndexError):
-    #         sl = it.slice( 6)
-    #     with self.assertRaises(IndexError):
-    #         it.popslice( 6)
-
-    #     t, it = setup()
-    #     with self.assertRaises(IndexError):
-    #         it.slice(-6)
-    #     with self.assertRaises(IndexError):
-    #         it.popslice(-6)
-
-    #     t, it = setup()
-    #     copy = it.copy()
-    #     copy.pop()
-    #     with self.assertRaises(SpecialNodeError):
-    #         it.slice(2)
-    #     with self.assertRaises(SpecialNodeError):
-    #         it.slice(-2)
-    #     with self.assertRaises(SpecialNodeError):
-    #         it.popslice(2)
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (1, 4), [6, 7, 8])
-    #     self.assertLinkedListEqual(it.popslice(1, 4), [6, 7, 8])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-3, 0), [2, 3, 4])
-    #     self.assertLinkedListEqual(it.popslice(-3, 0), [2, 3, 4])
-    #     self.assertLinkedListEqual(t, [1, 5, 6, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-3, 2), [2, 3, 4, 5, 6])
-    #     self.assertLinkedListEqual(it.popslice(-3, 2), [2, 3, 4, 5, 6])
-    #     self.assertLinkedListEqual(t, [1, 7, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (0, 4, 2), [5, 7])
-    #     self.assertLinkedListEqual(it.popslice(0, 4, 2), [5, 7])
-    #     self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-4, 4, 2), [1, 3, 5, 7])
-    #     self.assertLinkedListEqual(it.popslice(-4, 4, 2), [1, 3, 5, 7])
-    #     self.assertLinkedListEqual(t, [2, 4, 6, 8, 9])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-4, 5, 2), [1, 3, 5, 7, 9])
-    #     self.assertLinkedListEqual(it.popslice(-4, 5, 2), [1, 3, 5, 7, 9])
-    #     self.assertLinkedListEqual(t, [2, 4, 6, 8])
-
-    #     t, it = setup()
-    #     self.assertLinkedListEqual(it.slice   (-4, 6, 2), [1, 3, 5, 7, 9])
-    #     self.assertLinkedListEqual(it.popslice(-4, 6, 2), [1, 3, 5, 7, 9])
-    #     self.assertLinkedListEqual(t, [2, 4, 6, 8])
-
-    #     t = linked_list(range(1, 12))
-    #     it = t.find(6)
-    #     self.assertLinkedListEqual(it.slice   (-4, 6, 3), [2, 5, 8, 11])
-    #     self.assertLinkedListEqual(it.popslice(-4, 6, 3), [2, 5, 8, 11])
-    #     self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
-
-    #     t = linked_list(range(1, 12))
-    #     it = t.find(5)
-    #     self.assertLinkedListEqual(it.slice   (6, -4, -3), [11, 8, 5, 2])
-    #     self.assertLinkedListEqual(it.popslice(6, -4, -3), [11, 8, 5, 2])
-    #     self.assertLinkedListEqual(t, [1, 3, 4, 6, 7, 9, 10])
-
-    #     with self.assertRaises(ValueError):
-    #         it.slice(3, 4, 0)
-
-    #     # it's okay if slice end is "head" or "tail"
-    #     t = linked_list(range(6))
-
-    #     it = t.find(3)
-    #     self.assertLinkedListEqual(it[:3], [3, 4, 5])
-    #     self.assertLinkedListEqual(it[-3:], [0, 1, 2])
-
-    #     # rit = reversed(it)
-    #     # self.assertLinkedListEqual(rit[:3], [0, 1, 2, 3])
-    #     # self.assertLinkedListEqual(rit[-3:], [3, 4, 5])
-
     def test___getitem__(self):
         # __getitem__ and slicing
         def setup():
@@ -2596,17 +2452,24 @@ class BigLinkedListTests(unittest.TestCase):
         copy_a[10000000000:-3239879817998:-2] = 'abc'
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
+        # Test linked_list slicing using a brute-force exhaustive test.
+        # Construct a Python list of the numbers [1...count].
+        # Construct a linked_list containing the same values.
+        # Now slice into both objects with start, stop, and step
+        # testing *every* combination of these values:
+        #     [-23456789, -12345678, -(count + 1), ..., count + 1, 12345678, 23456789, None]
+        # Confirm that the list and the linked_list produce identical results.
         for count in (0, 1, 3, 4, 8, 9):
-            l = list(tuple(range(1, count + 1)))
+            l = list(range(1, count + 1))
             t = linked_list(l)
 
-            # test all valid combinations of these values
-            #     for start, stop, and step.
-            # [-23456789, -12345678, -(count + 1), ..., count + 1, 12345678, 23456789, None]
-            #
-            # (the only invalid combination is trying step=0, that's illegal.)
             values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789, None)
-            values_without_zero = tuple(o for o in values if o) # skip 0 for step, it's never legal
+
+            # Well... just one exception.
+            # step can never be 0.
+            # So, remove 0, just for step.
+            # (But don't remove None!)
+            values_without_zero = tuple(o for o in values if o != 0)
 
             for step in values_without_zero:
                 for stop in values:
@@ -2747,7 +2610,7 @@ class BigLinkedListTests(unittest.TestCase):
             rit[-1:3]
 
         # the rules are different for slices *on iterators*.
-        # for one--I *don't* clamp!  YOU'RE WELCOME.
+        # for example--I *don't* clamp!  YOU'RE WELCOME.
         with self.assertRaises(ValueError):
             it[1:100]
         with self.assertRaises(ValueError):
@@ -2898,7 +2761,52 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rit[0:6:2] = 'ab'
 
-        # and iterator delitem
+        # test zero-length slices of iterators
+        # len t is 9, it points to 5.
+        # confirm the invariants for these tests:
+        t, it, rit = setup()
+        self.assertEqual(len(t), 9)
+        self.assertEqual(it[0], 5)
+        for i in range(-4, 5):
+            with self.subTest(i=i):
+                t, it, rit = setup()
+                self.assertLinkedListEqual(it[i:i], [])
+                self.assertLinkedListEqual(it[i:i:-1], [])
+                self.assertLinkedListEqual(rit[i:i], [])
+                self.assertLinkedListEqual(rit[i:i:-1], [])
+
+                t, it, rit = setup()
+                l = list(t)
+                it[i:i] = ['a', 'b', 'c']
+                l[i+5:i+5] = ['a', 'b', 'c']
+                self.assertLinkedListEqual(t, l)
+
+                t, it, rit = setup()
+                l = list(t)
+                rit[i:i] = ['a', 'b', 'c']
+                l[4-i:4-i] = ['c', 'b', 'a']
+                self.assertLinkedListEqual(t, l)
+
+        # you can't assign slices to head or tail, neither
+        t, it, rit = setup()
+        it = t.head()
+        rit = reversed(it)
+        with self.assertRaises(UndefinedIndexError):
+            rit[0:0] = 'abc'
+        # however! this technically inserts *after* head, so it's okay
+        it[0:0] = 'abc'
+        self.assertLinkedListEqual(t, ['a', 'b', 'c', 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+        t, it, rit = setup()
+        it = t.tail()
+        rit = reversed(it)
+        with self.assertRaises(UndefinedIndexError):
+            it[0:0] = 'abc'
+        # and this reverse iterator slice is inserting before tail, so, also okay.
+        rit[0:0] = 'abc'
+        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 'c', 'b', 'a'])
+
+        # finally, iterator delitem, with slices
         t, it, rit = setup()
         del it[-1]
         self.assertLinkedListEqual(t, [1, 2, 3,    5, 6, 7, 8, 9])
@@ -3134,14 +3042,14 @@ class BigLinkedListTests(unittest.TestCase):
         it.insert(-2, 'qq')
         self.assertLinkedListEqual(t, [1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 10])
         it = t.head()
-        it.insert(0, 'xx')
-        self.assertLinkedListEqual(t, ['xx', 1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 10])
-        it = t.find(10)
-        it.insert(0, 'yy')
-        self.assertLinkedListEqual(t, ['xx', 1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 'yy', 10])
+        with self.assertRaises(UndefinedIndexError):
+            it.insert(0, 'xx')
         it = t.tail()
+        it.insert(0, 'yy')
+        self.assertLinkedListEqual(t, [1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 10, 'yy'])
+        it = t.find(10)
         it.insert(0, 'oo')
-        self.assertLinkedListEqual(t, ['xx', 1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 'yy', 10, 'oo'])
+        self.assertLinkedListEqual(t, [1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 'oo', 10, 'yy'])
 
     def test_truncate(self):
         def setup():
