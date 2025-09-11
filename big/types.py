@@ -1121,8 +1121,7 @@ class linked_list_node:
     def insert_before(self, value, special=None):
         "inserts value into the linked list in front of self."
 
-        if self.special == 'head':
-            raise UndefinedIndexError("can't insert before head")
+        assert self.special != 'head'
         assert self.previous
 
         linked_list = self.linked_list
@@ -1187,9 +1186,6 @@ class linked_list_node:
         #
         # if index==0, returns self, even if self is a special node.
 
-        if not hasattr(index, '__index__'):
-            raise TypeError("linked_list indices must be integers or slices")
-        index = index.__index__()
         cursor = self
 
         if index < 0:
@@ -1274,19 +1270,6 @@ class linked_list_node:
         Iterator, yields nodes.
         """
         # print(f"nodes {start=} {stop=} {step=}")
-
-        if not hasattr(step, '__index__'):
-            raise TypeError("linked_list indices must be integers or slices")
-        step = step.__index__()
-        if not step:
-            raise ValueError("step must not be 0")
-
-        if not hasattr(start, '__index__'):
-            raise TypeError("linked_list indices must be integers or slices")
-        if not hasattr(stop, '__index__'):
-            raise TypeError("linked_list indices must be integers or slices")
-        start = start.__index__()
-        stop = stop.__index__()
 
         first = self.index(start, allow_head_and_tail=True)
         last = self.index(stop, allow_head_and_tail=True)
@@ -1593,7 +1576,11 @@ class linked_list:
             step_is_positive = 1
             step_is_negative = 0
         else:
-            assert step != 0
+            if not hasattr(step, '__index__'):
+                raise TypeError('slice indices must be integers or None or have an __index__ method')
+            step = step.__index__()
+            if not step:
+                ValueError("slice step cannot be zero")
             step_is_positive = step > 0
             step_is_negative = not step_is_positive
 
@@ -1607,37 +1594,45 @@ class linked_list:
                 start = 0
             else:
                 start = last_element
-        elif start < 0:
-            if start >= negative_length:
-                start += length
-            elif step_is_negative:
-                start = -1
-            else:
-                start = 0
-        elif start >= length:
-            if step_is_negative:
-                start = last_element
-            else:
-                start = length
+        else:
+            if not hasattr(start, '__index__'):
+                raise TypeError('slice indices must be integers or None or have an __index__ method')
+            start = start.__index__()
+            if start < 0:
+                if start >= negative_length:
+                    start += length
+                elif step_is_negative:
+                    start = -1
+                else:
+                    start = 0
+            elif start >= length:
+                if step_is_negative:
+                    start = last_element
+                else:
+                    start = length
 
         if stop is None:
             if step_is_positive:
                 stop = length
             else:
                 stop = -1
-        elif stop < 0:
-            if stop >= negative_length:
-                stop += length
-            else:
-                if step_is_negative:
-                    stop = -1
+        else:
+            if not hasattr(stop, '__index__'):
+                raise TypeError('slice indices must be integers or None or have an __index__ method')
+            stop = stop.__index__()
+            if stop < 0:
+                if stop >= negative_length:
+                    stop += length
                 else:
-                    stop = 0
-        elif stop >= length:
-            if step_is_negative:
-                stop = last_element
-            else:
-                stop = length
+                    if step_is_negative:
+                        stop = -1
+                    else:
+                        stop = 0
+            elif stop >= length:
+                if step_is_negative:
+                    stop = last_element
+                else:
+                    stop = length
 
         if step_is_negative and (stop < start):
             slice_length = ((start - stop - 1) // -step) + 1
@@ -1707,15 +1702,16 @@ class linked_list:
             start, stop, step, slice_length = self._unpack_and_adjust_slice(key, for_assignment=for_assignment)
             node_after_head = self._head.next
             it = node_after_head.nodes(start, stop, step)
-            if it is None:
-                calculate_node = True
+            # it should be impossible to get a None here.
+            # we only get None for an iterator if start/stop is out of range,
+            # and we already clamped 'em.
+            assert it is not None
+            # test start stop step, does it yield anything?
+            for _ in range(start, stop, step):
+                calculate_node = False
+                break
             else:
-                # test start stop step, does it yield anything?
-                for _ in range(start, stop, step):
-                    calculate_node = False
-                    break
-                else:
-                    calculate_node = True
+                calculate_node = True
             if calculate_node:
                 # print("START", start, "STOP", stop)
                 node = self._cursor_at_index(stop)
@@ -2646,9 +2642,11 @@ class linked_list_base_iterator:
             if value is None:
                 append(default)
             elif not hasattr(value, '__index__'):
-                raise TypeError("linked_list indices must be integers or slices")
+                raise TypeError("slice indices must be integers or None or have an __index__ method")
             else:
                 append(value.__index__())
+        if not result[2]:
+            raise ValueError("slice step cannot be zero")
         return result
 
     def _slice_iterator(self, slice):

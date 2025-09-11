@@ -2855,6 +2855,75 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rit[1:3] = t
 
+        # indices must be, y'know, __index__-icies
+        with self.assertRaises(TypeError):
+            t['abc']
+        with self.assertRaises(TypeError):
+            it['abc']
+        with self.assertRaises(TypeError):
+            rit['abc']
+        with self.assertRaises(TypeError):
+            t['abc'] = 5
+        with self.assertRaises(TypeError):
+            it['abc'] = 6
+        with self.assertRaises(TypeError):
+            rit['abc'] = 7
+        with self.assertRaises(TypeError):
+            del t['abc']
+        with self.assertRaises(TypeError):
+            del it['abc']
+        with self.assertRaises(TypeError):
+            del rit['abc']
+        with self.assertRaises(TypeError):
+            t['abc':1]
+        with self.assertRaises(TypeError):
+            it['abc':1]
+        with self.assertRaises(TypeError):
+            rit['abc':1]
+        with self.assertRaises(TypeError):
+            t[1:'abc']
+        with self.assertRaises(TypeError):
+            it[1:'abc']
+        with self.assertRaises(TypeError):
+            rit[1:'abc']
+        with self.assertRaises(TypeError):
+            t[1:2:'abc']
+        with self.assertRaises(TypeError):
+            it[1:2:'abc']
+        with self.assertRaises(TypeError):
+            rit[1:2:'abc']
+        with self.assertRaises(TypeError):
+            t['abc':'def'] = [1, 2, 3]
+        with self.assertRaises(TypeError):
+            it['abc':'def'] = [1, 2, 3]
+        with self.assertRaises(TypeError):
+            rit['abc':'def'] = [1, 2, 3]
+        with self.assertRaises(TypeError):
+            del t['abc':'def']
+        with self.assertRaises(TypeError):
+            del it['abc':'def']
+        with self.assertRaises(TypeError):
+            del rit['abc':'def']
+
+        with self.assertRaises(ValueError):
+            t[1:2:0]
+        with self.assertRaises(ValueError):
+            it[1:2:0]
+        with self.assertRaises(ValueError):
+            rit[1:2:0]
+        with self.assertRaises(ValueError):
+            t[1:2:0] = 'abc'
+        with self.assertRaises(ValueError):
+            it[1:2:0] = 'abc'
+        with self.assertRaises(ValueError):
+            rit[1:2:0] = 'abc'
+        with self.assertRaises(ValueError):
+            del t[1:2:0]
+        with self.assertRaises(ValueError):
+            del it[1:2:0]
+        with self.assertRaises(ValueError):
+            del rit[1:2:0]
+
         # finally, iterator delitem, with slices
         t, it, rit = setup()
         del it[-1]
@@ -2921,6 +2990,9 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             t.insert('this is not a valid index', 'abc')
 
+        with self.assertRaises(TypeError):
+            t.insert(0, )
+
         # rotate
         initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
         d = collections.deque(initializer)
@@ -2965,6 +3037,12 @@ class BigLinkedListTests(unittest.TestCase):
         t2 = linked_list((4, 5, 6))
         t3 = t1 + t2
         self.assertLinkedListEqual(t3, (1, 2, 3, 4, 5, 6))
+
+        # __iadd__
+        t1 = linked_list((1, 2, 3))
+        t2 = linked_list((4, 5, 6))
+        t2 += t1
+        self.assertLinkedListEqual(t2, (4, 5, 6, 1, 2, 3))
 
         # __mul__
         t4 = t1 * 3
