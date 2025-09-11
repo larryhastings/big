@@ -1361,6 +1361,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertFalse(it)
         it.exhaust()
         self.assertFalse(it)
+        with self.assertRaises(UndefinedIndexError):
+            it.popleft()
         it.reset()
         self.assertFalse(it)
 
@@ -1385,6 +1387,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertFalse(rit)
         rit.exhaust() # rit, exhaust goes to head
         self.assertFalse(rit)
+        with self.assertRaises(UndefinedIndexError):
+            rit.popleft()
         rit.reset()   # rit, reset goes to tail
         self.assertFalse(rit)
 
@@ -1477,11 +1481,17 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 6)
         self.assertNoSpecialNodes(t)
 
+        with self.assertRaises(ValueError):
+            t.extend(t)
+
         t, it = setup()
         t.rextend('ABC')
         self.assertLinkedListEqual(t, ['A', 'B', 'C', 1, 2, 3])
         self.assertLength(t, 6)
         self.assertNoSpecialNodes(t)
+
+        with self.assertRaises(ValueError):
+            t.rextend(t)
 
         t, it = setup()
         it = it.find(1)
@@ -1497,10 +1507,16 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 6)
         self.assertNoSpecialNodes(t)
 
-        def setup2():
-            t = linked_list((1, 2, 3))
-            rit = reversed(t)
-            return t, rit
+        with self.assertRaises(ValueError):
+            it.extend(t)
+        with self.assertRaises(ValueError):
+            it.rextend(t)
+        rit = reversed(it)
+        with self.assertRaises(ValueError):
+            rit.extend(t)
+        with self.assertRaises(ValueError):
+            rit.rextend(t)
+
 
         # surprise! extending and rextending on a *reverse iterator*
         # inserts the nodes in *reverse order*.
@@ -1512,6 +1528,12 @@ class BigLinkedListTests(unittest.TestCase):
         #       i.append(o)
         # must always produce the same result, for both forwards
         # and reverse iterators.
+
+        def setup2():
+            t = linked_list((1, 2, 3))
+            rit = reversed(t)
+            return t, rit
+
         t, rit = setup2()
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         rit = rit.find(2)
@@ -2480,6 +2502,26 @@ class BigLinkedListTests(unittest.TestCase):
 
                             self.assertLinkedListEqual(t_slice, l_slice)
 
+                            if (None not in (start, stop, step)) and (abs(stop - start) < 26):
+                                elements = list(range(start, stop, step))
+                                replacement = alphabet[:len(elements)]
+
+                                l_copy = l.copy()
+                                t_copy = t.copy()
+                                try:
+                                    l_copy[start:stop:step] = replacement
+                                    t_copy[start:stop:step] = replacement
+                                    self.assertLinkedListEqual(t_copy, l_copy)
+                                except ValueError:
+                                    pass
+
+                            if step in (1, None):
+                                l_copy = l.copy()
+                                t_copy = t.copy()
+                                l_copy[start:stop:step] = ('a', 'b', 'c')
+                                t_copy[start:stop:step] = ('a', 'b', 'c')
+                                self.assertLinkedListEqual(t_copy, l_copy)
+
         # __setitem__
         t = setup()
         t[2] = 'rem lezar'
@@ -2552,6 +2594,9 @@ class BigLinkedListTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             t[1:4:2] = 'abcdefgh'
+
+        with self.assertRaises(ValueError):
+            t[1:4] = t
 
         # overwrite a zero-length slice!
         t = setup()
@@ -2793,18 +2838,22 @@ class BigLinkedListTests(unittest.TestCase):
         rit = reversed(it)
         with self.assertRaises(UndefinedIndexError):
             rit[0:0] = 'abc'
-        # however! this technically inserts *after* head, so it's okay
-        it[0:0] = 'abc'
-        self.assertLinkedListEqual(t, ['a', 'b', 'c', 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        with self.assertRaises(UndefinedIndexError):
+            it[0:0] = 'abc'
 
         t, it, rit = setup()
         it = t.tail()
         rit = reversed(it)
         with self.assertRaises(UndefinedIndexError):
             it[0:0] = 'abc'
-        # and this reverse iterator slice is inserting before tail, so, also okay.
-        rit[0:0] = 'abc'
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 'c', 'b', 'a'])
+        with self.assertRaises(UndefinedIndexError):
+            rit[0:0] = 'abc'
+
+        # you can't assign self to a slice of self
+        with self.assertRaises(ValueError):
+            it[1:3] = t
+        with self.assertRaises(ValueError):
+            rit[1:3] = t
 
         # finally, iterator delitem, with slices
         t, it, rit = setup()
@@ -2868,6 +2917,9 @@ class BigLinkedListTests(unittest.TestCase):
             t = linked_list((1, 2, 3, 4, 5))
             t.insert(index, 'x')
             self.assertLinkedListEqual(t, a)
+
+        with self.assertRaises(TypeError):
+            t.insert('this is not a valid index', 'abc')
 
         # rotate
         initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
@@ -3585,6 +3637,44 @@ class BigLinkedListTests(unittest.TestCase):
         rit.rtruncate()
         self.assertLinkedListEqual(t, [1, 2, 3, 4])
 
+    def test_list_compatibility(self):
+        def setup():
+            return linked_list(range(1, 10))
+
+        t = setup()
+        for i in range(1, 10):
+            with self.subTest(i=i):
+                self.assertEqual(t.index(i), i - 1)
+
+        with self.assertRaises(ValueError):
+            t.index('abc')
+        with self.assertRaises(ValueError):
+            t.index(4.5)
+        with self.assertRaises(ValueError):
+            t.index(None)
+
+        self.assertEqual(t.index(4, start=1, stop=5), 3)
+        with self.assertRaises(ValueError):
+            t.index(1, start=1, stop=5)
+        with self.assertRaises(ValueError):
+            t.index(9, start=1, stop=5)
+
+        with self.assertRaises(ValueError):
+            t.index(9, start=3, stop=2)
+        with self.assertRaises(ValueError):
+            t.index(9, start=12)
+        t = linked_list()
+        with self.assertRaises(ValueError):
+            t.index('abc')
+
+    def test_deque_compatibility(self):
+        def setup():
+            return linked_list(range(1, 10))
+        t = setup()
+        t.extendleft('abc')
+        self.assertLinkedListEqual(t, ['c', 'b', 'a', 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        with self.assertRaises(ValueError):
+            t.extendleft(t)
 
 
 def run_tests():

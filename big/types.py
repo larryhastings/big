@@ -30,6 +30,16 @@ from collections import deque
 import copy
 from itertools import zip_longest
 import re
+try: # pragma nocover
+    # new in 3.9
+    from types import GenericAlias
+except ImportError: # pragma nocover
+    # backwards compatibility for 3.7 and 3.8
+    # (3.6 doesn't support __class_getitem__ so we don't need it there)
+    def GenericAlias(origin, args):
+        s = ", ".join(t.__name__ for t in args)
+        return f'{origin.__name__}[{s}]'
+
 
 from .text import linebreaks, multipartition, multisplit, Pattern
 from .tokens import generate_tokens
@@ -1177,6 +1187,8 @@ class linked_list_node:
         #
         # if index==0, returns self, even if self is a special node.
 
+        if not hasattr(index, '__index__'):
+            raise TypeError("linked_list indices must be integers or slices")
         index = index.__index__()
         cursor = self
 
@@ -1263,10 +1275,16 @@ class linked_list_node:
         """
         # print(f"nodes {start=} {stop=} {step=}")
 
+        if not hasattr(step, '__index__'):
+            raise TypeError("linked_list indices must be integers or slices")
         step = step.__index__()
         if not step:
             raise ValueError("step must not be 0")
 
+        if not hasattr(start, '__index__'):
+            raise TypeError("linked_list indices must be integers or slices")
+        if not hasattr(stop, '__index__'):
+            raise TypeError("linked_list indices must be integers or slices")
         start = start.__index__()
         stop = stop.__index__()
 
@@ -1439,10 +1457,18 @@ class linked_list:
             t.append(copy.deepcopy(value, memo))
         return t
 
+    # new in 3.7
+    def __class_getitem__(cls, item): # pragma nocover
+        return GenericAlias(cls, (item,))
+
     def __add__(self, other):
         t = self.__copy__()
         t.extend(other)
         return t
+
+    def __iadd__(self, other):
+        self.extend(other)
+        return self
 
     def __mul__(self, other):
         if not hasattr(other, '__index__'):
@@ -1649,11 +1675,21 @@ class linked_list:
         if you called list(range(start, stop, step)).
 
         And then there's it and node!  If key is a slice,
-        we're gonna try and return an iterator.  If the 
-        it will be an iterator yielding the nodes specified
-        by key.  If that iterator yields one or more nodes,
-        then node will be None.  But if that iterator never
-        yields anything, 
+        we're gonna try and return an iterator.  If we're
+        doing something illegal, it might be none.  Otherwise
+        it'll be an iterator yielding just the nodes specified.
+        But maybe... that's zero nodes!  Like for a zero-length
+        slice.  In which case we also return a valid node, which
+        represents the end of the slice.  Again: if it is an iterator
+        that yields one or more nodes, node will be None.  Otherwise
+        node will be the last node from the slice.
+
+        The API idea here is this: if it's a non-extended slice,
+        then we might insert more values than we originally had
+        nodes.  You can handle that effortlessly like this:
+            it, node, ... = self._parse_key(...)
+            for node in it:
+                ...
 
         if key is not a slice, it, stop, step, and slice_length
         will all be None.  node will point at the node.
@@ -1680,9 +1716,16 @@ class linked_list:
                     break
                 else:
                     calculate_node = True
+            if calculate_node:
+                # print("START", start, "STOP", stop)
+                node = self._cursor_at_index(stop)
+            else:
+                node = None
         else:
             length = self._length
             original_start = key
+            if not hasattr(key, '__index__'):
+                raise TypeError("linked_list indices must be integers or slices")
             start = key.__index__()
             if start < 0:
                 start += length
@@ -1690,13 +1733,7 @@ class linked_list:
                 raise UndefinedIndexError(f'index {original_start} out of range')
             stop = step = slice_length = None
             it = None
-            calculate_node = True
             node = self._cursor_at_index(start)
-
-        if calculate_node:
-            node = self._cursor_at_index(start)
-        else:
-            node = None
 
         return it, node, start, stop, step, slice_length
 
@@ -1715,12 +1752,18 @@ class linked_list:
             node.value = value
             return
 
+        if value is self:
+            raise ValueError("can't assign self to slice of self")
+
+        # print(f"{it=} {node=} {start=} {stop=} {step=} {slice_length=}")
+
         if step == 1:
             # in case we don't ever iterate, pre-initialize node
             # to point to start
             sentinel = object()
-            next_node = None
             last = node
+            advance_last = False
+            next_node = None
             remove_me = None
             try:
                 values = iter(value)
@@ -1731,7 +1774,9 @@ class linked_list:
                 # print(f">> {node=} {value=} {sentinel=}")
                 if node == sentinel:
                     if next_node is None:
-                        next_node = last.next
+                        next_node = last
+                        if advance_last:
+                            next_node = next_node.next
                     next_node.insert_before(value)
                     continue
                 if value == sentinel:
@@ -1745,6 +1790,7 @@ class linked_list:
 
                 node.value = value
                 last = node
+                advance_last = True
 
             if remove_me is not None:
                 remove_me.remove()
@@ -1788,6 +1834,8 @@ class linked_list:
     def insert(self, index, object):
         length = self._length
         # convert index to range 0 <= index <= length
+        if not hasattr(index, '__index__'):
+            raise TypeError("linked_list indices must be integers or slices")
         index = index.__index__()
         if index <= -length:
             index = 0
@@ -1809,11 +1857,15 @@ class linked_list:
     rappend = prepend
 
     def extend(self, iterable):
+        if iterable is self:
+            raise ValueError("can't extend self with self")
         insert_before = self._tail.insert_before
         for value in iterable:
             insert_before(value)
 
     def rextend(self, iterable):
+        if iterable is self:
+            raise ValueError("can't rextend self with self")
         insert_before = self._head.next.insert_before
         for value in iterable:
             insert_before(value)
@@ -1974,9 +2026,6 @@ class linked_list:
             start is still inclusive.
             stop is still exclusive.
         """
-        # print()
-        # print("_" * 69)
-        # print(f"_cut {start=} {stop=} {is_rcut=}")
         start_is_none = start is None
         stop_is_none = stop is None
 
@@ -2009,18 +2058,11 @@ class linked_list:
             # if the user is cutting using reverse iterators,
             # negate is_rcut *here*
             is_rcut = not is_rcut
-            # print(f">> reverse iterators detected! negating is_rcut. is_rcut is now {is_rcut}")
 
         t2 = self.__class__()
 
         if not is_rcut:
             # cut
-            # print(f">> CUT")
-            # print(f">>     {start=}")
-            # print(f">>     {start_is_none=}")
-            # print(f">>     {stop=}")
-            # print(f">>     {stop_is_none=}")
-            # print(f">> (note start should be BEFORE or EQUAL TO stop right now)")
             if start_is_none:
                 start = self._head.next
             else:
@@ -2040,19 +2082,11 @@ class linked_list:
             if start == stop:
                 return t2
 
-            # print(f"BEFORE WE MAKE STOP INCLUSIVE {start=} {stop=}")
             stop = stop.previous
         else:
             # rcut
-            # print(f">> RCUT")
-            # print(f">>     {start=}")
-            # print(f">>     {start_is_none=}")
-            # print(f">>     {stop=}")
-            # print(f">>     {stop_is_none=}")
-            # print( ">> (note start should be EQUAL TO or AFTER stop right now)")
             if start_is_none:
                 start = self._tail.previous
-                # print("START IS NOW", start)
             else:
                 if start._cursor is self._tail:
                     # only permissible if stop is also _tail
@@ -2061,30 +2095,21 @@ class linked_list:
                     raise SpecialNodeError(f"can't {_cut} tail")
                 start = start._cursor
 
-            # print(f"BEFORE CURSOR {start=} {stop=}")
-
             # convert stop to a cursor, and make it inclusive
             if stop_is_none:
                 stop = self._head
-                # print(f">> STOP IS NOW {stop}")
             else:
                 stop = stop._cursor
 
             if start == stop:
                 return t2
 
-            # print(f"BEFORE WE MAKE STOP INCLUSIVE {start=} {stop=}")
-
             stop = stop.next
-
-            # print(f"BEFORE SWAP {start=} {stop=}")
 
             # now swap start and stop
             tmp = start
             start = stop
             stop = tmp
-
-        # print(f">> [1] {start=} {stop=}")
 
         if not (start_is_none or stop_is_none):
             # if the user specified both ends of the range,
@@ -2094,8 +2119,6 @@ class linked_list:
                 cursor = cursor.next
             if not cursor:
                 raise ValueError(f"stop points to a node before start")
-
-        # print(f">> [2] {start=} {stop=}")
 
         # everything checks out, and everything is prepared--we can cut!
         # start and stop are now cursors (direct references to nodes),
@@ -2331,6 +2354,51 @@ class linked_list:
 
         self._splice(other, where, cursor, special)
 
+    # special list compatibility layer
+    def index(self, value, start=None, stop=None):
+        def exp():
+            return ValueError(f'{value!r} is not in linked_list')
+
+        it = iter(self)
+        # slightly clever: pass in it as "default".
+        # we know it can't be in the list, we just created it.
+        v = it.next(it)
+        if v is it:
+            raise exp()
+
+        if start is None:
+            start = index = 0
+        else:
+            v = it.next(it, count=start)
+            if v is it:
+                raise exp()
+            index = start
+
+        if stop is not None:
+            delta = stop - start
+            if delta <= 0:
+                raise exp()
+            stop = it.copy()
+            stop.next(None, count=delta)
+
+        while it != stop:
+            if it[0] == value:
+                return index
+            index += 1
+            result = it.next(it)
+            if result is it:
+                raise exp()
+        raise exp()
+
+
+    # special deque compatibility layer
+    def extendleft(self, iterable):
+        if iterable is self:
+            raise ValueError("can't extendleft self with self")
+        self.rextend(reversed(iterable))
+
+    maxlen = None
+
 
 _sentinel = object()
 
@@ -2347,6 +2415,10 @@ class linked_list_base_iterator:
     @property
     def linked_list(self):
         return self._cursor.linked_list
+
+    # new in 3.7
+    def __class_getitem__(cls, item): # pragma nocover
+        return GenericAlias(cls, (item,))
 
     def __repr__(self):
         return f"<{self.__class__.__name__} {hex(id(self))} cursor={self._cursor!r}>"
@@ -2546,6 +2618,8 @@ class linked_list_base_iterator:
         If key indexes to a special node, or overshoots head/tail,
         raises an exception.
         """
+        if not hasattr(key, '__index__'):
+            raise TypeError("linked_list indices must be integers or slices")
         key = key.__index__()
         cursor = self._cursor
         if key == 0:
@@ -2562,13 +2636,20 @@ class linked_list_base_iterator:
 
     @staticmethod
     def _unpack_slice(slice):
-        start = slice.start
-        start = 0 if start is None else start.__index__()
-        stop = slice.stop
-        stop = 0 if stop is None else stop.__index__()
-        step = slice.step
-        step = 1 if step is None else step.__index__()
-        return start, stop, step
+        result = []
+        append = result.append
+        for value, default in (
+            (slice.start, 0),
+            (slice.stop, 0),
+            (slice.step, 1),
+            ):
+            if value is None:
+                append(default)
+            elif not hasattr(value, '__index__'):
+                raise TypeError("linked_list indices must be integers or slices")
+            else:
+                append(value.__index__())
+        return result
 
     def _slice_iterator(self, slice):
         """
@@ -2588,10 +2669,6 @@ class linked_list_base_iterator:
             cls = type(self._cursor.linked_list)
             return cls(node.value for node in it)
         cursor = self._cursor_at_index(key)
-        if cursor.special:
-            if cursor.special == 'special':
-                raise SpecialNodeError()
-            raise UndefinedIndexError()
         return cursor.value
 
 
@@ -2600,6 +2677,9 @@ class linked_list_base_iterator:
             cursor = self._cursor_at_index(key)
             cursor.value = value
             return
+
+        if value is self.linked_list:
+            raise ValueError("can't assign self to slice of self")
 
         start, stop, step = self._unpack_slice(key)
         it = self._slice_iterator(key)
@@ -2642,8 +2722,6 @@ class linked_list_base_iterator:
                     last_node.insert_before(insert_me.pop())
             else:
                 node = last_node
-                if node.special == 'tail':
-                    raise UndefinedIndexError("can't append to tail")
                 node = node.next
                 for v in insert_me:
                     node.insert_before(v)
@@ -2770,8 +2848,10 @@ class linked_list_base_iterator:
     appendleft = rappend = prepend
 
     def extend(self, iterable):
-        # -- handle self pointing at tail, or not --
         cursor = self._cursor
+        if iterable is cursor.linked_list:
+            raise ValueError("can't extend self with self")
+        # -- handle self pointing at tail, or not --
         if cursor.special == 'tail':
             raise UndefinedIndexError("can't append to tail")
         cursor = cursor.next
@@ -2783,8 +2863,10 @@ class linked_list_base_iterator:
             insert_before(value)
 
     def rextend(self, iterable):
-        # handle self pointing at head, or not --
         cursor = self._cursor
+        if iterable is cursor.linked_list:
+            raise ValueError("can't rextend self with self")
+        # handle self pointing at head, or not --
         if cursor.special == 'head':
             raise UndefinedIndexError("can't insert before head")
         # -- actually extend from iterator --
@@ -3085,11 +3167,15 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     def append(self, value):
         super().prepend(value)
 
-    def extend(self, value):
-        super().rextend(reversed(value))
+    def extend(self, iterable):
+        if iterable is self._cursor.linked_list:
+            raise ValueError("can't rextend self with self")
+        super().rextend(reversed(iterable))
 
-    def rextend(self, value):
-        super().extend(reversed(value))
+    def rextend(self, iterable):
+        if iterable is self._cursor.linked_list:
+            raise ValueError("can't rextend self with self")
+        super().extend(reversed(iterable))
 
     def pop(self):
         return self._pop(self._cursor.next)
@@ -3115,85 +3201,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     def rtruncate(self):
         super().truncate()
 
-
-    # This gets confusing.  So here's a diagram of cut with reverse iterators:
-    #
-    #                          <-next
-    #                          previous->
-    #               tail - 5 - 4 - 3 - 2 - 1 - head
-    #                      ^           ^   ^
-    #                      |           :   |
-    #                     start        :  stop
-    #                      :           :
-    #  first actual node cut           :
-    #                                  last actual node cut
-    #
-    # for these four defined values:
-    #    forward_start = (a forward iterator over t)
-    #    forward_end   = (a forward iterator over t)
-    #    reverse_start = reversed(forward_start)
-    #    reverse_end   = reversed(forward_end)
-    #
-    # these produce the same result:
-    #    t.cut(forward_start, forward_end)
-    #    t.rcut(reverse_start, reverse_end)
-    #
-    # and these too:
-    #    t.rcut(forward_end, forward_start)
-    #    t.cut(reverse_end, reverse_start)
-    #
-    # def cut(self, stop=None):
-    #     """
-    #     Bisects the list at the current node.  Returns a new list.
-
-    #     Cuts nodes from the linked list being iterated over.  Creates
-    #     a new linked list, moves all cut nodes to this new linked_list,
-    #     and returns this new linked list.
-
-    #     If end is not None, it must be an iterator pointing to either
-    #     the same node or a preceding node in the same linked list;
-    #     it's an error if end points to a preceding node, or to a node
-    #     in a different list.  The node pointed at by end and all
-    #     preceding nodes are not cut.
-
-    #     If end is None, all preceding nodes are cut, including "head".
-    #     (The linked list is given a new "head".)
-
-    #     If cut cuts any nodes, it always cuts the node pointed to by
-    #     self.
-
-    #     All iterators pointing at nodes moved to the new list continue to
-    #     point to those nodes.  This means they also move to the new list.
-    #     """
-    #     return self._cursor.linked_list._cut(self, stop, is_rcut=False, swapped=False)
-
-    # def rcut(self, stop=None):
-    #     """
-    #     Bisects the list at the current node.  Returns a new list.
-
-    #     Cuts nodes from the linked list being iterated over.  Creates
-    #     a new linked list, moves all cut nodes to this new linked_list,
-    #     and returns this new linked list.
-
-    #     If end is not None, it must be an iterator pointing to either
-    #     the same node or a subsequent node in the same linked list;
-    #     it's an error if end points to a preceding node, or to a node
-    #     in a different list.  The node pointed at by end and all
-    #     subsequent nodes are not cut.
-
-    #     If end is None, all subsequent nodes are cut, including "tail".
-    #     (The linked list is given a new "tail".)
-
-    #     If cut cuts any nodes, it always cuts the node pointed to by
-    #     self.
-
-    #     All iterators pointing at nodes moved to the new list continue to
-    #     point to those nodes.  This means they also move to the new list.
-    #     """
-    #     # rcut on a reverse iterator is cut, not rcut
-    #     return self._cursor.linked_list._cut(self, stop, is_rcut=True, swapped=False)
-
-    # cut logic is sufficiently complicated, we handle all the reverse-iterator
+    # cut/rcut logic is sufficiently complicated, we handle all the reverse-iterator
     # and reversing stuff inside linked_list itself.  we don't even need to
     # swap them here, linked_list.cut/rcut will handle it.
 
