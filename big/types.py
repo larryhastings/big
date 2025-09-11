@@ -1118,6 +1118,16 @@ class linked_list_node:
         self.next = self.previous = None
         self.iterator_refcount = 0
 
+    def __getstate__(self):
+        return (None, {
+            'value': self.value,
+            'special': self.special,
+            'next': self.next,
+            'previous': self.previous,
+            'linked_list': self.linked_list,
+            'iterator_refcount': self.iterator_refcount,
+            })
+
     def insert_before(self, value, special=None):
         "inserts value into the linked list in front of self."
 
@@ -1440,6 +1450,13 @@ class linked_list:
             t.append(copy.deepcopy(value, memo))
         return t
 
+    def __getstate__(self):
+        return (None, {
+            '_head': self._head,
+            '_length': self._length,
+            '_tail': self._tail,
+            })
+
     # new in 3.7
     def __class_getitem__(cls, item): # pragma nocover
         return GenericAlias(cls, (item,))
@@ -1688,6 +1705,8 @@ class linked_list:
 
         if key is not a slice, it, stop, step, and slice_length
         will all be None.  node will point at the node.
+        "if stop is None" is a solid way of discriminating
+        between "we parsed a slice" and "we got an index".
 
         it is an iterator pointing at the start'th entry.
 
@@ -1736,7 +1755,7 @@ class linked_list:
     def __getitem__(self, key):
         it, node, start, stop, step, slice_length = self._parse_key(key)
 
-        if it is None: # then key is not a slice
+        if stop is None: # then key is not a slice
             return node.value
 
         return self.__class__(o.value for o in it)
@@ -1744,7 +1763,7 @@ class linked_list:
     def __setitem__(self, key, value):
         it, node, start, stop, step, slice_length = self._parse_key(key, for_assignment=True)
 
-        if it is None: # then key is not a slice
+        if stop is None: # then key is not a slice
             node.value = value
             return
 
@@ -1811,7 +1830,7 @@ class linked_list:
     def __delitem__(self, key):
         it, node, start, stop, step, slice_length = self._parse_key(key)
 
-        if it is None: # then key is not a slice
+        if stop is None: # then key is not a slice
             node.remove()
             return
 
@@ -1829,10 +1848,11 @@ class linked_list:
 
     def insert(self, index, object):
         length = self._length
-        # convert index to range 0 <= index <= length
+        # convert index to range 0 <= index <= length.
         if not hasattr(index, '__index__'):
             raise TypeError("linked_list indices must be integers or slices")
         index = index.__index__()
+        # clamp the index, because list.insert clamps.
         if index <= -length:
             index = 0
         elif index < 0:
@@ -1849,7 +1869,6 @@ class linked_list:
         self._head.next.insert_before(object)
 
     # some aliases for you
-    appendleft = prepend
     rappend = prepend
 
     def extend(self, iterable):
@@ -1865,13 +1884,6 @@ class linked_list:
         insert_before = self._head.next.insert_before
         for value in iterable:
             insert_before(value)
-
-    # don't alias "rextend" as "appendleft", they have different semantics!
-    # collections.deque.appendleft inserts the items in reverse order,
-    #   which is dumb and is behavior nobody wants.
-    # linked_list.rextend inserts the items in forwards order,
-    #   which is smart and is the behavior everybody actually wants.
-
 
     def clear(self):
         head = self._head
@@ -1905,21 +1917,39 @@ class linked_list:
         previous.next = tail
         self._length = 0
 
-    def pop(self):
-        node_before_tail = self._tail.previous
-        while node_before_tail.special == 'special':
-            node_before_tail = node_before_tail.previous
-        if node_before_tail == self._head:
+    def pop(self, index=-1):
+        if not self._length:
             raise ValueError('pop from empty linked_list')
-        return node_before_tail.remove()
+        if index == -1:
+            node = self._tail.previous
+            while node.special == 'special':
+                node = node.previous
+        else:
+            if not hasattr(index, '__index__'):
+                raise TypeError('pop index must be an integer')
+            index = index.__index__()
+            node = self._cursor_at_index(index)
+            if node.special:
+                raise SpecialNodeError()
 
-    def popleft(self):
-        node_after_head = self._head.next
-        while node_after_head.special == 'special':
-            node_after_head = node_after_head.next
-        if node_after_head == self._tail:
-            raise ValueError('pop from empty linked_list')
-        return node_after_head.remove()
+        return node.remove()
+
+    def rpop(self, index=0):
+        if not self._length:
+            raise ValueError('rpop from empty linked_list')
+        if index == 0:
+            node = self._head.next
+            while node.special == 'special':
+                node = node.next
+        else:
+            if not hasattr(index, '__index__'):
+                raise TypeError('rpop index must be an integer')
+            index = index.__index__()
+            node = self._cursor_at_index(index)
+            if node.special:
+                raise SpecialNodeError()
+
+        return node.remove()
 
     def count(self, value):
         return self.head().count(value)
@@ -2393,7 +2423,9 @@ class linked_list:
             raise ValueError("can't extendleft self with self")
         self.rextend(reversed(iterable))
 
+    appendleft = prepend
     maxlen = None
+    popleft = rpop
 
 
 _sentinel = object()
@@ -2407,6 +2439,12 @@ class linked_list_base_iterator:
             raise TypeError("linked_list_base_iterator is an abstract base class")
         node.iterator_refcount += 1
         self._cursor = node
+
+    def __getstate__(self):
+        return (None, {
+            '_cursor': self._cursor,
+            })
+
 
     @property
     def linked_list(self):

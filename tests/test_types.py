@@ -32,7 +32,6 @@ import copy
 import itertools
 from itertools import zip_longest
 import pickle
-# import string
 from string import ascii_letters, punctuation, whitespace
 import sys
 import unittest
@@ -3753,6 +3752,32 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, ['c', 'b', 'a', 1, 2, 3, 4, 5, 6, 7, 8, 9])
         with self.assertRaises(ValueError):
             t.extendleft(t)
+
+    def test_pickle(self):
+        def setup():
+            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+            it = t.find(5)
+            rit = reversed(it)
+            return t, it, rit
+        t, it, rit = setup()
+
+        p = pickle.dumps(t)
+        t2 = pickle.loads(p)
+        self.assertIsInstance(t, linked_list)
+        self.assertEqual(t, t2)
+
+        p = pickle.dumps(it)
+        it2 = pickle.loads(p)
+        self.assertIsInstance(it, linked_list_iterator)
+        self.assertEqual(it[0], it2[0])
+        self.assertEqual(t, it2.linked_list)
+
+        p = pickle.dumps(rit)
+        rit2 = pickle.loads(p)
+        self.assertIsInstance(rit, linked_list_reverse_iterator)
+        self.assertEqual(rit[0], rit2[0])
+        self.assertEqual(t, rit2.linked_list)
+
 
 
 def run_tests():
