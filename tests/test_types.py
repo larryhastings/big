@@ -1664,6 +1664,12 @@ class BigLinkedListTests(unittest.TestCase):
         value = next(it)
         self.assertEqual(value, 0)
 
+        t = linked_list(range(10))
+        with self.assertRaises(UndefinedIndexError):
+            t[10] = 'abc'
+        with self.assertRaises(UndefinedIndexError):
+            del t[10]
+
 
     def test_iterator_methods(self):
         def setup():
@@ -2221,9 +2227,11 @@ class BigLinkedListTests(unittest.TestCase):
             with self.subTest(ordering=ordering):
                 t = linked_list([0, 'a', 'b', 5])
                 it1 = t.find('a')
-                copy = it1.copy(); copy.pop()
+                copy = it1.copy();
+                copy.pop()
                 it2 = t.find('b')
-                copy = it2.copy(); copy.pop()
+                copy = it2.copy();
+                copy.pop()
 
                 operations = [
                     lambda: it1.prepend(1),
@@ -2276,6 +2284,47 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 12)
         self.assertEqual(t.popleft(), 'b')
         self.assertLength(t, 11)
+
+        def setup():
+            t = linked_list(range(10))
+            it = t.find(5)
+            return t, it
+
+        for i in range(10):
+            with self.subTest(i=i):
+                t, it = setup()
+                self.assertEqual(t.pop(i), i)
+                t, it = setup()
+                self.assertEqual(t.popleft(i), i)
+
+        for i in range(-5, 5):
+            with self.subTest(i=i):
+                t, it = setup()
+                self.assertEqual(it.pop(i), i + 5)
+                t, it = setup()
+                self.assertEqual(it.popleft(i), i + 5)
+
+        t, it = setup()
+        with self.assertRaises(TypeError):
+            t.pop('abc')
+        with self.assertRaises(TypeError):
+            t.popleft('abc')
+        with self.assertRaises(TypeError):
+            it.pop('abc')
+        with self.assertRaises(TypeError):
+            it.popleft('abc')
+
+        t, it = setup()
+        del it[0]
+        with self.assertRaises(SpecialNodeError):
+            it.pop(0)
+        with self.assertRaises(SpecialNodeError):
+            it.popleft(0)
+        with self.assertRaises(SpecialNodeError):
+            t.pop(len(t))
+        with self.assertRaises(SpecialNodeError):
+            t.popleft(-(len(t) + 1))
+
 
 
     def test_rich_compare(self):
@@ -2491,6 +2540,28 @@ class BigLinkedListTests(unittest.TestCase):
             # So, remove 0, just for step.
             # (But don't remove None!)
             values_without_zero = tuple(o for o in values if o != 0)
+
+            for index in values:
+                with self.subTest(index=index):
+                    try:
+                        l_value = l[index]
+                        passed = True
+                    except IndexError:
+                        with self.assertRaises(IndexError):
+                            t[index]
+                        passed = False
+                    except TypeError:
+                        # reminder: None is in values
+                        with self.assertRaises(TypeError):
+                            t[index]
+                        passed = False
+
+                    if passed:
+                        # don't merge this into the "try" block above,
+                        # we want to notice if this raises IndexError
+                        # but a list doesn't.
+                        t_value = t[index]
+                        self.assertEqual(l_value, t_value)
 
             for step in values_without_zero:
                 for stop in values:
@@ -2980,11 +3051,12 @@ class BigLinkedListTests(unittest.TestCase):
 
         # insert
         for index in range(-7, 7):
-            a = [1, 2, 3, 4, 5]
-            a.insert(index, 'x')
-            t = linked_list((1, 2, 3, 4, 5))
-            t.insert(index, 'x')
-            self.assertLinkedListEqual(t, a)
+            with self.subTest(index=index):
+                a = [1, 2, 3, 4, 5]
+                a.insert(index, 'x')
+                t = linked_list((1, 2, 3, 4, 5))
+                t.insert(index, 'x')
+                self.assertLinkedListEqual(t, a)
 
         with self.assertRaises(TypeError):
             t.insert('this is not a valid index', 'abc')
