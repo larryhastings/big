@@ -30,6 +30,8 @@ from collections import deque
 import copy
 from itertools import zip_longest
 import re
+import sys
+
 try: # pragma nocover
     # new in 3.9
     from types import GenericAlias
@@ -380,34 +382,30 @@ class string(str):
             prefix = ''
         return f'{prefix}line {self._line_number} column {self._column_number}'
 
+    def _clamp_index(self, index, default, name):
+        if index is None:
+            return default
+
+        if not hasattr(index, '__index__'):
+            raise TypeError(f'{name} must be an int, not {type(index).__name__}')
+        index = index.__index__()
+
+        length = self._length
+        if index < 0:
+            index += length
+            if index <= 0:
+                return 0
+        elif index >= length:
+            return length
+        return index
+
     def __getitem__(self, index):
         if isinstance(index, slice):
-            start = index.start
-            stop = index.stop
-            step = index.step
-
-            length = self._length
-
             # slice clamps >:(
-            if start is None:
-                start = 0
-            else:
-                if start < 0:
-                    start += length
-                    if start < 0:
-                        start = 0
-                elif start > length:
-                    start = length
-
-            if stop is None:
-                stop = length
-            else:
-                if stop < 0:
-                    stop += length
-                    if stop < 0:
-                        stop = 0
-                elif stop > length:
-                    stop = length
+            clamp = self._clamp_index
+            start = clamp(index.start, 0, 'start')
+            stop = clamp(index.stop, self._length, 'stop')
+            step = index.step
 
             if stop < start:
                 stop = start
@@ -415,7 +413,11 @@ class string(str):
             if step is None:
                 step = 1
             else:
-                assert step > 0
+                if not hasattr(step, '__index__'):
+                    raise TypeError(f'step must be an int, not {type(index).__name__}')
+                step = step.__index__()
+                if step <= 0:
+                    raise ValueError('step must be 1 or more')
 
             if step == 1:
                 start_stops = ((start, stop),)
@@ -434,21 +436,15 @@ class string(str):
             start_stops = ((index, index+1),)
             length = 1
 
-        # print()
-        # print(f">> {start_stops=}")
         ranges = []
         strings = []
         for start, stop in start_stops:
-            # print(f"{start=} {stop=}")
             for r in self._ranges:
                 r_length = r.stop - r.start
                 if (start > r_length) or (stop > r_length):
                     start -= r_length
                     stop -= r_length
                     continue
-
-                    # print(f">> {start=} {stop=}")
-                    # print(f">> r length {r_length} {r}")
 
                 last_one = length <= r_length
                 if last_one:
@@ -466,7 +462,6 @@ class string(str):
                 stop -= r_length
                 length -= r_length
 
-        # print(f">> {len(ranges)=} {ranges=}")
         range0 = ranges[0]
         origin = range0.origin
 
@@ -525,6 +520,18 @@ class string(str):
                 new._origin = origin_string
 
                 yield new
+
+    def __reversed__(self):
+        length = len(self)
+        if length == 0:
+            return
+
+        if length == 1:
+            yield self
+            return
+
+        for i in range(len(self) -1, -1, -1):
+            yield self[i]
 
     @staticmethod
     def _append_ranges(r, r2):
@@ -1310,7 +1317,7 @@ class linked_list:
     A Python linked list.
 
     linked_list objects have an interface similar to
-    the list or collections.deque objects.  You can
+    list or collections.deque.  You can
     prepend() or append() nodes, or insert() at any index.
     (You can also extend() or rextend() an iterable.)
 
@@ -1321,8 +1328,8 @@ class linked_list:
     is something like a database cursor.  It behaves like
     a list object, relative to the node it's pointing to.
     (When a linked_list iterator yields the value N, it
-    continues to point to the node containing the value N
-    until you call next on it.)
+    continues pointing to the node containing N
+    until you advance it.)
     """
 
     __slots__ = ('_head', '_tail', '_length')
@@ -1458,7 +1465,7 @@ class linked_list:
             })
 
     # new in 3.7
-    def __class_getitem__(cls, item): # pragma nocover
+    def __class_getitem__(cls, item):
         return GenericAlias(cls, (item,))
 
     def __add__(self, other):
@@ -1594,8 +1601,8 @@ class linked_list:
             if not hasattr(step, '__index__'):
                 raise TypeError('slice indices must be integers or None or have an __index__ method')
             step = step.__index__()
-            if not step:
-                ValueError("slice step cannot be zero")
+            if step == 0:
+                raise ValueError("slice step cannot be zero")
             step_is_positive = step > 0
             step_is_negative = not step_is_positive
 
@@ -1766,11 +1773,9 @@ class linked_list:
         # print(f"{it=} {node=} {start=} {stop=} {step=} {slice_length=}")
 
         if step == 1:
-            # in case we don't ever iterate, pre-initialize node
-            # to point to start
             sentinel = object()
-            last = node
-            advance_last = False
+            previous_node = node
+            advance_previous = False
             next_node = None
             remove_me = None
             try:
@@ -1782,8 +1787,8 @@ class linked_list:
                 # print(f">> {node=} {value=} {sentinel=}")
                 if node == sentinel:
                     if next_node is None:
-                        next_node = last
-                        if advance_last:
+                        next_node = previous_node
+                        if advance_previous:
                             next_node = next_node.next
                     next_node.insert_before(value)
                     continue
@@ -1797,8 +1802,8 @@ class linked_list:
                     continue
 
                 node.value = value
-                last = node
-                advance_last = True
+                previous_node = node
+                advance_previous = True
 
             if remove_me is not None:
                 remove_me.remove()
@@ -1966,6 +1971,10 @@ class linked_list:
     def reverse(self):
         # reverse in-place
 
+        if self._length < 2:
+            # reverse is a no-op for lists of length 0 or 1
+            return self.__iter__()
+
         previous_fit_cursor = None
         fit = iter(self)
         rit = reversed(self)
@@ -1974,7 +1983,7 @@ class linked_list:
             next(fit)
             next(rit)
             if ((rit._cursor == fit._cursor) # odd # of nodes
-                or (rit._cursor == previous_fit_cursor)): # even # of nodes
+                or (rit._cursor == previous_fit_cursor)): # even # of nodes (or no nodes)
                 break
 
             tmp = fit._cursor.value
@@ -1985,6 +1994,7 @@ class linked_list:
 
     def sort(self, key=None, reverse=False):
         # copy to list, sort, then write back in-place
+        # if the list has special nodes, this might be very exciting!
 
         l = list(self)
         l.sort(key=key, reverse=reverse)
@@ -1995,6 +2005,10 @@ class linked_list:
             it._cursor.value = v
 
     def rotate(self, n):
+        if not hasattr(n, '__index__'):
+            raise TypeError(f'{type(n).__name__} object cannot be interpreted as integer')
+
+        n = n.__index__()
         n_is_negative = (n < 0)
         n = abs(n) % self._length
         if (not n) or (self._length < 2):
@@ -2027,6 +2041,11 @@ class linked_list:
 
     def _cut(self, start, stop, is_rcut):
         """
+        a mega function that implements cut and rcut
+        for both forward and reverse iterators.
+        (sadly this was the best approach, as there are
+        so many little if statements sprinkled within.)
+
         if is_rcut is true, then start comes after stop.
             start is still inclusive.
             stop is still exclusive.
@@ -2168,100 +2187,38 @@ class linked_list:
 
     def cut(self, start=None, stop=None):
         """
-        If start is None or head, this will cut head,
-        and self will grow a new head.
-        If stop is None, this will cut tail, and self
-        will grow a new tail.
+        Cuts a range of nodes from start to stop.
+        The range of nodes includes start but excludes
+        stop.
 
-        After the cut, start and stop will still point at
-        the same nodes; however, start will point at the
-        first node in the returned linked list, and stop
-        won't move.
+        Returns a new linked_list containing the cut nodes.
+
+        After the cut, the start and stop iterators
+        will still point at the same nodes, however
+        they will have been moved to the new list.
+
+        If start is None, it defaults to the first node
+        after head.  (If the list is empty, this will be tail.)
+        If stop is None, it defaults to tail.
+
+        If specified, start and stop must be iterators
+        over the current linked list.  start must not
+        be after stop.
+
+        This function won't cut head; it's an error
+        if start points to head.
 
         start and stop may be reverse iterators, however the
         linked list resulting from a cut will have the elements
-        in forward order.  (In general, you just swap "head"
-        and "tail" in all of the descriptions above.  For
-        example, if start is None and stop is specified,
-        start will default to "tail".)
+        in forward order.  If either start or stop is a reverse
+        iterator, then:
+
+        * start defaults to the last node before tail,
+        * stop defaults to head,
+        * start must not be after stop, and
+        * start must not point to tail.
         """
         return self._cut(start, stop, is_rcut=False)
-
-
-        # make stop inclusive.
-        #
-        # this is confusing enough that I had to draw a diagram to make sure I got it right.
-        # in both diagrams, we have a linked list containing [1, 2, 3, 4, 5], and
-        # start and stop both point to the first and last nodes.
-        if not start_is_reversed:
-            # both are forward iterators:
-            #
-            #                            next->
-            #                        <-previous
-            #               head - 1 - 2 - 3 - 4 - 5 - tail
-            #                      ^           ^   ^
-            #                      |           :   |
-            #                     start        :  stop
-            #                      :           :
-            #  first actual node cut           :
-            #                                  last actual node cut
-            #
-            #     * start is already inclusive.  it can't be head.
-            #       but we check that in _cut, so skip it here.
-            #     * stop *retreats* one node to 4 (stop = stop.previous)
-            #       to make it inclusive.
-            #     * if stop points to head, this is only legal if start
-            #       points to head too.  but we already handled start = stop,
-            #       so that can't be true here.  therefore, if we reach here
-            #       and stop is head, then it's an error.
-            #       (_cut checks this too, but we're about to advance stop,
-            #       so we have to redundantly check it here.)
-            #
-            if stop is self._head:
-                raise ValueError(f"stop points to a node before start")
-
-            if stop is not None:
-                stop = stop.previous
-        else:
-            # both are reverse iterators:
-            #
-            #                          <-next
-            #                          previous->
-            #               tail - 5 - 4 - 3 - 2 - 1 - head
-            #                      ^           ^   ^
-            #                      |           :   |
-            #                     start        :  stop
-            #                      :           :
-            #  first actual node cut           :
-            #                                  last actual node cut
-            #
-            #     * start is already inclusive.  it can't be tail.
-            #       but we check that in _cut, so skip it here.
-            #     * stop *advances* one node to 2 (stop = stop.next)
-            #       to make it inclusive.
-            #     * if stop points to tail, this is only legal if start
-            #       points to tail too.  but we already handled start = stop,
-            #       so that can't be true here.  therefore, if we reach here
-            #       and stop is tail, then it's an error.
-            #       (_cut checks this too, but we're about to advance stop,
-            #       so we have to redundantly check it here.)
-            #
-            if stop is self._tail:
-                raise ValueError(f"stop points to a node after start (and they're both reverse iterators)")
-            if stop is not None:
-                stop = stop.next
-
-            # and *now* we swap start and stop.
-            # (why not swap first?  it makes the error messages confusing.
-            # if start is tail, raise "stop can't be tail". feh.)
-            #
-            tmp = start
-            start = stop
-            stop = tmp
-
-
-        # print(f"CALLING  _CUT {start=} {stop=} {start_is_reversed=}")
-        return self._cut(start, stop, start_is_reversed)
 
     def rcut(self, start=None, stop=None):
         return self._cut(start, stop, is_rcut=True)
@@ -2318,9 +2275,10 @@ class linked_list:
         including special nodes.)
 
         where must be an iterator over self, or None.
-        if where is an iterator, the nodes are inserted
-        *after* the node pointed to by where.  if where
-        is None, the nodes are appended to self.
+        If where is an iterator, the nodes are inserted
+        *after* the node pointed to by where.  If where
+        is None, the nodes are appended to the list (as if
+        you had called extend).
         """
         self._splice_preflight_checks(other, where)
 
@@ -2360,7 +2318,35 @@ class linked_list:
         self._splice(other, where, cursor, special)
 
     # special list compatibility layer
-    def index(self, value, start=None, stop=None):
+    def _clamp_index(self, index, name):
+        if not hasattr(index, '__index__'):
+            raise TypeError(f'{name} must be an int, not {type(index).__name__}')
+        index = index.__index__()
+
+        length = self._length
+        if index < 0:
+            index += length
+            if index <= 0:
+                return 0
+        elif index >= length:
+            return length
+        return index
+
+    def index(self, value, start=0, stop=sys.maxsize):
+        """
+        Returns the first index of value.
+
+        Raises ValueError if the value is not present.
+
+        The value returned will be greater than or equal
+        to start, and less than stop.
+        """
+        clamp = self._clamp_index
+        start = clamp(start, 'start')
+        stop = clamp(stop, 'stop')
+        if stop < start:
+            raise ValueError("stop can't be less than start")
+
         def exp():
             return ValueError(f'{value!r} is not in linked_list')
 
@@ -2371,18 +2357,17 @@ class linked_list:
         if v is it:
             raise exp()
 
-        if start is None:
-            start = index = 0
+        if start == 0:
+            index = 0
         else:
             v = it.next(it, count=start)
             if v is it:
                 raise exp()
             index = start
 
-        if stop is not None:
+        if stop < self._length:
             delta = stop - start
-            if delta <= 0:
-                raise exp()
+            assert stop >= start
             stop = it.copy()
             stop.next(None, count=delta)
 
@@ -2398,6 +2383,9 @@ class linked_list:
 
     # special deque compatibility layer
     def extendleft(self, iterable):
+        """
+        Prepend the elements from the iterable to the linked_list, in reverse order.
+        """
         if iterable is self:
             raise ValueError("can't extendleft self with self")
         self.rextend(reversed(iterable))

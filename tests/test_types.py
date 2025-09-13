@@ -36,6 +36,7 @@ from string import ascii_letters, punctuation, whitespace
 import sys
 import unittest
 
+import big.all as big
 from big.types import string, Pattern
 from big.types import linked_list, SpecialNodeError, UndefinedIndexError
 from big.types import linked_list_base_iterator, linked_list_iterator, linked_list_reverse_iterator
@@ -328,9 +329,11 @@ class BigStringTests(unittest.TestCase):
             (
             '__module__',
             '__radd__',
+            '__reversed__',
             '__slots__',
             '_append_ranges',
             '_cat',
+            '_clamp_index',
             '_column_number',
             '_compute_line_and_column',
             '_isascii',
@@ -349,8 +352,8 @@ class BigStringTests(unittest.TestCase):
             'first_column_number',
             'generate_tokens',
             'line_number',
-            'multisplit',
             'multipartition',
+            'multisplit',
             'offset',
             'origin',
             'source',
@@ -445,11 +448,19 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde[:-8724], '')
         self.assertString(abcde[1:-50], '')
 
+        with self.assertRaises(TypeError):
+            abcde[1.5:]
+        with self.assertRaises(TypeError):
+            abcde[:1.5]
+        with self.assertRaises(TypeError):
+            abcde[::1.5]
+        with self.assertRaises(ValueError):
+            abcde[::0]
+
         # regression: if the string ended with a linebreak,
         # getting the zero-length string after that linebreak
         # would increment the line number
         s = string("x\n")
-
         endo = s[len(s):len(s)]
         self.assertEqual(endo.line_number, 2)
         self.assertEqual(endo[0:0].line_number, 2) # used to be 3!
@@ -1012,6 +1023,16 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde.replace('c', 'x', 0), abcde)
         wackyland_ampersand = string('wackyland ampersand')
         self.assertString(wackyland_ampersand.replace('a', 'AAA', 3), 'wAAAckylAAAnd AAAmpersand')
+
+    def test_reversed(self):
+        for i, (s, c) in enumerate(zip(reversed(abcde), reversed(str(abcde)))):
+            self.assertEqual(s, c)
+            self.assertEqual(s.column_number, 5 - i)
+
+        s = string()
+        self.assertEqual(list(s), list(reversed(s)))
+        s = string('x')
+        self.assertEqual(list(s), list(reversed(s)))
 
     def test_rfind(self):
         # see test___contains__
@@ -2522,6 +2543,15 @@ class BigLinkedListTests(unittest.TestCase):
         copy_a[10000000000:-3239879817998:-2] = 'abc'
         self.assertLinkedListEqual(copy_a, ['c', 2, 'b', 4, 'a'])
 
+        with self.assertRaises(TypeError):
+            a[1.5:]
+        with self.assertRaises(TypeError):
+            a[:1.5]
+        with self.assertRaises(TypeError):
+            a[::1.5]
+        with self.assertRaises(ValueError):
+            a[::0]
+
         # Test linked_list slicing using a brute-force exhaustive test.
         # Construct a Python list of the numbers [1...count].
         # Construct a linked_list containing the same values.
@@ -3045,6 +3075,7 @@ class BigLinkedListTests(unittest.TestCase):
         t.reverse()
         self.assertLinkedListEqual(t, l)
 
+
         # count
         for v in l:
             self.assertEqual(t.count(v), l.count(v))
@@ -3064,6 +3095,19 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             t.insert(0, )
 
+        # regression: reverse crashed if t was empty
+        t = linked_list()
+        t.reverse()
+        self.assertLinkedListEqual(t, [])
+
+        l = []
+        for i in range(1, 10):
+            t.append(i)
+            l.append(i)
+            t.reverse()
+            l.reverse()
+            self.assertLinkedListEqual(t, l)
+
         # rotate
         initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
         d = collections.deque(initializer)
@@ -3075,6 +3119,9 @@ class BigLinkedListTests(unittest.TestCase):
             d_copy = d.copy()
             d_copy.rotate(i)
             self.assertEqual(list(t_copy), list(d_copy))
+
+        with self.assertRaises(TypeError):
+            t.rotate(3.14159)
 
         # rremove
         t2 = t * 2
@@ -3091,6 +3138,16 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             it.rremove('abx')
         self.assertEqual(it.rremove('abz', 77), 77)
+
+        # by using the one in big.types,
+        # we get the real one in 3.9+
+        # and the fake one for 3.7-3.8
+        linked_list_int = big.types.GenericAlias(linked_list, int)
+        if python_version >= Version("3.7"): # pragma: nocover
+            self.assertEqual(linked_list[int], linked_list_int)
+        else: # pragma: nocover
+            self.assertEqual(linked_list_int, 'linked_list[int]')
+
 
     def test_misc_dunder_methods(self):
         t = linked_list((1, 2, 3, 4, 5))
@@ -3801,20 +3858,30 @@ class BigLinkedListTests(unittest.TestCase):
             t.index(4.5)
         with self.assertRaises(ValueError):
             t.index(None)
+        with self.assertRaises(TypeError):
+            t.index(1, start=1.5)
+        with self.assertRaises(TypeError):
+            t.index(1, stop=1.5)
 
         self.assertEqual(t.index(4, start=1, stop=5), 3)
+        self.assertEqual(t.index(4, start=-9, stop=-1), 3)
         with self.assertRaises(ValueError):
             t.index(1, start=1, stop=5)
         with self.assertRaises(ValueError):
+            t.index(1, start=-8, stop=-5)
+        with self.assertRaises(ValueError):
             t.index(9, start=1, stop=5)
+        with self.assertRaises(ValueError):
+            t.index(9, start=-10, stop=-5)
 
         with self.assertRaises(ValueError):
             t.index(9, start=3, stop=2)
         with self.assertRaises(ValueError):
             t.index(9, start=12)
+
         t = linked_list()
         with self.assertRaises(ValueError):
-            t.index('abc')
+            t.index('empty list')
 
     def test_deque_compatibility(self):
         def setup():
