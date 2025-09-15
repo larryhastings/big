@@ -3142,7 +3142,7 @@ class BigLinkedListTests(unittest.TestCase):
         # by using the one in big.types,
         # we get the real one in 3.9+
         # and the fake one for 3.7-3.8
-        linked_list_int = big.types.GenericAlias(linked_list, int)
+        linked_list_int = big.types.GenericAlias(linked_list, (int,))
         if python_version >= Version("3.7"): # pragma: nocover
             self.assertEqual(linked_list[int], linked_list_int)
         else: # pragma: nocover
