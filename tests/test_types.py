@@ -1295,6 +1295,7 @@ class BigStringTests(unittest.TestCase):
 
 
 class BigLinkedListTests(unittest.TestCase):
+
     def assertLength(self, o, length):
         self.assertEqual(len(o), length)
 
@@ -1431,6 +1432,81 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(reversed_initial, result)
         self.assertNoSpecialNodes(t)
 
+    def test_method_superset(self):
+        # check that linked_list furnishes every
+        # method (dunder and otherwise) provided
+        # by both list and collections.deque
+
+        def dir_without_sunder(o):
+            # return dir,
+            # but omit names that start with a *single* underscore.
+            # (still return names that start with two underscores.)
+            return list(name for name in dir(o) if not (name.startswith('_') and not (name.startswith('__'))))
+
+        list_dir = dir_without_sunder([])
+        deque_dir = dir_without_sunder(collections.deque())
+        list_and_deque_duplicates_dir = list_dir + deque_dir
+
+        list_and_deque_duplicates_dir.sort()
+        previous = None
+        list_and_deque_dir = []
+        append = list_and_deque_dir.append
+        for name in list_and_deque_duplicates_dir:
+            if previous != name:
+                append(name)
+                previous = name
+
+        linked_list_dir = dir_without_sunder(linked_list())
+        linked_list_dir.sort()
+
+        for line in """
+            ##
+            ## This is stuff in linked_list that isn't found
+            ## in either list or collections.deque.
+            ##
+
+            ##
+            ## __dunder__ methods
+            ##
+
+            __bool__                # list and deque rely on the default implementation?
+            __deepcopy__            # feature for copy.deepcopy
+            __firstlineno__         # added to user types
+            __slots__
+            __static_attributes__   # added to user types
+
+
+            ##
+            ## new method calls
+            ##
+
+            head tail
+
+            cut rcut
+            splice rsplice
+
+            find rfind
+            match rmatch
+
+            rextend                  # different from extendleft!
+            rpop
+            rremove
+
+            ##
+            ## aliases for appendleft
+            ##
+
+            rappend
+            prepend
+
+            """.strip().split('\n'):
+            line = line.partition('#')[0].strip()
+            if not line:
+                continue
+            for name in line.split():
+                linked_list_dir.remove(name)
+
+        self.assertEqual(linked_list_dir, list_and_deque_dir)
 
     def test_empty_list(self):
         # if the list is empty:
