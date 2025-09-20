@@ -5924,6 +5924,11 @@ class BigPatternTests(unittest.TestCase):
         result = m.expand(r"__\1--")
         self.assertEqual(result, "__aaa--")
 
+    def test_pattern(self):
+        with self.assertRaises(TypeError):
+            Pattern(3.5)
+        with self.assertRaises(TypeError):
+            Pattern('x', 3.5)
 
     def test_pattern_findall(self):
         pattern = string(":+").compile()

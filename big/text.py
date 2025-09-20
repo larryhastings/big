@@ -5304,6 +5304,10 @@ def decode_python_script(script, *,
 @export
 class Pattern:
     def __init__(self, s, flags=0):
+        if not isinstance(s, (str, bytes)):
+            raise TypeError(f's must be str, not {type(s).__name__}')
+        if not isinstance(flags, int):
+            raise TypeError(f'flags must be an int, not {type(flags).__name__}')
         self.s = s
         self.flags = flags
 

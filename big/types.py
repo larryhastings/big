@@ -31,6 +31,8 @@ import copy
 from itertools import zip_longest
 import re
 import sys
+from types import NoneType
+
 
 try: # pragma nocover
     # new in 3.9
@@ -304,7 +306,6 @@ class string(str):
         if column_number < first_column_number:
             raise ValueError(f"column_number is {column_number}, must be >= first_column_number which is {first_column_number}")
 
-
         if not isinstance(tab_width, int):
             raise TypeError(f"tab_width must be int, not {type(tab_width).__name__}")
         if tab_width < 1:
@@ -427,6 +428,9 @@ class string(str):
                 length = len(start_stops)
 
         else:
+            if not hasattr(index, '__index__'):
+                raise TypeError('string index must be slice or integer (or index type)')
+            index = index.__index__()
             if index < 0:
                 index += self._length
                 if index < 0:
@@ -607,6 +611,8 @@ class string(str):
         if len(fillchar) != 1:
             # why is it TypeError?  blame str.
             raise TypeError("The fill character must be exactly one character long")
+        if not isinstance(width, int):
+            raise TypeError(f"'{type(width).__name__}' cannot be interpreted as an integer")
 
         length = len(self)
         if length >= width:
@@ -623,6 +629,8 @@ class string(str):
         if len(fillchar) != 1:
             # why is it TypeError?  blame str.
             raise TypeError("The fill character must be exactly one character long")
+        if not isinstance(width, int):
+            raise TypeError(f"'{type(width).__name__}' cannot be interpreted as an integer")
 
         length = len(self)
         if length >= width:
@@ -642,6 +650,8 @@ class string(str):
         if len(fillchar) != 1:
             # why is it TypeError?  blame str.
             raise TypeError("The fill character must be exactly one character long")
+        if not isinstance(width, int):
+            raise TypeError(f"'{type(width).__name__}' cannot be interpreted as an integer")
 
         if self._length >= width:
             return self
@@ -717,6 +727,13 @@ class string(str):
         # big.string++!
         # preserve the substrings of the original.
 
+        if not isinstance(count, int):
+            raise TypeError(f"'{type(count).__name__}' cannot be interpreted as an integer")
+        if not isinstance(old, str):
+            raise TypeError(f"replace() argument 1 must be str, not {type(count).__name__}")
+        if not isinstance(new, str):
+            raise TypeError(f"replace() argument 2 must be str, not {type(count).__name__}")
+
         if count == 0:
             return self
         s = str(self)
@@ -765,6 +782,8 @@ class string(str):
     # we can always return string objects!
     #
     def lstrip(self, chars=None):
+        if not isinstance(chars, (str, NoneType)):
+            raise TypeError(f"lstrip arg must be str or None")
         s = str(self)
         lstripped = s.lstrip(chars)
         index = len(s) - len(lstripped)
@@ -774,6 +793,8 @@ class string(str):
         return self[index:]
 
     def rstrip(self, chars=None):
+        if not isinstance(chars, (str, NoneType)):
+            raise TypeError(f"rstrip arg must be str or None")
         s = str(self)
         rstripped = s.rstrip()
         reverse_index = len(s) - len(rstripped)
@@ -783,6 +804,8 @@ class string(str):
         return self[:-reverse_index]
 
     def strip(self, chars=None):
+        if not isinstance(chars, (str, NoneType)):
+            raise TypeError(f"strip arg must be str or None")
         s = str(self)
         s_length = len(s)
 
@@ -804,6 +827,8 @@ class string(str):
     def removeprefix(self, prefix):
         # new in Python 3.11 (I think?)
         # but string will support it all the way back to 3.6.
+        if not isinstance(prefix, str):
+            raise TypeError(f"removeprefix argument must be str, not {type(prefix).__name__}")
         s = str(self)
         if not s.startswith(prefix):
             return self
@@ -812,6 +837,8 @@ class string(str):
     def removesuffix(self, suffix):
         # new in Python 3.11 (I think?)
         # but string will support it all the way back to 3.6.
+        if not isinstance(suffix, str):
+            raise TypeError(f"removeprefix argument must be str, not {type(suffix).__name__}")
         s = str(self)
         if not s.endswith(suffix):
             return self
@@ -819,6 +846,11 @@ class string(str):
 
 
     def _partition(self, sep, count, reversed):
+        if not isinstance(sep, str):
+            raise TypeError(f"sep must be str, not {type(sep).__name__}")
+        if not isinstance(count, int):
+            raise TypeError(f"count must be int, not {type(count).__name__}")
+
         self_length = len(self)
 
         if reversed:
@@ -921,6 +953,11 @@ class string(str):
         # this splits the string using split/rsplit,
         # then finds those segments in the original string
 
+        if not isinstance(sep, (str, NoneType)):
+            raise TypeError(f"sep must be str, not {type(sep).__name__}")
+        if not isinstance(maxsplit, int):
+            raise TypeError(f"'{type(maxsplit).__name__}' object cannot be interpreted as an integer")
+
         result = []
         append = result.append
 
@@ -994,6 +1031,8 @@ class string(str):
     ##
 
     def bisect(self, index):
+        if not hasattr(index, '__index__'):
+            raise TypeError('index must be an integer (or index)')
         return self[:index], self[index:]
 
     @classmethod

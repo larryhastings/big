@@ -435,6 +435,10 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(last_zero.line_number, 1)
         self.assertEqual(last_zero.column_number, abcde.first_column_number + len(abcde))
 
+        # index must be slice or int
+        with self.assertRaises(TypeError):
+            abcde[33.55]
+
         # *indexing* out of range raises IndexError.
         with self.assertRaises(IndexError):
             abcde[-20]
@@ -800,6 +804,10 @@ class BigStringTests(unittest.TestCase):
             abcde.center(33, 352)
         with self.assertRaises(TypeError):
             abcde.center(33, 'xyz')
+        with self.assertRaises(TypeError):
+            abcde.center(5.5)
+        with self.assertRaises(TypeError):
+            abcde.center([3], 'x')
 
 
     def test_ljust(self):
@@ -818,6 +826,10 @@ class BigStringTests(unittest.TestCase):
             abcde.ljust(5, 352)
         with self.assertRaises(TypeError):
             abcde.ljust(5, 'xyz')
+        with self.assertRaises(TypeError):
+            abcde.ljust(5.5)
+        with self.assertRaises(TypeError):
+            abcde.ljust([3], 'x')
 
 
     def test_lower(self):
@@ -982,6 +994,11 @@ class BigStringTests(unittest.TestCase):
             )
         self.assertEqual(string.cat(*partitions), l)
 
+        with self.assertRaises(TypeError):
+            abcde.partition(33.5)
+        with self.assertRaises(TypeError):
+            abcde.partition('abc', 33.5)
+
 
 
     def test_removeprefix(self):
@@ -1006,6 +1023,11 @@ class BigStringTests(unittest.TestCase):
                 self.assertIs(value.removeprefix(chipmunk), value)
                 self.assertIs(value.removesuffix(chipmunk), value)
 
+        with self.assertRaises(TypeError):
+            abcde.removeprefix(33.5)
+        with self.assertRaises(TypeError):
+            abcde.removesuffix(33.5)
+
     def test_removesuffix(self):
         # see test_removeprefix
         pass
@@ -1023,6 +1045,13 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde.replace('c', 'x', 0), abcde)
         wackyland_ampersand = string('wackyland ampersand')
         self.assertString(wackyland_ampersand.replace('a', 'AAA', 3), 'wAAAckylAAAnd AAAmpersand')
+
+        with self.assertRaises(TypeError):
+            abcde.replace(33, 'x')
+        with self.assertRaises(TypeError):
+            abcde.replace('x', 33)
+        with self.assertRaises(TypeError):
+            abcde.replace('x', 'y', 55.5)
 
     def test_reversed(self):
         for i, (s, c) in enumerate(zip(reversed(abcde), reversed(str(abcde)))):
@@ -1049,6 +1078,10 @@ class BigStringTests(unittest.TestCase):
             abcde.rjust(5, 352)
         with self.assertRaises(TypeError):
             abcde.rjust(5, 'xyz')
+        with self.assertRaises(TypeError):
+            abcde.rjust(5.5)
+        with self.assertRaises(TypeError):
+            abcde.rjust([3], 'x')
 
 
     def test_rpartition(self):
@@ -1080,29 +1113,40 @@ class BigStringTests(unittest.TestCase):
                 ]),
             ('XooXoooXoooXoooXoo', 'Xooo', [('Xoo', 0, 1, 1), ('', 7, 1, 8), ('', 11, 1, 12), ('Xoo', 15, 1, 16)]),
             ]):
-            source = 'toe'
-            l2 = string(s, source=source)
-            list_split = list(l2.split(sep))
-            list_rsplit = list(l2.rsplit(sep))
-            for line, rline, r in zip_longest(list_split, list_rsplit, result):
-                with self.subTest(i=i):
-                    s2, offset, line_number, column_number = r
-                    self.assertEqual(line, s2, f"{line!r} != {r}")
-                    self.assertEqual(rline, s2, f"{rline!r} != {r}")
-                    self.assertEqual(line.offset, offset, f"{line!r} != {r}")
-                    self.assertEqual(rline.offset, offset, f"{rline!r} != {r}")
-                    self.assertEqual(line.line_number, line_number, f"{line!r} != {r}")
-                    self.assertEqual(rline.line_number, line_number, f"{rline!r} != {r}")
-                    self.assertEqual(line.column_number, column_number, f"{line!r} != {r}")
-                    self.assertEqual(rline.column_number, column_number, f"{rline!r} != {r}")
+            with self.subTest(i=i, s=s, sep=sep):
+                source = 'toe'
+                l2 = string(s, source=source)
+                list_split = list(l2.split(sep))
+                list_rsplit = list(l2.rsplit(sep))
+                for line, rline, r in zip_longest(list_split, list_rsplit, result):
+                    with self.subTest(line=line):
+                        s2, offset, line_number, column_number = r
+                        self.assertEqual(line, s2, f"{line!r} != {r}")
+                        self.assertEqual(rline, s2, f"{rline!r} != {r}")
+                        self.assertEqual(line.offset, offset, f"{line!r} != {r}")
+                        self.assertEqual(rline.offset, offset, f"{rline!r} != {r}")
+                        self.assertEqual(line.line_number, line_number, f"{line!r} != {r}")
+                        self.assertEqual(rline.line_number, line_number, f"{rline!r} != {r}")
+                        self.assertEqual(line.column_number, column_number, f"{line!r} != {r}")
+                        self.assertEqual(rline.column_number, column_number, f"{rline!r} != {r}")
 
-            axxb = string("a x x b")
-            list_split = axxb.split(' x ')
-            self.assertString(list_split[0], 'a')
-            self.assertString(list_split[1], 'x b')
-            list_rsplit = axxb.rsplit(' x ')
-            self.assertString(list_rsplit[0], 'a x')
-            self.assertString(list_rsplit[1], 'b')
+                axxb = string("a x x b")
+                list_split = axxb.split(' x ')
+                self.assertString(list_split[0], 'a')
+                self.assertString(list_split[1], 'x b')
+                list_rsplit = axxb.rsplit(' x ')
+                self.assertString(list_rsplit[0], 'a x')
+                self.assertString(list_rsplit[1], 'b')
+
+        with self.assertRaises(TypeError):
+            abcde.split(33.5)
+        with self.assertRaises(TypeError):
+            abcde.split('x', 33.5)
+
+        with self.assertRaises(TypeError):
+            abcde.rsplit(33.5)
+        with self.assertRaises(TypeError):
+            abcde.rsplit('x', 33.5)
 
 
     def test_splitlines(self):
@@ -1134,6 +1178,9 @@ class BigStringTests(unittest.TestCase):
                     else:
                         # print(f"{value=!r} {method} -> {value_mutated=!r}")
                         self.assertString(value_mutated, s_mutated)
+                with self.subTest(method=method):
+                    with self.assertRaises(TypeError):
+                        getattr(abcde, method)(33.5)
 
     def test_swapcase(self):
         for value_name, value in values.items():
@@ -1191,6 +1238,9 @@ class BigStringTests(unittest.TestCase):
             self.assertEqual(len(a), i)
             self.assertTrue(alphabet.startswith(a))
             self.assertEqual(a + b, alphabet)
+
+        with self.assertRaises(TypeError):
+            alphabet.bisect(33.5)
 
     def test_cat(self):
         self.assertString(string.cat(), '')
