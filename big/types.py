@@ -1419,7 +1419,7 @@ class linked_list:
     ##
 
     def __eq__(self, other):
-        if self.__class__ != other.__class__:
+        if not issubclass(other.__class__, linked_list):
             return False
         for value1, value2 in zip(iter(self), iter(other)):
             if value1 == value2:
@@ -1428,7 +1428,7 @@ class linked_list:
         return len(self) == len(other)
 
     def __ne__(self, other):
-        if self.__class__ != other.__class__:
+        if not issubclass(other.__class__, linked_list):
             return True
         for value1, value2 in zip(iter(self), iter(other)):
             if value1 != value2:
@@ -1436,7 +1436,7 @@ class linked_list:
         return len(self) != len(other)
 
     def __lt__(self, other):
-        if self.__class__ != other.__class__:
+        if not issubclass(other.__class__, linked_list):
             return NotImplemented
         for value1, value2 in zip(iter(self), iter(other)):
             if value1 < value2:
@@ -1448,7 +1448,7 @@ class linked_list:
         return len(self) < len(other)
 
     def __le__(self, other):
-        if self.__class__ != other.__class__:
+        if not issubclass(other.__class__, linked_list):
             return NotImplemented
         for value1, value2 in zip(iter(self), iter(other)):
             if value1 <= value2:
@@ -1460,7 +1460,7 @@ class linked_list:
         return len(self) <= len(other)
 
     def __ge__(self, other):
-        if self.__class__ != other.__class__:
+        if not issubclass(other.__class__, linked_list):
             return NotImplemented
         for value1, value2 in zip(iter(self), iter(other)):
             if value1 >= value2:
@@ -1472,7 +1472,7 @@ class linked_list:
         return len(self) >= len(other)
 
     def __gt__(self, other):
-        if self.__class__ != other.__class__:
+        if not issubclass(other.__class__, linked_list):
             return NotImplemented
         for value1, value2 in zip(iter(self), iter(other)):
             if value1 > value2:
@@ -1722,7 +1722,11 @@ class linked_list:
             (it, node, start, stop, step, slice_length)
 
         start is the index of the first element we want;
-        it will be in the range 0 <= start < length.
+        it should be in the range 0 <= start < length,
+        but sometimes it might return -1 or length,
+        because we're duplicating slicing rules on lists
+        and the list object has really tiresome slicing
+        semantics (see complaints about clamping).
 
         If key is a slice, stop, step, and slice_length
         will be integers.  stop will be in the same range
@@ -1746,6 +1750,12 @@ class linked_list:
             it, node, ... = self._parse_key(...)
             for node in it:
                 ...
+            for new_value in extra_values:
+                node.append(new_value)
+                node = next(node)
+        In the circumstance where it never yields any values,
+        node will be pointing at the correct place to start
+        appending.
 
         if key is not a slice, it, stop, step, and slice_length
         will all be None.  node will point at the node.
@@ -1947,6 +1957,8 @@ class linked_list:
         self._length = 0
 
     def pop(self, index=-1):
+        if not hasattr(index, '__index__'):
+            raise TypeError("pop indices must be integers")
         if not self._length:
             raise ValueError('pop from empty linked_list')
         if index == -1:
@@ -1961,6 +1973,8 @@ class linked_list:
         return node.remove()
 
     def rpop(self, index=0):
+        if not hasattr(index, '__index__'):
+            raise TypeError("pop indices must be integers")
         if not self._length:
             raise ValueError('rpop from empty linked_list')
         if index == 0:
@@ -2103,6 +2117,8 @@ class linked_list:
         if start_is_none:
             start_directions = 3
         else:
+            if not isinstance(start, linked_list_base_iterator):
+                raise TypeError(f"start is not an iterator over this linked_list, start={start!r}")
             if start._cursor.linked_list is not self:
                 raise ValueError(f"start is not an iterator over this linked_list, start={start!r}")
             start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
@@ -2110,6 +2126,8 @@ class linked_list:
         if stop_is_none:
             stop_directions = 3
         else:
+            if not isinstance(stop, linked_list_base_iterator):
+                raise TypeError(f"stop is not an iterator over this linked_list, stop={stop!r}")
             if stop._cursor.linked_list is not self:
                 raise ValueError(f"stop is not an iterator over this linked_list, stop={stop!r}")
             stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1

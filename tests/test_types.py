@@ -3576,6 +3576,15 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(SpecialNodeError):
             t.rcut(rit_head, None)
 
+        with self.assertRaises(TypeError):
+            t.cut(5, None)
+        with self.assertRaises(TypeError):
+            t.cut(None, 5)
+        with self.assertRaises(TypeError):
+            t.rcut(5, None)
+        with self.assertRaises(TypeError):
+            t.rcut(None, 5)
+
         # if start and stop both point to head,
         # cut returns an empty list.
         unchanged_t = list(t)
