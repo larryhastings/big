@@ -31,7 +31,10 @@ import copy
 from itertools import zip_longest
 import re
 import sys
-from types import NoneType
+try:
+    from types import NoneType
+except ImportError: # pragma: nocover
+    NoneType = type(None)
 
 
 try: # pragma nocover
@@ -43,6 +46,11 @@ except ImportError: # pragma nocover
     def GenericAlias(origin, args):
         s = ", ".join(t.__name__ for t in args)
         return f'{origin.__name__}[{s}]'
+
+from big.version import Version
+
+python_version = Version(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+python_version_3_7_or_greater = python_version >= Version("3.7")
 
 
 from .text import linebreaks, multipartition, multisplit, Pattern
@@ -1504,8 +1512,9 @@ class linked_list:
             })
 
     # new in 3.7
-    def __class_getitem__(cls, item):
-        return GenericAlias(cls, (item,))
+    if python_version_3_7_or_greater:
+        def __class_getitem__(cls, item):
+            return GenericAlias(cls, (item,))
 
     def __add__(self, other):
         t = self.__copy__()

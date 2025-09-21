@@ -100,7 +100,7 @@ values = {
 
 class BigStringTests(unittest.TestCase):
 
-    maxDiff = 2**32
+    maxDiff = None
 
     ##
     ## these methods with a type-sounding name
@@ -1346,6 +1346,8 @@ class BigStringTests(unittest.TestCase):
 
 class BigLinkedListTests(unittest.TestCase):
 
+    maxDiff = None
+
     def assertLength(self, o, length):
         self.assertEqual(len(o), length)
 
@@ -1490,41 +1492,37 @@ class BigLinkedListTests(unittest.TestCase):
         def dir_without_sunder(o):
             # return dir,
             # but omit names that start with a *single* underscore.
-            # (still return names that start with two underscores.)
+            # (we still want names that start with *two* underscores.)
             return list(name for name in dir(o) if not (name.startswith('_') and not (name.startswith('__'))))
 
-        list_dir = dir_without_sunder([])
-        deque_dir = dir_without_sunder(collections.deque())
-        list_and_deque_duplicates_dir = list_dir + deque_dir
-
-        list_and_deque_duplicates_dir.sort()
-        previous = None
-        list_and_deque_dir = []
-        append = list_and_deque_dir.append
-        for name in list_and_deque_duplicates_dir:
-            if previous != name:
-                append(name)
-                previous = name
+        list_dir = set(dir_without_sunder([]))
+        deque_dir = set(dir_without_sunder(collections.deque()))
+        list_and_deque_dir = list(list_dir | deque_dir)
+        list_and_deque_dir.sort()
 
         linked_list_dir = dir_without_sunder(linked_list())
         linked_list_dir.sort()
 
-        for line in """
+        def words(s):
+            for line in s.strip().split('\n'):
+                line = line.partition('#')[0].strip()
+                if not line:
+                    continue
+                for name in line.split():
+                    yield name
+
+        for name in words("""
             ##
             ## This is stuff in linked_list that isn't found
             ## in either list or collections.deque.
             ##
 
             ##
-            ## __dunder__ methods
+            ## __dunder__ stuff
             ##
 
-            __bool__                # list and deque rely on the default implementation?
             __deepcopy__            # feature for copy.deepcopy
-            __firstlineno__         # added to user types
             __slots__
-            __static_attributes__   # added to user types
-
 
             ##
             ## new method calls
@@ -1538,7 +1536,7 @@ class BigLinkedListTests(unittest.TestCase):
             find rfind
             match rmatch
 
-            rextend                  # different from extendleft!
+            rextend  # which is different from extendleft!
             rpop
             rremove
 
@@ -1549,12 +1547,36 @@ class BigLinkedListTests(unittest.TestCase):
             rappend
             prepend
 
-            """.strip().split('\n'):
-            line = line.partition('#')[0].strip()
-            if not line:
-                continue
-            for name in line.split():
+            """):
+            linked_list_dir.remove(name)
+            assert name not in list_and_deque_dir, f"name {name} is in list_and_deque_dir !!!"
+
+        for name in words("""
+            ##
+            ## This is stuff that Python added to user types
+            ## in versions after 3.6, so they're not always there.
+            ## (We just remove 'em from linked_list if they're not in list/deque.)
+            ##
+
+            __bool__                # deque has bool in 3.6 but removed it?!
+            __class_getitem__       # supported in 3.7, list didn't add until 3.9
+            __firstlineno__         # added to user types
+            __static_attributes__   # added to user types
+            __module__              # always added to user types, shows up in deque > 3.6
+
+            __getstate__            # deque added this at some? point > 3.6
+
+            """):
+            if (name in linked_list_dir) and (name not in list_and_deque_dir):
                 linked_list_dir.remove(name)
+
+        # for name in linked_list_dir:
+        #     if name not in list_and_deque_dir:
+        #         print(f"{name} in linked_list_dir but not in list_and_deque_dir")
+
+        # for name in list_and_deque_dir:
+        #     if name not in linked_list_dir:
+        #         print(f"{name} in list_and_deque_dir but not in linked_list_dir")
 
         self.assertEqual(linked_list_dir, list_and_deque_dir)
 
