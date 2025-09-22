@@ -1484,6 +1484,29 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(reversed_initial, result)
         self.assertNoSpecialNodes(t)
 
+        # you can't make your own iterators
+        with self.assertRaises(TypeError):
+            big.types.linked_list_base_iterator()
+        with self.assertRaises(TypeError):
+            big.types.linked_list_base_iterator(t)
+        with self.assertRaises(TypeError):
+            big.types.linked_list_base_iterator(it)
+
+        with self.assertRaises(TypeError):
+            linked_list_iterator()
+        with self.assertRaises(TypeError):
+            linked_list_iterator(t)
+        with self.assertRaises(TypeError):
+            linked_list_iterator(it)
+
+        with self.assertRaises(TypeError):
+            linked_list_reverse_iterator()
+        with self.assertRaises(TypeError):
+            linked_list_reverse_iterator(t)
+        with self.assertRaises(TypeError):
+            linked_list_reverse_iterator(it)
+
+
     def test_method_superset(self):
         # check that linked_list furnishes every
         # method (dunder and otherwise) provided
@@ -1789,10 +1812,6 @@ class BigLinkedListTests(unittest.TestCase):
         after = it.after()
         self.assertEqual(after[0], 8)
 
-        it1 = iterators[1]
-        with self.assertRaises(SpecialNodeError):
-            it1.replace('foo')
-
         t, it, iterators = setup()
         value = it.pop()
         self.assertEqual(value, 4)
@@ -1903,9 +1922,6 @@ class BigLinkedListTests(unittest.TestCase):
         before2 = it.before() # skips over deleted node
         self.assertEqual(before2[0], 1)
 
-        before2.replace('abc')
-        self.assertEqual(before2[0], 'abc')
-
         got = before2.remove(5)
         self.assertEqual(got, 5)
         with self.assertRaises(ValueError):
@@ -1922,9 +1938,6 @@ class BigLinkedListTests(unittest.TestCase):
         copy.pop() # after now points at a deleted node
         after2 = it.after() # skips over deleted node
         self.assertEqual(after2[0], 5)
-
-        after2.replace('xyz')
-        self.assertEqual(after2[0], 'xyz')
 
         t, it = setup()
         rit = reversed(it)
@@ -3366,8 +3379,12 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(t, it.linked_list)
 
         # next and previous
+        with self.assertRaises(TypeError):
+            it.next(count=5.5)
         with self.assertRaises(ValueError):
             it.next(count=-5)
+        with self.assertRaises(TypeError):
+            it.previous(count=5.5)
         with self.assertRaises(ValueError):
             it.previous(count=-5)
 
@@ -3412,6 +3429,8 @@ class BigLinkedListTests(unittest.TestCase):
         t, it = setup()
         self.assertEqual(it[0], 5)
 
+        with self.assertRaises(TypeError):
+            it2 = it.before(3.14159)
         with self.assertRaises(ValueError):
             it2 = it.before(-1)
         it2 = it.before(4)
@@ -3419,6 +3438,8 @@ class BigLinkedListTests(unittest.TestCase):
         it3 = it.before(5)
         self.assertIsHead(it3)
 
+        with self.assertRaises(TypeError):
+            it2 = it.after(3.14159)
         with self.assertRaises(ValueError):
             it2 = it.after(-1)
         it4 = it.after(4)

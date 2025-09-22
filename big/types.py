@@ -1550,15 +1550,15 @@ class linked_list:
         return self
 
     def __iter__(self):
-        return linked_list_iterator(self._head)
+        return _secret_iterator_fun_factory(linked_list_iterator, self._head)
 
     head = __iter__
 
     def tail(self):
-        return linked_list_iterator(self._tail)
+        return _secret_iterator_fun_factory(linked_list_iterator, self._tail)
 
     def __reversed__(self):
-        return linked_list_reverse_iterator(self._tail)
+        return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._tail)
 
     def __bool__(self):
         return self._length > 0
@@ -2066,41 +2066,6 @@ class linked_list:
             next(it)
             it._cursor.value = v
 
-    def rotate(self, n):
-        if not hasattr(n, '__index__'):
-            raise TypeError(f'{type(n).__name__} object cannot be interpreted as integer')
-
-        n = n.__index__()
-        n_is_negative = (n < 0)
-        n = abs(n) % self._length
-        if (not n) or (self._length < 2):
-            return
-
-        it = (iter if n_is_negative else reversed)(self)
-        for _ in range(n + n_is_negative):
-            it.next()
-
-        segment_1_head = self._head.next
-        segment_1_tail = it._cursor.previous
-
-        segment_2_head = it._cursor
-        segment_2_tail = self._tail.previous
-
-        assert isinstance(segment_1_head, linked_list_node)
-        assert isinstance(segment_1_tail, linked_list_node)
-        assert isinstance(segment_2_head, linked_list_node)
-        assert isinstance(segment_2_tail, linked_list_node)
-
-        self._head.next = segment_2_head
-        segment_2_head.previous = self._head
-
-        self._tail.previous = segment_1_tail
-        segment_1_tail.next = self._tail
-
-        segment_2_tail.next = segment_1_head
-        segment_1_head.previous = segment_2_tail
-
-
     def _cut(self, start, stop, is_rcut):
         """
         a mega function that implements cut and rcut
@@ -2383,7 +2348,10 @@ class linked_list:
 
         self._splice(other, where, cursor, special)
 
-    # special list compatibility layer
+
+    ##
+    ## special list compatibility layer
+    ##
     def _clamp_index(self, index, name):
         if not hasattr(index, '__index__'):
             raise TypeError(f'{name} must be an int, not {type(index).__name__}')
@@ -2447,7 +2415,9 @@ class linked_list:
         raise exp()
 
 
-    # special deque compatibility layer
+    ##
+    ## special deque compatibility layer
+    ##
     def extendleft(self, iterable):
         """
         Prepend the elements from the iterable to the linked_list, in reverse order.
@@ -2455,6 +2425,40 @@ class linked_list:
         if iterable is self:
             raise ValueError("can't extendleft self with self")
         self.rextend(reversed(iterable))
+
+    def rotate(self, n):
+        if not hasattr(n, '__index__'):
+            raise TypeError(f'{type(n).__name__} object cannot be interpreted as integer')
+
+        n = n.__index__()
+        n_is_negative = (n < 0)
+        n = abs(n) % self._length
+        if (not n) or (self._length < 2):
+            return
+
+        it = (iter if n_is_negative else reversed)(self)
+        for _ in range(n + n_is_negative):
+            it.next()
+
+        segment_1_head = self._head.next
+        segment_1_tail = it._cursor.previous
+
+        segment_2_head = it._cursor
+        segment_2_tail = self._tail.previous
+
+        assert isinstance(segment_1_head, linked_list_node)
+        assert isinstance(segment_1_tail, linked_list_node)
+        assert isinstance(segment_2_head, linked_list_node)
+        assert isinstance(segment_2_tail, linked_list_node)
+
+        self._head.next = segment_2_head
+        segment_2_head.previous = self._head
+
+        self._tail.previous = segment_1_tail
+        segment_1_tail.next = self._tail
+
+        segment_2_tail.next = segment_1_head
+        segment_1_head.previous = segment_2_tail
 
     appendleft = prepend
     maxlen = None
@@ -2468,16 +2472,12 @@ class linked_list_base_iterator:
     __slots__ = ('_cursor',)
 
     def __init__(self, node):
-        if type(self) == linked_list_base_iterator:
-            raise TypeError("linked_list_base_iterator is an abstract base class")
-        node.iterator_refcount += 1
-        self._cursor = node
+        raise TypeError("cannot create linked_list_base_iterator instances")
 
     def __getstate__(self):
         return (None, {
             '_cursor': self._cursor,
             })
-
 
     @property
     def linked_list(self):
@@ -2533,7 +2533,7 @@ class linked_list_base_iterator:
         return self.find(value) is not None
 
     def __copy__(self):
-        return self.__class__(self._cursor)
+        return _secret_iterator_fun_factory(self.__class__, self._cursor)
 
     def copy(self):
         return self.__copy__()
@@ -2572,6 +2572,9 @@ class linked_list_base_iterator:
         return cursor.value
 
     def next(self, default=_undefined, *, count=1):
+        if not hasattr(count, '__index__'):
+            raise TypeError(f'count must be an int, not {type(count).__name__}')
+        count = count.__index__()
         if count < 0:
             raise ValueError("count can't be negative")
         if count == 0:
@@ -2618,6 +2621,9 @@ class linked_list_base_iterator:
         return cursor.value
 
     def previous(self, default=_undefined, *, count=1):
+        if not hasattr(count, '__index__'):
+            raise TypeError(f'count must be an int, not {type(count).__name__}')
+        count = count.__index__()
         if count < 0:
             raise ValueError("count can't be negative")
         if count == 0:
@@ -2639,7 +2645,9 @@ class linked_list_base_iterator:
             return default
 
     def before(self, count=1):
-        original_count = count
+        if not hasattr(count, '__index__'):
+            raise TypeError(f'count must be an int, not {type(count).__name__}')
+        count = count.__index__()
         if count < 0:
             raise ValueError("count can't be negative")
         cursor = self._cursor
@@ -2650,9 +2658,12 @@ class linked_list_base_iterator:
             if cursor.special == 'special':
                 continue
             count -= 1
-        return self.__class__(cursor)
+        return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def after(self, count=1):
+        if not hasattr(count, '__index__'):
+            raise TypeError(f'count must be an int, not {type(count).__name__}')
+        count = count.__index__()
         if count < 0:
             raise ValueError("count can't be negative")
         cursor = self._cursor
@@ -2663,7 +2674,7 @@ class linked_list_base_iterator:
             if cursor.special == 'special':
                 continue
             count -= 1
-        return self.__class__(cursor)
+        return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def reset(self):
         self._cursor = self._cursor.linked_list._head
@@ -2740,7 +2751,6 @@ class linked_list_base_iterator:
             return cls(node.value for node in it)
         cursor = self._cursor_at_iterator_index(key)
         return cursor.value
-
 
     def __setitem__(self, key, value):
         if not isinstance(key, slice):
@@ -2843,12 +2853,6 @@ class linked_list_base_iterator:
             cursor = cursor.previous
         return counter
 
-    def replace(self, value):
-        cursor = self._cursor
-        if cursor.special:
-            raise SpecialNodeError()
-        cursor.value = value
-
     def _pop(self, destination):
         # removes the node we're pointing at,
         # moves to destination, and returns the popped node's value.
@@ -2864,6 +2868,9 @@ class linked_list_base_iterator:
         return value
 
     def pop(self, index=0):
+        if not hasattr(index, '__index__'):
+            raise TypeError(f'index must be an int, not {type(index).__name__}')
+        index = index.__index__()
         if index != 0:
             value = self[index]
             del self[index]
@@ -2877,6 +2884,9 @@ class linked_list_base_iterator:
         return self._pop(cursor)
 
     def popleft(self, index=0):
+        if not hasattr(index, '__index__'):
+            raise TypeError(f'index must be an int, not {type(index).__name__}')
+        index = index.__index__()
         if index != 0:
             value = self[index]
             del self[index]
@@ -2964,7 +2974,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.next
 
-        return self.__class__(cursor)
+        return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def rfind(self, value):
         cursor = self._cursor
@@ -2977,7 +2987,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.previous
 
-        return self.__class__(cursor)
+        return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def match(self, predicate):
         cursor = self._cursor
@@ -2990,7 +3000,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.next
 
-        return self.__class__(cursor)
+        return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def rmatch(self, predicate):
         cursor = self._cursor
@@ -3003,7 +3013,7 @@ class linked_list_base_iterator:
                 return None
             cursor = cursor.previous
 
-        return self.__class__(cursor)
+        return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def truncate(self):
         """
@@ -3142,6 +3152,15 @@ class linked_list_base_iterator:
 
 
 
+# not for you! don't touch!
+class _secret_iterator_fun_factory(linked_list_base_iterator):
+    def __init__(self, cls, node):
+        node.iterator_refcount += 1
+        self._cursor = node
+
+        self.__class__ = cls
+
+
 @export
 class linked_list_iterator(linked_list_base_iterator):
     """
@@ -3160,9 +3179,12 @@ class linked_list_iterator(linked_list_base_iterator):
               i[-9999:9999]
           raises a ValueError.
     """
-    def __reversed__(self):
-        return linked_list_reverse_iterator(self._cursor)
 
+    def __init__(self):
+        raise TypeError("cannot create linked_list_iterator instances")
+
+    def __reversed__(self):
+        return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._cursor)
 
 
 @export
@@ -3182,8 +3204,11 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     ## iterators they return; they're already reverse iterators.
     ##
 
+    def __init__(self):
+        raise TypeError("cannot create linked_list_reverse_iterator instances")
+
     def __reversed__(self):
-        return linked_list_iterator(self._cursor)
+        return _secret_iterator_fun_factory(linked_list_iterator, self._cursor)
 
     def __next__(self):
         return super().__previous__()
