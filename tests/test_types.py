@@ -1553,9 +1553,6 @@ class BigLinkedListTests(unittest.TestCase):
 
             head tail
 
-            cut rcut
-            splice rsplice
-
             find rfind
             match rmatch
 
@@ -2174,144 +2171,150 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_deleted_node(self):
+        # "dit" == "deleted iterator"
+        # points to the deleted node in the center of the list,
+        # between 3 and 4
         def setup():
             t = linked_list([1, 2, 3, 'X', 4, 5, 6])
-            it = t.find('X')
-            copy = it.copy()
+            dit = t.find('X')
+            copy = dit.copy()
             copy.pop()
             del copy
-            return t, it
+            return t, dit
 
-        t, it = setup()
+        t, dit = setup()
         self.assertEqual(list(    iter(t)), [1, 2, 3, 4, 5, 6])
         self.assertEqual(list(reversed(t)), [6, 5, 4, 3, 2, 1])
         self.assertLength(t, 6)
-        self.assertIsSpecial(it)
-        self.assertIsInstance(it, linked_list_iterator)
+        self.assertIsSpecial(dit)
+        self.assertIsInstance(dit, linked_list_iterator)
         with self.assertRaises(SpecialNodeError):
-            it[0]
+            dit[0]
         with self.assertRaises(SpecialNodeError):
-            it.pop()
+            dit.pop()
         with self.assertRaises(SpecialNodeError):
-            it.popleft()
+            dit.popleft()
 
         # you also can't include a deleted node in a slice
         with self.assertRaises(SpecialNodeError):
-            it[-1:2]
+            dit[-1:2]
         with self.assertRaises(SpecialNodeError):
-            it[-2:4:2]
+            dit[-2:4:2]
         with self.assertRaises(SpecialNodeError):
-            it[1:-2:-1]
+            dit[1:-2:-1]
         with self.assertRaises(SpecialNodeError):
-            it[2:-4:-2]
+            dit[2:-4:-2]
         # ... but if you carefully step over it, it's fine!
-        self.assertLinkedListEqual(it[-3:4:2], [1, 3, 4, 6])
+        self.assertLinkedListEqual(dit[-3:4:2], [1, 3, 4, 6])
 
-        copy = it.copy()
+        copy = dit.copy()
         value = copy.previous()
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 3)
         self.assertEqual(copy[0], 3)
 
-        copy = it.copy()
+        copy = dit.copy()
         value = next(copy)
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 4)
         self.assertEqual(copy[0], 4)
 
-        before = it.before()
+        before = dit.before()
         self.assertIsNormalNode(before)
         self.assertEqual(before[0], 3)
-        after = it.after()
+        after = dit.after()
         self.assertIsNormalNode(after)
         self.assertEqual(after[0], 4)
 
-        five = it.find(5)
+        five = dit.find(5)
         self.assertIsNormalNode(five)
         self.assertEqual(five[0], 5)
-        self.assertIsNone(it.find(333))
-        two = it.rfind(2)
+        self.assertIsNone(dit.find(333))
+
+        two = dit.rfind(2)
         self.assertIsNormalNode(two)
         self.assertEqual(two[0], 2)
-        self.assertIsNone(it.rfind(333))
+        self.assertIsNone(dit.rfind(333))
 
-        six = it.match(lambda value: value == 6)
+        six = dit.match(lambda value: value == 6)
         self.assertIsNormalNode(six)
         self.assertEqual(six[0], 6)
-        self.assertIsNone(it.match(lambda value: value == 888))
-        one = it.rmatch(lambda value: value == 1)
+        self.assertIsNone(dit.match(lambda value: value == 888))
+
+        one = dit.rmatch(lambda value: value == 1)
         self.assertIsNormalNode(one)
         self.assertEqual(one[0], 1)
-        self.assertIsNone(it.rmatch(lambda value: value == 999))
+        self.assertIsNone(dit.rmatch(lambda value: value == 999))
 
 
-        rit = reversed(it)
-        self.assertIsSpecial(rit)
-        self.assertIsInstance(rit, linked_list_reverse_iterator)
-        self.assertTrue(rit)
+        rdit = reversed(dit)
+        self.assertIsSpecial(rdit)
+        self.assertIsInstance(rdit, linked_list_reverse_iterator)
+        self.assertTrue(rdit)
         with self.assertRaises(SpecialNodeError):
-            rit[0]
+            rdit[0]
         with self.assertRaises(SpecialNodeError):
-            rit.pop()
+            rdit.pop()
         with self.assertRaises(SpecialNodeError):
-            rit.popleft()
+            rdit.popleft()
 
-        copy = rit.copy()
+        copy = rdit.copy()
         value = next(copy)
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 3)
         self.assertEqual(copy[0], 3)
 
-        copy = rit.copy()
+        copy = rdit.copy()
         value = copy.previous()
         self.assertIsNormalNode(copy)
         self.assertEqual(value, 4)
         self.assertEqual(copy[0], 4)
 
-        before = rit.before()
+        before = rdit.before()
         self.assertIsNormalNode(before)
         self.assertEqual(before[0], 4)
-        after = rit.after()
+        after = rdit.after()
         self.assertIsNormalNode(after)
         self.assertEqual(after[0], 3)
 
-        five = rit.rfind(5)
+        five = rdit.rfind(5)
         self.assertEqual(five[0], 5)
         self.assertIsNormalNode(five)
-        self.assertIsNone(rit.rfind(333))
-        two = rit.find(2)
+        self.assertIsNone(rdit.rfind(333))
+        two = rdit.find(2)
         self.assertIsNormalNode(two)
         self.assertEqual(two[0], 2)
-        self.assertIsNone(rit.find(333))
+        self.assertIsNone(rdit.find(333))
 
-        six = rit.rmatch(lambda value: value == 6)
+        six = rdit.rmatch(lambda value: value == 6)
         self.assertIsNormalNode(six)
         self.assertEqual(six[0], 6)
-        self.assertIsNone(rit.rmatch(lambda value: value == 888))
-        one = rit.match(lambda value: value == 1)
+        self.assertIsNone(rdit.rmatch(lambda value: value == 888))
+
+        one = rdit.match(lambda value: value == 1)
         self.assertIsNormalNode(one)
         self.assertEqual(one[0], 1)
-        self.assertIsNone(rit.match(lambda value: value == 999))
+        self.assertIsNone(rdit.match(lambda value: value == 999))
 
-        t, it = setup()
-        it.prepend('Z')
+        t, dit = setup()
+        dit.prepend('Z')
         self.assertLinkedListEqual(t, [1, 2, 3, 'Z', 4, 5, 6])
         self.assertLength(t, 7)
 
-        t, it = setup()
-        it.append('Q')
+        t, dit = setup()
+        dit.append('Q')
         self.assertLinkedListEqual(t, [1, 2, 3, 'Q', 4, 5, 6])
         self.assertLength(t, 7)
 
-        t, it = setup()
-        rit = reversed(it)
-        rit.prepend('J')
+        t, dit = setup()
+        rdit = reversed(dit)
+        rdit.prepend('J')
         self.assertLinkedListEqual(t, [1, 2, 3, 'J', 4, 5, 6])
         self.assertLength(t, 7)
 
-        t, it = setup()
-        rit = reversed(it)
-        rit.append('K')
+        t, dit = setup()
+        rdit = reversed(dit)
+        rdit.append('K')
         self.assertLinkedListEqual(t, [1, 2, 3, 'K', 4, 5, 6])
         self.assertLength(t, 7)
 
@@ -3558,378 +3561,6 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(len(t), 5)
         self.assertTrue(t)
         self.assertIsHead(it_5)
-
-    def test_cut_and_splice(self):
-        def setup():
-            t = linked_list(range(1, 11))
-            it_5 = t.find(5)
-            t2 = linked_list('abcde')
-            return t, it_5, t2
-
-        def check_linked_list_was_set(t):
-            it = iter(t)
-            self.assertIsHead(it)
-            self.assertIs(it.linked_list, t, "failed on t.head")
-            for _ in it:
-                self.assertIs(it.linked_list, t, f"failed on it={it!r}")
-            self.assertIsTail(it)
-            self.assertIs(it.linked_list, t, "failed on t.tail")
-
-        # splicing an empty linked_list does nothing
-        t, it_5, t2 = setup()
-        t_list = list(t)
-
-        t2 = linked_list()
-        t.splice(t2)
-        self.assertLinkedListEqual(t, t_list)
-        it_5.splice(t2)
-        self.assertLinkedListEqual(t, t_list)
-        rit = reversed(it_5)
-        rit.splice(t2)
-        self.assertLinkedListEqual(t, t_list)
-
-        # on a forward iterator, can't cut head
-        t, it_5, t2 = setup()
-        it_head = iter(t)
-        with self.assertRaises(SpecialNodeError):
-            it_head.cut()
-        with self.assertRaises(SpecialNodeError):
-            t.cut(it_head, None)
-
-        # on a reversed iterator, can't cut tail
-        rit_tail = reversed(t)
-        with self.assertRaises(SpecialNodeError):
-            rit_tail.cut()
-        with self.assertRaises(SpecialNodeError):
-            t.cut(rit_tail)
-
-        # on a forward iterator, can't rcut tail
-        t, it_5, t2 = setup()
-        it_tail = t.tail()
-        with self.assertRaises(SpecialNodeError):
-            it_tail.rcut()
-        with self.assertRaises(SpecialNodeError):
-            t.rcut(it_tail, None)
-
-        # on a reverse iterator, can't rcut head
-        t, it_5, t2 = setup()
-        rit_head = reversed(t.head())
-        with self.assertRaises(SpecialNodeError):
-            rit_head.rcut()
-        with self.assertRaises(SpecialNodeError):
-            t.rcut(rit_head, None)
-
-        with self.assertRaises(TypeError):
-            t.cut(5, None)
-        with self.assertRaises(TypeError):
-            t.cut(None, 5)
-        with self.assertRaises(TypeError):
-            t.rcut(5, None)
-        with self.assertRaises(TypeError):
-            t.rcut(None, 5)
-
-        # if start and stop both point to head,
-        # cut returns an empty list.
-        unchanged_t = list(t)
-        head = t.head()
-
-        got = t.cut(head, head)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        got = head.cut(head)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        head = reversed(head)
-        got = t.cut(head, head)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        got = head.cut(head)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        # if start and stop both point to tail,
-        # cut returns an empty list.
-        tail = t.tail()
-
-        got = t.cut(tail, tail)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        got = tail.cut(tail)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        tail = reversed(tail)
-        got = t.cut(tail, tail)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-        got = tail.cut(tail)
-        self.assertLinkedListEqual(t, unchanged_t)
-        self.assertLinkedListEqual(got, [])
-
-
-        t, it_5, t2 = setup()
-        snippet = it_5.cut()
-        self.assertIsInstance(snippet, linked_list)
-        self.assertLinkedListEqual(t,       [1, 2, 3, 4])
-        self.assertEqual(len(t), 4)
-        self.assertLinkedListEqual(snippet,             [5, 6, 7, 8, 9, 10])
-        self.assertEqual(len(snippet), 6)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        for test_reversed in (False, True):
-            for splice_at_tail in (False, True):
-                with self.subTest(test_reversed=test_reversed, splice_at_tail=splice_at_tail):
-                    t, it_5, t2 = setup()
-                    it_7 = t.find(7)
-
-                    snippet = it_5.cut(stop=it_7)
-                    self.assertIsInstance(snippet, linked_list)
-                    self.assertLinkedListEqual(snippet, [5, 6])
-                    self.assertEqual(len(snippet), 2)
-                    self.assertLinkedListEqual(t, [1, 2, 3, 4, 7, 8, 9, 10])
-                    self.assertEqual(len(t), 8)
-                    check_linked_list_was_set(t)
-                    check_linked_list_was_set(snippet)
-
-                    if splice_at_tail:
-                        if test_reversed:
-                            splice_here = reversed(t2)
-                        else:
-                            splice_here = iter(t2)
-                        splice_here.exhaust()
-                    else:
-                        splice_here = t2.find('c')
-                        if test_reversed:
-                            splice_here = reversed(splice_here)
-                        self.assertEqual(splice_here[0], 'c')
-
-                    splice_here.splice(snippet)
-                    self.assertLinkedListEqual(snippet, [])
-
-                    if splice_at_tail:
-                        if test_reversed:
-                            self.assertLinkedListEqual(t2, [5, 6, 'a', 'b', 'c', 'd', 'e'])
-                        else:
-                            self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 5, 6])
-
-                        self.assertIsSpecial(splice_here)
-                    else:
-                        if test_reversed:
-                            self.assertLinkedListEqual(t2, ['a', 'b', 5, 6, 'c', 'd', 'e'])
-                        else:
-                            self.assertLinkedListEqual(t2, ['a', 'b', 'c', 5, 6, 'd', 'e'])
-                    check_linked_list_was_set(t)
-                    check_linked_list_was_set(t2)
-                    self.assertEqual(len(t2), 7)
-                    self.assertEqual(len(snippet), 0)
-
-
-        t, it_5, t2 = setup()
-        rit_5 = reversed(it_5)
-        snippet = rit_5.cut()
-        self.assertIsInstance(snippet, linked_list)
-        self.assertLinkedListEqual(snippet, [1, 2, 3, 4,  5])
-        self.assertEqual(len(snippet), 5)
-        self.assertLinkedListEqual(t,                       [6, 7, 8, 9, 10])
-        self.assertEqual(len(t), 5)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        t2.splice(snippet)
-        self.assertLinkedListEqual(snippet, [])
-        self.assertEqual(len(snippet), 0)
-        self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 1, 2, 3, 4, 5])
-        self.assertEqual(len(t2), 10)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(t2)
-        check_linked_list_was_set(snippet)
-
-        t, it_5, t2 = setup()
-        rit_5 = reversed(it_5)
-        it_2 = t.find(2)
-        with self.assertRaises(ValueError):
-            rit_5.cut(it_2)
-        rit_2 = reversed(it_2)
-        snippet = rit_5.cut(rit_2)
-        self.assertLinkedListEqual(t,       [1, 2,         6, 7, 8, 9, 10])
-        self.assertEqual(len(t), 7)
-        self.assertLinkedListEqual(snippet,       [3, 4, 5])
-        self.assertEqual(len(snippet), 3)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        # rit moved to snippet when the nodes were cut.  which means
-        # these calls raise an exception! which means NOTHING CHANGED, RIGHT?
-        with self.assertRaises(ValueError):
-            t.cut(rit_5)
-        with self.assertRaises(ValueError):
-            t.cut(stop=rit_5)
-        self.assertLinkedListEqual(t,       [1, 2,         6, 7, 8, 9, 10])
-        self.assertEqual(len(t), 7)
-        self.assertLinkedListEqual(snippet,       [3, 4, 5])
-        self.assertEqual(len(snippet), 3)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        it = t.head().after()
-        t2 = t.cut(stop=it)
-        self.assertEqual(len(t), 7)
-        self.assertLinkedListEqual(t2, [])
-        self.assertEqual(len(t2), 0)
-
-        t, it_5, t2 = setup()
-        it_2 = t.find(2)
-        with self.assertRaises(ValueError):
-            # end comes before start
-            t.cut(it_5, it_2)
-        rit_5 = reversed(it_5)
-        rit_2 = reversed(it_2)
-        with self.assertRaises(ValueError):
-            # end comes before start
-            t.cut(rit_2, rit_5)
-
-        t, it_5, t2 = setup()
-        snippet = it_5.rcut()
-        self.assertLinkedListEqual(t,       [6, 7, 8, 9, 10])
-        self.assertEqual(len(t), 5)
-        self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5])
-        self.assertEqual(len(snippet), 5)
-        self.assertIs(it_5.linked_list, snippet)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        t, it_5, t2 = setup()
-        it = t.tail().before()
-        snippet = it.rcut()
-        self.assertLinkedListEqual(t,       [])
-        self.assertEqual(len(t), 0)
-        self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-        self.assertEqual(len(snippet), 10)
-        self.assertIs(it.linked_list, snippet)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        with self.assertRaises(TypeError):
-            t.splice([1, 2, 3])
-        with self.assertRaises(TypeError):
-            t.splice('abcde')
-        with self.assertRaises(TypeError):
-            t.splice(8675309)
-        with self.assertRaises(TypeError):
-            t.splice(3.14159)
-
-        with self.assertRaises(TypeError):
-            t.splice(t2, where=1234567890)
-        with self.assertRaises(TypeError):
-            t.splice(t2, where=t2)
-        with self.assertRaises(ValueError):
-            t.splice(t2, where=t2.head())
-
-        t, it_5, t2 = setup()
-        t2_tail = t2.tail()
-        t.splice(t2)
-        check_linked_list_was_set(t)
-        self.assertEqual(len(t), 15)
-        self.assertEqual(len(t2), 0)
-
-        with self.assertRaises(ValueError):
-            t.splice(t)
-
-        # rsplice without where
-        t, it_5, t2 = setup()
-        t.rsplice(t2)
-        self.assertLinkedListEqual(t, ['a', 'b', 'c', 'd', 'e', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-
-        # reverse iterator splice and rsplice
-        t, it_5, t2 = setup()
-        rit = reversed(it_5)
-        rit.splice(t2)
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 'a', 'b', 'c', 'd', 'e', 5, 6, 7, 8, 9, 10])
-
-        t, it_5, t2 = setup()
-        rit = reversed(it_5)
-        rit.rsplice(t2)
-        self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'a', 'b', 'c', 'd', 'e', 6, 7, 8, 9, 10])
-
-        # splice does NOT move head and tail.
-        t = linked_list()
-        t2 = linked_list('abcde')
-        head = t2.head()
-        tail = t2.tail()
-        t.splice(t2)
-        self.assertLinkedListEqual(t, ['a', 'b', 'c', 'd', 'e'])
-        self.assertLinkedListEqual(t2, [])
-        t2.append('X')
-        head.next()
-        tail.previous()
-        self.assertEqual(head[0], 'X')
-        self.assertEqual(tail[0], 'X')
-
-
-
-        def setup():
-            t = linked_list((1, 2, 3, 4, 5))
-            middle = t.find(3)
-            return t, t.head(), middle, t.tail()
-
-        t, head, middle, tail = setup()
-        snippet = t.cut(start=None, stop=middle)
-        self.assertIs(head.linked_list, t)
-        self.assertIs(tail.linked_list, t)
-        check_linked_list_was_set(t)
-        check_linked_list_was_set(snippet)
-
-        t, head, middle, tail = setup()
-        snippet = t.cut(start=head.after(), stop=middle)
-        self.assertIs(head.linked_list, t)
-        self.assertIs(tail.linked_list, t)
-
-
-
-        t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, stop=None)
-        self.assertIs(head.linked_list, t)
-        self.assertIs(tail.linked_list, t)
-
-        t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, stop=tail)
-        self.assertIs(head.linked_list, t)
-        self.assertIs(tail.linked_list, t)
-
-        # test rcut with start=None!
-        t, head, middle, tail = setup()
-        snippet = t.rcut(None, middle)
-        self.assertLinkedListEqual(snippet, [4, 5])
-        self.assertLinkedListEqual(t, [1, 2, 3])
-
-        # test cutting only special nodes!
-        def setup():
-            t = linked_list((1,))
-            it = t.find(1)
-            del it[0]
-            return t, it
-
-        t, it = setup()
-        t2 = t.cut()
-        self.assertEqual(it.linked_list, t2)
-
-        t, it = setup()
-        t2 = it.cut()
-        self.assertEqual(it.linked_list, t2)
-
-        t, it = setup()
-        t2 = t.rcut()
-        self.assertEqual(it.linked_list, t2)
-
-        t, it = setup()
-        t2 = it.rcut()
-        self.assertEqual(it.linked_list, t2)
 
 
     def test_reverse_iterators(self):
