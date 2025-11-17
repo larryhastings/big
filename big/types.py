@@ -1405,6 +1405,11 @@ class linked_list:
 
         self._length = 0
 
+        # append the values *before* setting the lock.
+        # why bother locking before any other thread can see the list?
+        self._lock = None
+        self._extend(iterable)
+
         # _lock is either a lock or None
         # _maybe_lock is always a context manager. you can always write
         #      with self._maybe_lock:
@@ -1420,9 +1425,6 @@ class linked_list:
             self._maybe_lock = lock
         else:
             self._maybe_lock = _inert_context_manager
-
-        for value in iterable:
-            self.append(value)
 
     def __repr__(self):
         buffer = ["linked_list(["]
