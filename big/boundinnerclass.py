@@ -1,5 +1,25 @@
 #!/usr/bin/env python3
 
+"""
+boundinnerclass - Bind inner classes to outer instances.
+
+If you have a class with an inner class inside, decorate the inner class
+with @BoundInnerClass and it will automatically receive the outer instance
+as a second parameter to __init__ (after self).
+
+    class Outer:
+        @BoundInnerClass
+        class Inner:
+            def __init__(self, outer):
+                self.outer = outer
+
+    o = Outer()
+    i = o.Inner()  # outer is passed automatically!
+
+Thanks to Alex Martelli for showing how this could be done back in 2010:
+https://stackoverflow.com/questions/2278426/inner-classes-how-can-i-get-the-outer-class-object-at-construction-time
+"""
+
 _license = """
 big
 Copyright 2022-2025 Larry Hastings
@@ -24,126 +44,232 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-#
-# If you have a class with an inner class inside,
-# decorate the inner class with BoundInnerClass below
-# and now it'll automatically get a second parameter
-# of the parent instance!
-# _______________________________________
-#
-# class Outer:
-#   @BoundInnerClass
-#   class Inner:
-#       def __init__(self, outer):
-#           global o
-#           print(outer = o)
-# o = Outer()
-# i = o.Inner()
-# _______________________________________
-#
-# This program prints True.  The "outer" parameter
-# to Inner.__init__ was filled in automatically by
-# the BoundInnerClass decorator.
-#
-# Thanks, BoundInnerClass, you've saved the day!
-#
-# -----
-#
-# Infinite extra-special thanks to Alex Martelli for
-# showing me how this could be done in the first place--
-# all the way back in 2010!
-#
-# https://stackoverflow.com/questions/2278426/inner-classes-how-can-i-get-the-outer-class-object-at-construction-time
-#
-# Thanks, Alex, you've saved the day!
-
-
-__all__ = ["BoundInnerClass", "UnboundInnerClass"]
-
+import inspect
 import weakref
 
-class _Worker(object):
-    def __init__(self, cls):
-        self.cls = cls
+
+__all__ = [
+    "BoundInnerClass",
+    "UnboundInnerClass",
+    "rebind",
+    "class_bound_to",
+    "instance_bound_to",
+]
+
+def export(fn):
+    __all__.append(fn.__name__)
+    return fn
+
+
+def _make_bound_signature(original_init):
+    """
+    Create a signature for the bound version of an __init__, removing 'outer'.
+
+    The bound wrapper injects 'outer' automatically, so the user-facing signature
+    should not include it.
+    """
+    try:
+        sig = inspect.signature(original_init)
+    except (ValueError, TypeError):
+        return None
+
+    params = list(sig.parameters.values())
+
+    # Remove 'self' (first param) and 'outer' (second param)
+    # Keep everything else
+    if len(params) >= 2:
+        bound_params = params[2:]  # Skip self and outer
+    else:
+        bound_params = []
+
+    return inspect.Signature(bound_params, return_annotation=sig.return_annotation)
+
+
+class _ClassProxy:
+    """
+    A minimal transparent proxy for class objects.
+
+    Forwards attribute access to the wrapped class while allowing
+    the proxy itself to act as a descriptor.
+
+    Inspired by wrapt.ObjectProxy but much simpler - we only need
+    to proxy classes, not arbitrary objects with arithmetic operators etc.
+
+    Note: __qualname__ and __annotations__ cannot be properties in Python,
+    so we copy them as actual attributes and handle them specially in
+    __setattr__ and __getattr__.
+    """
+
+    __slots__ = ('__wrapped__', '__qualname__', '__annotations__')
+
+    def __init__(self, wrapped):
+        object.__setattr__(self, '__wrapped__', wrapped)
+        # These must be actual attributes, not properties
+        try:
+            object.__setattr__(self, '__qualname__', wrapped.__qualname__)
+        except AttributeError:
+            pass
+        try:
+            object.__setattr__(self, '__annotations__', wrapped.__annotations__)
+        except AttributeError:
+            pass
+
+    # Forward class identity attributes as properties (read-only via property,
+    # write via __setattr__ which forwards to wrapped)
+    # Note: __qualname__ and __annotations__ are handled as slots since Python
+    # doesn't allow them to be properties.
+
+    @property
+    def __name__(self):
+        return self.__wrapped__.__name__
+
+    @property
+    def __module__(self):
+        return self.__wrapped__.__module__
+
+    @property
+    def __doc__(self):
+        return self.__wrapped__.__doc__
+
+    # Proxy behavior
+
+    def __repr__(self):
+        return f"<{type(self).__name__} for {self.__wrapped__!r}>"
+
+    def __getattr__(self, name):
+        return getattr(self.__wrapped__, name)
+
+    def __setattr__(self, name, value):
+        if name == '__wrapped__':
+            object.__setattr__(self, name, value)
+            # Update cached copies
+            try:
+                object.__setattr__(self, '__qualname__', value.__qualname__)
+            except AttributeError:
+                pass
+            try:
+                object.__setattr__(self, '__annotations__', value.__annotations__)
+            except AttributeError:
+                pass
+        elif name == '__qualname__':
+            object.__setattr__(self, name, value)
+            self.__wrapped__.__qualname__ = value
+        elif name == '__annotations__':
+            object.__setattr__(self, name, value)
+            self.__wrapped__.__annotations__ = value
+        else:
+            # Forward to wrapped object (handles __name__, __module__, __doc__, etc.)
+            setattr(self.__wrapped__, name, value)
+
+    def __delattr__(self, name):
+        delattr(self.__wrapped__, name)
+
+    # Make subclassing work: class Child(Outer.Inner) should use the wrapped class
+    def __mro_entries__(self, bases):
+        return (self.__wrapped__,)
+
+    # Backward compatibility: .cls returns the wrapped class
+    # Used when subclassing inside the outer class: class Child(Parent.cls)
+    @property
+    def cls(self):
+        return self.__wrapped__
+
+    # isinstance/issubclass support
+    def __instancecheck__(self, instance):
+        return isinstance(instance, self.__wrapped__)
+
+    def __subclasscheck__(self, subclass):
+        if hasattr(subclass, '__wrapped__'):
+            return issubclass(subclass.__wrapped__, self.__wrapped__)
+        return issubclass(subclass, self.__wrapped__)
+
+
+# Storage attribute name for bound inner classes cache
+_CACHE_ATTR = '__boundinnerclass__'
+
+
+def _get_cache(outer):
+    """Get or create the bound inner classes cache dict on outer."""
+    cache = getattr(outer, _CACHE_ATTR, None)
+    if cache is None:
+        cache = {}
+        # Try to set it - will fail if outer uses __slots__ without this attr
+        try:
+            object.__setattr__(outer, _CACHE_ATTR, cache)
+        except AttributeError:
+            # outer uses __slots__ and doesn't have __boundinnerclass__
+            # (If outer had __dict__, object.__setattr__ would have succeeded)
+            raise TypeError(
+                f"Cannot cache bound inner class on {type(outer).__name__}. "
+                f"Add {_CACHE_ATTR!r} to __slots__ or include '__dict__'."
+            ) from None
+    return cache
+
+
+class _BoundInnerClassBase(_ClassProxy):
+    """
+    Base descriptor for bound inner classes.
+
+    Subclasses implement _wrap() to define how the wrapper class is created.
+    """
+
+    __slots__ = ()
 
     def __get__(self, outer, outer_class):
-
-        #
-        # If outer is not None, we've been accessed through
-        # an *instance* of the class, like so:
-        #    o = Outer()
-        #    ref = o.Inner
-        #
-        # See:
-        #    https://docs.python.org/3/howto/descriptor.html#invocation-from-an-instance
-        #
-        #
-        # If outer is None, we've been accessed through the *class itself*,
-        # like so:
-        #    ref = Outer.Inner
-        #
-        # See:
-        #    https://docs.python.org/3/howto/descriptor.html#invocation-from-a-class
-        #
-        # If someone accesses us through the class, not through an instance,
-        # return the unbound version of the class.
-        #
+        # Accessed via class (Outer.Inner) - return unwrapped class
         if outer is None:
-            return self.cls
+            return self.__wrapped__
 
-        name = self.cls.__name__
+        # Accessed via instance (o.Inner) - return bound version
+        name = self.__wrapped__.__name__
+        cache = _get_cache(outer)
 
-        wrapper_bases = [self.cls]
+        # Check cache
+        cached = cache.get(name)
+        if cached is not None:
+            return cached
 
-        # Iterate over cls's bases, and look in outer,
-        #   to see if any have bound inner classes in outer.
-        # If so, multiply inherit from the bound inner version(s).
+        # Build wrapper bases, handling inheritance from other BoundInnerClasses
+        # The wrapper inherits from self.__wrapped__ first (for __init__ signature),
+        # then from bound versions of parent BoundInnerClasses (for MRO chaining)
+        wrapper_bases = [self.__wrapped__]
 
-        multiply_inherit = False
-        for base in self.cls.__bases__:
-            # If we can't find a bound inner base,
-            # add the original unbound base instead.
-            # this is harmless but helps preserve the original MRO.
-            inherit_from = base
+        for base in self.__wrapped__.__bases__:
+            # Skip if same name as us (would cause infinite recursion)
+            if base.__name__ == name:
+                continue
 
-            # If we inherit from a BoundInnerClass from another outer class,
-            # we *might* have the same name as a legitimate base class.
-            # But if we get that attribute, we'll call __get__ recursively...
-            # forever.
-            #
-            # If the name is the same as our own name, there's no way it's
-            # a bound inner class we need to inherit from, so just skip it.
-            if base.__name__ != name:
-                bound_inner_base = getattr(outer, base.__name__, None)
-                if bound_inner_base:
-                    bases = getattr(bound_inner_base, "__bases__", (None,))
-                    # The unbound class is always the first base of
-                    # the bound inner class.
-                    if bases[0] == base:
-                        inherit_from = bound_inner_base
-                        multiply_inherit = True
-            wrapper_bases.append(inherit_from)
+            bound_inner_base = getattr(outer, base.__name__, None)
+            if bound_inner_base:
+                bases = getattr(bound_inner_base, '__bases__', (None,))
+                # The unbound class is always the first base of bound inner class
+                if bases[0] == base:
+                    # Add bound version for MRO chaining
+                    wrapper_bases.append(bound_inner_base)
 
-        Wrapper = self._wrap(outer, wrapper_bases[0])
+        # Create the wrapper - always use self.__wrapped__ as base
+        Wrapper = self._wrap(outer, self.__wrapped__)
         Wrapper.__name__ = name
 
-        # Assigning to __bases__ is startling, but it's the only way to get
-        # this code working simultaneously in both Python 2 and Python 3.
-        if multiply_inherit:
+        # Set bases if we have bound parents to include
+        if len(wrapper_bases) > 1:
             Wrapper.__bases__ = tuple(wrapper_bases)
 
-        # Cache the bound instance in outer's dict.
-        # This also means that future requests for us won't call our
-        # __get__ again, it'll automatically use the cached copy.
-        outer.__dict__[name] = Wrapper
+        # Cache and return
+        cache[name] = Wrapper
         return Wrapper
 
+    def _wrap(self, outer, base):
+        """Create the wrapper class. Override in subclasses."""
+        raise NotImplementedError
 
-class BoundInnerClass(_Worker):
+
+@export
+class BoundInnerClass(_BoundInnerClassBase):
     """
-    Class decorator for an inner class.  When accessing the inner class
+    Class decorator for an inner class. When accessing the inner class
     through an instance of the outer class, "binds" the inner class to
-    the instance.  This changes the signature of the inner class's __init__
+    the instance. This changes the signature of the inner class's __init__
     from
 
         def __init__(self, *args, **kwargs):
@@ -160,41 +286,53 @@ class BoundInnerClass(_Worker):
     class S must be decorated with either BoundInnerClass
     or UnboundInnerClass.
     """
-    def _wrap(self, outer, base):
-        wrapper_self = self
-        assert outer is not None
-        outer_weakref = weakref.ref(outer)
-        class Wrapper(base):
-            def __init__(self, *bic_args, **bic_kwargs):
-                wrapper_self.cls.__init__(self,
-                                          outer_weakref(), *bic_args, **bic_kwargs)
 
-            # give the bound inner class a nicer repr
-            # (but only if it doesn't already have a custom repr)
-            if wrapper_self.cls.__repr__ is object.__repr__:
+    __slots__ = ()
+
+    def _wrap(self, outer, base):
+        outer_weakref = weakref.ref(outer)
+        cls = self.__wrapped__
+
+        class Wrapper(base):
+            def __init__(self, *args, **kwargs):
+                # Call cls.__init__ directly, not super().__init__
+                # This avoids multiple outer injections when inheriting
+                # from other BoundInnerClasses
+                cls.__init__(self, outer_weakref(), *args, **kwargs)
+
+            # Custom repr if the wrapped class doesn't have one
+            if cls.__repr__ is object.__repr__:
                 def __repr__(self):
                     return "".join([
                         "<",
-                        wrapper_self.cls.__module__,
+                        cls.__module__,
                         ".",
                         self.__class__.__name__,
                         " object bound to ",
                         repr(outer_weakref()),
                         " at ",
                         hex(id(self)),
-                        ">"])
-        Wrapper.__name__ = self.cls.__name__
-        Wrapper.__module__ = self.cls.__module__
-        Wrapper.__qualname__ = self.cls.__qualname__
-        Wrapper.__doc__ = self.cls.__doc__
-        # big supports back to 3.6, but class attribute annotations
-        # weren't added until 3.8.
-        if hasattr(self.cls, '__annotations__'): # pragma: nocover
-            Wrapper.__annotations__ = self.cls.__annotations__
+                        ">",
+                    ])
+
+        Wrapper.__name__ = cls.__name__
+        Wrapper.__module__ = cls.__module__
+        Wrapper.__qualname__ = cls.__qualname__
+        Wrapper.__doc__ = cls.__doc__
+        if hasattr(cls, '__annotations__'):
+            Wrapper.__annotations__ = cls.__annotations__
+
+        # Set proper signature (without 'outer' param since it's injected)
+        bound_sig = _make_bound_signature(cls.__init__)
+        if bound_sig is not None:
+            Wrapper.__signature__ = bound_sig
+            Wrapper.__init__.__signature__ = bound_sig
+
         return Wrapper
 
 
-class UnboundInnerClass(_Worker):
+@export
+class UnboundInnerClass(_BoundInnerClassBase):
     """
     Class decorator for an inner class that prevents binding
     the inner class to an instance of the outer class.
@@ -204,13 +342,127 @@ class UnboundInnerClass(_Worker):
     class S must be decorated with either BoundInnerClass
     or UnboundInnerClass.
     """
+
+    __slots__ = ()
+
     def _wrap(self, outer, base):
+        cls = self.__wrapped__
+
         class Wrapper(base):
             pass
-        Wrapper.__name__ = self.cls.__name__
-        Wrapper.__module__ = self.cls.__module__
-        Wrapper.__qualname__ = self.cls.__qualname__
-        Wrapper.__doc__ = self.cls.__doc__
-        if hasattr(self.cls, '__annotations__'): # pragma: nocover
-            Wrapper.__annotations__ = self.cls.__annotations__
+
+        Wrapper.__name__ = cls.__name__
+        Wrapper.__module__ = cls.__module__
+        Wrapper.__qualname__ = cls.__qualname__
+        Wrapper.__doc__ = cls.__doc__
+        if hasattr(cls, '__annotations__'):
+            Wrapper.__annotations__ = cls.__annotations__
+
         return Wrapper
+
+
+@export
+def rebind(child, bound_parent):
+    """
+    Create a rebound version of child that inherits from bound_parent.
+
+    This allows a class defined outside the outer class to participate
+    in the bound inner class system.
+
+    Args:
+        child: A class that inherits from an unbound inner class (Outer.Inner)
+        bound_parent: A bound inner class (outer_instance.Inner)
+
+    Returns:
+        A new class that, when instantiated, automatically receives
+        the outer instance that bound_parent is bound to.
+
+    Example:
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        class Child(Outer.Parent):
+            def __init__(self, outer):
+                super().__init__(outer)
+                self.child_attr = 'set by child'
+
+        o = Outer()
+        Rebound = rebind(Child, o.Parent)
+        instance = Rebound()  # outer passed automatically!
+        assert instance.outer is o
+        assert instance.child_attr == 'set by child'
+    """
+    # Get the outer reference from bound_parent's wrapper
+    # bound_parent is a Wrapper class that has outer captured in closure
+    # We need to extract it and create a new wrapper that calls child.__init__
+
+    # The bound_parent's __init__ has outer_weakref in its closure
+    outer_weakref = None
+    for cell in bound_parent.__init__.__closure__ or ():
+        val = cell.cell_contents
+        if isinstance(val, weakref.ref):
+            outer_weakref = val
+            break
+
+    if outer_weakref is None:
+        raise ValueError("bound_parent doesn't appear to be a bound inner class")
+
+    class Rebound(bound_parent, child):
+        def __init__(self, *args, **kwargs):
+            # Call child's __init__ with outer injected
+            child.__init__(self, outer_weakref(), *args, **kwargs)
+
+    Rebound.__name__ = child.__name__
+    Rebound.__module__ = child.__module__
+    Rebound.__qualname__ = child.__qualname__
+
+    return Rebound
+
+
+@export
+def class_bound_to(cls, outer):
+    """
+    Return True if cls is a BoundInnerClass bound to outer.
+
+    This checks if cls was created by accessing a BoundInnerClass-decorated
+    inner class through the specific outer instance.
+
+    Args:
+        cls: A class to check
+        outer: An instance of an outer class
+
+    Returns:
+        True if cls is cached as a bound inner class on outer, False otherwise.
+
+    Note:
+        This is NOT transitive. If cls is bound to x, and x is bound to y,
+        class_bound_to(cls, y) returns False.
+    """
+    cache = getattr(outer, _CACHE_ATTR, None)
+    if cache is None:
+        return False
+    name = getattr(cls, '__name__', None)
+    if name is None:
+        return False
+    return cache.get(name) is cls
+
+
+@export
+def instance_bound_to(obj, outer):
+    """
+    Return True if obj is an instance of a class bound to outer.
+
+    Args:
+        obj: An object to check
+        outer: An instance of an outer class
+
+    Returns:
+        True if type(obj) is a bound inner class of outer, False otherwise.
+
+    Note:
+        This is NOT transitive.
+    """
+    return class_bound_to(type(obj), outer)
