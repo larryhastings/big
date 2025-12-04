@@ -1149,7 +1149,14 @@ class string(str):
 #####################################################################################################
 
 
-_undefined = object()
+class Undefined:
+    def __repr__(self):
+        return '<Undefined>'
+
+    def __eq__(self, other):
+        return other is self
+
+_undefined = Undefined()
 
 @export
 class SpecialNodeError(LookupError):
@@ -1358,6 +1365,16 @@ class linked_list_node:
         return f"linked_list_node({self.value!r}{special})"
 
 
+class _inert_context_manager_cls:
+    def __repr__(self):
+        return '_inert_context_manager_cls()'
+    def __enter__(self):
+        return self
+    def __exit__(self, et, ev, tr):
+        return None
+
+_inert_context_manager = _inert_context_manager_cls()
+
 @export
 class linked_list:
     """
@@ -1379,30 +1396,106 @@ class linked_list:
     until you advance it.)
     """
 
-    __slots__ = ('_head', '_tail', '_length')
+    __slots__ = ('_head', '_tail', '_lock', '_maybe_lock', '_length')
 
-    def __init__(self, iterable=()):
+    def __init__(self, iterable=(), *, lock=None):
         self._head = head = linked_list_node(self, None, 'head')
         head.next = self._tail = tail = linked_list_node(self, None, 'tail')
         tail.previous = self._head
+
         self._length = 0
-        for value in iterable:
-            self.append(value)
+
+        # append the values *before* setting the lock.
+        # why bother locking before any other thread can see the list?
+        self._lock = None
+        self._extend(iterable)
+
+        # _lock is either a lock or None
+        # _maybe_lock is always a context manager. you can always write
+        #      with self._maybe_lock:
+        # and it'll work.  if we don't have a lock, it's an inert context manager.
+        self._lock = lock
+        if lock is not None:
+            if not (hasattr(lock, 'acquire') and hasattr(lock, 'release')):
+                raise TypeError('lock object must support acquire and release')
+            if not (hasattr(lock, '__enter__') and hasattr(lock, '__exit__')):
+                raise TypeError('lock object must be a context manager')
+            if not bool(lock):
+                raise ValueError('lock object must always be true')
+            self._maybe_lock = lock
+        else:
+            self._maybe_lock = _inert_context_manager
 
     def __repr__(self):
         buffer = ["linked_list(["]
         append = buffer.append
-        cursor = self._head.next
-        tail = self._tail
-        separator = ''
-        while cursor != tail:
-            if not cursor.special:
-                append(separator)
-                separator = ', '
-                append(repr(cursor.value))
-            cursor = cursor.next
+        with self._maybe_lock:
+            cursor = self._head.next
+            tail = self._tail
+            separator = ''
+            while cursor != tail:
+                if not cursor.special:
+                    append(separator)
+                    separator = ', '
+                    append(repr(cursor.value))
+                cursor = cursor.next
         append("])")
         return ''.join(buffer)
+
+    ##
+    ## internal APIs for internal use by linked list objects.
+    ##
+    ## __eq__ and the other rich compare methods
+    ## need to examine "other".  How do we proceed?
+    ##
+    ##    * If we only call public APIs, then if other
+    ##      has a lock, we'll lock and unlock on every
+    ##      method call (e.g. __next__).  This means
+    ##      our __eq__ test won't be atomic, which is bad.
+    ##
+    ##    * If we examine internal data structures, like
+    ##      _lock and _head, then we force all subclasses
+    ##      to use these same attributes for the same things.
+    ##      A subclass linked list might want to use a very
+    ##      different implementation but would be unable to.
+    ##
+    ## So instead we do it the third way: we define internal-only APIs,
+    ## not for public consumption, that let us interact with "other"
+    ## in a safe, well-defined, performant way.  These method names
+    ## all start with "_internal".
+
+    def _internal_lock(self):
+        ## Returns the lock for this linked list, if any.
+        ##
+        ## If this linked list has a lock, returns it.  The object
+        ##    returned must support the API of threading.Lock,
+        ##    specifically: acquire, release, and the context manager APIs.
+        ## If this linked list doesn't have a lock, returns None.
+        if not hasattr(self, '_lock'):
+            print("\n\n\n" + (">" * 79) + f"\n{self=}\n{dir(self)=}\n{hasattr(self, '_lock')=}\n" + (">" * 79) + "\n\n\n")
+        return self._lock
+
+    def _internal_iter(self):
+        ## Iterator, yields all *data nodes* in forward order.
+        ## (Yields *nodes*, not *values*.  Never yields special nodes.)
+        ## Does not lock!  Assumes you have already locked the list.
+        cursor = self._head.next
+        stop = self._tail
+        while cursor is not stop:
+            if cursor.special is None:
+                yield cursor
+            cursor = cursor.next
+
+    def _internal_reversed(self):
+        ## Iterator, yields all *data nodes* in reverse order.
+        ## (Yields *nodes*, not *values*.  Never yields special nodes.)
+        ## Does not lock!  Assumes you have already locked the list.
+        cursor = self._tail.previous
+        stop = self._head
+        while cursor is not stop:
+            if cursor.special is None:
+                yield cursor
+            cursor = cursor.previous
 
     ##
     ## implement the six rich comparison methods
@@ -1426,90 +1519,128 @@ class linked_list:
     ##     (x<y or x==y) does not imply x<=y.
     ##
 
+    def _two_locks(self, other):
+        "Returns a list containing self._maybe_lock and the equivalent from other, in the order you should acquire them."
+        self_lock = self._maybe_lock
+        other_lock = other._internal_lock() or _inert_context_manager
+        if id(other_lock) <= id(self_lock):
+            return [other_lock, self_lock]
+        return [self_lock, other_lock]
+
     def __eq__(self, other):
-        if not issubclass(other.__class__, linked_list):
+        if self is other:
+            return True
+        if not isinstance(other, linked_list):
             return False
-        for value1, value2 in zip(iter(self), iter(other)):
-            if value1 == value2:
-                continue
-            return False
-        return len(self) == len(other)
+        locks = self._two_locks(other)
+        with locks[0], locks[1]:
+            for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
+                if self_node.value == other_node.value:
+                    continue
+                return False
+            return len(self) == len(other)
 
     def __ne__(self, other):
-        if not issubclass(other.__class__, linked_list):
+        if self is other:
+            return False
+        if not isinstance(other, linked_list):
             return True
-        for value1, value2 in zip(iter(self), iter(other)):
-            if value1 != value2:
-                return True
-        return len(self) != len(other)
+        locks = self._two_locks(other)
+        with locks[0], locks[1]:
+            for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
+                if self_node.value != other_node.value:
+                    return True
+            return len(self) != len(other)
 
     def __lt__(self, other):
-        if not issubclass(other.__class__, linked_list):
-            return NotImplemented
-        for value1, value2 in zip(iter(self), iter(other)):
-            if value1 < value2:
-                return True
-            if value1 == value2:
-                continue
-            # value1 > value2
+        if self is other:
             return False
-        return len(self) < len(other)
+        if not isinstance(other, linked_list):
+            return NotImplemented
+        locks = self._two_locks(other)
+        with locks[0], locks[1]:
+            for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
+                if self_node.value < other_node.value:
+                    return True
+                if self_node.value == other_node.value:
+                    continue
+                # self_node > other_node
+                return False
+            return len(self) < len(other)
 
     def __le__(self, other):
-        if not issubclass(other.__class__, linked_list):
+        if self is other:
+            return True
+        if not isinstance(other, linked_list):
             return NotImplemented
-        for value1, value2 in zip(iter(self), iter(other)):
-            if value1 <= value2:
-                if value1 == value2:
-                    continue
-                return True
-            # value1 > value2
-            return False
-        return len(self) <= len(other)
+        locks = self._two_locks(other)
+        with locks[0], locks[1]:
+            for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
+                if self_node.value <= other_node.value:
+                    if self_node.value == other_node.value:
+                        continue
+                    return True
+                # self_node > other_node
+                return False
+            return len(self) <= len(other)
 
     def __ge__(self, other):
-        if not issubclass(other.__class__, linked_list):
+        if self is other:
+            return True
+        if not isinstance(other, linked_list):
             return NotImplemented
-        for value1, value2 in zip(iter(self), iter(other)):
-            if value1 >= value2:
-                if value1 == value2:
-                    continue
-                return True
-            # value1 < value2
-            return False
-        return len(self) >= len(other)
+        locks = self._two_locks(other)
+        with locks[0], locks[1]:
+            for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
+                if self_node.value >= other_node.value:
+                    if self_node.value == other_node.value:
+                        continue
+                    return True
+                # self_node < other_node
+                return False
+            return len(self) >= len(other)
 
     def __gt__(self, other):
-        if not issubclass(other.__class__, linked_list):
-            return NotImplemented
-        for value1, value2 in zip(iter(self), iter(other)):
-            if value1 > value2:
-                return True
-            if value1 == value2:
-                continue
-            # value1 < value2
+        if self is other:
             return False
-        return len(self) > len(other)
+        if not isinstance(other, linked_list):
+            return NotImplemented
+        locks = self._two_locks(other)
+        with locks[0], locks[1]:
+            for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
+                if self_node.value > other_node.value:
+                    return True
+                if self_node.value == other_node.value:
+                    continue
+                # self_node < other_node
+                return False
+            return len(self) > len(other)
 
 
     def __copy__(self):
-        return linked_list(self)
+        with self._maybe_lock:
+            return linked_list((node.value for node in self._internal_iter()))
 
     def copy(self):
         return self.__copy__()
 
     def __deepcopy__(self, memo):
         t = linked_list()
-        for value in self:
-            t.append(copy.deepcopy(value, memo))
+        append = t.append
+        with self._maybe_lock:
+            for node in self._internal_iter():
+                append(copy.deepcopy(node.value, memo))
         return t
 
     def __getstate__(self):
-        return (None, {
-            '_head': self._head,
-            '_length': self._length,
-            '_tail': self._tail,
-            })
+        with self._maybe_lock:
+            return (None, {
+                '_head': self._head,
+                '_tail': self._tail,
+                '_lock': self._lock,
+                '_maybe_lock': self._maybe_lock,
+                '_length': self._length,
+                })
 
     # new in 3.7
     if python_version_3_7_or_greater:
@@ -1517,8 +1648,13 @@ class linked_list:
             return GenericAlias(cls, (item,))
 
     def __add__(self, other):
-        t = self.__copy__()
-        t.extend(other)
+        with self._maybe_lock:
+            t = linked_list((node.value for node in self._internal_iter()))
+        if isinstance(other, linked_list):
+            with t._internal_lock() or _inert_context_manager:
+                t.extend((node.value for node in other._internal_iter()))
+        else:
+            t.extend(other)
         return t
 
     def __iadd__(self, other):
@@ -1528,12 +1664,13 @@ class linked_list:
     def __mul__(self, other):
         if not hasattr(other, '__index__'):
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
-        index = other.__index__()
-        if other <= 0:
-            return linked_list()
-        t = self.__copy__()
-        for _ in range(index - 1):
-            t.extend(self)
+        multiplicand = other.__index__()
+        t = linked_list()
+        if multiplicand <= 0:
+            return t
+        with self._maybe_lock:
+            for _ in range(multiplicand):
+                t.extend((node.value for node in self._internal_iter()))
         return t
 
     __rmul__ = __mul__
@@ -1541,30 +1678,40 @@ class linked_list:
     def __imul__(self, other):
         if not hasattr(other, '__index__'):
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
-        index = other.__index__()
-        if other <= 0:
+        multiplicand = other.__index__()
+        if multiplicand <= 0:
             return linked_list()
-        t = self.__copy__()
-        for _ in range(index - 1):
-            self.extend(t)
+        with self._maybe_lock:
+            elements = list((node.value for node in self._internal_iter()))
+            for _ in range(multiplicand - 1):
+                self.extend(elements)
         return self
 
     def __iter__(self):
+        # no locking needed! self._head and self._lock never change.
         return _secret_iterator_fun_factory(linked_list_iterator, self._head)
 
     head = __iter__
 
     def tail(self):
+        # no locking needed! self._tail and self._lock never change.
         return _secret_iterator_fun_factory(linked_list_iterator, self._tail)
 
     def __reversed__(self):
+        # no locking needed! self._tail and self._lock never change.
         return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._tail)
 
     def __bool__(self):
-        return self._length > 0
+        if self._lock is None:
+            return self._length > 0
+        with self._lock:
+            return self._length > 0
 
     def __len__(self):
-        return self._length
+        if self._lock is None:
+            return self._length
+        with self._lock:
+            return self._length
 
     def __contains__(self, value):
         return self.find(value) is not None
@@ -1806,7 +1953,7 @@ class linked_list:
 
         return it, node, start, stop, step, slice_length
 
-    def __getitem__(self, key):
+    def _getitem(self, key):
         it, node, start, stop, step, slice_length = self._parse_key(key)
 
         if stop is None: # then key is not a slice
@@ -1816,7 +1963,13 @@ class linked_list:
 
         return self.__class__(o.value for o in it)
 
-    def __setitem__(self, key, value):
+    def __getitem__(self, key):
+        if not self._lock:
+            return self._getitem(key)
+        with self._lock:
+            return self._getitem(key)
+
+    def _setitem(self, key, value):
         it, node, start, stop, step, slice_length = self._parse_key(key, for_assignment=True)
 
         if stop is None: # then key is not a slice
@@ -1883,7 +2036,14 @@ class linked_list:
         for node, v in zip(it, values):
             node.value = v
 
-    def __delitem__(self, key):
+    def __setitem__(self, key, value):
+        if not self._lock:
+            return self._setitem(key, value)
+        with self._lock:
+            return self._setitem(key, value)
+
+
+    def _delitem(self, key):
         it, node, start, stop, step, slice_length = self._parse_key(key)
 
         if stop is None: # then key is not a slice
@@ -1904,36 +2064,69 @@ class linked_list:
         if remove_me is not None:
             remove_me.remove()
 
-    def insert(self, index, object):
+    def __delitem__(self, key):
+        if not self._lock:
+            return self._delitem(key)
+        with self._lock:
+            return self._delitem(key)
+
+    def _insert(self, index, object):
         cursor = self._cursor_at_list_index(index, clamp=True)
         if cursor.special == 'head':
             cursor = cursor.next
         cursor.insert_before(object)
 
+    def insert(self, index, object):
+        if not self._lock:
+            return self._insert(index, object)
+        with self._lock:
+            return self._insert(index, object)
+
+
     def append(self, object):
-        self._tail.insert_before(object)
+        if not self._lock:
+            self._tail.insert_before(object)
+            return
+        with self._lock:
+            self._tail.insert_before(object)
 
     def prepend(self, object):
-        self._head.next.insert_before(object)
+        if not self._lock:
+            self._head.next.insert_before(object)
+            return
+        with self._lock:
+            self._head.next.insert_before(object)
 
     # some aliases for you
     rappend = prepend
 
+    def _extend(self, iterable):
+        insert_before = self._tail.insert_before
+        for value in iterable:
+            insert_before(value)
+
     def extend(self, iterable):
         if iterable is self:
             raise ValueError("can't extend self with self")
-        insert_before = self._tail.insert_before
+        if not self._lock:
+            return self._extend(iterable)
+        with self._lock:
+            return self._extend(iterable)
+
+    def _rextend(self, iterable):
+        insert_before = self._head.next.insert_before
         for value in iterable:
             insert_before(value)
 
     def rextend(self, iterable):
         if iterable is self:
             raise ValueError("can't rextend self with self")
-        insert_before = self._head.next.insert_before
-        for value in iterable:
-            insert_before(value)
+        if not self._lock:
+            return self._rextend(iterable)
+        with self._lock:
+            return self._rextend(iterable)
 
-    def clear(self):
+    def _clear(self):
         head = self._head
         tail = self._tail
 
@@ -1965,9 +2158,13 @@ class linked_list:
         previous.next = tail
         self._length = 0
 
-    def pop(self, index=-1):
-        if not hasattr(index, '__index__'):
-            raise TypeError("pop indices must be integers")
+    def clear(self):
+        if not self._lock:
+            return self._clear()
+        with self._lock:
+            return self._clear()
+
+    def _pop(self, index):
         if not self._length:
             raise ValueError('pop from empty linked_list')
         if index == -1:
@@ -1981,9 +2178,16 @@ class linked_list:
 
         return node.remove()
 
-    def rpop(self, index=0):
+    def pop(self, index=-1):
         if not hasattr(index, '__index__'):
             raise TypeError("pop indices must be integers")
+        index = index.__index__()
+        if not self._lock:
+            return self._pop(index)
+        with self._lock:
+            return self._pop(index)
+
+    def _rpop(self, index):
         if not self._length:
             raise ValueError('rpop from empty linked_list')
         if index == 0:
@@ -1996,6 +2200,15 @@ class linked_list:
                 raise SpecialNodeError()
 
         return node.remove()
+
+    def rpop(self, index=0):
+        if not hasattr(index, '__index__'):
+            raise TypeError("pop indices must be integers")
+        index = index.__index__()
+        if not self._lock:
+            return self._rpop(index)
+        with self._lock:
+            return self._rpop(index)
 
     def count(self, value):
         return self.head().count(value)
@@ -2013,340 +2226,46 @@ class linked_list:
         return self.tail().rmatch(predicate)
 
     def remove(self, value, default=_undefined):
-        it = self.head().find(value)
-        if it is None:
-            if default is not _undefined:
-                return default
-            raise ValueError('{value!r} not in linked list')
-        assert not it._cursor.special # find should never return a special node
-        return it._cursor.remove()
+        with self._maybe_lock:
+            return self.head()._remove(value, default)
 
     def rremove(self, value, default=_undefined):
-        it = self.tail().rfind(value)
-        if it is None:
-            if default is not _undefined:
-                return default
-            raise ValueError(f'{value!r} not in linked list')
-        assert not it._cursor.special # find should never return a special node
-        return it._cursor.remove()
+        with self._maybe_lock:
+            return self.tail()._rremove(value, default)
 
     def reverse(self):
-        # reverse in-place
+        with self._maybe_lock:
+            if self._length < 2:
+                # reverse is a no-op for lists of length 0 or 1
+                return self.__iter__()
 
-        if self._length < 2:
-            # reverse is a no-op for lists of length 0 or 1
-            return self.__iter__()
+            previous_r = None
+            fit = self._internal_iter()
+            rit = self._internal_reversed()
 
-        previous_fit_cursor = None
-        fit = iter(self)
-        rit = reversed(self)
+            while True:
+                f = next(fit)
+                r = next(rit)
+                if ((f == r) # odd number of nodes
+                    or (f == previous_r)): # even number of nodes (or no nodes)
+                    break
 
-        while True:
-            next(fit)
-            next(rit)
-            if ((rit._cursor == fit._cursor) # odd # of nodes
-                or (rit._cursor == previous_fit_cursor)): # even # of nodes (or no nodes)
-                break
+                tmp = f.value
+                f.value = r.value
+                r.value = tmp
 
-            tmp = fit._cursor.value
-            fit._cursor.value = rit._cursor.value
-            rit._cursor.value = tmp
-
-            previous_fit_cursor = fit._cursor
+                previous_r = r
 
     def sort(self, key=None, reverse=False):
         # copy to list, sort, then write back in-place
         # if the list has special nodes, this might be very exciting!
 
-        l = list(self)
-        l.sort(key=key, reverse=reverse)
+        with self._maybe_lock:
+            values = list((node.value for node in self._internal_iter()))
+            values.sort(key=key, reverse=reverse)
 
-        it = iter(self)
-        for v in l:
-            next(it)
-            it._cursor.value = v
-
-    def _cut(self, start, stop, is_rcut):
-        """
-        a mega function that implements cut and rcut
-        for both forward and reverse iterators.
-        (sadly this was the best approach, as there are
-        so many little if statements sprinkled within.)
-
-        if is_rcut is true, then start comes after stop.
-            start is still inclusive.
-            stop is still exclusive.
-        """
-        start_is_none = start is None
-        stop_is_none = stop is None
-
-        # compute this now, before we potentially invert is_rcut
-        _cut = "rcut" if is_rcut else "cut"
-
-        # {name}_directions is a bitfield indicating supported iterator directions:
-        #   1 means "forward"
-        #   2 means "reverse"
-        #   3 means both "forward" and "reverse"
-
-        if start_is_none:
-            start_directions = 3
-        else:
-            if not isinstance(start, linked_list_base_iterator):
-                raise TypeError(f"start is not an iterator over this linked_list, start={start!r}")
-            if start._cursor.linked_list is not self:
-                raise ValueError(f"start is not an iterator over this linked_list, start={start!r}")
-            start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
-
-        if stop_is_none:
-            stop_directions = 3
-        else:
-            if not isinstance(stop, linked_list_base_iterator):
-                raise TypeError(f"stop is not an iterator over this linked_list, stop={stop!r}")
-            if stop._cursor.linked_list is not self:
-                raise ValueError(f"stop is not an iterator over this linked_list, stop={stop!r}")
-            stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1
-
-        if not (start_directions & stop_directions):
-            raise ValueError("mismatched forward and reverse iterators for start and stop, start={start!r}, stop={stop!r}")
-
-        if (start_directions == 2) or (stop_directions == 2):
-            # if the user is cutting using reverse iterators,
-            # negate is_rcut *here*
-            is_rcut = not is_rcut
-
-        t2 = self.__class__()
-
-        if not is_rcut:
-            # cut
-            if start_is_none:
-                start = self._head.next
-            else:
-                if start._cursor is self._head:
-                    # only permissible if stop is also _head
-                    if start == stop:
-                        return t2
-                    raise SpecialNodeError(f"can't {_cut} head")
-                start = start._cursor
-
-            # convert stop to a cursor, and make it inclusive
-            if stop_is_none:
-                stop = self._tail
-            else:
-                stop = stop._cursor
-
-            if start == stop:
-                return t2
-
-            stop = stop.previous
-        else:
-            # rcut
-            if start_is_none:
-                start = self._tail.previous
-            else:
-                if start._cursor is self._tail:
-                    # only permissible if stop is also _tail
-                    if start == stop:
-                        return t2
-                    raise SpecialNodeError(f"can't {_cut} tail")
-                start = start._cursor
-
-            # convert stop to a cursor, and make it inclusive
-            if stop_is_none:
-                stop = self._head
-            else:
-                stop = stop._cursor
-
-            if start == stop:
-                return t2
-
-            stop = stop.next
-
-            # now swap start and stop
-            tmp = start
-            start = stop
-            stop = tmp
-
-        if not (start_is_none or stop_is_none):
-            # if the user specified both ends of the range,
-            # confirm that start comes before stop
-            cursor = start
-            while cursor and (cursor is not stop):
-                cursor = cursor.next
-            if not cursor:
-                raise ValueError(f"stop points to a node before start")
-
-        # everything checks out, and everything is prepared--we can cut!
-        # start and stop are now cursors (direct references to nodes),
-        # and are inclusive.
-        #
-        # and, we've already done all our memory allocation, before changing anything.
-        # (in case an allocation fails, we won't leave the original linked list
-        # in an incomplete state.)
-
-        # "previous" points to the node in self just before the cut, and
-        # "next" points to the node in self just after the cut.
-        # since first can't be head, and last can't be tail, we know
-        # previous and next are both defined.
-
-        previous = start.previous
-        next = stop.next
-
-        new_head = t2._head
-        new_tail = t2._tail
-
-        new_head.next = start
-        start.previous = new_head
-        new_tail.previous = stop
-        stop.next = new_tail
-
-        previous.next = next
-        next.previous = previous
-
-        count = 0
-        while start is not new_tail:
-            assert start is not None
-            start.linked_list = t2
-            if start.special is None:
-                count += 1
-            start = start.next
-
-        self._length -= count
-        t2._length = count
-
-        return t2
-
-
-    def cut(self, start=None, stop=None):
-        """
-        Cuts a range of nodes from start to stop.
-        The range of nodes includes start but excludes
-        stop.
-
-        Returns a new linked_list containing the cut nodes.
-
-        After the cut, the start and stop iterators
-        will still point at the same nodes, however
-        they will have been moved to the new list.
-
-        If start is None, it defaults to the first node
-        after head.  (If the list is empty, this will be tail.)
-        If stop is None, it defaults to tail.
-
-        If specified, start and stop must be iterators
-        over the current linked list.  start must not
-        be after stop.
-
-        This function won't cut head; it's an error
-        if start points to head.
-
-        start and stop may be reverse iterators, however the
-        linked list resulting from a cut will have the elements
-        in forward order.  If either start or stop is a reverse
-        iterator, then:
-
-        * start defaults to the last node before tail,
-        * stop defaults to head,
-        * start must not be after stop, and
-        * start must not point to tail.
-        """
-        return self._cut(start, stop, is_rcut=False)
-
-    def rcut(self, start=None, stop=None):
-        return self._cut(start, stop, is_rcut=True)
-
-    def _splice(self, other, where, cursor, special):
-        """
-        moves nodes from other (a linked list) to after cursor (a node).
-        """
-
-        after = cursor.next
-        assert after
-
-        other_first = other._head.next
-        other_last = other._tail.previous
-
-        cursor.next = other_first
-        other_first.previous = cursor
-
-        after.previous = other_last
-        other_last.next = after
-
-        other._head.next = other._tail
-        other._tail.previous = other._head
-
-        while cursor != after:
-            cursor.linked_list = self
-            cursor = cursor.next
-
-        self._length += other._length
-        other._length = 0
-
-        if (where is not None) and (special is not None):
-            where._cursor = special
-
-    def _splice_preflight_checks(self, other, where):
-        if not isinstance(other, linked_list):
-            raise TypeError('other must be a linked_list')
-        if other is self:
-            raise ValueError("other and self are the same")
-
-        if where is not None:
-            if not isinstance(where, linked_list_base_iterator):
-                raise TypeError('where must be a linked_list iterator over self')
-            if where._cursor.linked_list != self:
-                raise ValueError("where must be a linked_list iterator over self")
-
-    def splice(self, other, *, where=None):
-        """
-        Moves nodes from other into self, at where.
-
-        other must be a linked_list.  If successful,
-        other will be empty.  (The head and tail from
-        other don't move, but all other nodes move,
-        including special nodes.)
-
-        where must be an iterator over self, or None.
-        If where is an iterator, the nodes are inserted
-        *after* the node pointed to by where.  If where
-        is None, the nodes are appended to the list (as if
-        you had called extend).
-        """
-        self._splice_preflight_checks(other, where)
-
-        if not other:
-            return
-
-        special = None
-
-        if where is None:
-            cursor = self._tail.previous
-        else:
-            cursor = where._cursor
-            if cursor is self._tail:
-                special = cursor.insert_before(None, 'special')
-                cursor = special
-
-        self._splice(other, where, cursor, special)
-
-    def rsplice(self, other, *, where=None):
-        self._splice_preflight_checks(other, where)
-
-        if not other:
-            return
-
-        special = None
-
-        if where is None:
-            cursor = self._head
-        else:
-            cursor = where._cursor
-            if cursor.special == 'head':
-                special = cursor.next.insert_before(None, 'special')
-                cursor = special
-            else:
-                cursor = cursor.previous
-
-        self._splice(other, where, cursor, special)
+            for node, value in zip(self._internal_iter(), values):
+                node.value = value
 
 
     ##
@@ -2375,44 +2294,45 @@ class linked_list:
         The value returned will be greater than or equal
         to start, and less than stop.
         """
-        clamp = self._clamp_index
-        start = clamp(start, 'start')
-        stop = clamp(stop, 'stop')
-        if stop < start:
-            raise ValueError("stop can't be less than start")
+        with self._maybe_lock:
+            clamp = self._clamp_index
+            start = clamp(start, 'start')
+            stop = clamp(stop, 'stop')
+            if stop < start:
+                raise ValueError("stop can't be less than start")
 
-        def exp():
-            return ValueError(f'{value!r} is not in linked_list')
+            def exp():
+                return ValueError(f'{value!r} is not in linked_list')
 
-        it = iter(self)
-        # slightly clever: pass in it as "default".
-        # we know it can't be in the list, we just created it.
-        v = it.next(it)
-        if v is it:
-            raise exp()
-
-        if start == 0:
-            index = 0
-        else:
-            v = it.next(it, count=start)
+            it = iter(self)
+            # slightly clever: pass in it as "default".
+            # we know it can't be in the list, we just created it.
+            v = it.next(it)
             if v is it:
                 raise exp()
-            index = start
 
-        if stop < self._length:
-            delta = stop - start
-            assert stop >= start
-            stop = it.copy()
-            stop.next(None, count=delta)
+            if start == 0:
+                index = 0
+            else:
+                v = it.next(it, count=start)
+                if v is it:
+                    raise exp()
+                index = start
 
-        while it != stop:
-            if it[0] == value:
-                return index
-            index += 1
-            result = it.next(it)
-            if result is it:
-                raise exp()
-        raise exp()
+            if stop < self._length:
+                delta = stop - start
+                assert stop >= start
+                stop = it.copy()
+                stop.next(None, count=delta)
+
+            while it != stop:
+                if it[0] == value:
+                    return index
+                index += 1
+                result = it.next(it)
+                if result is it:
+                    raise exp()
+            raise exp()
 
 
     ##
@@ -2436,29 +2356,35 @@ class linked_list:
         if (not n) or (self._length < 2):
             return
 
-        it = (iter if n_is_negative else reversed)(self)
-        for _ in range(n + n_is_negative):
-            it.next()
+        with self._maybe_lock:
+            if n_is_negative:
+                cursor = self._head
+                for _ in range(n + 1):
+                    cursor = cursor.next
+            else:
+                cursor = self._tail
+                for _ in range(n):
+                    cursor = cursor.previous
 
-        segment_1_head = self._head.next
-        segment_1_tail = it._cursor.previous
+            segment_1_head = self._head.next
+            segment_1_tail = cursor.previous
 
-        segment_2_head = it._cursor
-        segment_2_tail = self._tail.previous
+            segment_2_head = cursor
+            segment_2_tail = self._tail.previous
 
-        assert isinstance(segment_1_head, linked_list_node)
-        assert isinstance(segment_1_tail, linked_list_node)
-        assert isinstance(segment_2_head, linked_list_node)
-        assert isinstance(segment_2_tail, linked_list_node)
+            assert isinstance(segment_1_head, linked_list_node)
+            assert isinstance(segment_1_tail, linked_list_node)
+            assert isinstance(segment_2_head, linked_list_node)
+            assert isinstance(segment_2_tail, linked_list_node)
 
-        self._head.next = segment_2_head
-        segment_2_head.previous = self._head
+            self._head.next = segment_2_head
+            segment_2_head.previous = self._head
 
-        self._tail.previous = segment_1_tail
-        segment_1_tail.next = self._tail
+            self._tail.previous = segment_1_tail
+            segment_1_tail.next = self._tail
 
-        segment_2_tail.next = segment_1_head
-        segment_1_head.previous = segment_2_tail
+            segment_2_tail.next = segment_1_head
+            segment_1_head.previous = segment_2_tail
 
     appendleft = prepend
     maxlen = None
@@ -2469,7 +2395,7 @@ _sentinel = object()
 
 @export
 class linked_list_base_iterator:
-    __slots__ = ('_cursor',)
+    __slots__ = ('_cursor', '_lock', '_maybe_lock')
 
     def __init__(self, node):
         raise TypeError("cannot create linked_list_base_iterator instances")
@@ -2477,10 +2403,13 @@ class linked_list_base_iterator:
     def __getstate__(self):
         return (None, {
             '_cursor': self._cursor,
+            '_lock': self._lock,
+            '_maybe_lock': self._maybe_lock,
             })
 
     @property
     def linked_list(self):
+        # no locking needed, this will always work
         return self._cursor.linked_list
 
     # new in 3.7
@@ -2488,43 +2417,68 @@ class linked_list_base_iterator:
         return GenericAlias(cls, (item,))
 
     def __repr__(self):
-        return f"<{self.__class__.__name__} {hex(id(self))} cursor={self._cursor!r}>"
+        with self._maybe_lock:
+            return f"<{self.__class__.__name__} {hex(id(self))} cursor={self._cursor!r}>"
 
     def __del__(self):
         # drop our reference to the current node.
         # that means decrementing node.iterator_refcount.
         # and if node.iterator_refcount reaches 0,
         # we *gotta* call unlink.
-        cursor = getattr(self, '_cursor', None)
-        if cursor is None:
-            return
-        setattr(self, '_cursor', None)
-        iterator_refcount = getattr(cursor, 'iterator_refcount', None)
-        if iterator_refcount is None:
-            return
-        iterator_refcount -= 1
-        setattr(cursor, 'iterator_refcount', iterator_refcount)
-        special = getattr(cursor, 'special', None)
-        if (not iterator_refcount) and (special == 'special'):
-            unlink = getattr(cursor, 'unlink', None)
-            if unlink is not None:
-                unlink()
+        maybe_lock = getattr(self, '_maybe_lock', _inert_context_manager)
+        with maybe_lock:
+            cursor = getattr(self, '_cursor', None)
+            if cursor is None:
+                return
+            setattr(self, '_cursor', None)
+            iterator_refcount = getattr(cursor, 'iterator_refcount', None)
+            if iterator_refcount is None:
+                return
+            iterator_refcount -= 1
+            setattr(cursor, 'iterator_refcount', iterator_refcount)
+            special = getattr(cursor, 'special', None)
+            if (not iterator_refcount) and (special == 'special'):
+                unlink = getattr(cursor, 'unlink', None)
+                if unlink is not None:
+                    unlink()
 
     def __bool__(self):
-        cursor = self._cursor
-        while True:
-            special = cursor.special
-            if special == 'tail':
-                return False
-            if special is None:
-                return True
-            cursor = cursor.next
+        "Returns True if this iterator isn't currently exhausted."
+
+        # If this iterator points at the next-to-last node,
+        # bool still returns True.
+        #
+        # An alternate proposed API for bool: return True if you can currently
+        # call next() on the iterator without it raising StopIteration.
+        #
+        # But consider this code:
+        #       t = linked_list([1, 2, 3, 4, 5])
+        #       it = t.find(5)
+        #       if it:
+        #          ...
+        #
+        # With the current semantics, it is true, so we enter the if block.
+        # If we returned False if next(it) would raise, here it would be false,
+        # so we wouldn't go inside the if block.
+        #
+        # It's more useful if it is true in the above scenario.  So, the current
+        # semantics stay.
+        with self._maybe_lock:
+            cursor = self._cursor
+            while True:
+                special = cursor.special
+                if special == 'tail':
+                    return False
+                if special is None:
+                    return True
+                cursor = cursor.next
 
     def __eq__(self, other):
-        return (
-            (self.__class__ == other.__class__)
-            and (self._cursor == other._cursor)
-            )
+        with self._maybe_lock:
+            return (
+                (self.__class__ == other.__class__)
+                and (self._cursor == other._cursor)
+                )
 
     def __iter__(self):
         return self
@@ -2533,20 +2487,23 @@ class linked_list_base_iterator:
         return self.find(value) is not None
 
     def __copy__(self):
-        return _secret_iterator_fun_factory(self.__class__, self._cursor)
+        with self._maybe_lock:
+            return _secret_iterator_fun_factory(self.__class__, self._cursor)
 
     def copy(self):
         return self.__copy__()
 
     def __len__(self):
         length = 0
-        cursor = self._cursor
-        while cursor is not None:
-            if not cursor.special:
-                length += 1
-            cursor = cursor.next
+        with self._maybe_lock:
+            cursor = self._cursor
+            while cursor is not None:
+                if not cursor.special:
+                    length += 1
+                cursor = cursor.next
+        return length
 
-    def __next__(self):
+    def _next(self):
         cursor = self._cursor
         special = cursor.special
 
@@ -2571,6 +2528,17 @@ class linked_list_base_iterator:
             raise StopIteration
         return cursor.value
 
+    def __next__(self):
+        lock = self._lock
+        if not lock:
+            return self._next()
+
+        try:
+            lock.acquire()
+            return self._next()
+        finally:
+            lock.release()
+
     def next(self, default=_undefined, *, count=1):
         if not hasattr(count, '__index__'):
             raise TypeError(f'count must be an int, not {type(count).__name__}')
@@ -2580,22 +2548,31 @@ class linked_list_base_iterator:
         if count == 0:
             return None
 
-        if default == _undefined:
-            while count > 1:
-                self.__next__()
-                count -= 1
-
-            return self.__next__()
-
+        # do this the "hard" way, for speed
+        lock = self._lock
+        if lock:
+            lock.acquire()
         try:
-            while count > 1:
-                self.__next__()
-                count -= 1
-            return self.__next__()
-        except StopIteration:
-            return default
+            next = self._next
 
-    def __previous__(self):
+            if default == _undefined:
+                while count > 1:
+                    next()
+                    count -= 1
+                return next()
+
+            try:
+                while count > 1:
+                    next()
+                    count -= 1
+                return next()
+            except StopIteration:
+                return default
+        finally:
+            if lock:
+                lock.release()
+
+    def _previous(self):
         cursor = self._cursor
         special = cursor.special
 
@@ -2620,6 +2597,17 @@ class linked_list_base_iterator:
             raise StopIteration
         return cursor.value
 
+    def __previous__(self):
+        lock = self._lock
+        if not lock:
+            return self._previous()
+
+        try:
+            lock.acquire()
+            return self._previous()
+        finally:
+            lock.release()
+
     def previous(self, default=_undefined, *, count=1):
         if not hasattr(count, '__index__'):
             raise TypeError(f'count must be an int, not {type(count).__name__}')
@@ -2629,58 +2617,71 @@ class linked_list_base_iterator:
         if count == 0:
             return None
 
-        if default == _undefined:
-            while count > 1:
-                self.__previous__()
-                count -= 1
-
-            return self.__previous__()
-
+        # do this the "hard" way, for speed
+        lock = self._lock
+        if lock:
+            lock.acquire()
         try:
-            while count > 1:
-                self.__previous__()
-                count -= 1
-            return self.__previous__()
-        except StopIteration:
-            return default
+            previous = self._previous
+            if default == _undefined:
+                while count > 1:
+                    previous()
+                    count -= 1
+
+                return previous()
+
+            try:
+                while count > 1:
+                    previous()
+                    count -= 1
+                return previous()
+            except StopIteration:
+                return default
+        finally:
+            if lock:
+                lock.release()
 
     def before(self, count=1):
-        if not hasattr(count, '__index__'):
-            raise TypeError(f'count must be an int, not {type(count).__name__}')
-        count = count.__index__()
-        if count < 0:
-            raise ValueError("count can't be negative")
-        cursor = self._cursor
-        while count:
-            cursor = cursor.previous
-            if cursor is None:
-                raise UndefinedIndexError("can't go past head")
-            if cursor.special == 'special':
-                continue
-            count -= 1
-        return _secret_iterator_fun_factory(self.__class__, cursor)
+        with self._maybe_lock:
+            if not hasattr(count, '__index__'):
+                raise TypeError(f'count must be an int, not {type(count).__name__}')
+            count = count.__index__()
+            if count < 0:
+                raise ValueError("count can't be negative")
+            cursor = self._cursor
+            while count:
+                cursor = cursor.previous
+                if cursor is None:
+                    raise UndefinedIndexError("can't go past head")
+                if cursor.special == 'special':
+                    continue
+                count -= 1
+            return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def after(self, count=1):
-        if not hasattr(count, '__index__'):
-            raise TypeError(f'count must be an int, not {type(count).__name__}')
-        count = count.__index__()
-        if count < 0:
-            raise ValueError("count can't be negative")
-        cursor = self._cursor
-        while count:
-            cursor = cursor.next
-            if cursor is None:
-                raise UndefinedIndexError("can't go past tail")
-            if cursor.special == 'special':
-                continue
-            count -= 1
-        return _secret_iterator_fun_factory(self.__class__, cursor)
+        with self._maybe_lock:
+            if not hasattr(count, '__index__'):
+                raise TypeError(f'count must be an int, not {type(count).__name__}')
+            count = count.__index__()
+            if count < 0:
+                raise ValueError("count can't be negative")
+            cursor = self._cursor
+            while count:
+                cursor = cursor.next
+                if cursor is None:
+                    raise UndefinedIndexError("can't go past tail")
+                if cursor.special == 'special':
+                    continue
+                count -= 1
+            return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def reset(self):
-        self._cursor = self._cursor.linked_list._head
+        with self._maybe_lock:
+            self._cursor = self._cursor.linked_list._head
 
     def exhaust(self):
-        self._cursor = self._cursor.linked_list._tail
+        with self._maybe_lock:
+            self._cursor = self._cursor.linked_list._tail
 
     @property
     def special(self):
@@ -2690,6 +2691,9 @@ class linked_list_base_iterator:
     def is_special(self):
         return self._cursor.special is not None
 
+    ########
+    ########   h  e  r  e
+    ########
     def _cursor_at_iterator_index(self, key, allow_head_and_tail=False):
         """
         Only returns a valid data node, head, or tail.
@@ -2745,113 +2749,137 @@ class linked_list_base_iterator:
         return it
 
     def __getitem__(self, key):
-        if isinstance(key, slice):
-            it = self._slice_iterator(key)
-            cls = type(self._cursor.linked_list)
-            return cls(node.value for node in it)
-        cursor = self._cursor_at_iterator_index(key)
-        return cursor.value
+        lock = self._lock
+        if lock:
+            lock.acquire()
+        try:
+            if isinstance(key, slice):
+                it = self._slice_iterator(key)
+                cls = type(self._cursor.linked_list)
+                return cls(node.value for node in it)
+            cursor = self._cursor_at_iterator_index(key)
+            return cursor.value
+        finally:
+            if lock:
+                lock.release()
 
     def __setitem__(self, key, value):
-        if not isinstance(key, slice):
-            cursor = self._cursor_at_iterator_index(key)
-            cursor.value = value
-            return
-
         if value is self.linked_list:
             raise ValueError("can't assign self to slice of self")
 
-        start, stop, step = self._unpack_slice(key)
-        it = self._slice_iterator(key)
-        nodes_list = list(it)
-        nodes_list_length = len(nodes_list)
+        lock = self._lock
+        if lock:
+            lock.acquire()
+        try:
+            if not isinstance(key, slice):
+                cursor = self._cursor_at_iterator_index(key)
+                cursor.value = value
+                return
 
-        values_list = list(value)
-        values_list_length = len(values_list)
+            start, stop, step = self._unpack_slice(key)
+            it = self._slice_iterator(key)
+            nodes_list = list(it)
+            nodes_list_length = len(nodes_list)
 
-        delete_me = insert_me = None
+            values_list = list(value)
+            values_list_length = len(values_list)
 
-        is_reverse = isinstance(self, linked_list_reverse_iterator)
-        if is_reverse:
-            value = reversed(value)
+            delete_me = insert_me = None
 
-        if nodes_list_length != values_list_length:
-            allowable_step = -1 if is_reverse else 1
-            if step != allowable_step:
-                raise ValueError(f"attempt to assign sequence of size {values_list_length} to extended slice of size {nodes_list_length}")
-            if nodes_list_length > values_list_length:
-                # more nodes than values
-                delete_me = nodes_list[values_list_length:]
-            else:
-                # more values than nodes
-                insert_me = values_list[nodes_list_length:]
-
-        # zip stops at the shorter of the two
-        for n, v in zip(nodes_list, values_list):
-            n.value = v
-
-        if delete_me:
-            for n in delete_me:
-                n.remove()
-        elif insert_me:
-            if nodes_list:
-                last_node = nodes_list[-1]
-            else:
-                last_node = self._cursor_at_iterator_index(stop, allow_head_and_tail=True)
-            if last_node.special in ('head', 'tail'):
-                raise UndefinedIndexError()
+            is_reverse = isinstance(self, linked_list_reverse_iterator)
             if is_reverse:
-                # last_node is actually the earliest node in the list!
-                while insert_me:
-                    last_node.insert_before(insert_me.pop())
-            else:
-                node = last_node.next
-                for v in insert_me:
-                    node.insert_before(v)
+                value = reversed(value)
+
+            if nodes_list_length != values_list_length:
+                allowable_step = -1 if is_reverse else 1
+                if step != allowable_step:
+                    raise ValueError(f"attempt to assign sequence of size {values_list_length} to extended slice of size {nodes_list_length}")
+                if nodes_list_length > values_list_length:
+                    # more nodes than values
+                    delete_me = nodes_list[values_list_length:]
+                else:
+                    # more values than nodes
+                    insert_me = values_list[nodes_list_length:]
+
+            # zip stops at the shorter of the two
+            for n, v in zip(nodes_list, values_list):
+                n.value = v
+
+            if delete_me:
+                for n in delete_me:
+                    n.remove()
+            elif insert_me:
+                if nodes_list:
+                    last_node = nodes_list[-1]
+                else:
+                    last_node = self._cursor_at_iterator_index(stop, allow_head_and_tail=True)
+                if last_node.special in ('head', 'tail'):
+                    raise UndefinedIndexError()
+                if is_reverse:
+                    # last_node is actually the earliest node in the list!
+                    while insert_me:
+                        last_node.insert_before(insert_me.pop())
+                else:
+                    node = last_node.next
+                    for v in insert_me:
+                        node.insert_before(v)
+        finally:
+            if lock:
+                lock.release()
 
     def __delitem__(self, key):
-        if not isinstance(key, slice):
-            cursor = self._cursor_at_iterator_index(key)
-            cursor.remove()
-            return
+        lock = self._lock
+        if lock:
+            lock.acquire()
+        try:
+            if not isinstance(key, slice):
+                cursor = self._cursor_at_iterator_index(key)
+                cursor.remove()
+                return
 
-        # be gentle on our lovely little list.
-        # don't remove a node while the iterator is
-        # pointing at it.
-        waiting = None
-        for n in self._slice_iterator(key):
+            # be gentle on our lovely little list.
+            # don't remove a node while the iterator is
+            # pointing at it.
+            waiting = None
+            for n in self._slice_iterator(key):
+                if waiting:
+                    waiting.remove()
+                waiting = n
+
             if waiting:
                 waiting.remove()
-            waiting = n
-
-        if waiting:
-            waiting.remove()
+        finally:
+            if lock:
+                lock.release()
 
     def insert(self, index, object):
-        cursor = self._cursor_at_iterator_index(index, allow_head_and_tail=True)
-        if cursor.special == 'head':
-            raise UndefinedIndexError()
-        cursor.insert_before(object)
+        with self._maybe_lock:
+            cursor = self._cursor_at_iterator_index(index, allow_head_and_tail=True)
+            if cursor.special == 'head':
+                raise UndefinedIndexError()
+            cursor.insert_before(object)
 
     def count(self, value):
-        cursor = self._cursor
-        tail = cursor.linked_list._tail
-        counter = 0
-        while cursor != tail:
-            if (cursor.special is None) and (cursor.value == value):
-                counter += 1
-            cursor = cursor.next
-        return counter
+        with self._maybe_lock:
+            cursor = self._cursor
+            tail = cursor.linked_list._tail
+            counter = 0
+            while cursor != tail:
+                if (cursor.special is None) and (cursor.value == value):
+                    counter += 1
+                cursor = cursor.next
+            return counter
 
     def rcount(self, value):
-        cursor = self._cursor
-        head = cursor.linked_list._head
-        counter = 0
-        while cursor != head:
-            if (cursor.special is None) and (cursor.value == value):
-                counter += 1
-            cursor = cursor.previous
-        return counter
+        with self._maybe_lock:
+            cursor = self._cursor
+            head = cursor.linked_list._head
+            counter = 0
+            while cursor != head:
+                if (cursor.special is None) and (cursor.value == value):
+                    counter += 1
+                cursor = cursor.previous
+            return counter
 
     def _pop(self, destination):
         # removes the node we're pointing at,
@@ -2871,36 +2899,51 @@ class linked_list_base_iterator:
         if not hasattr(index, '__index__'):
             raise TypeError(f'index must be an int, not {type(index).__name__}')
         index = index.__index__()
-        if index != 0:
-            value = self[index]
-            del self[index]
-            return value
-        cursor = self._cursor
-        if cursor.special == 'head':
-            raise UndefinedIndexError()
-        cursor = cursor.previous
-        while cursor.special == 'special':
+        with self._maybe_lock:
+            if index != 0:
+                value = self[index]
+                del self[index]
+                return value
+            cursor = self._cursor
+            if cursor.special == 'head':
+                raise UndefinedIndexError()
             cursor = cursor.previous
-        return self._pop(cursor)
+            while cursor.special == 'special':
+                cursor = cursor.previous
+            return self._pop(cursor)
 
     def popleft(self, index=0):
         if not hasattr(index, '__index__'):
             raise TypeError(f'index must be an int, not {type(index).__name__}')
         index = index.__index__()
-        if index != 0:
-            value = self[index]
-            del self[index]
-            return value
-        cursor = self._cursor
-        if cursor.special == 'tail':
-            raise UndefinedIndexError()
-        cursor = cursor.next
-        while cursor.special == 'special':
+        with self._maybe_lock:
+            if index != 0:
+                value = self[index]
+                del self[index]
+                return value
+            cursor = self._cursor
+            if cursor.special == 'tail':
+                raise UndefinedIndexError()
             cursor = cursor.next
-        return self._pop(cursor)
+            while cursor.special == 'special':
+                cursor = cursor.next
+            return self._pop(cursor)
+
+    def _remove(self, value, default):
+        with self._maybe_lock:
+            it = self._find(value)
+            if it:
+                return it.pop()
+        if default is not _undefined:
+            return default
+        raise ValueError(f'value {value!r} not found')
 
     def remove(self, value, default=_undefined):
-        it = self.find(value)
+        with self._maybe_lock:
+            return self._remove(value, default)
+
+    def _rremove(self, value, default):
+        it = self._rfind(value)
         if it:
             return it.pop()
         if default is not _undefined:
@@ -2908,62 +2951,58 @@ class linked_list_base_iterator:
         raise ValueError(f'value {value!r} not found')
 
     def rremove(self, value, default=_undefined):
-        it = self.rfind(value)
-        if it:
-            return it.pop()
-        if default is not _undefined:
-            return default
-        raise ValueError(f'value {value!r} not found')
+        with self._maybe_lock:
+            return self._rremove(value, default)
 
     def append(self, value):
-        # -- handle self pointing at tail, or not --
-        cursor = self._cursor
-        if cursor.special == 'tail':
-            raise UndefinedIndexError("can't append to tail")
-        cursor = cursor.next
-        # -- actually append value --
-        cursor.insert_before(value)
+        with self._maybe_lock:
+            # -- handle self pointing at tail, or not --
+            cursor = self._cursor
+            if cursor.special == 'tail':
+                raise UndefinedIndexError("can't append to tail")
+            cursor = cursor.next
+            # -- actually append value --
+            cursor.insert_before(value)
 
     def prepend(self, value):
-        # -- handle self pointing at head, or not --
-        cursor = self._cursor
-        if cursor.special == 'head':
-            raise UndefinedIndexError("can't insert before head")
-        # -- actually append value --
-        cursor.insert_before(value)
+        with self._maybe_lock:
+            # -- handle self pointing at head, or not --
+            cursor = self._cursor
+            if cursor.special == 'head':
+                raise UndefinedIndexError("can't insert before head")
+            # -- actually append value --
+            cursor.insert_before(value)
 
     appendleft = rappend = prepend
 
     def extend(self, iterable):
-        cursor = self._cursor
-        if iterable is cursor.linked_list:
-            raise ValueError("can't extend self with self")
-        # -- handle self pointing at tail, or not --
-        if cursor.special == 'tail':
-            raise UndefinedIndexError("can't append to tail")
-        cursor = cursor.next
-        # -- actually extend from iterator --
-        counter = 0
-        insert_before = cursor.insert_before
-        for value in iterable:
-            counter += 1
-            insert_before(value)
+        with self._maybe_lock:
+            cursor = self._cursor
+            if iterable is cursor.linked_list:
+                raise ValueError("can't extend self with self")
+            # -- handle self pointing at tail, or not --
+            if cursor.special == 'tail':
+                raise UndefinedIndexError("can't append to tail")
+            cursor = cursor.next
+            # -- actually extend from iterator --
+            insert_before = cursor.insert_before
+            for value in iterable:
+                insert_before(value)
 
     def rextend(self, iterable):
-        cursor = self._cursor
-        if iterable is cursor.linked_list:
-            raise ValueError("can't rextend self with self")
-        # handle self pointing at head, or not --
-        if cursor.special == 'head':
-            raise UndefinedIndexError("can't insert before head")
-        # -- actually extend from iterator --
-        counter = 0
-        insert_before = cursor.insert_before
-        for value in iterable:
-            counter += 1
-            insert_before(value)
+        with self._maybe_lock:
+            cursor = self._cursor
+            if iterable is cursor.linked_list:
+                raise ValueError("can't rextend self with self")
+            # handle self pointing at head, or not --
+            if cursor.special == 'head':
+                raise UndefinedIndexError("can't insert before head")
+            # -- actually extend from iterator --
+            insert_before = cursor.insert_before
+            for value in iterable:
+                insert_before(value)
 
-    def find(self, value):
+    def _find(self, value):
         cursor = self._cursor
 
         while True:
@@ -2973,47 +3012,57 @@ class linked_list_base_iterator:
             if special == 'tail':
                 return None
             cursor = cursor.next
+
+        return _secret_iterator_fun_factory(self.__class__, cursor)
+
+    def find(self, value):
+        with self._maybe_lock:
+            return self._find(value)
+
+    def _rfind(self, value):
+        cursor = self._cursor
+
+        while True:
+            special = cursor.special
+            if (not special) and (cursor.value == value):
+                break
+            if special == 'head':
+                return None
+            cursor = cursor.previous
 
         return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def rfind(self, value):
-        cursor = self._cursor
-
-        while True:
-            special = cursor.special
-            if (not special) and (cursor.value == value):
-                break
-            if special == 'head':
-                return None
-            cursor = cursor.previous
-
-        return _secret_iterator_fun_factory(self.__class__, cursor)
+        with self._maybe_lock:
+            return self._rfind(value)
 
     def match(self, predicate):
-        cursor = self._cursor
+        with self._maybe_lock:
+            cursor = self._cursor
 
-        while True:
-            special = cursor.special
-            if (not special) and predicate(cursor.value):
-                break
-            if special == 'tail':
-                return None
-            cursor = cursor.next
+            while True:
+                special = cursor.special
+                if (not special) and predicate(cursor.value):
+                    break
+                if special == 'tail':
+                    return None
+                cursor = cursor.next
 
-        return _secret_iterator_fun_factory(self.__class__, cursor)
+            return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def rmatch(self, predicate):
-        cursor = self._cursor
+        with self._maybe_lock:
+            cursor = self._cursor
 
-        while True:
-            special = cursor.special
-            if (not special) and predicate(cursor.value):
-                break
-            if special == 'head':
-                return None
-            cursor = cursor.previous
+            while True:
+                special = cursor.special
+                if (not special) and predicate(cursor.value):
+                    break
+                if special == 'head':
+                    return None
+                cursor = cursor.previous
 
-        return _secret_iterator_fun_factory(self.__class__, cursor)
+            return _secret_iterator_fun_factory(self.__class__, cursor)
 
     def truncate(self):
         """
@@ -3022,37 +3071,38 @@ class linked_list_base_iterator:
 
         After this operation, the iterator will point to the linked list's tail.
         """
-        cursor = self._cursor
-        t = cursor.linked_list
-        tail = t._tail
+        with self._maybe_lock:
+            cursor = self._cursor
+            t = cursor.linked_list
+            tail = t._tail
 
-        if cursor is tail:
-            return
+            if cursor is tail:
+                return
 
-        if cursor is t._head:
-            raise SpecialNodeError("can't truncate head")
+            if cursor is t._head:
+                raise SpecialNodeError("can't truncate head")
 
-        previous = cursor.previous
-        count = 0
-        while cursor is not tail:
-            if cursor.special is None:
-                count += 1
-            next = cursor.next
-            cursor.value = None
-            if cursor.iterator_refcount:
-                cursor.special = 'special'
+            previous = cursor.previous
+            count = 0
+            while cursor is not tail:
+                if cursor.special is None:
+                    count += 1
+                next = cursor.next
                 cursor.value = None
-                previous.next = cursor
-                cursor.previous = previous
-                previous = cursor
-            else:
-                cursor.previous = cursor.next = None
-            cursor = next
-        tail.previous = previous
-        previous.next = tail
+                if cursor.iterator_refcount:
+                    cursor.special = 'special'
+                    cursor.value = None
+                    previous.next = cursor
+                    cursor.previous = previous
+                    previous = cursor
+                else:
+                    cursor.previous = cursor.next = None
+                cursor = next
+            tail.previous = previous
+            previous.next = tail
 
-        self._cursor = tail
-        t._length -= count
+            self._cursor = tail
+            t._length -= count
 
     def rtruncate(self):
         """
@@ -3061,94 +3111,38 @@ class linked_list_base_iterator:
 
         After this operation, the iterator will point to the linked list's head.
         """
-        cursor = self._cursor
-        t = cursor.linked_list
-        head = t._head
+        with self._maybe_lock:
+            cursor = self._cursor
+            t = cursor.linked_list
+            head = t._head
 
-        if cursor is head:
-            return
-        if cursor is t._tail:
-            raise SpecialNodeError("can't rtruncate tail")
+            if cursor is head:
+                return
+            if cursor is t._tail:
+                raise SpecialNodeError("can't rtruncate tail")
 
-        next = cursor.next
+            next = cursor.next
 
-        count = 0
-        while cursor is not head:
-            if cursor.special is None:
-                count += 1
-            previous = cursor.previous
-            cursor.value = None
-            if cursor.iterator_refcount:
-                cursor.special = 'special'
+            count = 0
+            while cursor is not head:
+                if cursor.special is None:
+                    count += 1
+                previous = cursor.previous
                 cursor.value = None
-                next.previous = cursor
-                cursor.next = next
-                next = cursor
-            else:
-                cursor.previous = cursor.next = None
-            cursor = previous
-        head.next = next
-        next.previous = head
+                if cursor.iterator_refcount:
+                    cursor.special = 'special'
+                    cursor.value = None
+                    next.previous = cursor
+                    cursor.next = next
+                    next = cursor
+                else:
+                    cursor.previous = cursor.next = None
+                cursor = previous
+            head.next = next
+            next.previous = head
 
-        self._cursor = head
-        t._length -= count
-
-
-    def cut(self, stop=None):
-        """
-        Bisects the list at the current node.  Returns a new list.
-
-        Cuts nodes from the linked list being iterated over.  Creates
-        a new linked list, moves all cut nodes to this new linked_list,
-        and returns this new linked list.
-
-        If end is not None, it must be an iterator pointing to either
-        the same node or a subsequent node in the same linked list;
-        it's an error if end points to a preceding node, or to a node
-        in a different list.  The node pointed at by end and all
-        subsequent nodes are not cut.
-
-        If end is None, all subsequent nodes are cut, including "tail".
-        (The linked list is given a new "tail".)
-
-        If cut cuts any nodes, it always cuts the node pointed to by
-        self.
-
-        All iterators pointing at nodes moved to the new list continue to
-        point to those nodes.  This means they also move to the new list.
-        """
-        return self._cursor.linked_list.cut(self, stop)
-
-    def rcut(self, stop=None):
-        """
-        Bisects the list at the current node.  Returns a new list.
-
-        Cuts nodes from the linked list being iterated over.  Creates
-        a new linked list, moves all cut nodes to this new linked_list,
-        and returns this new linked list.
-
-        If end is not None, it must be an iterator pointing to either
-        the same node or a preceding node in the same linked list;
-        it's an error if end points to a preceding node, or to a node
-        in a different list.  The node pointed at by end and all
-        preceding nodes are not cut.
-
-        If end is None, all preceding nodes are cut, including "head".
-        (The linked list is given a new "head".)
-
-        If cut cuts any nodes, it always cuts the node pointed to by
-        self.
-
-        All iterators pointing at nodes moved to the new list continue to
-        point to those nodes.  This means they also move to the new list.
-        """
-        return self._cursor.linked_list.rcut(self, stop)
-
-    def splice(self, other):
-        self._cursor.linked_list.splice(other, where=self)
-
-    def rsplice(self, other):
-        self._cursor.linked_list.rsplice(other, where=self)
+            self._cursor = head
+            t._length -= count
 
 
 
@@ -3157,6 +3151,8 @@ class _secret_iterator_fun_factory(linked_list_base_iterator):
     def __init__(self, cls, node):
         node.iterator_refcount += 1
         self._cursor = node
+        self._lock = lock = node.linked_list._lock
+        self._maybe_lock = lock or _inert_context_manager
 
         self.__class__ = cls
 
@@ -3184,7 +3180,8 @@ class linked_list_iterator(linked_list_base_iterator):
         raise TypeError("cannot create linked_list_iterator instances")
 
     def __reversed__(self):
-        return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._cursor)
+        with self._maybe_lock:
+            return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._cursor)
 
 
 @export
@@ -3208,13 +3205,11 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         raise TypeError("cannot create linked_list_reverse_iterator instances")
 
     def __reversed__(self):
-        return _secret_iterator_fun_factory(linked_list_iterator, self._cursor)
+        with self._maybe_lock:
+            return _secret_iterator_fun_factory(linked_list_iterator, self._cursor)
 
-    def __next__(self):
-        return super().__previous__()
-
-    def __previous__(self):
-        return super().__next__()
+    _next     = linked_list_base_iterator._previous
+    _previous = linked_list_base_iterator._next
 
     @staticmethod
     def _reverse_index(index):
@@ -3252,10 +3247,12 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         return super().__delitem__(self._reverse_index(index))
 
     def reset(self):
-        self._cursor = self._cursor.linked_list._tail
+        with self._maybe_lock:
+            self._cursor = self._cursor.linked_list._tail
 
     def exhaust(self):
-        self._cursor = self._cursor.linked_list._head
+        with self._maybe_lock:
+            self._cursor = self._cursor.linked_list._head
 
     def before(self, count=1):
         return super().after(count)
@@ -3264,14 +3261,15 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         return super().before(count)
 
     def __bool__(self):
-        cursor = self._cursor
-        while True:
-            special = cursor.special
-            if special == 'head':
-                return False
-            if special is None:
-                return True
-            cursor = cursor.previous
+        with self._maybe_lock:
+            cursor = self._cursor
+            while True:
+                special = cursor.special
+                if special == 'head':
+                    return False
+                if special is None:
+                    return True
+                cursor = cursor.previous
 
     def count(self, value):
         return super().rcount(value)
@@ -3286,20 +3284,22 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         super().prepend(value)
 
     def extend(self, iterable):
-        if iterable is self._cursor.linked_list:
-            raise ValueError("can't rextend self with self")
-        super().rextend(reversed(iterable))
+        with self._maybe_lock:
+            if iterable is self._cursor.linked_list:
+                raise ValueError("can't rextend self with self")
+            super().rextend(reversed(iterable))
 
     def rextend(self, iterable):
-        if iterable is self._cursor.linked_list:
-            raise ValueError("can't rextend self with self")
-        super().extend(reversed(iterable))
+        with self._maybe_lock:
+            if iterable is self._cursor.linked_list:
+                raise ValueError("can't rextend self with self")
+            super().extend(reversed(iterable))
 
-    def pop(self):
-        return self._pop(self._cursor.next)
+    def pop(self, index=0):
+        return super().popleft(index)
 
-    def popleft(self):
-        return self._pop(self._cursor.previous)
+    def popleft(self, index=0):
+        return super().pop(index)
 
     def find(self, value):
         return super().rfind(value)
@@ -3319,24 +3319,15 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     def rtruncate(self):
         super().truncate()
 
-    # cut/rcut logic is sufficiently complicated, we handle all the reverse-iterator
-    # and reversing stuff inside linked_list itself.  we don't even need to
-    # swap them here, linked_list.cut/rcut will handle it.
-
-    def splice(self, other):
-        super().rsplice(other)
-
-    def rsplice(self, other):
-        super().splice(other)
-
     def __len__(self):
-        length = 0
-        cursor = self._cursor
-        while cursor is not None:
-            if not cursor.special:
-                length += 1
-            cursor = cursor.previous
-        return length
+        with self._maybe_lock:
+            length = 0
+            cursor = self._cursor
+            while cursor is not None:
+                if not cursor.special:
+                    length += 1
+                cursor = cursor.previous
+            return length
 
 
 del export
