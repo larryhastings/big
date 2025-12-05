@@ -49,11 +49,6 @@ import weakref
 
 
 __all__ = [
-    "BoundInnerClass",
-    "UnboundInnerClass",
-    "rebind",
-    "class_bound_to",
-    "instance_bound_to",
 ]
 
 def export(fn):
