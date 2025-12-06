@@ -9,6 +9,7 @@ import weakref
 
 from big.boundinnerclass import (
     BoundInnerClass,
+    ClassRegistry,
     UnboundInnerClass,
     _BoundInnerClassBase,
     _ClassProxy,
@@ -862,13 +863,13 @@ class TestNewEdgeCases(unittest.TestCase):
         class Base:
             pass
         Base.__name__ = 'Inner'  # Same name as the inner class
-        
+
         class Outer:
             @BoundInnerClass
             class Inner(Base):
                 def __init__(self, outer):
                     self.outer = outer
-        
+
         # This triggers the same-name skip in __get__
         o = Outer()
         i = o.Inner()
@@ -879,16 +880,16 @@ class TestNewEdgeCases(unittest.TestCase):
         class Parent:
             def __init__(self):  # pragma: nocover
                 pass
-        
+
         class Child(Parent):
             def __init__(self):  # pragma: nocover
                 super().__init__()
-        
+
         # Create a class that looks like a bound inner class but isn't
         class FakeBound:
             def __init__(self):  # pragma: nocover
                 pass
-        
+
         with self.assertRaises(ValueError) as cm:
             rebind(Child, FakeBound)
         self.assertIn("doesn't appear to be a bound inner class", str(cm.exception))
@@ -966,12 +967,12 @@ class TestRegressions(unittest.TestCase):
     def test_nested_boundinnerclass_inheritance_single_outer_injection(self):
         """
         Regression test: nested BoundInnerClass inheritance should inject outer only once.
-        
+
         Bug: When class C inherits from class B which inherits from class A,
         and all three are BoundInnerClasses, each wrapper's __init__ was calling
         super().__init__(outer, *args), causing outer to be passed multiple times.
         This resulted in "takes N arguments but N+M were given" errors.
-        
+
         Fix: Changed wrappers to call cls.__init__ directly instead of super().__init__.
         """
         class Outer:
@@ -980,26 +981,121 @@ class TestRegressions(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
                     self.grandparent_called = True
-            
+
             @BoundInnerClass
             class Parent(GrandParent):
                 def __init__(self, outer):
                     super().__init__()
                     self.parent_called = True
-            
+
             @BoundInnerClass
             class Child(Parent):
                 def __init__(self, outer):
                     super().__init__()
                     self.child_called = True
-        
+
         o = Outer()
-        
+
         # This used to raise: "takes 2 positional arguments but 4 were given"
         c = o.Child()
-        
+
         # Verify all __init__ methods were called correctly
         self.assertIs(c.outer, o)
         self.assertTrue(c.grandparent_called)
         self.assertTrue(c.parent_called)
         self.assertTrue(c.child_called)
+
+
+class TestClassRegistry(unittest.TestCase):
+    """Tests for ClassRegistry."""
+
+    def test_register_and_access_by_attribute(self):
+        """Classes can be registered and accessed as attributes."""
+
+
+        registry = ClassRegistry()
+
+        @registry()
+        class Foo:
+            pass
+
+        self.assertIs(registry.Foo, Foo)
+
+    def test_register_with_custom_name(self):
+        """Classes can be registered with a custom name."""
+
+
+        registry = ClassRegistry()
+
+        @registry('CustomName')
+        class Foo:
+            pass
+
+        self.assertIs(registry.CustomName, Foo)
+        self.assertNotIn('Foo', registry)
+
+    def test_attribute_error_for_missing(self):
+        """Accessing missing attribute raises AttributeError."""
+
+
+        registry = ClassRegistry()
+
+        with self.assertRaises(AttributeError) as cm:
+            registry.NonExistent
+        self.assertEqual(str(cm.exception), 'NonExistent')
+
+    def test_use_for_inheritance(self):
+        """Registry can be used for cross-scope inheritance."""
+
+
+        base = ClassRegistry()
+
+        @base()
+        class Parent:
+            x = 1
+
+        class Child(base.Parent):
+            y = 2
+
+        self.assertTrue(issubclass(Child, Parent))
+        self.assertEqual(Child.x, 1)
+        self.assertEqual(Child.y, 2)
+
+    def test_with_boundinnerclass(self):
+        """Registry works with BoundInnerClass decorator."""
+
+
+        base = ClassRegistry()
+
+        class Outer:
+            @base()
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+            @BoundInnerClass
+            class Child(base.Parent):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.child = True
+
+        o = Outer()
+        c = o.Child()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child)
+
+    def test_dict_operations_still_work(self):
+        """Registry still works as a dict."""
+
+
+        registry = ClassRegistry()
+
+        @registry()
+        class Foo:
+            pass
+
+        self.assertIn('Foo', registry)
+        self.assertEqual(len(registry), 1)
+        self.assertEqual(list(registry.keys()), ['Foo'])
+        self.assertEqual(list(registry.values()), [Foo])
