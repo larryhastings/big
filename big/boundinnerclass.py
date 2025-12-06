@@ -44,21 +44,14 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+__all__ = []
+
+def export(o):
+    __all__.append(o.__name__)
+    return o
+
 import inspect
 import weakref
-
-
-__all__ = [
-    "BoundInnerClass",
-    "UnboundInnerClass",
-    "rebind",
-    "class_bound_to",
-    "instance_bound_to",
-]
-
-def export(fn):
-    __all__.append(fn.__name__)
-    return fn
 
 
 def _make_bound_signature(original_init):
@@ -185,7 +178,7 @@ class _ClassProxy:
 
 
 # Storage attribute name for bound inner classes cache
-_CACHE_ATTR = '__boundinnerclass__'
+_CACHE_ATTR = '__bound_inner_classes__'
 
 
 def _get_cache(outer):
@@ -197,11 +190,11 @@ def _get_cache(outer):
         try:
             object.__setattr__(outer, _CACHE_ATTR, cache)
         except AttributeError:
-            # outer uses __slots__ and doesn't have __boundinnerclass__
+            # outer uses __slots__ and doesn't have __bound_inner_classes__
             # (If outer had __dict__, object.__setattr__ would have succeeded)
             raise TypeError(
                 f"Cannot cache bound inner class on {type(outer).__name__}. "
-                f"Add {_CACHE_ATTR!r} to __slots__ or include '__dict__'."
+                f"Add '__bound_inner_classes__' to __slots__ or include '__dict__'."
             ) from None
     return cache
 
@@ -466,3 +459,61 @@ def instance_bound_to(obj, outer):
         This is NOT transitive.
     """
     return class_bound_to(type(obj), outer)
+
+
+@export
+class ClassRegistry(dict):
+    """
+    A dict subclass that enables attribute-style access and works as a decorator.
+
+    Python scoping rules make heavy nested-classes techniques clumsy.
+    ClassRegistry provides an easy way to access references to base classes
+    that you want to subclass in a different class scope.  Just decorate
+    the base classes you need with a call to the ClassRegistry object,
+    then access the base classes as attributes on the ClassRegistry.
+    You can assign a custom name to the attribute by passing in a string
+    when you call the ClassRegistry.
+
+    Example:
+        # Create a registry
+        base = ClassRegistry()
+
+        # Register a class using the decorator
+        @base()
+        class Dingus:
+            pass
+
+        # Now access it as an attribute
+        class Doodad(base.Dingus):
+            pass
+
+        # Register with a custom name
+        @base('MyName')
+        class SomeClass:
+            pass
+
+        # Access via custom name
+        class Other(base.MyName):
+            pass
+
+    When used with BoundInnerClass, put @base() above @BoundInnerClass:
+
+        @base()
+        @BoundInnerClass
+        class Transaction(base.Signaling):
+            pass
+    """
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+    def __call__(self, name=None):
+        """Decorator factory to register a class."""
+        def decorator(cls):
+            key = name if name is not None else cls.__name__
+            self[key] = cls
+            return cls
+        return decorator

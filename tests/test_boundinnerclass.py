@@ -1,45 +1,24 @@
 #!/usr/bin/env python3
 
-_license = """
-big
-Copyright 2022-2025 Larry Hastings
-All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-"""
-
-import bigtestlib
-bigtestlib.preload_local_big()
-
-import big.all as big
-from big.boundinnerclass import *
+"""Tests for boundinnerclass module."""
 
 import inspect
-import itertools
-import re
 import types
 import unittest
 import weakref
 
-
-from big.boundinnerclass import _BoundInnerClassBase, _CACHE_ATTR, _ClassProxy, _make_bound_signature
-
+from big.boundinnerclass import (
+    BoundInnerClass,
+    ClassRegistry,
+    UnboundInnerClass,
+    _BoundInnerClassBase,
+    _ClassProxy,
+    _CACHE_ATTR,
+    _make_bound_signature,
+    class_bound_to,
+    instance_bound_to,
+    rebind,
+)
 
 
 class TestBoundInnerClass(unittest.TestCase):
@@ -181,7 +160,7 @@ class TestUnboundInnerClass(unittest.TestCase):
                     self.outer = outer
 
             @UnboundInnerClass
-            class Child(Parent.cls):
+            class Child(Parent):
                 def __init__(self):
                     super().__init__()
 
@@ -194,6 +173,27 @@ class TestUnboundInnerClass(unittest.TestCase):
 class TestInheritance(unittest.TestCase):
     """Tests for inheritance with bound inner classes."""
 
+    def test_inherit_without_cls_hack(self):
+        """Subclassing works without .cls - __mro_entries__ handles it."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+            # No .cls needed!
+            @BoundInnerClass
+            class Child(Parent):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.child = True
+
+        o = Outer()
+        c = o.Child()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child)
+        self.assertIsInstance(c, Outer.Parent)
+
     def test_inherit_from_bound_inner_class(self):
         """Subclass of BIC inside outer class works correctly."""
         class Outer:
@@ -203,7 +203,7 @@ class TestInheritance(unittest.TestCase):
                     self.outer = outer
 
             @BoundInnerClass
-            class Child(Parent.cls):
+            class Child(Parent):
                 def __init__(self, outer, x):
                     super().__init__()
                     self.x = x
@@ -222,7 +222,7 @@ class TestInheritance(unittest.TestCase):
                     self.outer = outer
 
             @UnboundInnerClass
-            class Child(Parent.cls):
+            class Child(Parent):
                 def __init__(self):
                     super().__init__()
 
@@ -392,9 +392,9 @@ class TestSlotsCompatibility(unittest.TestCase):
         self.assertIn(_CACHE_ATTR, o.__dict__)
 
     def test_outer_with_slots_and_cache_slot(self):
-        """Works with __slots__ that includes __boundinnerclass__ and __weakref__."""
+        """Works with __slots__ that includes __bound_inner_classes__ and __weakref__."""
         class Outer:
-            __slots__ = ('__boundinnerclass__', '__weakref__', 'x')
+            __slots__ = ('__bound_inner_classes__', '__weakref__', 'x')
 
             @BoundInnerClass
             class Inner:
@@ -417,7 +417,7 @@ class TestSlotsCompatibility(unittest.TestCase):
         o = Outer()
         with self.assertRaises(TypeError) as cm:
             o.Inner
-        self.assertIn('__boundinnerclass__', str(cm.exception))
+        self.assertIn('__bound_inner_classes__', str(cm.exception))
 
 
 class TestWeakref(unittest.TestCase):
@@ -588,6 +588,37 @@ class TestClassProxyBehavior(unittest.TestCase):
         descriptor = Outer.__dict__['Inner']
         self.assertIs(descriptor.cls, Outer.Inner)
 
+    def test_cls_backward_compatibility_for_inheritance(self):
+        """The .cls property works for inheritance (backward compatibility)."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+            # Old-style using .cls still works
+            @BoundInnerClass
+            class Child(Parent.cls):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.child = True
+
+            @UnboundInnerClass
+            class UnboundChild(Parent.cls):
+                def __init__(self):
+                    super().__init__()
+
+        o = Outer()
+
+        # BoundInnerClass with .cls works
+        c = o.Child()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child)
+
+        # UnboundInnerClass with .cls works
+        uc = o.UnboundChild()
+        self.assertIs(uc.outer, o)
+
     def test_proxy_repr(self):
         """Proxy has informative repr."""
         class Outer:
@@ -667,7 +698,7 @@ class TestClassProxyChecks(unittest.TestCase):
                 pass
 
             @BoundInnerClass
-            class Child(Parent.cls):
+            class Child(Parent):
                 pass
 
         parent_desc = Outer.__dict__['Parent']
@@ -832,13 +863,13 @@ class TestNewEdgeCases(unittest.TestCase):
         class Base:
             pass
         Base.__name__ = 'Inner'  # Same name as the inner class
-        
+
         class Outer:
             @BoundInnerClass
             class Inner(Base):
                 def __init__(self, outer):
                     self.outer = outer
-        
+
         # This triggers the same-name skip in __get__
         o = Outer()
         i = o.Inner()
@@ -847,18 +878,18 @@ class TestNewEdgeCases(unittest.TestCase):
     def test_rebind_with_non_bound_class_raises(self):
         """rebind raises ValueError if bound_parent isn't a bound inner class."""
         class Parent:
-            def __init__(self):
+            def __init__(self):  # pragma: nocover
                 pass
-        
+
         class Child(Parent):
-            def __init__(self):
+            def __init__(self):  # pragma: nocover
                 super().__init__()
-        
+
         # Create a class that looks like a bound inner class but isn't
         class FakeBound:
-            def __init__(self):
+            def __init__(self):  # pragma: nocover
                 pass
-        
+
         with self.assertRaises(ValueError) as cm:
             rebind(Child, FakeBound)
         self.assertIn("doesn't appear to be a bound inner class", str(cm.exception))
@@ -936,12 +967,12 @@ class TestRegressions(unittest.TestCase):
     def test_nested_boundinnerclass_inheritance_single_outer_injection(self):
         """
         Regression test: nested BoundInnerClass inheritance should inject outer only once.
-        
+
         Bug: When class C inherits from class B which inherits from class A,
         and all three are BoundInnerClasses, each wrapper's __init__ was calling
         super().__init__(outer, *args), causing outer to be passed multiple times.
         This resulted in "takes N arguments but N+M were given" errors.
-        
+
         Fix: Changed wrappers to call cls.__init__ directly instead of super().__init__.
         """
         class Outer:
@@ -950,24 +981,24 @@ class TestRegressions(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
                     self.grandparent_called = True
-            
+
             @BoundInnerClass
-            class Parent(GrandParent.cls):
+            class Parent(GrandParent):
                 def __init__(self, outer):
                     super().__init__()
                     self.parent_called = True
-            
+
             @BoundInnerClass
-            class Child(Parent.cls):
+            class Child(Parent):
                 def __init__(self, outer):
                     super().__init__()
                     self.child_called = True
-        
+
         o = Outer()
-        
+
         # This used to raise: "takes 2 positional arguments but 4 were given"
         c = o.Child()
-        
+
         # Verify all __init__ methods were called correctly
         self.assertIs(c.outer, o)
         self.assertTrue(c.grandparent_called)
@@ -975,9 +1006,96 @@ class TestRegressions(unittest.TestCase):
         self.assertTrue(c.child_called)
 
 
-def run_tests():
-    bigtestlib.run(name="big.boundinnerclass", module=__name__)
+class TestClassRegistry(unittest.TestCase):
+    """Tests for ClassRegistry."""
 
-if __name__ == "__main__": # pragma: no cover
-    run_tests()
-    bigtestlib.finish()
+    def test_register_and_access_by_attribute(self):
+        """Classes can be registered and accessed as attributes."""
+
+
+        registry = ClassRegistry()
+
+        @registry()
+        class Foo:
+            pass
+
+        self.assertIs(registry.Foo, Foo)
+
+    def test_register_with_custom_name(self):
+        """Classes can be registered with a custom name."""
+
+
+        registry = ClassRegistry()
+
+        @registry('CustomName')
+        class Foo:
+            pass
+
+        self.assertIs(registry.CustomName, Foo)
+        self.assertNotIn('Foo', registry)
+
+    def test_attribute_error_for_missing(self):
+        """Accessing missing attribute raises AttributeError."""
+
+
+        registry = ClassRegistry()
+
+        with self.assertRaises(AttributeError) as cm:
+            registry.NonExistent
+        self.assertEqual(str(cm.exception), 'NonExistent')
+
+    def test_use_for_inheritance(self):
+        """Registry can be used for cross-scope inheritance."""
+
+
+        base = ClassRegistry()
+
+        @base()
+        class Parent:
+            x = 1
+
+        class Child(base.Parent):
+            y = 2
+
+        self.assertTrue(issubclass(Child, Parent))
+        self.assertEqual(Child.x, 1)
+        self.assertEqual(Child.y, 2)
+
+    def test_with_boundinnerclass(self):
+        """Registry works with BoundInnerClass decorator."""
+
+
+        base = ClassRegistry()
+
+        class Outer:
+            @base()
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+            @BoundInnerClass
+            class Child(base.Parent):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.child = True
+
+        o = Outer()
+        c = o.Child()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child)
+
+    def test_dict_operations_still_work(self):
+        """Registry still works as a dict."""
+
+
+        registry = ClassRegistry()
+
+        @registry()
+        class Foo:
+            pass
+
+        self.assertIn('Foo', registry)
+        self.assertEqual(len(registry), 1)
+        self.assertEqual(list(registry.keys()), ['Foo'])
+        self.assertEqual(list(registry.values()), [Foo])
