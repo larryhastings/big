@@ -470,8 +470,6 @@ And here are five little functions/classes I use all the time:
 
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
 
-[**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
-
 [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
 [**Bound inner classes**](#bound-inner-classes)
@@ -2370,7 +2368,6 @@ for a higher-level view of those families, read the
 following deep-dives:
 
 * [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
-* [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 * [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
 All the functions in `big.text` will work with either
@@ -2420,8 +2417,7 @@ A tuple of `str` objects, representing every line-breaking whitespace
 character defined by ASCII.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.
 If you don't want to include this string, use [`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf) instead.
@@ -2450,8 +2446,7 @@ A tuple of `str` objects, representing every whitespace
 character defined by ASCII.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.
 If you don't want to include this string, use [`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf) instead.
@@ -2481,8 +2476,7 @@ A tuple of `bytes` objects, representing every line-breaking whitespace
 character recognized by the Python `bytes` object.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `b'\r\n'`.
 If you don't want to include this string, use [`bytes_linebreaks_without_crlf`](#bytes_linebreaks_without_crlf) instead.
@@ -2512,8 +2506,7 @@ character recognized by the Python `bytes` object.  (`bytes.isspace`,
 `bytes.split`, etc will tell you which characters are considered whitespace...)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `b'\r\n'`.
 If you don't want to include this string, use [`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf) instead.
@@ -2829,8 +2822,7 @@ whitespace character recognized by the Python `str` object.
 Identical to [`str_linebreaks`.](#str_linebreaks)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
@@ -2851,418 +2843,6 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 
 </dd></dl>
 
-
-#### `LineInfo(lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`
-
-<dl><dd>
-
-The first object in the 2-tuple yielded by a
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-iterator, containing metadata about the line.
-Every parameter to the constructor is stored as
-an attribute of the new `LineInfo` object using
-the same identifier.
-
-`line` is the original unmodified line, split
-from the original `s` input to `lines`.  Note
-that `line` includes the trailing newline character,
-if any.
-
-`line_number` is the line number of this line.
-`
-`column_number` is the starting column of the
-accompanying `line` string (the second entry
-in the 2-tuple yielded by `lines`).
-
-`leading` and `trailing` are strings that have
-been stripped from the beginning or end of the
-original `line`, if any.  (Not counting the
-line-terminating linebreak character.)
-
-`end` is the linebreak character that terminated
-the current line, if any.  If the `s` passed in to
-`lines` is an iterator yielding strings, `end`
-will always be an empty string.
-
-`indent` is the indent level of the current line,
-represented as an integer.  See [`lines_strip_indent`](#lines_strip_indentli).
-If the indent level hasn't been measured yet this
-should be `0`.
-
-`match` is the `re.Match` object that matched this
-line, if any.  See [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch).
-
-You can add your own fields by passing them in
-via `**kwargs`; you can also add new attributes
-or modify existing attributes as needed from
-inside a "lines modifier" function.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `LineInfo.clip_leading(line, s)`
-
-<dl><dd>
-
-Clip the leading substring `s` from `line`.
-
-`s` may be either a string (`str` or `bytes`) or an `int`.
-If `s` is a string, it must match the leading substring
-of `line` you wish clipped.  If `s` is an `int`, it should
-representing the number of characters you want clipped
-from the beginning of `s`.
-
-Returns `line` with `s` clipped; also appends
-the clipped portion to `self.leading`, and updates
-`self.column_number` to represent the column number
-where `line` now starts.  (If the clipped portion of
-`line` contains tabs, it's detabbed using `lines.tab_width`
-and the `detab` method on the clipped substring before it
-is measured.)
-
-</dd></dl>
-
-#### `LineInfo.clip_trailing(line, s)`
-
-<dl><dd>
-
-Clip the trailing substring `s` from `line`.
-
-`s` may be either a string (`str` or `bytes`) or an `int`.
-If `s` is a string, it must match the trailing substring
-of `line` you wish clipped.  If `s` is an `int`, it should
-representing the number of characters you want clipped
-from the end of `s`.
-
-Returns `line` with `s` clipped; also appends
-the clipped portion to `self.trailing`.
-
-
-</dd></dl>
-
-#### `LineInfo.copy()`
-
-<dl><dd>
-
-Returns a copy of the `LineInfo` object,
-including all current state (e.g. `leading`, `trailing`).
-
-</dd></dl>
-
-
-#### `lines(s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, tab_width=8, **kwargs)`
-
-<dl><dd>
-
-A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
-
-
-When iterated over, yields 2-tuples:
-
-```
-     (info, line)
-```
-
-where `info` is a
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object, and `line` is a `str` or `bytes` object.
-
-`s` can be `str`, `bytes`, or an iterable.
-
-If `s` is neither `str` nor `bytes`, `s` must be an iterable.
-The iterable should either yield individual strings, which is the
-line, or it should yield a tuple containing two strings, in which case
-the strings should be the line and the line-terminating newline respectively.
-All "string" objects yielded by this iterable should be homogeneous,
-either `str` or `bytes`.
-
-`separators` should either be `None` or an iterable of separator strings,
-as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
-it will be split using `multisplit`, using these separators.  If
-`separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
-`s` will be split at linebreak characters.  (If `s` is neither `str` nor `bytes`,
-`separators` must be `None`.)
-
-`line_number` is the starting line number given to the first
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object.  This number is then incremented for every subsequent line.
-
-`column_number` is the starting column number given to every
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object.  This number represents the leftmost column of every line.
-
-`tab_width` isn't used by lines itself, but is stored internally and
-may be used by other lines modifier functions (e.g. [`lines_strip_indent`](#lines_strip_indentli),
-`lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
-in via kwargs are stored internally and can be accessed by user-defined
-lines modifier functions.
-
-`lines` copies the line-breaking character (usually `\n`) from each line
-to `info.end`. If `clip_linebreaks` is true (the default), `lines` will clip
-the line-breaking character off the end of each line.  If `clip_linebreaks`
-is false, `lines` will leave the line-breaking character in place.
-
-You can pass in an instance of a subclass of `bytes` or `str`
-for `s` and elements of `separators`, but the base class
-for both must be the same (`str` or `bytes`).  `lines` will
-only yield `str` or `bytes` objects for `line`.
-
-Composable with all the `lines_` modifier functions in the `big.text` module.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-
-#### `lines_convert_tabs_to_spaces(li)`
-
-<dl><dd>
-
-A lines modifier function.  Converts tabs to spaces for the lines
-of a "lines iterator", using the `tab_width` passed in to
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_filter_empty_lines(li)`
-
-<dl><dd>
-
-A lines modifier function.  Filters out the empty lines
-of a "lines iterator".
-
-Preserves the line numbers.  If lines 0 through 2 are empty,
-line 3 is `'a'``, line 4 is empty, and line 5 is `'b'``, this will yield:
-```
-    (LineInfo(line='a', line_number=3), 'a')
-    (LineInfo(line='b', line_number=5), 'b')
-```
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_filter_line_comment_lines(li, comment_markers)`
-
-<dl><dd>
-
-A lines modifier function.  Filters out comment lines from the
-lines of a "lines iterator".  Comment lines are lines whose
-first non-whitespace characters appear in the iterable of
-`comment_separators` strings passed in.
-
-What's the difference between
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
-and
-`lines_filter_line_comment_lines`?
-
-* `lines_filter_line_comment_lines`
-  only recognizes lines that *start* with a comment separator
-  (ignoring leading whitespace).  Also, it filters out those
-  lines completely, rather than modifying the line.
-* [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
-  handles comment markers anywhere in the line, and it can also ignore
-  comments inside quoted strings.  It truncates the line but still always
-  yields the line.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_containing(li, s, *, invert=False)`
-
-<dl><dd>
-
-A lines modifier function.  Only yields lines
-that contain `s`.  (Filters out lines that
-don't contain `s`.)
-
-If `invert` is true, returns the opposite--filters
-out lines that contain `s`.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_grep(li, pattern, *, invert=False, flags=0, match='match')`
-
-<dl><dd>
-
-A lines modifier function.  Only yields lines
-that match the regular expression `pattern`.
-(Filters out lines that don't match `pattern`.)
-Stores the resulting `re.Match` object in `info.match`.
-
-`pattern` can be `str`, `bytes`, or an `re.Pattern` object.
-If `pattern` is not an `re.Pattern` object, it's compiled
-with `re.compile(pattern, flags=flags)`.
-
-If `invert` is true, returns the opposite--filters
-out lines that match `pattern`.
-
-The match parameter specifies the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-attribute name to
-write to.  By default it writes to `info.match`; you can specify
-any valid identifier, and it will instead write the `re.Match`
-object (or `None`) to the identifier you specify.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-
-(In older versions of Python, `re.Pattern` was a private type called
-`re._pattern_type`.)
-</dd></dl>
-
-#### `lines_rstrip(li, separators=None)`
-
-<dl><dd>
-
-A lines modifier function.  Strips trailing whitespace from the
-lines of a "lines iterator".
-
-`separators` is an iterable of separators, like the argument
-to `multistrip`.  The default value is `None`, which means
-`lines_rstrip` strips all trailing whitespace characters.
-
-All characters removed are clipped to `info.trailing`
-as appropriate.  If the line is non-empty before stripping, and
-empty after stripping, the entire line is clipped to `info.trailing`.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_sort(li, *, key=None, reverse=False)`
-
-<dl><dd>
-
-A lines modifier function.  Sorts all input lines before
-yielding them.
-
-If `key` is specified, it's used as the `key` parameter to `list.sort`.
-The `key` function will be called with the `(info, line)`` tuple yielded
-by the *lines iterator.*  If `key` is a false value, `lines_sort`
-sorts the lines lexicographically, from lowest to highest.
-
-If `reverse` is true, lines are sorted from highest to lowest.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip(li, separators=None)`
-
-<dl><dd>
-
-A lines modifier function.  Strips leading and trailing strings
-from the lines of a "lines iterator".
-
-`separators` is an iterable of separators, like the argument
-to `multistrip`.  The default value is `None`, which means
-`lines_strip` strips all leading and trailing whitespace characters.
-
-All characters are clipped to `info.leading` and `info.trailing`
-as appropriate.  If the line is non-empty before stripping, and
-empty after stripping, the entire line is clipped to `info.trailing`.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip_indent(li)`
-
-<dl><dd>
-
-A lines modifier function.  Strips leading whitespace and tracks
-the indent level.
-
-The indent level is stored in the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object's attribute
-`indent`.  `indent` is an integer, the ordinal number of the current
-indent; if the text has been indented three times, `indent` will be 3.
-
-Strips any leading whitespace from the line, updating the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-attributes `leading` and `column_number` as needed.
-
-Uses an intentionally simple algorithm.
-Only understands tab and space characters as indent characters.
-Internally detabs to spaces first for consistency, using the
-`tab_width` passed in to lines.
-
-You can only dedent out to a previous indent.
-Raises `IndentationError` if there's an illegal dedent.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`
-
-<dl><dd>
-
-A lines modifier function.  Strips comments from the lines
-of a "lines iterator".  Comments are substrings that indicate
-the rest of the line should be ignored; `lines_strip_line_comments`
-truncates the line at the beginning of the leftmost comment
-separator.
-
-`line_comment_markers` should be an iterable of line comment
-marker strings.  These are strings that denote a "line comment",
-which is to say, a comment that starts at that marker and extends
-to the end of the line.
-
-By default, `quotes` and `multiline_quotes` are both false,
-in which case `lines_strip_line_comments` will truncate each
-line, starting at the leftmost comment marker, and yield
-the resulting line.  If the line doesn't contain any comment
-markers, `lines_strip_line_comments` will yield it unchanged.
-
-However, the syntax of the text you're parsing might support
-quoted strings, and if so, comment marks in those quoted strings
-should be ignored.  `lines_strip_quoted_strings` supports this
-too, with its `escape`, `quotes`, and `multiline_quotes` parameters.
-
-If `quotes` is true, it must be an iterable of quote characters.
-`lines_strip_line_comments` will parse the line using **big**'s
-[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
-function and ignore comment
-markers inside quoted strings.  Quote marks must be balanced; if you
-open a quoted string, you must close it.  If a line ends with an
-quoted string still open, `lines_strip_line_comments` will raise
-`SyntaxError`.
-
-`multiline_quotes` is similar to `quotes`, except quoted strings are
-permitted to span lines.  If the iterator stops iteration with a
-multiline quoted string still open, `lines_strip_line_comments`
-will raise `SyntaxError`.
-
-`escape` specifies an escape string to allow having the closing quote
-marker inside a quoted string without closing ending the string.
-If false, there is no escape string.
-
-What's the difference between
-`lines_strip_line_comments`
-and
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)?
-
-* [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
-  only recognizes lines that *start* with a comment separator
-  (ignoring leading whitespace).  Also, it filters out those lines
-  completely, rather than modifying the line.
-* `lines_strip_line_comments`
-  handles comment markers anywhere in the line, and it can even ignore
-  comments inside quoted strings.  It always yields the line, whether or
-  not it's truncated the line.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
 
 #### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
 
@@ -4106,8 +3686,7 @@ whitespace character recognized by the Python `str` object.
 Identical to [`linebreaks`.](#linebreaks)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
@@ -4136,8 +3715,7 @@ character recognized by the Python `str` object.
 Identical to [`whitespace`.](#whitespace)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
@@ -4165,8 +3743,7 @@ A tuple of `str` objects, representing every line-breaking
 whitespace character defined by Unicode.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
@@ -4194,8 +3771,7 @@ A tuple of `str` objects, representing every whitespace
 character defined by Unicode.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
@@ -4224,8 +3800,7 @@ character recognized by the Python `str` object.
 Identical to [`str_whitespace`.](#str_whitespace)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.  See the deep-dive section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
@@ -4423,12 +3998,12 @@ fractional seconds: a float, a `datetime` object, or the
 value `None`.
 </dd></dl>
 
-#### `timestamp_human(t=None, want_microseconds=None)`
+#### `timestamp_human(t=None, want_microseconds=None, *, tzinfo=None)`
 
 <dl><dd>
 
 Return a timestamp string formatted in a pleasing way
-using the currently-set local timezone.  This format
+for the local timezone (by default).  This format
 is intended for human readability; for computer-parsable
 time, use `timestamp_3339Z()`.
 
@@ -4438,19 +4013,20 @@ Example timestamp: `"2021/05/24 23:42:49.099437"`
 
 * If `t` is `None`, `timestamp_human` uses the current local time.
 * If `t` is an int or float, it's interpreted as seconds since the epoch.
-* If `t` is a `time.struct_time` or `datetime.datetime` object,
-  it's converted to the local timezone.
+* If `t` is a `time.struct_time`, it's converted to a `datetime.datetime` object.
+* If `t` is a `datetime.datetime` object, it's used directly
 
 If `want_microseconds` is true, the timestamp will end with
 the microseconds, represented as ".######".  If `want_microseconds`
 is false, the timestamp will not include the microseconds.
 
-If `want_microseconds` is `None` (the default), the timestamp
-ends with microseconds if the type of `t` can represent
-fractional seconds: a float, a `datetime` object, or the
-value `None`.
+If `tzinfo` is `None` (the default), the time is converted to the local
+timezone.  If `tzinfo` is a `datetime.timezone` object, the time is
+converted to this timezone.  The timezone is printed at the end of
+the string.
 
-*0.13 update:* Added timezone to the end of the string.
+*0.13 update:* Added `tzinfo` parameter, and added the timezone
+to the end of the string.
 </dd></dl>
 
 ## `big.version`
@@ -6249,164 +5825,6 @@ into two-byte segments and operate on those.
 
 </dd></dl>
 
-
-## `lines` and lines modifier functions
-
-<dl><dd>
-
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-is a function that makes it easy to write well-behaved, feature-rich text parsers.
-
-
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) itself
-iterates over a string, returning an iterator that yields individual lines
-split from that string.  The iterator yields a 2-tuple:
-```
-(LinesInfo, line)
-```
-The `LinesInfo` object provides the line number and starting column number
-for each line.  This makes it easy for your parser to provide
-line and column information for error messages.
-
-This iterator is designed to be modified by "lines modifier"
-functions.  These are functions that consume a lines
-iterator and re-yield the values, possibly modifying or
-discarding them along the way.  For example, passing
-a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator into `lines_filter_empty_lines` results
-in an iterator that skips over the empty lines.
-All the lines modifier functions that ship with **big**
-start with the string `lines_`.
-
-Most lines modifier function names belong to a category,
-encoded as the second word in the function name
-(immediately after `lines_`).  Some examples:
-
-* `lines_filter_` functions conditionally remove
-  lines from the output.  For example, `lines_filter_empty_lines`
-  will only yield a line if it isn't empty.
-* `lines_strip_` functions may remove one or
-  more substrings from the line.  For example,
-  [`lines_strip_indent`](#lines_strip_indentli)
-  strips the leading whitespace from a line before yielding
-  it.  (Whenever a lines modifier removes leading text from a line,
-  it will add a `leading` field to the accompanying
-  [`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-  object containing the removed substring, and will also update the
-  `column_number` of the line to reflect the new starting column.)
-* `lines_convert_` functions means this lines modifier may change one
-  or more substrings in the line.  For example,
-  `lines_convert_tabs_to_spaces` changes tab characters
-  to space characters in any lines it processes.
-
-(**big** isn't strictly consistent about these category names though.
-For example,
-[`lines_containing`](#lines_containingli-s--invertfalse)
-and
-[`lines_grep`](#lines_grepli-pattern--invertfalse-flags0)
-are obviously "filter" modifiers, but their names
-don't start with `lines_filter_`.)
-
-All lines modifier functions are composable with each
-other; you can "stack" them together simply by passing
-the output of one into the input of another.  For example,
-
-```Python
-     with open("textfile.txt", "rt") as f:
-         for info, line in big.lines_filter_empty_lines(
-     	     big.lines_rstrip(lines(f.read()))):
-     	     ...
-```
-
-will iterate over the lines of `textfile.txt`, skipping
-over all empty lines and lines that consist only of
-whitespace.
-
-When you stack line modifiers in this way, note that the
-*outer* modifiers happen *later*.  In the above example,
-each line is first "r-stripped", and then discarded
-if it's empty.  If you stacked the line modifiers in
-the opposite order:
-
-```Python
-     with open("textfile.txt", "rt") as f:
-         for info, line in big.lines_rstrip(
-     	     big.lines_filter_empty_lines(lines(f.read()))):
-     	     ...
-```
-
-then it'd filter out empty lines first, and *then*
-"r-strip" the lines.  So lines in the input that contained
-only whitespace would still get yielded as empty lines,
-which is probably not what you want.  Ordering is important!
-
-It's probably clearer to constructed nested lines modifiers
-this way:
-
-```Python
-     with open("textfile.txt", "rt") as f:
-         li = lines(f.read())
-         li = big.lines_filter_empty_lines(li)
-         li = big.lines_rstrip(li)
-         for info, line in li:
-           ...
-```
-
-This is much easier to read, particularly when one or
-more lines modifiers take additional arguments.
-
-Of course, you can write your own lines modifier functions.
-Simply accept a lines iterator as an argument, iterate over
-it, and yield each line info and line--modifying them
-(or not yielding them!) as you see fit.  You could
-even write your own lines iterator, a replacement for
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
-if you need functionality
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) doesn't provide.
-
-Note that if you write your own lines modifier function,
-and it removes text from the beginning the line, you must
-update `column_number` in the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object manually--it
-doesn't happen automatically.  The easiest way to handle this
-is also the best way: whenever clipping text from the beginning
-or end of the line, use the
-[`clip_leading`](#lineinfoclip_leadingline-s)
-and
-[`clip_trailing`](#lineinfoclip_trailingline-s)
-methods on the `LineInfo` object.
-
-Speaking of best practices for lines modifier functions,
-it's also best practice to *modify* the *existing*
-`LineInfo` object that was yielded to you, rather than
-throwing it away, creating a new one, and yielding that
-instead.  Previous lines modifier iterators may have added
-fields to the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-that you'd to preserve.
-
-### leading + line + trailing + end
-
-Generally speaking,
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-objects obey an invariant.
-For any `(info, line)` pair yielded by `lines` or a lines
-modifier:
-
-    info.leading + line + info.trailing + info.end == info.line
-
-That is, you can recreate the original line by concatenating
-the "leading" string, the modified line, the "trailing" string,
-and the "end" string.
-
-Of course, this won't be true if you use lines modifiers that
-replace characters in the line.  For example, `lines_convert_tabs_to_spaces`
-replaces tab characters with one or more space characters.
-If the original line contains tabs, obviously the above invariant
-will no longer hold true.
-
-</dd></dl>
-
 ## Word wrapping and formatting
 
 <dl><dd>
@@ -7027,35 +6445,51 @@ in the **big** test suite.
 
 It's been a whole year... and I've been busy!
 
-* Added three new modules: *big.types*, which contains
-  core types, *big.tokens*, useful functions and values
-  when working with Python's tokenizer, and *big.template*,
-  functions that parse strings containing a simple template
-  syntax.
-* Added `LinkedList` to *big.types*.  `LinkedList` is a
+* Added three new modules:
+  * *big.types*, which contains core types,
+  * *big.tokens*, useful functions and values
+    when working with Python's tokenizer, and
+  * *big.template*, functions that parse strings
+    containing a simple template syntax.
+* Added `LinkedList` to new module *big.types*.  `LinkedList` is a
   thoughtful implementation of a standard linked list data
   structure, with an API and UX modeled on Python's `list`
   (or, more accurately, `collections.deque`) class.  Unlike
   Python's builtins, you're permitted to add and remove
   values to a `LinkedList` while iterating.
-* Added `String` to *big.types*.  `String` is a subclass
+* Added `String` to new module *big.types*.  `String` is a subclass
   of `str` that tracks line number and column number offsets
   for you.  Just initialize one big `String` containing an
   entire file, and every substring of that string will know
   its line number, column number, and offset in characters
   from the beginning.
-* `big.lines` is now deprecated; `String` replaces it--and
-  it's a *massive* upgrade.  `big.lines` will move to
+* `big.lines` is now deprecated; `String` replaces it (and
+  it's a *massive* upgrade!).  `big.lines` will move to
   the `deprecated` module no sooner than November 2025,
   and will be removed no sooner than May 2026.
 * Added `parse_template_string` and `eval_template_string`
-  to *big.template*.  `parse_template_string` parses a string
+  to new module *big.template*.  `parse_template_string` parses a string
   containing Jinja-like interpolations, and returns an
   iterator that yields strings and `Interpolation` objects.
   (This is similar to "t-strings" in Python 3.14+.)
   `eval_template_string` calls `parse_template_string` to
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
+* Added `generate_tokens` to new module *big.tokens*.
+  `generate_tokens` is a convenience wrapper around
+  Python's `tokenize.generate_tokens`, which has an
+  abstruse "readline"-based interface.  `tokens.generate_tokens`
+  lets you simply pass in a string object, and returns a
+  generator yielding tokens.  (And--if you pass in a
+  big `String` object, the `string` values it yields
+  will be slices from that original `String`!)
+* The *big.tokens* module also contains definitions
+  for every token defined by any version
+  of Python supported by big (3.6+).  big's version
+  always starts with `TOKEN_`, e.g. `token.COMMA`
+  is `big.tokens.TOKEN_COMMA`.  Tokens not defined
+  in the currently running version of Python have
+  a value of `TOKEN_INVALID`, which is -1.
 * Added `iterator_context` to *big.itertools*.  `iterator_context`
   is like an extended version of Python's `enumerate`,
   inspired by Jinja's ["loop special variables":](https://jinja.palletsprojects.com/en/stable/templates/#for)
@@ -7080,6 +6514,10 @@ It's been a whole year... and I've been busy!
     is also available unchanged in the *big.deprecated*
     module.  `OldLog` and the old `Log`will both be
     removed someday, no earlier than January 2027.
+* `big.time.timestamp_human` now prints the timezone.
+  Also, if you want it to use a specific timezone,
+  you can specify a `datetime.timezone` object via
+  the new `tzinfo` keyword-only parameter.
 * Added support for Python 3.14, mainly to support t-strings:
   * `python_delimiters` now recognizes all the new string
     prefixes containing `t` (or `T`).
