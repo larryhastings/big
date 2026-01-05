@@ -7023,6 +7023,21 @@ in the **big** test suite.
 
 *under development*
 
+* Rewrote the entire *big.log* module.  I never actually
+  used the old `Log` class, yet on a couple recent projects
+  I coded up a quick-and-dirty log... clearly the old `Log`
+  wasn't solving my problem.  The new `Log` is easy to use,
+  feature-rich, high-performance, and supports a "threaded"
+  mode where logging calls are 8x faster!
+  * I added a backwards-compatible `OldLog` to *big.log*
+    in case anybody was using the old `Log` class.  This
+    provides the API and functionality of the old `Log`
+    class, but is reimplemented on top of the new `Log`.
+    Hopefully the way I did it will ease your transition
+    to the obviously-superior new `Log`.  The old `Log`
+    is also available unchanged in the *big.deprecated*
+    module.  `OldLog` and the old `Log`will both be
+    removed someday, no earlier than January 2027.
 * Added three new modules: *big.types*, which contains
   core types, *big.tokens*, useful functions and values
   when working with Python's tokenizer, and *big.template*,
@@ -7075,7 +7090,32 @@ in the **big** test suite.
   is also faster, but that optimization only saved 0.0000014 seconds.
   Hat tip to Eric V. Smith for his suggestions on how to make
   Big's test suite so much faster!
-* Updated copyright notices to 2025.
+* Removed some old deprecated stuff:
+  * Old names for sets of characters:
+    * `whitespace_without_dos`
+    * `ascii_whitespace_without_dos`
+    * `newlines`
+    * `newlines_without_dos`
+    * `ascii_newlines`
+    * `ascii_newlines_without_dos`
+    * `utf8_whitespace`
+    * `utf8_whitespace_without_dos`
+    * `utf8_newlines`
+    * `utf8_newlines_without_dos`
+  * Old functions / classes / aliases:
+    * `split_quoted_strings`
+    * `lines_strip_comments`
+    * `parse_delimiters` and its associated stuff:
+      * `Delimiter` (a class)
+      * `delimiter_parentheses`
+      * `delimiter_square_brackets`
+      * `delimiter_curly_braces`
+      * `delimiter_angle_brackets`
+      * `delimiter_single_quote`
+      * `delimiter_double_quotes`
+      * `parse_delimiters_default_delimiters`
+    * The old alias `lines_filter_comment_lines`
+* Updated copyright notices to 2026.
 
 #### 0.12.8
 
