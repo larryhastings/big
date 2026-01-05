@@ -47,6 +47,12 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import inspect
 import weakref
 
+import sys
+from .version import Version
+
+python_version = Version(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+python_version_3_7_or_greater = python_version >= Version("3.7")
+
 
 __all__ = []
 
@@ -94,7 +100,10 @@ class _ClassProxy:
     __setattr__ and __getattr__.
     """
 
-    __slots__ = ('__wrapped__', '__qualname__', '__annotations__')
+    if python_version_3_7_or_greater:
+        __slots__ = ('__wrapped__', '__qualname__', '__annotations__')
+    else:
+        __slots__ = ('__wrapped__', '__annotations__')
 
     def __init__(self, wrapped):
         object.__setattr__(self, '__wrapped__', wrapped)

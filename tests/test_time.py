@@ -37,7 +37,7 @@ import unittest
 class BigTests(unittest.TestCase):
 
     def test_timestamp_human(self):
-        human_re = re.compile(r"^(\d\d\d\d)/\d\d/\d\d \d\d:\d\d:\d\d(\.\d\d\d\d\d\d)?$")
+        human_re = re.compile(r"^(\d\d\d\d)/\d\d/\d\d \d\d:\d\d:\d\d(\.\d\d\d\d\d\d)? [A-Z]+$")
         for t in (
             big.timestamp_human(),
             big.timestamp_human(None),
@@ -61,22 +61,35 @@ class BigTests(unittest.TestCase):
         # that moment.  then subtract that offset from the UTC int/float
         # time.  that gives you the UTC int/float time that renders
         # in the local timezone for the value you want.
+        utc = datetime.timezone.utc
         zero = 0
-        aware = datetime.datetime(1970, 1, 1).astimezone()
+        aware = datetime.datetime(1970, 1, 1).astimezone(utc)
         if aware.tzinfo:
             zero -= int(aware.utcoffset().total_seconds())
             float_zero = float(zero)
 
-            epoch = "1970/01/01 00:00:00"
-            epoch_with_microseconds = f"{epoch}.000000"
-            self.assertEqual(big.timestamp_human(zero), epoch)
-            self.assertEqual(big.timestamp_human(float_zero), epoch_with_microseconds)
-            self.assertEqual(big.timestamp_human(time.gmtime(float_zero)), epoch)
-            self.assertEqual(big.timestamp_human(time.localtime(float_zero)), epoch)
-            self.assertEqual(big.timestamp_human(datetime.datetime.fromtimestamp(zero)), epoch_with_microseconds)
-            self.assertEqual(big.timestamp_human(datetime.datetime.fromtimestamp(zero, datetime.timezone.utc)), epoch_with_microseconds)
+            epoch = "1970/01/01 00:00:00 UTC"
+            epoch_with_microseconds = epoch.replace(":00 ", ":00.000000 ")
+            self.assertEqual(big.timestamp_human(zero, tzinfo=utc), epoch)
+            self.assertEqual(big.timestamp_human(float_zero, tzinfo=utc), epoch_with_microseconds)
+            self.assertEqual(big.timestamp_human(time.gmtime(float_zero), tzinfo=utc), epoch)
+            self.assertEqual(big.timestamp_human(time.localtime(float_zero), tzinfo=utc), epoch)
+            self.assertEqual(big.timestamp_human(datetime.datetime.fromtimestamp(zero), tzinfo=utc), epoch_with_microseconds)
+            self.assertEqual(big.timestamp_human(datetime.datetime.fromtimestamp(zero, utc)), epoch_with_microseconds)
 
-            self.assertEqual(big.timestamp_human(datetime.datetime(1234, 5, 6, 7, 8, 9, microsecond=123456)), "1234/05/06 07:08:09.123456")
+            class EST(datetime.tzinfo):
+                def utcoffset(self, dt):
+                    return datetime.timedelta(hours=5)
+
+                def dst(self, dt):
+                    return datetime.timedelta(0)
+
+                def tzname(self, dt):
+                    return "EST"
+
+            est = EST()
+
+            self.assertEqual(big.timestamp_human(datetime.datetime(1234, 5, 6, 7, 8, 9, microsecond=123456, tzinfo=est)), "1234/05/06 07:08:09.123456 EST")
 
     def test_timestamp_3339Z(self):
         re_3339z = re.compile(r"^(\d\d\d\d)-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d\d\d\d\d\d)?Z$")
@@ -97,6 +110,7 @@ class BigTests(unittest.TestCase):
         self.assertEqual(big.timestamp_3339Z(time.localtime(0.0)), epoch)
         self.assertEqual(big.timestamp_3339Z(datetime.datetime.fromtimestamp(0)), epoch_with_microseconds)
         self.assertEqual(big.timestamp_3339Z(datetime.datetime.fromtimestamp(0, datetime.timezone.utc)), epoch_with_microseconds)
+
 
         self.assertEqual(big.timestamp_3339Z(datetime.datetime(1234, 5, 6, 7, 8, 9, tzinfo=datetime.timezone.utc, microsecond=123456)), "1234-05-06T07:08:09.123456Z")
 

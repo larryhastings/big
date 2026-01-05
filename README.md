@@ -4449,6 +4449,8 @@ If `want_microseconds` is `None` (the default), the timestamp
 ends with microseconds if the type of `t` can represent
 fractional seconds: a float, a `datetime` object, or the
 value `None`.
+
+*0.13 update:* Added timezone to the end of the string.
 </dd></dl>
 
 ## `big.version`

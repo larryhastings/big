@@ -1471,8 +1471,6 @@ class linked_list:
         ##    returned must support the API of threading.Lock,
         ##    specifically: acquire, release, and the context manager APIs.
         ## If this linked list doesn't have a lock, returns None.
-        if not hasattr(self, '_lock'):
-            print("\n\n\n" + (">" * 79) + f"\n{self=}\n{dir(self)=}\n{hasattr(self, '_lock')=}\n" + (">" * 79) + "\n\n\n")
         return self._lock
 
     def _internal_iter(self):

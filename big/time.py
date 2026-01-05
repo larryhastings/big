@@ -43,10 +43,10 @@ def export(o):
 
 
 
-_timestamp_human_format = "%Y/%m/%d %H:%M:%S"
+_timestamp_human_format = "%Y/%m/%d %H:%M:%S{microseconds} %Z"
 
 @export
-def timestamp_human(t=None, want_microseconds=None):
+def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
     """
     Return a timestamp string formatted in a pleasing way
     using the currently-set local timezone.  This format
@@ -54,7 +54,7 @@ def timestamp_human(t=None, want_microseconds=None):
     time, use timestamp_3339Z().
 
     Example timestamp:
-        '2021/05/24 23:42:49.099437'
+        '2021/05/24 23:42:49.099437 PST'
 
     t can be one of several types:
         If t is None, timestamp_human uses the current local time.
@@ -87,19 +87,16 @@ def timestamp_human(t=None, want_microseconds=None):
         if want_microseconds == None:
             want_microseconds = isinstance(t, float)
         t = datetime.fromtimestamp(t)
-    elif isinstance(t, datetime):
-        if t.tzinfo != None:
-            t = t.astimezone(None)
-    else:
+    elif not isinstance(t, datetime):
         raise TypeError(f"unrecognized type {type(t)}")
+    if t.tzinfo is None:
+        t = t.astimezone(tzinfo)
 
     if want_microseconds == None:
         # if it's still None, t must be a type that supports microseconds
         want_microseconds = True
 
-    s = t.strftime(_timestamp_human_format)
-    if want_microseconds:
-        s = f"{s}.{t.microsecond:06d}"
+    s = t.strftime(_timestamp_human_format).rstrip().replace("{microseconds}", f".{t.microsecond:06d}" if want_microseconds else '')
     return s
 
 
