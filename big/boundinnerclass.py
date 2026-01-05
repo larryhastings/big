@@ -22,7 +22,7 @@ https://stackoverflow.com/questions/2278426/inner-classes-how-can-i-get-the-oute
 
 _license = """
 big
-Copyright 2022-2025 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
