@@ -323,7 +323,7 @@ _end = "\n"
 def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8):
     # 1 for the dot
     time_width = time_seconds_width + 1 + time_fractional_width
-    return f'[{{elapsed:0{time_width}.0{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
+    return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
 
 
 @export
@@ -487,7 +487,7 @@ class Log(Logger):
             timestamp=timestamp,
             elapsed=elapsed,
             thread=thread,
-            time=time,
+            time=epoch,
             name=self._name,
             ) + self._spaces
 

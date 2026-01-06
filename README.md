@@ -6504,7 +6504,7 @@ It's been a whole year... and I've been busy!
   I coded up a quick-and-dirty log... clearly the old `Log`
   wasn't solving my problem.  The new `Log` is easy to use,
   feature-rich, high-performance, and supports a "threaded"
-  mode where logging calls are 8x faster!
+  mode where logging calls are 5x faster than calling `print`!
   * I added a backwards-compatible `OldLog` to *big.log*
     in case anybody was using the old `Log` class.  This
     provides the API and functionality of the old `Log`

@@ -100,10 +100,9 @@ class _ClassProxy:
     __setattr__ and __getattr__.
     """
 
-    if python_version_3_7_or_greater:
-        __slots__ = ('__wrapped__', '__qualname__', '__annotations__')
-    else:
-        __slots__ = ('__wrapped__', '__annotations__')
+    __slots__ = [ '__wrapped__',  '__annotations__' ]
+    if python_version_3_7_or_greater: __slots__.append('__qualname__',)
+    __slots__ = tuple(__slots__)
 
     def __init__(self, wrapped):
         object.__setattr__(self, '__wrapped__', wrapped)

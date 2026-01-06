@@ -33,11 +33,11 @@ import re
 
 __all__ = []
 
-def _export_name(s):
+def export_name(s):
     __all__.append(s)
 
-def _export(o):
-    _export_name(o.__name__)
+def export(o):
+    export_name(o.__name__)
     return o
 
 
@@ -56,6 +56,7 @@ except ImportError: # pragma: no cover
 # that's way way cooler.  You should definitely use that one
 # instead.  This old Log class is deprecated, and will be
 # removed no earlier than January 2027.
+@export
 class Log:
     """
     A simple lightweight logging class, useful for performance analysis.
@@ -213,3 +214,6 @@ class Log:
             indent2 = indent * depth
             print(f"{indent}{format_time(start)}  {format_time(elapsed)}  {indent2}{event}")
 
+
+del export_name
+del export

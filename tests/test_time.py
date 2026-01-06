@@ -78,9 +78,6 @@ class BigTests(unittest.TestCase):
             self.assertEqual(big.timestamp_human(datetime.datetime.fromtimestamp(zero, utc)), epoch_with_microseconds)
 
             class EST(datetime.tzinfo):
-                def utcoffset(self, dt):
-                    return datetime.timedelta(hours=5)
-
                 def dst(self, dt):
                     return datetime.timedelta(0)
 
