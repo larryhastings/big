@@ -34,6 +34,7 @@ from itertools import zip_longest
 import pickle
 from string import ascii_letters, punctuation, whitespace
 import sys
+from threading import Lock
 import unittest
 
 import big.all as big
@@ -1344,9 +1345,24 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(s, line1 + line2)
 
 
+
 class BigLinkedListTests(unittest.TestCase):
 
     maxDiff = None
+
+    def lock_fns(self):
+        def return_none():
+            return None
+
+        def return_new_lock():
+            return Lock()
+
+        lock = Lock()
+        def return_one_lock():
+            return lock
+
+        return [return_none, return_new_lock, return_one_lock]
+
 
     def assertLength(self, o, length):
         self.assertEqual(len(o), length)
@@ -1390,29 +1406,37 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_list_basics(self):
-        t = linked_list()
+        for _lock in self.lock_fns():
+            self.list_basics_tests(_lock)
+
+    def list_basics_tests(self, _lock):
+        t = linked_list(lock=_lock())
         self.assertFalse(t)
         self.assertLinkedListEqual(t, [])
 
-        t = linked_list((1, 2, 3, 4, 5))
+        t = linked_list((1, 2, 3, 4, 5), lock=_lock())
         self.assertTrue(t)
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5])
 
-        t = linked_list([1, 2, 4, 8, 16])
+        t = linked_list([1, 2, 4, 8, 16], lock=_lock())
         self.assertTrue(t)
         self.assertLinkedListEqual(t, [1, 2, 4, 8, 16])
 
-        t = linked_list('abcde')
+        t = linked_list('abcde', lock=_lock())
         self.assertTrue(t)
         self.assertLinkedListEqual(t, ['a', 'b', 'c', 'd', 'e'])
 
-        t = linked_list(iter((1, 1, 2, 3, 5, 8)))
+        t = linked_list(iter((1, 1, 2, 3, 5, 8)), lock=_lock())
         self.assertTrue(t)
         self.assertLinkedListEqual(t, [1, 1, 2, 3, 5, 8])
 
 
     def test_iterator_basics(self):
-        t = linked_list()
+        for _lock in self.lock_fns():
+            self.iterator_basics_tests(_lock)
+
+    def iterator_basics_tests(self, _lock):
+        t = linked_list(lock=_lock())
         self.assertNoSpecialNodes(t)
 
         with self.assertRaises(TypeError):
@@ -1472,7 +1496,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertNoSpecialNodes(t)
 
         initial = [1, 2, 3, 4, 5]
-        t = linked_list(initial)
+        t = linked_list(initial, lock=_lock())
         self.assertLength(t, 5)
         it = iter(t)
         result = list(it)
@@ -1508,6 +1532,10 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_method_superset(self):
+        for _lock in self.lock_fns():
+            self.method_superset_tests(_lock)
+
+    def method_superset_tests(self, _lock):
         # check that linked_list furnishes every
         # method (dunder and otherwise) provided
         # by both list and collections.deque
@@ -1523,7 +1551,7 @@ class BigLinkedListTests(unittest.TestCase):
         list_and_deque_dir = list(list_dir | deque_dir)
         list_and_deque_dir.sort()
 
-        linked_list_dir = dir_without_sunder(linked_list())
+        linked_list_dir = dir_without_sunder(linked_list(lock=_lock()))
         linked_list_dir.sort()
 
         def words(s):
@@ -1545,6 +1573,7 @@ class BigLinkedListTests(unittest.TestCase):
             ##
 
             __deepcopy__            # feature for copy.deepcopy
+            __setstate__
             __slots__
 
             ##
@@ -1604,8 +1633,12 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(linked_list_dir, list_and_deque_dir)
 
     def test_empty_list(self):
+        for _lock in self.lock_fns():
+            self.empty_list_tests(_lock)
+
+    def empty_list_tests(self, _lock):
         # if the list is empty:
-        t = linked_list()
+        t = linked_list(lock=_lock())
         self.assertFalse(t)
 
         # "after" head is tail
@@ -1660,8 +1693,12 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertNoSpecialNodes(t)
 
     def test_extend(self):
+        for _lock in self.lock_fns():
+            self.extend_tests(_lock)
+
+    def extend_tests(self, _lock):
         def setup():
-            t = linked_list((1, 2, 3))
+            t = linked_list((1, 2, 3), lock=_lock())
             self.assertLength(t, 3)
             it = iter(t)
             return t, it
@@ -1721,7 +1758,7 @@ class BigLinkedListTests(unittest.TestCase):
         # and reverse iterators.
 
         def setup2():
-            t = linked_list((1, 2, 3))
+            t = linked_list((1, 2, 3), lock=_lock())
             rit = reversed(t)
             return t, rit
 
@@ -1745,8 +1782,12 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_linked_list_methods(self):
+        for _lock in self.lock_fns():
+            self.linked_list_methods_tests(_lock)
+
+    def linked_list_methods_tests(self, _lock):
         def setup():
-            t = linked_list((1, 2, 3))
+            t = linked_list((1, 2, 3), lock=_lock())
             it = t.find(2)
             return t, it
 
@@ -1777,6 +1818,10 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_with_deleted_nodes(self):
+        for _lock in self.lock_fns():
+            self.deleted_nodes_tests(_lock)
+
+    def deleted_nodes_tests(self, _lock):
         def setup():
             # returns t, it, iterators
             #
@@ -1789,7 +1834,7 @@ class BigLinkedListTests(unittest.TestCase):
             # it = iter pointing at 4 -----+
             #
             # iterators, array of iterators pointing at each node
-            t = linked_list((0, 1, 2, 3, 4, 5, 6, 7, 8))
+            t = linked_list((0, 1, 2, 3, 4, 5, 6, 7, 8), lock=_lock())
             iterators = [t.find(i) for i in range(9)]
             for i in (1, 2, 3, 5, 6, 7):
                 it = t.find(i)
@@ -1852,7 +1897,7 @@ class BigLinkedListTests(unittest.TestCase):
         value = next(it)
         self.assertEqual(value, 0)
 
-        t = linked_list(range(10))
+        t = linked_list(range(10), lock=_lock())
         with self.assertRaises(UndefinedIndexError):
             t[10] = 'abc'
         with self.assertRaises(UndefinedIndexError):
@@ -1860,8 +1905,12 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_iterator_methods(self):
+        for _lock in self.lock_fns():
+            self.iterator_methods_tests(_lock)
+
+    def iterator_methods_tests(self, _lock):
         def setup():
-            t = linked_list([1, 2, 3, 4, 5])
+            t = linked_list([1, 2, 3, 4, 5], lock=_lock())
             it = t.find(3)
             return t, it
 
@@ -1987,11 +2036,15 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertNoSpecialNodes(t)
 
     def test_prepend_and_append_and_extend_and_rextend(self):
+        for _lock in self.lock_fns():
+            self.prepend_and_append_and_extend_and_rextend_tests(_lock)
+
+    def prepend_and_append_and_extend_and_rextend_tests(self, _lock):
         #
         # test all our verbs in the middle of the list
         #
         def setup():
-            t = linked_list((1, 2, 3))
+            t = linked_list((1, 2, 3), lock=_lock())
             it = t.find(2)
             self.assertIsNormalNode(it)
             return t, it
@@ -2028,7 +2081,7 @@ class BigLinkedListTests(unittest.TestCase):
         # now test when we're pointed at head
         #
         def setup():
-            t = linked_list((1, 2, 3))
+            t = linked_list((1, 2, 3), lock=_lock())
             it = iter(t)
             self.assertIsHead(it)
             return t, it
@@ -2059,7 +2112,7 @@ class BigLinkedListTests(unittest.TestCase):
         # now test when we're pointed at tail
         #
         def setup():
-            t = linked_list((1, 2, 3))
+            t = linked_list((1, 2, 3), lock=_lock())
             it = iter(t)
             it.exhaust()
             return t, it
@@ -2091,13 +2144,13 @@ class BigLinkedListTests(unittest.TestCase):
         #
 
         def setup_at_head():
-            t = linked_list()
+            t = linked_list(lock=_lock())
             it = iter(t)
             self.assertIsHead(it)
             return t, it
 
         def setup_at_tail():
-            t = linked_list()
+            t = linked_list(lock=_lock())
             it = iter(t)
             it.exhaust()
             return t, it
@@ -2150,7 +2203,11 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_special_nodes(self):
-        t = linked_list('a')
+        for _lock in self.lock_fns():
+            self.special_nodes_tests(_lock)
+
+    def special_nodes_tests(self, _lock):
+        t = linked_list('a', lock=_lock())
         self.assertTrue(t)
         self.assertEqual(repr(t), "linked_list(['a'])")
 
@@ -2174,11 +2231,15 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_deleted_node(self):
+        for _lock in self.lock_fns():
+            self.deleted_node_tests(_lock)
+
+    def deleted_node_tests(self, _lock):
         # "dit" == "deleted iterator"
         # points to the deleted node in the center of the list,
         # between 3 and 4
         def setup():
-            t = linked_list([1, 2, 3, 'X', 4, 5, 6])
+            t = linked_list([1, 2, 3, 'X', 4, 5, 6], lock=_lock())
             dit = t.find('X')
             copy = dit.copy()
             copy.pop()
@@ -2327,7 +2388,7 @@ class BigLinkedListTests(unittest.TestCase):
         #
 
         def setup():
-            t = linked_list(('a', 1, 'b', 2, 'c', 'd', 'e', 3, 4, 5, 'f', 'g', 'h', 6, 'i', 7, 'j'))
+            t = linked_list(('a', 1, 'b', 2, 'c', 'd', 'e', 3, 4, 5, 'f', 'g', 'h', 6, 'i', 7, 'j'), lock=_lock())
             it = iter(t)
             def delete_str_nodes():
                 it = iter(t)
@@ -2474,7 +2535,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLength(t, 11)
 
         def setup():
-            t = linked_list(range(10))
+            t = linked_list(range(10), lock=_lock())
             it = t.find(5)
             return t, it
 
@@ -2516,10 +2577,14 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_rich_compare(self):
-        a        = linked_list([1, 2, 2])
-        b        = linked_list([1, 2, 3])
-        b_longer = linked_list([1, 2, 3, 4])
-        c        = linked_list([1, 2, 4])
+        for _lock in self.lock_fns():
+            self.rich_compare_tests(_lock)
+
+    def rich_compare_tests(self, _lock):
+        a        = linked_list([1, 2, 2], lock=_lock())
+        b        = linked_list([1, 2, 3], lock=_lock())
+        b_longer = linked_list([1, 2, 3, 4], lock=_lock())
+        c        = linked_list([1, 2, 4], lock=_lock())
         pi       = 3.14159
 
 
@@ -2669,9 +2734,13 @@ class BigLinkedListTests(unittest.TestCase):
             a > pi
 
     def test___getitem__(self):
+        for _lock in self.lock_fns():
+            self.getitem_tests(_lock)
+
+    def getitem_tests(self, _lock):
         # __getitem__ and slicing
         def setup():
-            return linked_list((1, 2, 3, 4, 5))
+            return linked_list((1, 2, 3, 4, 5), lock=_lock())
 
         a = setup()
 
@@ -2728,7 +2797,7 @@ class BigLinkedListTests(unittest.TestCase):
         # Confirm that the list and the linked_list produce identical results.
         for count in (0, 1, 3, 4, 8, 9):
             l = list(range(1, count + 1))
-            t = linked_list(l)
+            t = linked_list(l, lock=_lock())
 
             values = (-23456789, -12345678,) + tuple(range(-(count + 1), count + 2)) + (12345678, 23456789, None)
 
@@ -2809,14 +2878,14 @@ class BigLinkedListTests(unittest.TestCase):
 
         # assign to slice with fewer elements
         t = setup()
-        t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+        t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9), lock=_lock())
         t[1:7] = 'ab'
         self.assertLinkedListEqual(t, (1, 'a', 'b', 8, 9))
         self.assertNoSpecialNodes(t)
 
         # ... and with an iterator
         t = setup()
-        t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+        t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9), lock=_lock())
         t[1:7] = iter('ab')
         self.assertLinkedListEqual(t, (1, 'a', 'b', 8, 9))
         self.assertNoSpecialNodes(t)
@@ -2890,7 +2959,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         # and now--the iterator!
         def setup():
-            t = linked_list(range(1, 10))
+            t = linked_list(range(1, 10), lock=_lock())
             it = t.find(5)
             rit = reversed(it)
             return t, it, rit
@@ -2947,7 +3016,7 @@ class BigLinkedListTests(unittest.TestCase):
         #
         # q: but what if it's pointing at a special node?
         # a: we raise an exception at you.
-        t = linked_list(range(1, 10))
+        t = linked_list(range(1, 10), lock=_lock())
         it = t.find(5)
         del it[0]
 
@@ -3224,9 +3293,13 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_misc_methods(self):
+        for _lock in self.lock_fns():
+            self.misc_methods_tests(_lock)
+
+    def misc_methods_tests(self, _lock):
         # sort
         l = [5, 20, -3, 3, 44, 4, 3, 6, 8, 3, 8]
-        t = linked_list(l)
+        t = linked_list(l, lock=_lock())
         l.sort()
         t.sort()
         self.assertLinkedListEqual(t, l)
@@ -3252,7 +3325,7 @@ class BigLinkedListTests(unittest.TestCase):
             with self.subTest(index=index):
                 a = [1, 2, 3, 4, 5]
                 a.insert(index, 'x')
-                t = linked_list((1, 2, 3, 4, 5))
+                t = linked_list((1, 2, 3, 4, 5), lock=_lock())
                 t.insert(index, 'x')
                 self.assertLinkedListEqual(t, a)
 
@@ -3263,7 +3336,7 @@ class BigLinkedListTests(unittest.TestCase):
             t.insert(0, )
 
         # regression: reverse crashed if t was empty
-        t = linked_list()
+        t = linked_list(lock=_lock())
         t.reverse()
         self.assertLinkedListEqual(t, [])
 
@@ -3278,7 +3351,7 @@ class BigLinkedListTests(unittest.TestCase):
         # rotate
         initializer = ('x', 2, 3, 4, 5, 6, 7, 8, 9)
         d = collections.deque(initializer)
-        t = linked_list(d)
+        t = linked_list(d, lock=_lock())
 
         for i in range(-10, 11):
             t_copy = t.copy()
@@ -3315,9 +3388,12 @@ class BigLinkedListTests(unittest.TestCase):
         else: # pragma: nocover
             self.assertEqual(linked_list_int, 'linked_list[int]')
 
-
     def test_misc_dunder_methods(self):
-        t = linked_list((1, 2, 3, 4, 5))
+        for _lock in self.lock_fns():
+            self.misc_dunder_methods_test(_lock)
+
+    def misc_dunder_methods_test(self, _lock):
+        t = linked_list((1, 2, 3, 4, 5), lock=_lock())
 
         # __deepcopy__
         t1 = linked_list(({1:2}, {3:4}))
@@ -3365,8 +3441,12 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertNotIn('x', t)
 
     def test_misc_iterator_methods(self):
+        for _lock in self.lock_fns():
+            self.misc_iterator_methods_test(_lock)
+
+    def misc_iterator_methods_test(self, _lock):
         def setup():
-            t = linked_list(range(1, 11))
+            t = linked_list(range(1, 11), lock=_lock())
             it = t.find(5)
             return t, it
 
@@ -3382,7 +3462,7 @@ class BigLinkedListTests(unittest.TestCase):
         it3 = copy.copy(it)
         self.assertEqual(it, it3)
 
-        self.assertEqual(t, it.linked_list)
+        self.assertIs(t, it.linked_list)
 
         # next and previous
         with self.assertRaises(TypeError):
@@ -3464,7 +3544,7 @@ class BigLinkedListTests(unittest.TestCase):
         del it[2]
         self.assertLinkedListEqual(t, [1, 2, 3, 4,       6,      8, 9, 10])
 
-        t = linked_list((1, 'x', 2, 'x', 3, 'x', 4, 'x', 5, 'x', 6, 'x', 7, 'x', 8))
+        t = linked_list((1, 'x', 2, 'x', 3, 'x', 4, 'x', 5, 'x', 6, 'x', 7, 'x', 8), lock=_lock())
         it = t.find(5)
         self.assertEqual(it.count('x'), 3)
         self.assertEqual(it.rcount('x'), 4)
@@ -3485,10 +3565,14 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2, 'qq', 3, 4, 5, 6, 7, 'zz', 8, 9, 'oo', 10, 'yy'])
 
     def test_truncate(self):
+        for _lock in self.lock_fns():
+            self.truncate_tests(_lock)
+
+    def truncate_tests(self, _lock):
         def setup():
-            t = linked_list(range(1, 11))
+            t = linked_list(range(1, 11), lock=_lock())
             it_5 = t.find(5)
-            t2 = linked_list('abcde')
+            t2 = linked_list('abcde', lock=_lock())
             return t, it_5, t2
 
         # truncate no nodes
@@ -3567,10 +3651,14 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_cut_and_splice(self):
+        for _lock in self.lock_fns():
+            self.cut_and_splice_tests(_lock)
+
+    def cut_and_splice_tests(self, _lock):
         def setup():
-            t = linked_list(range(1, 11))
+            t = linked_list(range(1, 11), lock=_lock())
             it_5 = t.find(5)
-            t2 = linked_list('abcde')
+            t2 = linked_list('abcde', lock=_lock())
             return t, it_5, t2
 
         def check_linked_list_was_set(t):
@@ -3640,20 +3728,20 @@ class BigLinkedListTests(unittest.TestCase):
         unchanged_t = list(t)
         head = t.head()
 
-        got = t.cut(head, head)
+        got = t.cut(head, head, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
-        got = head.cut(head)
+        got = head.cut(head, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
         head = reversed(head)
-        got = t.cut(head, head)
+        got = t.cut(head, head, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
-        got = head.cut(head)
+        got = head.cut(head, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
@@ -3661,26 +3749,26 @@ class BigLinkedListTests(unittest.TestCase):
         # cut returns an empty list.
         tail = t.tail()
 
-        got = t.cut(tail, tail)
+        got = t.cut(tail, tail, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
-        got = tail.cut(tail)
+        got = tail.cut(tail, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
         tail = reversed(tail)
-        got = t.cut(tail, tail)
+        got = t.cut(tail, tail, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
-        got = tail.cut(tail)
+        got = tail.cut(tail, lock=_lock())
         self.assertLinkedListEqual(t, unchanged_t)
         self.assertLinkedListEqual(got, [])
 
 
         t, it_5, t2 = setup()
-        snippet = it_5.cut()
+        snippet = it_5.cut(lock=_lock())
         self.assertIsInstance(snippet, linked_list)
         self.assertLinkedListEqual(t,       [1, 2, 3, 4])
         self.assertEqual(len(t), 4)
@@ -3695,7 +3783,7 @@ class BigLinkedListTests(unittest.TestCase):
                     t, it_5, t2 = setup()
                     it_7 = t.find(7)
 
-                    snippet = it_5.cut(stop=it_7)
+                    snippet = it_5.cut(stop=it_7, lock=_lock())
                     self.assertIsInstance(snippet, linked_list)
                     self.assertLinkedListEqual(snippet, [5, 6])
                     self.assertEqual(len(snippet), 2)
@@ -3739,7 +3827,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it_5, t2 = setup()
         rit_5 = reversed(it_5)
-        snippet = rit_5.cut()
+        snippet = rit_5.cut(lock=_lock())
         self.assertIsInstance(snippet, linked_list)
         self.assertLinkedListEqual(snippet, [1, 2, 3, 4,  5])
         self.assertEqual(len(snippet), 5)
@@ -3763,7 +3851,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rit_5.cut(it_2)
         rit_2 = reversed(it_2)
-        snippet = rit_5.cut(rit_2)
+        snippet = rit_5.cut(rit_2, lock=_lock())
         self.assertLinkedListEqual(t,       [1, 2,         6, 7, 8, 9, 10])
         self.assertEqual(len(t), 7)
         self.assertLinkedListEqual(snippet,       [3, 4, 5])
@@ -3785,7 +3873,7 @@ class BigLinkedListTests(unittest.TestCase):
         check_linked_list_was_set(snippet)
 
         it = t.head().after()
-        t2 = t.cut(stop=it)
+        t2 = t.cut(stop=it, lock=_lock())
         self.assertEqual(len(t), 7)
         self.assertLinkedListEqual(t2, [])
         self.assertEqual(len(t2), 0)
@@ -3802,7 +3890,7 @@ class BigLinkedListTests(unittest.TestCase):
             t.cut(rit_2, rit_5)
 
         t, it_5, t2 = setup()
-        snippet = it_5.rcut()
+        snippet = it_5.rcut(lock=_lock())
         self.assertLinkedListEqual(t,       [6, 7, 8, 9, 10])
         self.assertEqual(len(t), 5)
         self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5])
@@ -3813,7 +3901,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it_5, t2 = setup()
         it = t.tail().before()
-        snippet = it.rcut()
+        snippet = it.rcut(lock=_lock())
         self.assertLinkedListEqual(t,       [])
         self.assertEqual(len(t), 0)
         self.assertLinkedListEqual(snippet, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
@@ -3865,8 +3953,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'a', 'b', 'c', 'd', 'e', 6, 7, 8, 9, 10])
 
         # splice does NOT move head and tail.
-        t = linked_list()
-        t2 = linked_list('abcde')
+        t = linked_list(lock=_lock())
+        t2 = linked_list('abcde', lock=_lock())
         head = t2.head()
         tail = t2.tail()
         t.splice(t2)
@@ -3879,69 +3967,71 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(tail[0], 'X')
 
 
-
         def setup():
-            t = linked_list((1, 2, 3, 4, 5))
+            t = linked_list((1, 2, 3, 4, 5), lock=_lock())
             middle = t.find(3)
             return t, t.head(), middle, t.tail()
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=None, stop=middle)
+        snippet = t.cut(start=None, stop=middle, lock=_lock())
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
         check_linked_list_was_set(t)
         check_linked_list_was_set(snippet)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=head.after(), stop=middle)
+        snippet = t.cut(start=head.after(), stop=middle, lock=_lock())
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
 
 
-
         t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, stop=None)
+        snippet = t.cut(start=middle, stop=None, lock=_lock())
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
 
         t, head, middle, tail = setup()
-        snippet = t.cut(start=middle, stop=tail)
+        snippet = t.cut(start=middle, stop=tail, lock=_lock())
         self.assertIs(head.linked_list, t)
         self.assertIs(tail.linked_list, t)
 
         # test rcut with start=None!
         t, head, middle, tail = setup()
-        snippet = t.rcut(None, middle)
+        snippet = t.rcut(None, middle, lock=_lock())
         self.assertLinkedListEqual(snippet, [4, 5])
         self.assertLinkedListEqual(t, [1, 2, 3])
 
         # test cutting only special nodes!
         def setup():
-            t = linked_list((1,))
+            t = linked_list((1,), lock=_lock())
             it = t.find(1)
             del it[0]
             return t, it
 
         t, it = setup()
-        t2 = t.cut()
+        t2 = t.cut(lock=_lock())
         self.assertEqual(it.linked_list, t2)
 
         t, it = setup()
-        t2 = it.cut()
+        t2 = it.cut(lock=_lock())
         self.assertEqual(it.linked_list, t2)
 
         t, it = setup()
-        t2 = t.rcut()
+        t2 = t.rcut(lock=_lock())
         self.assertEqual(it.linked_list, t2)
 
         t, it = setup()
-        t2 = it.rcut()
+        t2 = it.rcut(lock=_lock())
         self.assertEqual(it.linked_list, t2)
 
 
     def test_reverse_iterators(self):
+        for _lock in self.lock_fns():
+            self.reverse_iterators_tests(_lock)
+
+    def reverse_iterators_tests(self, _lock):
         def setup():
-            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9), lock=_lock())
             it = t.find(5)
             rit = reversed(it)
             return t, it, rit
@@ -4029,8 +4119,12 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2, 3, 4])
 
     def test_list_compatibility(self):
+        for _lock in self.lock_fns():
+            self.list_compatibility_tests(_lock)
+
+    def list_compatibility_tests(self, _lock):
         def setup():
-            return linked_list(range(1, 10))
+            return linked_list(range(1, 10), lock=_lock())
 
         t = setup()
         for i in range(1, 10):
@@ -4064,13 +4158,17 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             t.index(9, start=12)
 
-        t = linked_list()
+        t = linked_list(lock=_lock())
         with self.assertRaises(ValueError):
             t.index('empty list')
 
     def test_deque_compatibility(self):
+        for _lock in self.lock_fns():
+            self.deque_compatibility_tests(_lock)
+
+    def deque_compatibility_tests(self, _lock):
         def setup():
-            return linked_list(range(1, 10))
+            return linked_list(range(1, 10), lock=_lock())
         t = setup()
         t.extendleft('abc')
         self.assertLinkedListEqual(t, ['c', 'b', 'a', 1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -4078,8 +4176,12 @@ class BigLinkedListTests(unittest.TestCase):
             t.extendleft(t)
 
     def test_pickle(self):
+        for _lock in self.lock_fns():
+            self.pickle_tests(_lock)
+
+    def pickle_tests(self, _lock):
         def setup():
-            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9))
+            t = linked_list((1, 2, 3, 4, 5, 6, 7, 8, 9), lock=_lock())
             it = t.find(5)
             rit = reversed(it)
             return t, it, rit
