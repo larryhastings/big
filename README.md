@@ -6454,9 +6454,9 @@ It's been a whole year... and I've been busy!
 * Added `LinkedList` to new module *big.types*.  `LinkedList` is a
   thoughtful implementation of a standard linked list data
   structure, with an API and UX modeled on Python's `list`
-  (or, more accurately, `collections.deque`) class.  Unlike
-  Python's builtins, you're permitted to add and remove
-  values to a `LinkedList` while iterating.
+  and `collections.deque` objects.  Unlike Python's builtins,
+  you're permitted to add and remove values to a `LinkedList`
+  while iterating.  `LinkedList` also supports locking.
 * Added `String` to new module *big.types*.  `String` is a subclass
   of `str` that tracks line number and column number offsets
   for you.  Just initialize one big `String` containing an
@@ -6502,9 +6502,11 @@ It's been a whole year... and I've been busy!
 * Rewrote the entire *big.log* module.  I never actually
   used the old `Log` class, yet on a couple recent projects
   I coded up a quick-and-dirty log... clearly the old `Log`
-  wasn't solving my problem.  The new `Log` is easy to use,
-  feature-rich, high-performance, and supports a "threaded"
-  mode where logging calls are 5x faster than calling `print`!
+  wasn't solving my problem.  The new `Log` is designed
+  explicitly for lightweight application logging and debugging.
+  It's easy to use, feature-rich, high-performance,
+  and supports a "threaded" mode where logging calls
+  are 5x faster than calling `print`!
   * I added a backwards-compatible `OldLog` to *big.log*
     in case anybody was using the old `Log` class.  This
     provides the API and functionality of the old `Log`

@@ -1368,7 +1368,7 @@ class linked_list_node:
 
 class _inert_context_manager_cls:
     def __repr__(self):
-        return '_inert_context_manager_cls()'
+        return '<inert_context_manager>'
     def __enter__(self):
         return self
     def __exit__(self, et, ev, tr):
@@ -1439,7 +1439,10 @@ class linked_list:
                 separator = ', '
                 append(repr(cursor.value))
             cursor = cursor.next
-        append("])")
+        append("]")
+        if self._lock:
+            append(f", lock={self._lock!r}")
+        append(")")
         return ''.join(buffer)
 
     def __repr__(self):
@@ -3015,18 +3018,18 @@ class linked_list_base_iterator:
             raise StopIteration
         return cursor.value
 
-    def __previous__(self):
-        try:
-            while True:
-                _lock = self._lock
-                if _lock:
-                    _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
-                break
-            return self._previous()
-        finally:
-            if _lock:
-                _lock.release()
+    # def __previous__(self):
+    #     try:
+    #         while True:
+    #             _lock = self._lock
+    #             if _lock:
+    #                 _lock.acquire()
+    #                 if _lock is not self._lock: _lock.release() ; continue
+    #             break
+    #         return self._previous()
+    #     finally:
+    #         if _lock:
+    #             _lock.release()
 
     def previous(self, default=_undefined, *, count=1):
         if not hasattr(count, '__index__'):

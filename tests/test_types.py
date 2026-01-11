@@ -2207,13 +2207,17 @@ class BigLinkedListTests(unittest.TestCase):
             self.special_nodes_tests(_lock)
 
     def special_nodes_tests(self, _lock):
+        t = linked_list('a')
+        self.assertEqual(repr(t), "linked_list(['a'])")
+
         t = linked_list('a', lock=_lock())
         self.assertTrue(t)
-        self.assertEqual(repr(t), "linked_list(['a'])")
 
         it = iter(t).after()
         copy = it.copy()
         copy.pop()
+        # white box testing: remove lock, just so we can examine the repr
+        t._lock = None
         # test repr with a deleted node
         self.assertEqual(repr(t), "linked_list([])")
         self.assertFalse(t)
@@ -2409,26 +2413,39 @@ class BigLinkedListTests(unittest.TestCase):
         # and make sure find and match all work
         for c in 'abcdefghij':
             with self.subTest(c=c):
-                t, it, delete_str_nodes = setup()
-                t.remove(c)
-                self.assertLength(t, 16)
-                self.assertIsNone(t.find(c))
-                self.assertIsNone(t.rfind(c))
-                for i in range(1, 8):
-                    with self.subTest(i=i):
-                        it = t.find(i)
-                        self.assertIsNormalNode(it)
-                        self.assertEqual(it[0], i)
-                        rit = t.rfind(i)
-                        self.assertIsNormalNode(rit)
-                        self.assertEqual(rit[0], i)
+                for variant in ('t remove', 't rremove', 'it remove', 'it rremove'):
+                    with self.subTest(variant=variant):
+                        t, it, delete_str_nodes = setup()
+                        if variant.endswith('rremove'):
+                            if variant.startswith('it'):
+                                it = t.tail()
+                                it.rremove(c)
+                            else:
+                                t.rremove(c)
+                        else:
+                            if variant.startswith('it'):
+                                it = t.head()
+                                it.remove(c)
+                            else:
+                                t.remove(c)
+                        self.assertLength(t, 16)
+                        self.assertIsNone(t.find(c))
+                        self.assertIsNone(t.rfind(c))
+                        for i in range(1, 8):
+                            with self.subTest(i=i):
+                                it = t.find(i)
+                                self.assertIsNormalNode(it)
+                                self.assertEqual(it[0], i)
+                                rit = t.rfind(i)
+                                self.assertIsNormalNode(rit)
+                                self.assertEqual(rit[0], i)
 
-                        it = t.match(lambda value: value==i)
-                        self.assertIsNormalNode(it)
-                        self.assertEqual(it[0], i)
-                        rit = t.rmatch(lambda value: value==i)
-                        self.assertIsNormalNode(rit)
-                        self.assertEqual(rit[0], i)
+                                it = t.match(lambda value: value==i)
+                                self.assertIsNormalNode(it)
+                                self.assertEqual(it[0], i)
+                                rit = t.rmatch(lambda value: value==i)
+                                self.assertIsNormalNode(rit)
+                                self.assertEqual(rit[0], i)
 
         t, it, delete_str_nodes = setup()
 
@@ -2499,6 +2516,8 @@ class BigLinkedListTests(unittest.TestCase):
         t.clear()
         self.assertLength(t, 0)
         self.assertFalse(t)
+        # white box testing: remove lock, just so we can examine the repr
+        t._lock = None
         self.assertEqual(repr(t), 'linked_list([])')
         for value in t: # pragma: nocover
             self.assertTrue(False) # shouldn't reach here!
@@ -2513,6 +2532,8 @@ class BigLinkedListTests(unittest.TestCase):
         delete_str_nodes()
         t.clear()
         self.assertFalse(t)
+        # white box testing: remove lock, just so we can examine the repr
+        t._lock = None
         self.assertEqual(repr(t), 'linked_list([])')
         for value in t: # pragma: nocover
             self.assertTrue(False) # shouldn't reach here!
@@ -3392,6 +3413,18 @@ class BigLinkedListTests(unittest.TestCase):
         for _lock in self.lock_fns():
             self.misc_dunder_methods_test(_lock)
 
+        t = linked_list('a')
+        self.assertEqual(repr(t), "linked_list(['a'])")
+
+        class FakeLock:
+            def ignore(self, *a, **kw):
+                pass
+            acquire = release = __enter__ = __exit__ = ignore
+            def __repr__(self):
+                return '<FakeLock>'
+        t = linked_list('a', lock=FakeLock())
+        self.assertEqual(repr(t), "linked_list(['a'], lock=<FakeLock>)")
+
     def misc_dunder_methods_test(self, _lock):
         t = linked_list((1, 2, 3, 4, 5), lock=_lock())
 
@@ -3654,6 +3687,17 @@ class BigLinkedListTests(unittest.TestCase):
         for _lock in self.lock_fns():
             self.cut_and_splice_tests(_lock)
 
+        # splicing from a list WITH a lock
+        # into a list WITHOUT a lock
+        t = linked_list([1, 2, 3, 4, 5])
+        it = t.find(3)
+        t2 = linked_list('abc', lock=Lock())
+
+        it.splice(t2)
+        self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 4, 5])
+        self.assertLinkedListEqual(t2, [])
+
+
     def cut_and_splice_tests(self, _lock):
         def setup():
             t = linked_list(range(1, 11), lock=_lock())
@@ -3682,6 +3726,26 @@ class BigLinkedListTests(unittest.TestCase):
         rit = reversed(it_5)
         rit.splice(t2)
         self.assertLinkedListEqual(t, t_list)
+
+        t2 = linked_list()
+        t.rsplice(t2)
+        self.assertLinkedListEqual(t, t_list)
+        it_5.rsplice(t2)
+        self.assertLinkedListEqual(t, t_list)
+        rit = reversed(it_5)
+        rit.rsplice(t2)
+        self.assertLinkedListEqual(t, t_list)
+
+        # can't splice t into t
+        with self.assertRaises(ValueError):
+            t.splice(t)
+        with self.assertRaises(ValueError):
+            t.rsplice(t)
+        with self.assertRaises(ValueError):
+            it_5.splice(t)
+        with self.assertRaises(ValueError):
+            it_5.rsplice(t)
+
 
         # on a forward iterator, can't cut head
         t, it_5, t2 = setup()
@@ -3925,6 +3989,15 @@ class BigLinkedListTests(unittest.TestCase):
             t.splice(t2, where=t2)
         with self.assertRaises(ValueError):
             t.splice(t2, where=t2.head())
+
+        with self.assertRaises(TypeError):
+            it.splice([1, 2, 3])
+        with self.assertRaises(TypeError):
+            it.splice('abcde')
+        with self.assertRaises(TypeError):
+            it.splice(8675309)
+        with self.assertRaises(TypeError):
+            it.splice(3.14159)
 
         t, it_5, t2 = setup()
         t2_tail = t2.tail()
@@ -4203,6 +4276,40 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertIsInstance(rit, linked_list_reverse_iterator)
         self.assertEqual(rit[0], rit2[0])
         self.assertEqual(t, rit2.linked_list)
+
+    def test_coverage(self):
+        self.assertEqual(repr(big.types._undefined), '<Undefined>')
+        self.assertEqual(repr(big.types._inert_context_manager), '<inert_context_manager>')
+
+
+        with self.assertRaises(TypeError):
+            linked_list([1, 2, 3], lock=object())
+
+        # has acquire and release, but isn't a context manager
+        class FakeLock:
+            def acquire(self): # pragma: nocover
+                pass
+            def release(self): # pragma: nocover
+                pass
+
+        with self.assertRaises(TypeError):
+            linked_list([1, 2, 3], lock=FakeLock())
+
+        # has acquire and release, is a context manager, but is false
+        class FakeLock2:
+            def acquire(self): # pragma: nocover
+                pass
+            def release(self): # pragma: nocover
+                pass
+            def __enter__(self): # pragma: nocover
+                pass
+            def __exit__(self): # pragma: nocover
+                pass
+            def __bool__(self): # pragma: nocover
+                return False
+
+        with self.assertRaises(ValueError):
+            linked_list([1, 2, 3], lock=FakeLock2())
 
 
 
