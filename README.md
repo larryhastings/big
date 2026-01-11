@@ -6463,10 +6463,11 @@ It's been a whole year... and I've been busy!
   entire file, and every substring of that string will know
   its line number, column number, and offset in characters
   from the beginning.
-* `big.lines` is now deprecated; `String` replaces it (and
-  it's a *massive* upgrade!).  `big.lines` will move to
-  the `deprecated` module no sooner than November 2025,
-  and will be removed no sooner than May 2026.
+* `big.lines` and all the "lines modifier" functions
+  are now deprecated; `String` replaces all of it
+  (and it's a *massive* upgrade!).  `big.lines` will
+  move to the `deprecated` module no sooner than
+  November 2025, and will be removed no sooner than May 2026.
 * Added `parse_template_string` and `eval_template_string`
   to new module *big.template*.  `parse_template_string` parses a string
   containing Jinja-like interpolations, and returns an
