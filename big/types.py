@@ -3476,8 +3476,6 @@ class linked_list_base_iterator:
             if _lock:
                 _lock.release()
 
-    popleft = rpop
-
     def _remove(self, value, default):
         cursor = self._find(value)
         if cursor is not None:
@@ -4129,9 +4127,9 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         return super()._extend(iterable, reversed(iterable), "rextend")
 
     def pop(self, index=0):
-        return super().popleft(-index)
+        return super().rpop(-index)
 
-    def popleft(self, index=0):
+    def rpop(self, index=0):
         return super().pop(-index)
 
     def find(self, value):

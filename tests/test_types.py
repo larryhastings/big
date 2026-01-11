@@ -1452,7 +1452,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(UndefinedIndexError):
             it.pop()
         with self.assertRaises(UndefinedIndexError):
-            it.popleft()
+            it.rpop()
         # iterator only returns True if you can call next and it doesn't raise.
         # so, when pointing to either head or tail of an empty list, it returns false.
         self.assertFalse(it)
@@ -1461,7 +1461,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(UndefinedIndexError):
             it.pop()
         with self.assertRaises(UndefinedIndexError):
-            it.popleft()
+            it.rpop()
         it.reset()
         self.assertFalse(it)
 
@@ -1479,7 +1479,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(UndefinedIndexError):
             rit.pop()
         with self.assertRaises(UndefinedIndexError):
-            rit.popleft()
+            rit.rpop()
 
         # iterator only returns True if you can call next and it doesn't raise.
         # so, when pointing to either head or tail of an empty list, it returns false.
@@ -1489,7 +1489,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(UndefinedIndexError):
             rit.pop()
         with self.assertRaises(UndefinedIndexError):
-            rit.popleft()
+            rit.rpop()
         rit.reset()   # rit, reset goes to tail
         self.assertFalse(rit)
 
@@ -1590,6 +1590,16 @@ class BigLinkedListTests(unittest.TestCase):
                     got = it_4.rpop(index - 4)
                     self.assertEqual(expected, got)
 
+                    t, it_4 = setup()
+                    rit_4 = reversed(it_4)
+                    got = rit_4.pop(4 - index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    rit_4 = reversed(it_4)
+                    got = rit_4.pop(4 - index)
+                    self.assertEqual(expected, got)
+
                 else:
                     t, it_4 = setup()
                     tail = t.tail()
@@ -1601,6 +1611,27 @@ class BigLinkedListTests(unittest.TestCase):
                     got = tail.rpop(index)
                     self.assertEqual(expected, got)
 
+        t, it_4 = setup()
+        value = it_4.pop()
+        self.assertEqual(value, 4)
+        self.assertEqual(it_4[0], 3)
+
+        t, it_4 = setup()
+        value = it_4.rpop()
+        self.assertEqual(value, 4)
+        self.assertEqual(it_4[0], 5)
+
+        t, it_4 = setup()
+        rit_4 = reversed(it_4)
+        value = rit_4.pop()
+        self.assertEqual(value, 4)
+        self.assertEqual(rit_4[0], 5)
+
+        t, it_4 = setup()
+        rit_4 = reversed(it_4)
+        value = rit_4.rpop()
+        self.assertEqual(value, 4)
+        self.assertEqual(rit_4[0], 3)
 
         t, it_4 = setup()
         with self.assertRaises(UndefinedIndexError):
@@ -1954,7 +1985,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(it[0], 0)
 
         t, it, iterators = setup()
-        value = it.popleft()
+        value = it.rpop()
         self.assertEqual(value, 4)
         self.assertEqual(it[0], 8)
 
@@ -2352,7 +2383,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(SpecialNodeError):
             dit.pop()
         with self.assertRaises(SpecialNodeError):
-            dit.popleft()
+            dit.rpop()
 
         # you also can't include a deleted node in a slice
         with self.assertRaises(SpecialNodeError):
@@ -2415,7 +2446,7 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(SpecialNodeError):
             rdit.pop()
         with self.assertRaises(SpecialNodeError):
-            rdit.popleft()
+            rdit.rpop()
 
         copy = rdit.copy()
         value = next(copy)
@@ -2663,7 +2694,7 @@ class BigLinkedListTests(unittest.TestCase):
                 t, it = setup()
                 self.assertEqual(it.pop(i), i + 5)
                 t, it = setup()
-                self.assertEqual(it.popleft(i), i + 5)
+                self.assertEqual(it.rpop(i), i + 5)
 
         t, it = setup()
         with self.assertRaises(TypeError):
@@ -2673,14 +2704,14 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             it.pop('abc')
         with self.assertRaises(TypeError):
-            it.popleft('abc')
+            it.rpop('abc')
 
         t, it = setup()
         del it[0]
         with self.assertRaises(SpecialNodeError):
             it.pop(0)
         with self.assertRaises(SpecialNodeError):
-            it.popleft(0)
+            it.rpop(0)
         with self.assertRaises(SpecialNodeError):
             t.pop(len(t))
         with self.assertRaises(SpecialNodeError):
@@ -4297,7 +4328,7 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(rit[0], 6)
 
         t, it, rit = setup()
-        value = rit.popleft()
+        value = rit.rpop()
         self.assertEqual(value, 5)
         self.assertLinkedListEqual(t, [1, 2, 3, 4, 6, 7, 8, 9])
         self.assertEqual(rit[0], 4)
