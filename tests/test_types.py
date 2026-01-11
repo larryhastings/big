@@ -1534,6 +1534,12 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             linked_list_reverse_iterator(it)
 
+
+    def test_pop_and_rpop(self):
+        for _lock in self.lock_fns():
+            self.pop_and_rpop_tests(_lock)
+
+    def pop_and_rpop_tests(self, _lock):
         # pop and popleft with indexing,
         # forwards and backwards
         def setup():
@@ -1583,6 +1589,16 @@ class BigLinkedListTests(unittest.TestCase):
                     self.assertEqual(expected, got)
 
                     t, it_4 = setup()
+                    rit_0 = reversed(t.find(0))
+                    got = rit_0.pop(-index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    rit_0 = reversed(t.find(0))
+                    got = rit_0.rpop(-index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
                     got = it_4.pop(index - 4)
                     self.assertEqual(expected, got)
 
@@ -1611,6 +1627,28 @@ class BigLinkedListTests(unittest.TestCase):
                     got = tail.rpop(index)
                     self.assertEqual(expected, got)
 
+                    t, it_4 = setup()
+                    rit_8 = reversed(t.find(8))
+                    got = rit_8.pop(-1 - index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    rit_8 = reversed(t.find(8))
+                    got = rit_8.rpop(-1 - index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    rit_4 = reversed(it_4)
+                    got = rit_4.pop(-5 - index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    rit_4 = reversed(it_4)
+                    got = rit_4.rpop(-5 - index)
+                    self.assertEqual(expected, got)
+
+
+        # test directionality of iterator pop/rpop
         t, it_4 = setup()
         value = it_4.pop()
         self.assertEqual(value, 4)
@@ -1633,7 +1671,9 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(value, 4)
         self.assertEqual(rit_4[0], 3)
 
+        # pop/rpop don't clamp
         t, it_4 = setup()
+        rit_4 = reversed(it_4)
         with self.assertRaises(UndefinedIndexError):
             t.pop(100)
         with self.assertRaises(UndefinedIndexError):
@@ -1643,6 +1683,10 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(UndefinedIndexError):
             it_4.rpop(100)
         with self.assertRaises(UndefinedIndexError):
+            rit_4.pop(100)
+        with self.assertRaises(UndefinedIndexError):
+            rit_4.rpop(100)
+        with self.assertRaises(UndefinedIndexError):
             t.pop(-100)
         with self.assertRaises(UndefinedIndexError):
             t.rpop(-100)
@@ -1650,6 +1694,32 @@ class BigLinkedListTests(unittest.TestCase):
             it_4.pop(-100)
         with self.assertRaises(UndefinedIndexError):
             it_4.rpop(-100)
+        with self.assertRaises(UndefinedIndexError):
+            rit_4.pop(-100)
+        with self.assertRaises(UndefinedIndexError):
+            rit_4.rpop(-100)
+
+        head = t.head()
+        tail = t.tail()
+        rhead = reversed(head)
+        rtail = reversed(tail)
+
+        with self.assertRaises(UndefinedIndexError):
+            head.pop()
+        with self.assertRaises(UndefinedIndexError):
+            head.rpop()
+        with self.assertRaises(UndefinedIndexError):
+            tail.pop()
+        with self.assertRaises(UndefinedIndexError):
+            tail.rpop()
+        with self.assertRaises(UndefinedIndexError):
+            rhead.pop()
+        with self.assertRaises(UndefinedIndexError):
+            rhead.rpop()
+        with self.assertRaises(UndefinedIndexError):
+            rtail.pop()
+        with self.assertRaises(UndefinedIndexError):
+            rtail.rpop()
 
 
 
