@@ -1459,6 +1459,8 @@ class BigLinkedListTests(unittest.TestCase):
         it.exhaust()
         self.assertFalse(it)
         with self.assertRaises(UndefinedIndexError):
+            it.pop()
+        with self.assertRaises(UndefinedIndexError):
             it.popleft()
         it.reset()
         self.assertFalse(it)
@@ -1484,6 +1486,8 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertFalse(rit)
         rit.exhaust() # rit, exhaust goes to head
         self.assertFalse(rit)
+        with self.assertRaises(UndefinedIndexError):
+            rit.pop()
         with self.assertRaises(UndefinedIndexError):
             rit.popleft()
         rit.reset()   # rit, reset goes to tail
@@ -1529,6 +1533,93 @@ class BigLinkedListTests(unittest.TestCase):
             linked_list_reverse_iterator(t)
         with self.assertRaises(TypeError):
             linked_list_reverse_iterator(it)
+
+        # pop and popleft with indexing,
+        # forwards and backwards
+        def setup():
+            t = linked_list([0, 1, 2, 3, 4, 5, 6, 7, 8], lock=_lock())
+            it = t.find(4)
+            return t, it
+
+        for index, expected in(
+            (0, 0),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 4),
+            (5, 5),
+            (6, 6),
+            (7, 7),
+            (8, 8),
+
+            (-1, 8),
+            (-2, 7),
+            (-3, 6),
+            (-4, 5),
+            (-5, 4),
+            (-6, 3),
+            (-7, 2),
+            (-8, 1),
+            (-9, 0),
+            ):
+            with self.subTest(index=index, expected=expected):
+                t, it_4 = setup()
+                got = t.pop(index)
+                self.assertEqual(expected, got)
+
+                t, it_4 = setup()
+                got = t.rpop(index)
+                self.assertEqual(expected, got)
+
+                if index >= 0:
+                    t, it_4 = setup()
+                    it_0 = t.find(0)
+                    got = it_0.pop(index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    it_0 = t.find(0)
+                    got = it_0.rpop(index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    got = it_4.pop(index - 4)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    got = it_4.rpop(index - 4)
+                    self.assertEqual(expected, got)
+
+                else:
+                    t, it_4 = setup()
+                    tail = t.tail()
+                    got = tail.pop(index)
+                    self.assertEqual(expected, got)
+
+                    t, it_4 = setup()
+                    tail = t.tail()
+                    got = tail.rpop(index)
+                    self.assertEqual(expected, got)
+
+
+        t, it_4 = setup()
+        with self.assertRaises(UndefinedIndexError):
+            t.pop(100)
+        with self.assertRaises(UndefinedIndexError):
+            t.rpop(100)
+        with self.assertRaises(UndefinedIndexError):
+            it_4.pop(100)
+        with self.assertRaises(UndefinedIndexError):
+            it_4.rpop(100)
+        with self.assertRaises(UndefinedIndexError):
+            t.pop(-100)
+        with self.assertRaises(UndefinedIndexError):
+            t.rpop(-100)
+        with self.assertRaises(UndefinedIndexError):
+            it_4.pop(-100)
+        with self.assertRaises(UndefinedIndexError):
+            it_4.rpop(-100)
+
 
 
     def test_method_superset(self):
@@ -3696,6 +3787,34 @@ class BigLinkedListTests(unittest.TestCase):
         it.splice(t2)
         self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 4, 5])
         self.assertLinkedListEqual(t2, [])
+
+        # splice has special code to ensure
+        # we always lock the locks in increasing
+        # order of id.  we gotta ensure we test
+        # both orderings.
+        lock1 = Lock()
+        lock2 = Lock()
+        def setup(lock1, lock2):
+            t = linked_list([1, 2, 3, 4, 5], lock=lock1)
+            it = t.find(3)
+            t2 = linked_list('abc', lock=lock2)
+            return t, it, t2
+        for (lock1, lock2) in (
+            (lock1, lock2),
+            (lock2, lock1),
+            ):
+            with self.subTest(lock1=lock1, lock2=lock2):
+                t, it, t2 = setup(lock1, lock2)
+                t.splice(t2)
+                self.assertLinkedListEqual(t, [1, 2, 3, 4, 5, 'a', 'b', 'c'])
+
+                t, it, t2 = setup(lock1, lock2)
+                t.splice(t2, where=it)
+                self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 4, 5])
+
+                t, it, t2 = setup(lock1, lock2)
+                it.splice(t2)
+                self.assertLinkedListEqual(t, [1, 2, 3, 'a', 'b', 'c', 4, 5])
 
 
     def cut_and_splice_tests(self, _lock):

@@ -1745,9 +1745,14 @@ class linked_list:
     def _cursor_at_list_index(self, index, clamp=False):
         """
         Returns a cursor at the node requested.
-        index can be -1, in which case it returns head.
-        index can be length, in which case it returns tail.
-        (This is to accommodate slicing semantics copied from list.)
+
+        If the list contains the five values a b c d and e,
+        here's how the indexing works:
+            head  a  b  c  d  e  tail
+                  0  1  2  3  4  5
+              -6 -5 -4 -3 -2 -1
+
+        This is to accommodate slicing semantics copied from list.
         """
         if not hasattr(index, '__index__'):
             raise TypeError("linked_list indices must be integers or slices")
@@ -2194,6 +2199,7 @@ class linked_list:
         if not self._length:
             raise ValueError('pop from empty linked_list')
         if index == -1:
+            # speical case
             node = self._tail.previous
             while node.special == 'special':
                 node = node.previous
@@ -3425,6 +3431,7 @@ class linked_list_base_iterator:
                 value = cursor.value
                 cursor.remove()
                 return value
+            # cursor is where we'll retreat to after we pop
             cursor = self._cursor
             if cursor.special == 'head':
                 raise UndefinedIndexError()
@@ -3436,7 +3443,12 @@ class linked_list_base_iterator:
             if _lock:
                 _lock.release()
 
-    def popleft(self, index=0):
+    def rpop(self, index=0):
+        """
+        The difference between pop and rpop is the direction the
+        iterator moves after popping.  pop retreats to the previous
+        node, rpop advances to the next node.
+        """
         if not hasattr(index, '__index__'):
             raise TypeError(f'index must be an int, not {type(index).__name__}')
         index = index.__index__()
@@ -3452,6 +3464,7 @@ class linked_list_base_iterator:
                 value = cursor.value
                 cursor.remove()
                 return value
+            # cursor is where we'll advance to after we pop
             cursor = self._cursor
             if cursor.special == 'tail':
                 raise UndefinedIndexError()
@@ -3462,6 +3475,8 @@ class linked_list_base_iterator:
         finally:
             if _lock:
                 _lock.release()
+
+    popleft = rpop
 
     def _remove(self, value, default):
         cursor = self._find(value)
@@ -4114,10 +4129,10 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         return super()._extend(iterable, reversed(iterable), "rextend")
 
     def pop(self, index=0):
-        return super().popleft(index)
+        return super().popleft(-index)
 
     def popleft(self, index=0):
-        return super().pop(index)
+        return super().pop(-index)
 
     def find(self, value):
         return super().rfind(value)
