@@ -3559,7 +3559,7 @@ class linked_list_base_iterator:
             if _lock:
                 _lock.release()
 
-    appendleft = rappend = prepend
+    rappend = prepend
 
     def _extend(self, other, iterable, verb):
         try:
