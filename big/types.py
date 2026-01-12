@@ -3924,7 +3924,7 @@ class linked_list_base_iterator:
             list = self._cursor.linked_list
             if other is list:
                 raise ValueError("other and self are the same list")
-            if not other._length:
+            if not other._internal_length():
                 return
             return list._splice(other, self, is_rsplice)
 
