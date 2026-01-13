@@ -43,7 +43,8 @@ def export(o):
 
 
 
-_timestamp_human_format = "%Y/%m/%d %H:%M:%S{microseconds} %Z"
+_timestamp_human_format_with_us = "%Y/%m/%d %H:%M:%S.%f %Z"
+_timestamp_human_format_without_us = _timestamp_human_format_with_us.replace('.%f', '')
 
 @export
 def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
@@ -69,9 +70,8 @@ def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
     the microseconds, represented as ".######".  If want_microseconds
     is false, the timestamp will not include the microseconds.
     If want_microseconds is None (the default), the timestamp
-    ends with microseconds if t is a type that can represent
-    fractional seconds: a float, a datetime object, or the
-    value None.
+    ends in microseconds if t is a type that can represent
+    fractional seconds (which is any accepted type except int).
     """
     if isinstance(t, time.struct_time):
         if t.tm_zone == "GMT":
@@ -96,13 +96,16 @@ def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
         # if it's still None, t must be a type that supports microseconds
         want_microseconds = True
 
-    s = t.strftime(_timestamp_human_format).rstrip().replace("{microseconds}", f".{t.microsecond:06d}" if want_microseconds else '')
+    if want_microseconds:
+        format = _timestamp_human_format_with_us
+    else:
+        format = _timestamp_human_format_without_us
+    s = t.strftime(format)
     return s
 
 
-_timestamp_3339Z_format_base = "%Y-%m-%dT%H:%M:%S"
-_timestamp_3339Z_format = f"{_timestamp_3339Z_format_base}Z"
-_timestamp_3339Z_microseconds_format = f"{_timestamp_3339Z_format_base}.%fZ"
+_timestamp_3339Z_format_with_us =  "%Y-%m-%dT%H:%M:%S.%fZ"
+_timestamp_3339Z_format_without_us = _timestamp_3339Z_format_with_us.replace('.%f', '')
 
 @export
 def timestamp_3339Z(t=None, want_microseconds=None):
@@ -159,11 +162,11 @@ def timestamp_3339Z(t=None, want_microseconds=None):
         want_microseconds = True
 
     if want_microseconds:
-        f = _timestamp_3339Z_microseconds_format
+        format = _timestamp_3339Z_format_with_us
     else:
-        f = _timestamp_3339Z_format
-
-    return t.strftime(f)
+        format = _timestamp_3339Z_format_without_us
+    s = t.strftime(format)
+    return s
 
 
 @export

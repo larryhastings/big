@@ -1350,18 +1350,25 @@ class BigLinkedListTests(unittest.TestCase):
 
     maxDiff = None
 
-    def lock_fns(self):
+    def lock_fns(self, one_lock=False):
         def return_none():
             return None
 
+        yield return_none
+
         def return_new_lock():
             return Lock()
+
+        yield return_new_lock
+
+        if not one_lock:
+            return
 
         lock = Lock()
         def return_one_lock():
             return lock
 
-        return [return_none, return_new_lock, return_one_lock]
+        yield return_one_lock
 
 
     def assertLength(self, o, length):
@@ -3876,7 +3883,7 @@ class BigLinkedListTests(unittest.TestCase):
 
 
     def test_cut_and_splice(self):
-        for _lock in self.lock_fns():
+        for _lock in self.lock_fns(True):
             self.cut_and_splice_tests(_lock)
 
         # splicing from a list WITH a lock

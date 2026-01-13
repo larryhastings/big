@@ -34,16 +34,16 @@ import unittest
 import weakref
 
 from big.boundinnerclass import (
-    BoundInnerClass,
-    ClassRegistry,
-    UnboundInnerClass,
     _BoundInnerClassBase,
     _ClassProxy,
-    _CACHE_ATTR,
     _make_bound_signature,
+    BoundInnerClass,
+    BOUNDINNERCLASS_ATTR,
     class_bound_to,
+    ClassRegistry,
     instance_bound_to,
     rebind,
+    UnboundInnerClass,
 )
 
 
@@ -415,7 +415,7 @@ class TestSlotsCompatibility(unittest.TestCase):
         o = Outer()
         i = o.Inner()
         self.assertIs(i.outer, o)
-        self.assertIn(_CACHE_ATTR, o.__dict__)
+        self.assertIn(BOUNDINNERCLASS_ATTR, o.__dict__)
 
     def test_outer_with_slots_and_cache_slot(self):
         """Works with __slots__ that includes __bound_inner_classes__ and __weakref__."""

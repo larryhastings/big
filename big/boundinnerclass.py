@@ -102,6 +102,7 @@ class _ClassProxy:
 
     __slots__ = [ '__wrapped__',  '__annotations__' ]
     if python_version_3_7_or_greater: __slots__.append('__qualname__',)
+    __slots__.sort()
     __slots__ = tuple(__slots__)
 
     def __init__(self, wrapped):
@@ -186,18 +187,24 @@ class _ClassProxy:
         return issubclass(subclass, self.__wrapped__)
 
 
-# Storage attribute name for bound inner classes cache
-_CACHE_ATTR = '__bound_inner_classes__'
+# Storage attribute name for bound inner classes cache.
+# If you use bound inner classes inside a class using slots,
+# add BOUNDINNERCLASS_SLOTS to your slots declaration:
+#
+# class Foo:
+#     __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
+BOUNDINNERCLASS_ATTR = '__bound_inner_classes__'
+BOUNDINNERCLASS_SLOTS = (BOUNDINNERCLASS_ATTR,)
 
 
 def _get_cache(outer):
     """Get or create the bound inner classes cache dict on outer."""
-    cache = getattr(outer, _CACHE_ATTR, None)
+    cache = getattr(outer, BOUNDINNERCLASS_ATTR, None)
     if cache is None:
         cache = {}
         # Try to set it - will fail if outer uses __slots__ without this attr
         try:
-            object.__setattr__(outer, _CACHE_ATTR, cache)
+            object.__setattr__(outer, BOUNDINNERCLASS_ATTR, cache)
         except AttributeError:
             # outer uses __slots__ and doesn't have __bound_inner_classes__
             # (If outer had __dict__, object.__setattr__ would have succeeded)
@@ -325,10 +332,10 @@ class BoundInnerClass(_BoundInnerClassBase):
             Wrapper.__annotations__ = cls.__annotations__
 
         # Set proper signature (without 'outer' param since it's injected)
-        bound_sig = _make_bound_signature(cls.__init__)
-        if bound_sig is not None:
-            Wrapper.__signature__ = bound_sig
-            Wrapper.__init__.__signature__ = bound_sig
+        bound_signature = _make_bound_signature(cls.__init__)
+        if bound_signature is not None:
+            Wrapper.__signature__ = bound_signature
+            Wrapper.__init__.__signature__ = bound_signature
 
         return Wrapper
 
@@ -443,7 +450,7 @@ def class_bound_to(cls, outer):
         This is NOT transitive. If cls is bound to x, and x is bound to y,
         class_bound_to(cls, y) returns False.
     """
-    cache = getattr(outer, _CACHE_ATTR, None)
+    cache = getattr(outer, BOUNDINNERCLASS_ATTR, None)
     if cache is None:
         return False
     name = getattr(cls, '__name__', None)
