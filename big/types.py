@@ -1484,6 +1484,24 @@ class linked_list:
         ## If this linked list doesn't have a lock, returns None.
         return self._lock
 
+    def _internal_cut(self):
+        ## Cuts all nodes internally.  List will be empty afterwards.
+        ## Returns a tuple containing (first_node last_node).
+        ##
+        ## If list is empty, returns (None, None).
+        if not self._length:
+            return (None, None)
+        head = self._head.next
+        head.previous = None
+        tail = self._tail.previous
+        tail.next = None
+
+        self._head.next = self._tail
+        self._tail.previous = self._head
+        self._length = 0
+
+        return (head, tail)
+
     def _internal_iter(self):
         ## Iterator, yields all *data nodes* in forward order.
         ## (Yields *nodes*, not *values*.  Never yields special nodes.)
@@ -2562,8 +2580,13 @@ class linked_list:
         after = cursor.next
         assert after
 
-        other_first = other._head.next
-        other_last = other._tail.previous
+        other_length = other._internal_length()
+        assert other_length
+        self._length += other_length
+
+        other_first, other_last = other._internal_cut()
+        assert other_first != None
+        assert other_last != None
 
         cursor.next = other_first
         other_first.previous = cursor
@@ -2571,15 +2594,9 @@ class linked_list:
         after.previous = other_last
         other_last.next = after
 
-        other._head.next = other._tail
-        other._tail.previous = other._head
-
         while cursor != after:
             cursor.linked_list = self
             cursor = cursor.next
-
-        self._length += other._length
-        other._length = 0
 
         if (where is not None) and (special is not None):
             where._cursor = special
