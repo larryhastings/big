@@ -1488,9 +1488,8 @@ class linked_list:
         ## Cuts all nodes internally.  List will be empty afterwards.
         ## Returns a tuple containing (first_node last_node).
         ##
-        ## If list is empty, returns (None, None).
-        if not self._length:
-            return (None, None)
+        ## list must contain nodes.  Behavior is undefined if list is empty.
+        assert self._length
         head = self._head.next
         head.previous = None
         tail = self._tail.previous
