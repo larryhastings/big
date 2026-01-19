@@ -1470,6 +1470,9 @@ class linked_list:
     ## not for public consumption, that let us interact with "other"
     ## in a safe, well-defined, performant way.  These method names
     ## all start with "_internal".
+    ##
+    ## There's a similar internal API for linked list iterators,
+    ## with just two methods: _internal_lock and _internal_linked_list.
 
     def _internal_length(self):
         ## Returns the length for this linked list.
@@ -2351,30 +2354,39 @@ class linked_list:
                 start_directions = 3
             else:
                 if not isinstance(start, linked_list_base_iterator):
+                    ex_type = TypeError
+                elif not (
+                    (start._internal_lock() is self._lock)
+                    and (start._internal_linked_list() is self)
+                    ):
+                    ex_type = ValueError
+                else:
+                    ex_type = None
+                if ex_type is not None:
                     if _lock:
                         _lock.release()
                         _lock = None
-                    raise TypeError(f"start is not an iterator over this linked_list, start={start!r}")
-                if start._cursor.linked_list is not self:
-                    if _lock:
-                        _lock.release()
-                        _lock = None
-                    raise ValueError(f"start is not an iterator over this linked_list, start={start!r}")
+                    raise ex_type(f"start is not an iterator over this linked_list, start={start!r}")
+
                 start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
 
             if stop_is_none:
                 stop_directions = 3
             else:
                 if not isinstance(stop, linked_list_base_iterator):
+                    ex_type = TypeError
+                elif not (
+                    (stop._internal_lock() is self._lock)
+                    and (stop._internal_linked_list() is self)
+                    ):
+                    ex_type = ValueError
+                else:
+                    ex_type = None
+                if ex_type is not None:
                     if _lock:
                         _lock.release()
                         _lock = None
-                    raise TypeError(f"stop is not an iterator over this linked_list, stop={stop!r}")
-                if stop._cursor.linked_list is not self:
-                    if _lock:
-                        _lock.release()
-                        _lock = None
-                    raise ValueError(f"stop is not an iterator over this linked_list, stop={stop!r}")
+                    raise ex_type(f"stop is not an iterator over this linked_list, stop={stop!r}")
                 stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1
 
             if not (start_directions & stop_directions):
@@ -2559,7 +2571,7 @@ class linked_list:
             else:
                 self._splice_check_where(where)
                 cursor = where._cursor
-                if cursor.special == 'head':
+                if cursor is self._head:
                     special = cursor.next.insert_before(None, 'special')
                     cursor = special
                 else:
@@ -2610,7 +2622,10 @@ class linked_list:
         if where is not None:
             if not isinstance(where, linked_list_base_iterator):
                 raise TypeError('where must be a linked_list iterator over self')
-            if where._cursor.linked_list is not self:
+            if not (
+                (where._internal_lock() is self._lock)
+                and (where._internal_linked_list() is self)
+                ):
                 raise ValueError("where must be a linked_list iterator over self")
 
     def splice(self, other, *, where=None):
@@ -2703,7 +2718,7 @@ class linked_list:
     ##
     def extendleft(self, iterable):
         """
-        Prepend the elements from the iterable to the linked_list, in reverse order.
+        Prepend the elements from the iterable to the linked_list, helpfully in reverse order.
         """
         if iterable is self:
             raise ValueError("can't extendleft self with self")
@@ -2772,6 +2787,24 @@ class linked_list_base_iterator:
         d = state[1]
         self._cursor = d['_cursor']
         self._lock = self._cursor.linked_list._lock
+
+    def _internal_lock(self):
+        """
+        Internal API for use by linked_list
+        and linked_list iterator objects.
+        Returns a reference to the linked list's
+        lock, or None if the linked list has no lock.
+        """
+        return self._lock
+
+    def _internal_linked_list(self):
+        """
+        Internal API for use by linked_list
+        and linked_list iterator objects.
+        Returns a reference to the linked list
+        being iterated over.
+        """
+        return self._cursor.linked_list
 
     @property
     def linked_list(self):
@@ -2871,11 +2904,11 @@ class linked_list_base_iterator:
                     if _lock is not self._lock: _lock.release() ; continue
                 break
             cursor = self._cursor
+            tail = cursor.linked_list._tail
             while True:
-                special = cursor.special
-                if special == 'tail':
+                if cursor is tail:
                     return False
-                if special is None:
+                if cursor.special is None:
                     return True
                 cursor = cursor.next
         finally:
@@ -3039,19 +3072,6 @@ class linked_list_base_iterator:
         if special == 'head':
             raise StopIteration
         return cursor.value
-
-    # def __previous__(self):
-    #     try:
-    #         while True:
-    #             _lock = self._lock
-    #             if _lock:
-    #                 _lock.acquire()
-    #                 if _lock is not self._lock: _lock.release() ; continue
-    #             break
-    #         return self._previous()
-    #     finally:
-    #         if _lock:
-    #             _lock.release()
 
     def previous(self, default=_undefined, *, count=1):
         if not hasattr(count, '__index__'):
@@ -4113,11 +4133,11 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                     if _lock is not self._lock: _lock.release() ; continue
                 break
             cursor = self._cursor
+            head = cursor.linked_list._head
             while True:
-                special = cursor.special
-                if special == 'head':
+                if cursor is head:
                     return False
-                if special is None:
+                if cursor.special is None:
                     return True
                 cursor = cursor.previous
         finally:
