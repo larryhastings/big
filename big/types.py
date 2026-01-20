@@ -2795,7 +2795,37 @@ class linked_list_base_iterator:
         Returns a reference to the linked list's
         lock, or None if the linked list has no lock.
         """
-        return self._lock
+
+        ## Note that in most cases the caller will often
+        ## already hold the iterator's lock. Which means:
+        ## this function *must* be unsynchronized!
+        ##
+        ## However, the function must also *not* return
+        ## stale data.  Which means it must fetch the
+        ## correct lock without benefit of synchronization.
+        ##
+        ## In practice this should be fine.  _internal_lock
+        ## is only used as part of a two-step process to confirm
+        ## that an iterator is valid for an operation.  If you
+        ## perform an operation on list J using iterator K,
+        ## we first confirm that K and J have the same lock;
+        ## if they don't, K can't be an iterator over J.
+        ##
+        ## * If K is an iterator over J, then the code calling
+        ##   K._internal_lock already holds the lock, and so
+        ##   this is safe.
+        ## * If K is *not* an iterator over J, but J and K
+        ##   have the same lock anyway, again the code already
+        ##   holds the lock and this is safe.
+        ## * If K is not an iterator over J, and K and J
+        ##   have *different* locks, then we fetched the lock
+        ##   in an unsychronized way, but "self._cursor" and
+        ##   "self._cursor.linked_list" and
+        ##   "self._cursor.linked_list._lock" should always
+        ##   be defined, and then the operation on K will
+        ##   discover the locks don't match and give up.
+        self._lock = lock = self._cursor.linked_list._lock
+        return lock
 
     def _internal_linked_list(self):
         """
