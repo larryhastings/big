@@ -154,12 +154,12 @@ class _ClassProxy:
                 object.__setattr__(self, '__annotations__', value.__annotations__)
             except AttributeError:
                 pass
-        elif name == '__qualname__':
-            object.__setattr__(self, name, value)
-            self.__wrapped__.__qualname__ = value
         elif name == '__annotations__':
             object.__setattr__(self, name, value)
             self.__wrapped__.__annotations__ = value
+        elif python_version_3_7_or_greater and (name == '__qualname__'):
+            object.__setattr__(self, name, value)
+            self.__wrapped__.__qualname__ = value
         else:
             # Forward to wrapped object (handles __name__, __module__, __doc__, etc.)
             setattr(self.__wrapped__, name, value)
