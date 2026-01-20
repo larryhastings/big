@@ -48,17 +48,17 @@ import inspect
 import weakref
 
 import sys
-from .version import Version
-
-python_version = Version(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-python_version_3_7_or_greater = python_version >= Version("3.7")
-
+python_version_3_7_or_greater = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
 
 __all__ = []
 
+def export_name(name):
+    __all__.append(name)
+
 def export(o):
-    __all__.append(o.__name__)
+    export_name(o.__name__)
     return o
+
 
 
 def _make_bound_signature(original_init):
@@ -194,7 +194,9 @@ class _ClassProxy:
 # class Foo:
 #     __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
 BOUNDINNERCLASS_ATTR = '__bound_inner_classes__'
+export_name('BOUNDINNERCLASS_ATTR')
 BOUNDINNERCLASS_SLOTS = (BOUNDINNERCLASS_ATTR,)
+export_name('BOUNDINNERCLASS_SLOTS')
 
 
 def _get_cache(outer):
@@ -369,6 +371,14 @@ class UnboundInnerClass(_BoundInnerClassBase):
 
         return Wrapper
 
+if python_version_3_7_or_greater:
+    @export
+    def bound_inner_base(o): # pragma: nocover
+        return o
+else:
+    @export
+    def bound_inner_base(o): # pragma: nocover
+        return o.cls
 
 @export
 def rebind(child, bound_parent):
@@ -533,3 +543,4 @@ class ClassRegistry(dict):
             self[key] = cls
             return cls
         return decorator
+

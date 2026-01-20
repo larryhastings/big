@@ -77,19 +77,25 @@ class Logger:
     def reset(self, time, thread):
         self.start = time
 
-    if 0:
+    """
+    ##
+    ## prototypes for additional methods
+    ## you may override in a Logger subclass
+    ##
 
-        def log(self, time, thread, s, *, flush=False):
-            pass
+    def log(self, time, thread, s, *, flush=False):
+        pass
 
-        def heading(self, time, thread, s, marker):
-            pass
+    def heading(self, time, thread, s, marker):
+        pass
 
-        def enter(self, time, thread, s):
-            pass
+    def enter(self, time, thread, s):
+        pass
 
-        def exit(self, time, thread, s):
-            pass
+    def exit(self, time, thread, s):
+        pass
+
+    """
 
 
 @export

@@ -33,18 +33,13 @@ import types
 import unittest
 import weakref
 
+from big.boundinnerclass import *
+
 from big.boundinnerclass import (
     _BoundInnerClassBase,
     _ClassProxy,
     _make_bound_signature,
-    BoundInnerClass,
-    BOUNDINNERCLASS_ATTR,
-    class_bound_to,
-    ClassRegistry,
-    instance_bound_to,
-    rebind,
-    UnboundInnerClass,
-)
+    )
 
 
 class TestBoundInnerClass(unittest.TestCase):
@@ -186,7 +181,7 @@ class TestUnboundInnerClass(unittest.TestCase):
                     self.outer = outer
 
             @UnboundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 def __init__(self):
                     super().__init__()
 
@@ -209,7 +204,7 @@ class TestInheritance(unittest.TestCase):
 
             # No .cls needed!
             @BoundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 def __init__(self, outer):
                     super().__init__()
                     self.child = True
@@ -229,7 +224,7 @@ class TestInheritance(unittest.TestCase):
                     self.outer = outer
 
             @BoundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 def __init__(self, outer, x):
                     super().__init__()
                     self.x = x
@@ -248,7 +243,7 @@ class TestInheritance(unittest.TestCase):
                     self.outer = outer
 
             @UnboundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 def __init__(self):
                     super().__init__()
 
@@ -420,7 +415,7 @@ class TestSlotsCompatibility(unittest.TestCase):
     def test_outer_with_slots_and_cache_slot(self):
         """Works with __slots__ that includes __bound_inner_classes__ and __weakref__."""
         class Outer:
-            __slots__ = ('__bound_inner_classes__', '__weakref__', 'x')
+            __slots__ = ('__weakref__', 'x') + BOUNDINNERCLASS_SLOTS
 
             @BoundInnerClass
             class Inner:
@@ -724,7 +719,7 @@ class TestClassProxyChecks(unittest.TestCase):
                 pass
 
             @BoundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 pass
 
         parent_desc = Outer.__dict__['Parent']
@@ -1009,13 +1004,13 @@ class TestRegressions(unittest.TestCase):
                     self.grandparent_called = True
 
             @BoundInnerClass
-            class Parent(GrandParent):
+            class Parent(bound_inner_base(GrandParent)):
                 def __init__(self, outer):
                     super().__init__()
                     self.parent_called = True
 
             @BoundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 def __init__(self, outer):
                     super().__init__()
                     self.child_called = True
@@ -1101,7 +1096,7 @@ class TestClassRegistry(unittest.TestCase):
                     self.outer = outer
 
             @BoundInnerClass
-            class Child(base.Parent):
+            class Child(bound_inner_base(base.Parent)):
                 def __init__(self, outer):
                     super().__init__()
                     self.child = True

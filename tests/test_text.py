@@ -612,13 +612,13 @@ class BigTextTests(unittest.TestCase):
 
     def test_reversed_re_finditer(self):
         # Cribbed off the test suite from the 'regex' package
-        def test(pattern, string, expected):
+        def test(pattern, string, expected, check_regex=True):
             pattern = c(pattern)
             string = c(string)
             expected = c(expected)
             got = finditer_group0(big.reversed_re_finditer(pattern, string))
 
-            if have_regex:
+            if check_regex and have_regex:
                 # confirm first that we match regex's output
                 if isinstance(pattern, re_Pattern):
                     p = pattern.pattern
@@ -666,10 +666,12 @@ class BigTextTests(unittest.TestCase):
             if (sys.version_info.major == 3) and (sys.version_info.minor <= 6):  # pragma: no cover
                 # wrong, but consistent
                 result = ('bar', 'oo', '')
+                check_regex = False
             else:
                 # correct
                 result = ('bar', 'foo', '')
-            test(r'^|\w+', 'foo bar', result)
+                check_regex = True
+            test(r'^|\w+', 'foo bar', result, check_regex=False)
 
             # regression test: the initial implementation of multisplit got this wrong.
             # it never truncated
