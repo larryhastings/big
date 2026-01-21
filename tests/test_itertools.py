@@ -257,7 +257,7 @@ class TidyItertoolsTests(unittest.TestCase):
         test([33, 3,      33, 3, 33], [33, 3, 33, 3])
 
         # test exhaustion
-        it = filterator(l, stop_at_value=2)
+        it = iterator_filter(l, stop_at_value=2)
         got = list(it)
         self.assertEqual(got, [1, 'a'])
         got = list(it)
@@ -275,10 +275,8 @@ class TidyItertoolsTests(unittest.TestCase):
 
         for stop_value in range(-20, 1):
             with self.subTest(stop_value=stop_value):
-                for i in f8r(fail_immediately(), stop_at_count=stop_value): # pragma: nocover
+                for i in iterator_filter(fail_immediately(), stop_at_count=stop_value): # pragma: nocover
                     raise RuntimeError(f"we shouldn't have entered the body of this for loop! i={i!r}")
-
-
 
 
 # --8<-- end tidy itertools tests --8<--

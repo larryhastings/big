@@ -90,13 +90,13 @@ class TestLogger(unittest.TestCase):
         self.assertEqual(logger.start, 500)
 
 
-class TestWrapper(unittest.TestCase):
-    """Tests for the Wrapper logger."""
+class TestCallable(unittest.TestCase):
+    """Tests for the Callable logger."""
 
-    def test_wrapper_write(self):
+    def test_callable_write(self):
         results = []
-        wrapper = big.Wrapper(results.append)
-        wrapper.write(0, None, "test string")
+        c = big.Callable(results.append)
+        c.write(0, None, "test string")
         self.assertEqual(results, ["test string"])
 
 
@@ -261,7 +261,7 @@ class TestLogBasics(unittest.TestCase):
 
     def test_log_with_list(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("hello")
         log.close()
         self.assertTrue(any("hello" in s for s in array))
@@ -271,7 +271,7 @@ class TestLogBasics(unittest.TestCase):
             path = f.name
 
         try:
-            log = big.Log(path, threading=False, start='', finish='', prefix='')
+            log = big.Log(path, threading=False, initial='', final='', prefix='')
             log("test message")
             log.close()
 
@@ -283,7 +283,7 @@ class TestLogBasics(unittest.TestCase):
 
     def test_log_with_callable(self):
         results = []
-        log = big.Log(results.append, threading=False, start='', finish='', prefix='')
+        log = big.Log(results.append, threading=False, initial='', final='', prefix='')
         log("callable test")
         log.close()
         self.assertTrue(any("callable test" in s for s in results))
@@ -291,7 +291,7 @@ class TestLogBasics(unittest.TestCase):
     def test_log_with_none_logger(self):
         # None loggers should be skipped
         array = []
-        log = big.Log(None, array, None, threading=False, start='', finish='', prefix='')
+        log = big.Log(None, array, None, threading=False, initial='', final='', prefix='')
         log("test")
         log.close()
         self.assertTrue(len(array) > 0)
@@ -303,7 +303,7 @@ class TestLogBasics(unittest.TestCase):
 
     def test_log_closed_error(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.close()
         with self.assertRaises(RuntimeError) as cm:
             log("after close")
@@ -311,21 +311,21 @@ class TestLogBasics(unittest.TestCase):
 
     def test_log_write_closed_error(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.close()
         with self.assertRaises(RuntimeError):
             log.write("after close")
 
     def test_log_heading_closed_error(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.close()
         with self.assertRaises(RuntimeError):
             log.heading("after close")
 
     def test_log_close_is_idempotent(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         self.assertFalse(log.closed())
         log.close()
         self.assertTrue(log.closed())
@@ -350,49 +350,49 @@ class TestLogMethods(unittest.TestCase):
 
     def test_log_method(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.log("via log method")
         log.close()
         self.assertTrue(any("via log method" in s for s in array))
 
     def test_log_write(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.write("raw write\n")
         log.close()
         self.assertTrue(any("raw write" in s for s in array))
 
     def test_log_write_not_string(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         with self.assertRaises(TypeError):
             log.write(12345)
         log.close()
 
     def test_log_heading(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.heading("My Heading")
         log.close()
         self.assertTrue(any("My Heading" in s for s in array))
 
     def test_log_heading_not_string(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         with self.assertRaises(TypeError):
             log.heading(12345)
         log.close()
 
     def test_log_heading_custom_marker(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.heading("Custom", marker='*')
         log.close()
         self.assertTrue(any("*" in s for s in array))
 
     def test_log_enter_exit(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.enter("subsystem")
         log("inside")
         log.exit()
@@ -403,7 +403,7 @@ class TestLogMethods(unittest.TestCase):
 
     def test_log_enter_context_manager(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         with log.enter("subsystem"):
             log("inside context")
         log.close()
@@ -413,7 +413,7 @@ class TestLogMethods(unittest.TestCase):
 
     def test_log_unbalanced_exit(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         with self.assertRaises(RuntimeError) as cm:
             log.exit()
         self.assertIn("unbalanced", str(cm.exception))
@@ -421,14 +421,14 @@ class TestLogMethods(unittest.TestCase):
 
     def test_log_flush(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("before flush")
         log.flush()
         log.close()
 
     def test_log_reset(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("before reset")
         log.reset()
         log("after reset")
@@ -436,7 +436,7 @@ class TestLogMethods(unittest.TestCase):
 
     def test_log_reset_after_close(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("before reset")
         log.close()
         log.reset()
@@ -445,14 +445,14 @@ class TestLogMethods(unittest.TestCase):
 
     def test_log_sep_end_params(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("a", "b", "c", sep="-", end="!\n")
         log.close()
         self.assertTrue(any("a-b-c!" in s for s in array))
 
     def test_log_with_flush_param(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("flushed message", flush=True)
         log.close()
 
@@ -462,7 +462,7 @@ class TestLogContextManager(unittest.TestCase):
 
     def test_log_context_manager(self):
         array = []
-        with big.Log(array, threading=False, start='', finish='', prefix='') as log:
+        with big.Log(array, threading=False, initial='', final='', prefix='') as log:
             log("inside with block")
         # After exiting, flush should have been called
         self.assertTrue(any("inside with block" in s for s in array))
@@ -473,14 +473,14 @@ class TestLogThreading(unittest.TestCase):
 
     def test_log_threaded(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         log("threaded message")
         log.close()
         self.assertTrue(any("threaded message" in s for s in array))
 
     def test_log_threaded_multiple_messages(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         for i in range(10):
             log(f"message {i}")
         log.close()
@@ -490,7 +490,7 @@ class TestLogThreading(unittest.TestCase):
 
     def test_log_threaded_enter_exit(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         with log.enter("threaded subsystem"):
             log("inside threaded")
         log.close()
@@ -499,7 +499,7 @@ class TestLogThreading(unittest.TestCase):
 
     def test_log_threaded_reset(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         log("before")
         log.reset()
         log("after")
@@ -507,7 +507,7 @@ class TestLogThreading(unittest.TestCase):
 
     def test_log_threaded_reset_after_close(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         log("before")
         log.close()
         log.reset()
@@ -516,28 +516,28 @@ class TestLogThreading(unittest.TestCase):
 
     def test_log_threaded_heading(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         log.heading("threaded heading")
         log.close()
         self.assertTrue(any("threaded heading" in s for s in array))
 
     def test_log_threaded_flush(self):
         array = []
-        log = big.Log(array, threading=True, start='', finish='', prefix='')
+        log = big.Log(array, threading=True, initial='', final='', prefix='')
         log("message")
         log.flush()
         log.close()
 
     def test_log_exit_closed_error(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.close()
         with self.assertRaises(RuntimeError):
             log.exit()
 
     def test_log_flush_closed_error(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log.close()
         with self.assertRaises(RuntimeError):
             log.flush()
@@ -549,8 +549,8 @@ class TestLogNestedLogs(unittest.TestCase):
     def test_nested_logs(self):
         array1 = []
         array2 = []
-        inner_log = big.Log(array2, threading=False, start='', finish='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, start='', finish='', prefix='')
+        inner_log = big.Log(array2, threading=False, initial='', final='', prefix='')
+        outer_log = big.Log(array1, inner_log, threading=False, initial='', final='', prefix='')
         outer_log("message")
         outer_log.close()
         # Message should appear in both
@@ -560,8 +560,8 @@ class TestLogNestedLogs(unittest.TestCase):
     def test_nested_logs_write(self):
         array1 = []
         array2 = []
-        inner_log = big.Log(array2, threading=False, start='', finish='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, start='', finish='', prefix='')
+        inner_log = big.Log(array2, threading=False, initial='', final='', prefix='')
+        outer_log = big.Log(array1, inner_log, threading=False, initial='', final='', prefix='')
         outer_log.write("raw write\n")
         outer_log.close()
         self.assertTrue(any("raw write" in s for s in array2))
@@ -569,8 +569,8 @@ class TestLogNestedLogs(unittest.TestCase):
     def test_nested_logs_heading(self):
         array1 = []
         array2 = []
-        inner_log = big.Log(array2, threading=False, start='', finish='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, start='', finish='', prefix='')
+        inner_log = big.Log(array2, threading=False, initial='', final='', prefix='')
+        outer_log = big.Log(array1, inner_log, threading=False, initial='', final='', prefix='')
         outer_log.heading("nested heading")
         outer_log.close()
         self.assertTrue(any("nested heading" in s for s in array2))
@@ -578,8 +578,8 @@ class TestLogNestedLogs(unittest.TestCase):
     def test_nested_logs_enter_exit(self):
         array1 = []
         array2 = []
-        inner_log = big.Log(array2, threading=False, start='', finish='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, start='', finish='', prefix='')
+        inner_log = big.Log(array2, threading=False, initial='', final='', prefix='')
+        outer_log = big.Log(array1, inner_log, threading=False, initial='', final='', prefix='')
         outer_log.enter("nested subsystem")
         outer_log("inside nested")
         outer_log.exit()
@@ -590,8 +590,8 @@ class TestLogNestedLogs(unittest.TestCase):
     def test_nested_logs_flush(self):
         array1 = []
         array2 = []
-        inner_log = big.Log(array2, threading=False, start='', finish='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, start='', finish='', prefix='')
+        inner_log = big.Log(array2, threading=False, initial='', final='', prefix='')
+        outer_log = big.Log(array1, inner_log, threading=False, initial='', final='', prefix='')
         outer_log("before flush")
         outer_log.flush()
         outer_log.close()
@@ -599,8 +599,8 @@ class TestLogNestedLogs(unittest.TestCase):
     def test_nested_logs_reset(self):
         array1 = []
         array2 = []
-        inner_log = big.Log(array2, threading=False, start='', finish='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, start='', finish='', prefix='')
+        inner_log = big.Log(array2, threading=False, initial='', final='', prefix='')
+        outer_log = big.Log(array1, inner_log, threading=False, initial='', final='', prefix='')
         outer_log("before reset")
         outer_log.close()
         outer_log.reset()
@@ -613,35 +613,29 @@ class TestLogFormatting(unittest.TestCase):
 
     def test_log_with_prefix(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='[PREFIX] ')
+        log = big.Log(array, threading=False, initial='', final='', prefix='[PREFIX] ')
         log("test")
         log.close()
         self.assertTrue(any("[PREFIX]" in s for s in array))
 
-    def test_log_with_start_finish(self):
+    def test_log_with_initial_and_final(self):
         array = []
-        log = big.Log(array, threading=False, start='START', finish='FINISH', prefix='')
+        log = big.Log(array, threading=False, initial='START', final='FINISH', prefix='')
         log("middle")
         log.close()
         output = ''.join(array)
         self.assertIn("START", output)
         self.assertIn("FINISH", output)
 
-    def test_log_no_start(self):
+    def test_log_no_start_final_or_prefix(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
-        log("test")
-        log.close()
-
-    def test_log_no_finish(self):
-        array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='')
         log("test")
         log.close()
 
     def test_log_empty_separator(self):
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='', separator='')
+        log = big.Log(array, threading=False, initial='', final='', prefix='', separator='')
         log.enter("sub")
         log("test")
         log.exit()
@@ -653,33 +647,44 @@ class TestSink(unittest.TestCase):
 
     def test_sink_basic(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
-        log("event1")
-        log("event2")
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
+        log("message1")
+        log("message2")
         log.close()
 
         events = list(sink)
         self.assertEqual(len(events), 2)
+        for i, e in enumerate(events, 1):
+            elapsed, duration, thread, depth, type, message = e
+            self.assertGreater(elapsed, 0)
+            self.assertGreaterEqual(duration, 0)
+            self.assertEqual(thread, threading.current_thread())
+            self.assertEqual(depth, 0)
+            self.assertEqual(type, big.log.Sink.LOG)
+            self.assertTrue(message.startswith('message'))
+            self.assertTrue(message.endswith(str(i)))
 
     def test_sink_event_types(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log("regular event")
+        log.write("write event")
         log.heading("heading event")
         log.enter("enter event")
         log.exit()
         log.close()
 
         events = list(sink)
-        types = [e[3] for e in events]
-        self.assertIn(big.Sink.EVENT, types)
+        types = [e[4] for e in events]
+        self.assertIn(big.Sink.WRITE, types)
+        self.assertIn(big.Sink.LOG, types)
         self.assertIn(big.Sink.HEADING, types)
         self.assertIn(big.Sink.ENTER, types)
         self.assertIn(big.Sink.EXIT, types)
 
     def test_sink_print(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log("test event")
         log.close()
 
@@ -689,7 +694,7 @@ class TestSink(unittest.TestCase):
 
     def test_sink_print_with_formats(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log("test")
         log.heading("heading")
         log.enter("sub")
@@ -699,16 +704,16 @@ class TestSink(unittest.TestCase):
         output = []
         sink.print(
             print=output.append,
-            format='{event}',
-            heading='=={event}==',
-            enter='>>{event}',
+            format='{message}',
+            heading='=={message}==',
+            enter='>>{message}',
             exit='<<exit'
         )
         self.assertTrue(len(output) > 0)
 
     def test_sink_print_no_separator(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log("test event")
         log.close()
 
@@ -718,7 +723,7 @@ class TestSink(unittest.TestCase):
 
     def test_sink_print_default_print(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log("test event")
         log.close()
 
@@ -734,7 +739,7 @@ class TestSink(unittest.TestCase):
 
     def test_sink_reset(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log("before reset")
         log.close()
 
@@ -746,7 +751,7 @@ class TestSink(unittest.TestCase):
 
     def test_sink_write(self):
         sink = big.Sink()
-        log = big.Log(sink, threading=False, start='', finish='', prefix='')
+        log = big.Log(sink, threading=False, initial='', final='', prefix='')
         log.write("raw write\n")
         log.close()
         events = list(sink)
@@ -758,7 +763,7 @@ class TestOldLogger(unittest.TestCase):
 
     def test_old_logger_basic(self):
         old = big.OldLogger()
-        log = big.Log(old, threading=False, start='', finish='', prefix='')
+        log = big.Log(old, threading=False, initial='', final='', prefix='')
         log("event")
         log.close()
 
@@ -768,7 +773,7 @@ class TestOldLogger(unittest.TestCase):
 
     def test_old_logger_enter_exit(self):
         old = big.OldLogger()
-        log = big.Log(old, threading=False, start='', finish='', prefix='')
+        log = big.Log(old, threading=False, initial='', final='', prefix='')
         log.enter("subsystem")
         log("inside")
         log.exit()
@@ -781,7 +786,7 @@ class TestOldLogger(unittest.TestCase):
 
     def test_old_logger_print(self):
         old = big.OldLogger()
-        log = big.Log(old, threading=False, start='', finish='', prefix='')
+        log = big.Log(old, threading=False, initial='', final='', prefix='')
         log("test")
         log.close()
 
@@ -791,7 +796,7 @@ class TestOldLogger(unittest.TestCase):
 
     def test_old_logger_print_no_title(self):
         old = big.OldLogger()
-        log = big.Log(old, threading=False, start='', finish='', prefix='')
+        log = big.Log(old, threading=False, initial='', final='', prefix='')
         log("test")
         log.close()
 
@@ -802,7 +807,7 @@ class TestOldLogger(unittest.TestCase):
 
     def test_old_logger_print_no_headings(self):
         old = big.OldLogger()
-        log = big.Log(old, threading=False, start='', finish='', prefix='')
+        log = big.Log(old, threading=False, initial='', final='', prefix='')
         log("test")
         log.close()
 
@@ -811,7 +816,7 @@ class TestOldLogger(unittest.TestCase):
 
     def test_old_logger_write(self):
         old = big.OldLogger()
-        log = big.Log(old, threading=False, start='', finish='', prefix='')
+        log = big.Log(old, threading=False, initial='', final='', prefix='')
         log.write("raw write content\n")
         log.close()
 
@@ -887,7 +892,7 @@ class TestLogWithTextIOBase(unittest.TestCase):
 
     def test_log_with_stringio(self):
         buffer = io.StringIO()
-        log = big.Log(buffer, threading=False, start='', finish='', prefix='')
+        log = big.Log(buffer, threading=False, initial='', final='', prefix='')
         log("stringio test")
         log.close()
         content = buffer.getvalue()
@@ -903,7 +908,7 @@ class TestLogWithPath(unittest.TestCase):
             path = Path(f.name)
 
         try:
-            log = big.Log(path, threading=False, start='', finish='', prefix='')
+            log = big.Log(path, threading=False, initial='', final='', prefix='')
             log("path object test")
             log.close()
 
@@ -920,7 +925,7 @@ class TestLogWithCustomClock(unittest.TestCase):
     def test_custom_clock(self):
         clock = FakeClock()
         array = []
-        log = big.Log(array, threading=False, start='', finish='', prefix='[{elapsed}] ', clock=clock)
+        log = big.Log(array, threading=False, initial='', final='', prefix='[{elapsed}] ', clock=clock)
 
         clock.advance(1_000_000_000)  # 1 second
         log("at 1 second")
@@ -935,7 +940,7 @@ class TestExport(unittest.TestCase):
 
     def test_all_exports(self):
         expected = [
-            'Logger', 'Wrapper', 'Print', 'List', 'Buffer', 'File', 'FileHandle',
+            'Logger', 'Callable', 'Print', 'List', 'Buffer', 'File', 'FileHandle',
             'Log', 'Sink', 'OldLogger', 'OldLog'
         ]
         for name in expected:

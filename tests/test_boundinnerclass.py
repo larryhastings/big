@@ -939,7 +939,7 @@ class TestNewEdgeCases(unittest.TestCase):
 
         with self.assertRaises(ValueError) as cm:
             rebind(Child, FakeBound)
-        self.assertIn("doesn't appear to be a bound inner class", str(cm.exception))
+        self.assertIn("isn't a bound inner class", str(cm.exception))
 
 
 class TestRegressions(unittest.TestCase):

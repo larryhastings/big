@@ -147,7 +147,7 @@ def pure_virtual():
 @export
 class ClassRegistry(dict):
     """
-    A dict subclass that enables attribute-style access and works as a decorator.
+    A dict subclass with attribute-style access used as a class decorator.
 
     Python's scoping rules make it clumsy to work with heavily-nested classes.
     ClassRegistry makes it easy to reference base classes in a different class
@@ -169,16 +169,16 @@ class ClassRegistry(dict):
         class Dingus:
             pass
 
-        # 3. Access the class as an attribute
+        # 3. Access that class as an attribute on the registry
         class Doodad(base.Dingus):
             pass
 
-        # Register with a custom name
+        # Register using a custom name
         @base('MyName')
         class SomeClass:
             pass
 
-        # Access via custom name
+        # Access via that custom name
         class Other(base.MyName):
             pass
 

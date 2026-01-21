@@ -26,7 +26,14 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import collections
 
-__all__ = ['PushbackIterator', 'IteratorContext', 'iterator_context', 'ix', 'Undefined', 'undefined', 'iterator_filter', 'filterator', 'f8r']
+__all__ = [
+    'iterator_context',
+    'iterator_filter',
+    'IteratorContext',
+    'PushbackIterator',
+    'Undefined',
+    'undefined',
+    ]
 
 class PushbackIterator:
     """
@@ -115,6 +122,8 @@ class PushbackIterator:
 
 
 class IteratorContext:
+    "Context object yielded by big.iterator_context."
+
     def __init__(self, iterator, start, index, is_first, is_last, previous, current, next):
         self._iterator = iterator
         self._length = None
@@ -158,39 +167,41 @@ def iterator_context(iterator, start=0):
     "context" variable containing metadata about
     the iteration.
 
-    ctx.is_first is true for the first value yielded
+    These six context attributes work with any iterator:
+
+    * ctx.is_first is true for the first value yielded
       and false otherwise.
-    ctx.is_last is true for the last value yielded
+    * ctx.is_last is true for the last value yielded
       and false otherwise.  (If the iterator only yields
       one value, is_first and is_last will both be true.)
-    ctx.current contains the current value yielded by the
+    * ctx.current contains the current value yielded by the
       iterator.   (The same as the 'o' value in the
       yielded tuple).
-    ctx.previous contains the previous value yielded, if
+    * ctx.previous contains the previous value yielded, if
       this is the second or subsequent time this iterator
       has yielded a value.  If is_first is true, ctx.previous
       will be undefined, and accessing it will raise
       AttributeError.
-    ctx.next contains the next value to be yielded by this
+    * ctx.next contains the next value to be yielded by this
       iterator if there is one.  If is_last is True,
       ctx.previous will be undefined, and accessing it will
       raise AttributeError.
-    ctx.index contains the index of this value.  The first
+    * ctx.index contains the index of this value.  The first
       time the iterator yields a value, this will be "start";
       the second time, it will be start + 1, etc.
 
-    The last two attributes, ctx.length and ctx.countdown,
+    These last two attributes, ctx.length and ctx.countdown,
     require the "iterator" object to support __len__.  If
-    the iterator object doesn't support __len__, accessing
-    them will raise an exception.
+    the iterator object doesn't support __len__, they are
+    undefined, and accessing them will raise an exception.
 
-    ctx.countdown contains the "opposite" value of ctx.index.
+    * ctx.countdown contains the "opposite" value of ctx.index.
       The values yielded by ctx.countdown are the same as
       ctx.index, but in reversed order.  (If start is 0,
       and the iterator yields four items, ctx.index will
       be 0, 1, 2, and 3 in that order, and ctx.countdown
       will be 3, 2, 1, and 0 in that order.)
-    ctx.length contains the total number of items that
+    * ctx.length contains the total number of items that
       will be yielded.
     """
     index = start
@@ -227,8 +238,6 @@ def iterator_context(iterator, start=0):
         ctx = IteratorContext(iterator, start, index, is_first, True, current, _next, undefined)
         yield (ctx, _next)
 
-ix = iterator_context
-
 
 undefined = None
 
@@ -261,37 +270,29 @@ def iterator_filter(iterator,
     only_predicate=None,
     ):
     """
-    Wraps any iterator, yielding values from the wrapped
-    iterator, but only if they pass all specified tests.
+    Wraps any iterator, filtering the values yielded.
 
-    iterator_filter accepts one positional parameter, iterator, and
+    iterator_filter accepts one positional parameter, "iterator", and
     ten keyword-only parameters which constitute tests for the values
-    called "rules".  The rules are formed from three prefixes: "stop_at",
-    "reject", and "only", and three suffixes, "_value", "_in", and
-    "_predicate".  For example, iterator_filter accepts arguments
-    with names like "stop_at_value", "reject_in", and "only_predicate".
+    called "rules".  iterator_filter is itself an iterator; it yields
+    values yielded by the iterator you pass in, but only if they pass
+    all the "rules" you supplied.
 
-    iterator_filter is itself an iterator.  It yields values from the
-    iterator you pass in, but only if they pass all the rules you
-    supplied.
+    Generally, the rules are formed from three prefixes: "stop_at",
+    "reject", and "only", as well as three suffixes, "_value", "_in",
+    and "_predicate".  Here's a list of all the "rule" parameters:
+        stop_at_value
+        stop_at_in
+        stop_at_predicate
+        stop_at_count
 
-    To "pass" a rule means "the test using this rule returned
-    a true value".  There are three varieties of tests, differentiated
-    with the suffix at the end of the rule's name.
+        reject_value
+        reject_in
+        reject_predicate
 
-        A rule that ends in "_value" means "pass if the value == this argument".
-        For example, stop_at_value=5 would mean "if the inner iterator
-        ever yields the value 5, immediately become exhausted".  The value
-        that exhausts the iterator is not yielded.
-
-        A rule that ends in "_in" means "pass if the value is in this argument".
-        The argument must support the "in" operator.  For example,
-        "reject_in=(1, 2, 3)" would reject the value if it was 1, 2, or 3.
-
-        A rule that ends in "_predicate" means "pass if calling this argument
-        and passing in the value returns a true value".  This argument must
-        be callable.  For example, "only_predicate=lambda o: isinstance(o, str)"
-        would only accept values that were instances of str.
+        only_value
+        only_in
+        only_predicate
 
     There are three categories of rule actions, differentiated by the
     prefix of the rule's name.  They're examined in this order:
@@ -302,19 +303,43 @@ def iterator_filter(iterator,
         the iterator immediately goes into its "exhausted" state.
         (It doesn't yield the value that caused it to become exhausted.)
 
-        "reject" rules cause iterator_filter to reject values--a
-        "blacklist" for values.  If a value passes any "reject" rule,
-        it's discarded and the iterator continues to the next value.
+        "reject" rules cause iterator_filter to reject matching
+        values--a "blacklist" for values.  If a value passes any
+        "reject" rule, it's discarded and the iterator continues
+        to the next value.
 
-        "only" rules are required for iterator_filter to accept a
-        value--a "whitelist" for values.  If a value doesn't pass all
-        "only" rules, it's rejected.
+        "only" rules cause iterator_filter to reject non-matching
+        values--a "whitelist" for values.  If a value doesn't pass
+        all "only" rules, it's discarded and the iterator continues
+        to the next value.
+
+    To "pass" a rule means "the test using this rule returned
+    a true value".  There are three varieties of tests, differentiated
+    with the suffix at the end of the rule's name.
+
+        A rule ending in "_value" means "pass if the value == this argument".
+        For example, stop_at_value=5 would mean "if the inner iterator
+        ever yields the value 5, immediately become exhausted".  The test
+        is performed using the "==" operator (__eq__).  The value that
+        exhausts the iterator is not yielded.
+
+        A rule ending in "_in" means "pass if the value is in this argument".
+        The test is performed using the "in" operator; the value passed in
+        must therefore support the "in" operator (__contains__). For example,
+        "reject_in=(1, 2, 3)" would reject the value if it's 1, 2, or 3.
+
+        A rule that ends in "_predicate" means "pass if calling this argument
+        and passing in the value returns a true value".  The argument to this
+        parameter must be callable.  For example,
+        "only_predicate=lambda o: isinstance(o, str)" would only accept values
+        that were instances of str.
 
     There's one additional rule not described in the above:
     "stop_at_count", an number.  This exhausts the iterator after
-    yielding "stop_at_count" items.  If "stop_at_count" is
-    initially <= 0, the iterator starts out in an exhausted state
-    and does not yield any values.
+    yielding "stop_at_count" items.  If you pass in stop_at_count=5,
+    the iterator becomes exhausted after yielding five values.
+    If "stop_at_count" is initially <= 0, the iterator starts out
+    in an exhausted state and does not yield any values.
     """
 
     un = undefined
@@ -373,7 +398,5 @@ def iterator_filter(iterator,
             stop_at_count -= 1
 
         yield o
-
-f8r = filterator = iterator_filter
 
 # --8<-- end tidy itertools --8<--
