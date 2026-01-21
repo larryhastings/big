@@ -48,7 +48,7 @@ import inspect
 import weakref
 
 import sys
-python_version_3_7_or_greater = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
+_python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
 
 __all__ = []
 
@@ -100,10 +100,8 @@ class _ClassProxy:
     __setattr__ and __getattr__.
     """
 
-    __slots__ = [ '__wrapped__',  '__annotations__' ]
-    if python_version_3_7_or_greater: __slots__.append('__qualname__',)
-    __slots__.sort()
-    __slots__ = tuple(__slots__)
+    __slots__ = ( '__annotations__', '__qualname__', '__wrapped__' )
+    if not _python_3_7_plus: __slots__ = tuple(x for x in __slots__ if x != '__qualname__')
 
     def __init__(self, wrapped):
         object.__setattr__(self, '__wrapped__', wrapped)
@@ -157,7 +155,7 @@ class _ClassProxy:
         elif name == '__annotations__':
             object.__setattr__(self, name, value)
             self.__wrapped__.__annotations__ = value
-        elif python_version_3_7_or_greater and (name == '__qualname__'):
+        elif _python_3_7_plus and (name == '__qualname__'):
             object.__setattr__(self, name, value)
             self.__wrapped__.__qualname__ = value
         else:
@@ -212,7 +210,7 @@ def _get_cache(outer):
             # (If outer had __dict__, object.__setattr__ would have succeeded)
             raise TypeError(
                 f"Cannot cache bound inner class on {type(outer).__name__}. "
-                f"Add '__bound_inner_classes__' to __slots__ or include '__dict__'."
+                f"Add '{BOUNDINNERCLASS_ATTR}' to __slots__ or include '__dict__'."
             ) from None
     return cache
 
@@ -371,7 +369,7 @@ class UnboundInnerClass(_BoundInnerClassBase):
 
         return Wrapper
 
-if python_version_3_7_or_greater:
+if _python_3_7_plus:
     @export
     def bound_inner_base(o): # pragma: nocover
         return o
