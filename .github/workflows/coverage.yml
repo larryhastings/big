@@ -34,7 +34,7 @@ jobs:
         coverage combine
         coverage html -i
         echo '```' >> $GITHUB_STEP_SUMMARY
-        coverage report -i >> $GITHUB_STEP_SUMMARY
+        coverage report -im >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
     - name: Upload htmlcov
       uses: actions/upload-artifact@v4
@@ -43,4 +43,4 @@ jobs:
         path: htmlcov/
     - name: Fail if not 100% coverage
       run: |
-        coverage report -i --fail-under=100
+        coverage report -im --fail-under=100
