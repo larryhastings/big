@@ -142,3 +142,64 @@ def pure_virtual():
         wrapper.__signature__ = signature(fn)
         return wrapper
     return pure_virtual
+
+
+@export
+class ClassRegistry(dict):
+    """
+    A dict subclass that enables attribute-style access and works as a decorator.
+
+    Python's scoping rules make it clumsy to work with heavily-nested classes.
+    ClassRegistry makes it easy to reference base classes in a different class
+    scope for easier subclassing.  To use:
+        1. Create a ClassRegistry object.
+        2. Decorate the base classes you need with a call to that instance.
+        3. Access those base classes as attributes on the ClassRegistry.
+
+    By default the name of the class is used as the name of the attribute.
+    You can specify a custom name by passing it in an argument to the instance
+    when you decorate the class.
+
+    Example:
+        # 1. Create a registry
+        base = ClassRegistry()
+
+        # 2. Register a class using the decorator
+        @base()
+        class Dingus:
+            pass
+
+        # 3. Access the class as an attribute
+        class Doodad(base.Dingus):
+            pass
+
+        # Register with a custom name
+        @base('MyName')
+        class SomeClass:
+            pass
+
+        # Access via custom name
+        class Other(base.MyName):
+            pass
+
+    When using with BoundInnerClass, put @base() above @BoundInnerClass:
+
+        @base()
+        @BoundInnerClass
+        class Transaction(base.Signaling):
+            pass
+    """
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+    def __call__(self, name=None):
+        """Decorator factory to register a class."""
+        def decorator(cls):
+            key = name if name is not None else cls.__name__
+            self[key] = cls
+            return cls
+        return decorator

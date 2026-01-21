@@ -41,6 +41,8 @@ from big.boundinnerclass import (
     _make_bound_signature,
     )
 
+from big.builtin import ClassRegistry
+
 
 class TestBoundInnerClass(unittest.TestCase):
     """Tests for basic BoundInnerClass functionality."""
@@ -167,6 +169,30 @@ class TestBoundInnerClass(unittest.TestCase):
         o = Outer()
         i = o.Inner()
         self.assertEqual(repr(i), 'custom repr')
+
+    def test_with_ClassRegistry(self):
+        """test using ClassRegistry with BoundInnerClass."""
+
+        base = ClassRegistry()
+
+        class Outer:
+            @base()
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+            @BoundInnerClass
+            class Child(bound_inner_base(base.Parent)):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.child = True
+
+        o = Outer()
+        c = o.Child()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child)
+
 
 
 class TestUnboundInnerClass(unittest.TestCase):
@@ -1026,100 +1052,6 @@ class TestRegressions(unittest.TestCase):
         self.assertTrue(c.parent_called)
         self.assertTrue(c.child_called)
 
-
-class TestClassRegistry(unittest.TestCase):
-    """Tests for ClassRegistry."""
-
-    def test_register_and_access_by_attribute(self):
-        """Classes can be registered and accessed as attributes."""
-
-
-        registry = ClassRegistry()
-
-        @registry()
-        class Foo:
-            pass
-
-        self.assertIs(registry.Foo, Foo)
-
-    def test_register_with_custom_name(self):
-        """Classes can be registered with a custom name."""
-
-
-        registry = ClassRegistry()
-
-        @registry('CustomName')
-        class Foo:
-            pass
-
-        self.assertIs(registry.CustomName, Foo)
-        self.assertNotIn('Foo', registry)
-
-    def test_attribute_error_for_missing(self):
-        """Accessing missing attribute raises AttributeError."""
-
-
-        registry = ClassRegistry()
-
-        with self.assertRaises(AttributeError) as cm:
-            registry.NonExistent
-        self.assertEqual(str(cm.exception), 'NonExistent')
-
-    def test_use_for_inheritance(self):
-        """Registry can be used for cross-scope inheritance."""
-
-
-        base = ClassRegistry()
-
-        @base()
-        class Parent:
-            x = 1
-
-        class Child(base.Parent):
-            y = 2
-
-        self.assertTrue(issubclass(Child, Parent))
-        self.assertEqual(Child.x, 1)
-        self.assertEqual(Child.y, 2)
-
-    def test_with_boundinnerclass(self):
-        """Registry works with BoundInnerClass decorator."""
-
-
-        base = ClassRegistry()
-
-        class Outer:
-            @base()
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):
-                    self.outer = outer
-
-            @BoundInnerClass
-            class Child(bound_inner_base(base.Parent)):
-                def __init__(self, outer):
-                    super().__init__()
-                    self.child = True
-
-        o = Outer()
-        c = o.Child()
-        self.assertIs(c.outer, o)
-        self.assertTrue(c.child)
-
-    def test_dict_operations_still_work(self):
-        """Registry still works as a dict."""
-
-
-        registry = ClassRegistry()
-
-        @registry()
-        class Foo:
-            pass
-
-        self.assertIn('Foo', registry)
-        self.assertEqual(len(registry), 1)
-        self.assertEqual(list(registry.keys()), ['Foo'])
-        self.assertEqual(list(registry.values()), [Foo])
 
 def run_tests():
     bigtestlib.run(name="big.boundinnerclass", module=__name__)
