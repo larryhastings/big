@@ -383,10 +383,10 @@ class TestLogMethods(unittest.TestCase):
             log.heading(12345)
         log.close()
 
-    def test_log_heading_custom_marker(self):
+    def test_log_heading_custom_separator(self):
         array = []
         log = big.Log(array, threading=False, initial='', final='', prefix='')
-        log.heading("Custom", marker='*')
+        log.heading("Custom", separator='*')
         log.close()
         self.assertTrue(any("*" in s for s in array))
 

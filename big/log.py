@@ -87,12 +87,13 @@ class Destination:
     Destination objects may also define any of these methods:
 
         log(elapsed, thread, message, *, flush=False)
-        heading(elapsed, thread, message, marker)
-        enter(elapsed, thread, message)
-        exit(elapsed, thread)
+        heading(elapsed, thread, message, separator)
+        enter(elapsed, thread, message, separator)
+        exit(elapsed, thread, separator)
 
     * message is the original message passed in to a Log method.
-    * marker 
+    * separator is the separator string to use, or None if the
+      default separator should be used.
 
     If these are defined, high-level calls to those
     methods will turn into calls to the equivalent
@@ -314,7 +315,7 @@ class Sink(Destination):
     def log(self, elapsed, thread, message, *, flush=False):
         self._event(elapsed, thread, self.LOG, message.rstrip('\n'))
 
-    def heading(self, elapsed, thread, message, marker):
+    def heading(self, elapsed, thread, message, separator):
         self._event(elapsed, thread, self.HEADING, message)
 
     def enter(self, elapsed, thread, message):
@@ -456,7 +457,7 @@ class Log:
     when indenting the log (using Log.start).  Default is 4.
 
     "width" should be an integer, default is 79.  This is only used
-    to format separator lines (see "separator" and "delimiter").
+    to format separator lines (see "separator" and "banner_separator").
 
     "clock" should be a function returning nanoseconds since some event.
     The default value is time.monotonic_ns for Python 3.7, and a
@@ -470,8 +471,8 @@ class Log:
     "separator" is a string that will be repeated to create
     "separator lines" in the log, setting off headers.
 
-    "delimiter" is a string, a special "separator" string only used
-    for the "initial" and "final" log messages (if defined).
+    "banner_separator" is also a string, a special "separator"
+    string only used for the "initial" and "final" log messages.
 
     "prefix" should be a string used to format text inserted
     at the beginning of every log message.  Default is
@@ -503,7 +504,7 @@ class Log:
 
     def __init__(self, *destinations,
             clock=default_clock,
-            delimiter='=',
+            banner_separator='=',
             final='{name} finish at {timestamp}\n',
             indent=4,
             initial='{name} start at {timestamp}',
@@ -530,7 +531,7 @@ class Log:
         self._name = name
         self._initial = initial
         self._final = final
-        self._delimiter = delimiter
+        self._banner_separator = banner_separator
         self._separator = separator
 
         self._width = width
@@ -670,15 +671,15 @@ class Log:
             timestamp=timestamp,
             ) + self._spaces
 
-    def _line(self, prefix, marker):
+    def _line(self, prefix, separator):
         line = prefix
 
-        if not marker:
-            marker = self._separator or ''
-        if marker:
-            length = len(marker)
-            marker = marker * ((self._width + length) // length)
-            line = line + marker
+        if not separator:
+            separator = self._separator or ''
+        if separator:
+            length = len(separator)
+            separator = separator * ((self._width + length) // length)
+            line = line + separator
         return line[:self._width] + '\n'
 
     def _header(self):
@@ -686,7 +687,7 @@ class Log:
 
         if self._initial:
             initial = self._format(0, self._reset_thread, self._initial)
-            self._heading(self._start_time_ns, self._reset_thread, initial, self._delimiter)
+            self._heading(self._start_time_ns, self._reset_thread, initial, self._banner_separator)
 
 
     def _log(self, time, thread, args, sep, end, flush):
@@ -771,27 +772,27 @@ class Log:
             fn(*args)
 
 
-    def _heading(self, time, thread, message, marker):
+    def _heading(self, time, thread, message, separator):
         if self._print_header: self._header()
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
 
-        separator = self._line(prefix, marker)
+        separator = self._line(prefix, separator)
         formatted = separator + prefix + message + '\n' + separator
 
         for destination, is_log in self._destinations:
             if is_log:
-                destination.heading(message, marker=marker)
+                destination.heading(message, separator=separator)
                 continue
 
             heading = getattr(destination, 'heading', None)
             if heading:
-                heading(elapsed, thread, message, marker)
+                heading(elapsed, thread, message, separator)
                 continue
             destination.write(elapsed, thread, formatted)
 
-    def heading(self, message, marker=None):
+    def heading(self, message, separator=None):
         time = self._clock()
         thread = current_thread()
 
@@ -800,7 +801,7 @@ class Log:
         if self._closed:
             raise RuntimeError("Log is closed")
 
-        work = [(self._heading, (time, thread, message, marker))]
+        work = [(self._heading, (time, thread, message, separator))]
 
         if self._threading:
             self._queue.put(work)
@@ -821,13 +822,13 @@ class Log:
         def __exit__(self, exc_type, exc_value, traceback):
             self.log.exit()
 
-    def _enter(self, time, thread, message, marker):
+    def _enter(self, time, thread, message, separator):
         if self._print_header: self._header()
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
 
-        separator = self._line(prefix, marker)
+        separator = self._line(prefix, separator)
         formatted = separator + prefix + message + '\n' + separator
 
         for destination, is_log in self._destinations:
@@ -844,10 +845,10 @@ class Log:
         self._nesting += 1
         self._spaces = _spaces[:self._nesting * self._indent]
 
-    def enter(self, message, *, marker=None):
+    def enter(self, message, *, separator=None):
         time = self._clock()
         thread = current_thread()
-        work = [(self._enter, (time, thread, message, marker))]
+        work = [(self._enter, (time, thread, message, separator))]
 
         if self._threading:
             self._queue.put(work)
@@ -870,7 +871,7 @@ class Log:
             method(time, thread)
 
 
-    def _exit(self, time, thread):
+    def _exit(self, time, thread, separator):
         if self._nesting < 1:
             raise RuntimeError('unbalanced enter/exit calls')
 
@@ -879,7 +880,7 @@ class Log:
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
-        separator = self._line(prefix, self._separator)
+        separator = self._line(prefix, separator)
 
         for destination, is_log in self._destinations:
             if is_log:
@@ -892,10 +893,18 @@ class Log:
                 continue
             destination.write(elapsed, thread, separator)
 
-    def exit(self):
+    def exit(self, *, separator=None):
         time = self._clock()
         thread = current_thread()
-        self._dispatch_0(time, thread, self._exit)
+
+        work = [(self._exit, (time, thread, separator))]
+
+        if self._threading:
+            self._queue.put(work)
+        else:
+            with self._lock:
+                fn, args = work[0]
+                fn(*args)
 
 
     def _flush(self, time, thread):
@@ -946,7 +955,7 @@ class Log:
                 stripped = final.rstrip('\n')
                 newlines = final[len(stripped):]
 
-                append((self._heading, (time, thread, stripped, self._delimiter)))
+                append((self._heading, (time, thread, stripped, self._banner_separator)))
                 if newlines:
                     append((self._write, (time, thread, newlines)))
 
