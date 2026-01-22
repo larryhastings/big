@@ -48,12 +48,6 @@ except ImportError: # pragma nocover
         s = ", ".join(t.__name__ for t in args)
         return f'{origin.__name__}[{s}]'
 
-from big.version import Version
-
-python_version = Version(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-python_version_3_7_or_greater = python_version >= Version("3.7")
-
-
 from .text import linebreaks, multipartition, multisplit, Pattern
 from .tokens import generate_tokens
 
@@ -62,6 +56,9 @@ __all__ = []
 def export(o):
     __all__.append(o.__name__)
     return o
+
+
+_python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
 
 
 
@@ -1689,7 +1686,7 @@ class linked_list:
             self._maybe_lock = _inert_context_manager
 
     # new in 3.7
-    if python_version_3_7_or_greater:
+    if _python_3_7_plus:
         def __class_getitem__(cls, item):
             return GenericAlias(cls, (item,))
 
