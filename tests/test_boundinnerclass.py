@@ -1053,6 +1053,48 @@ class TestRegressions(unittest.TestCase):
         self.assertTrue(c.child_called)
 
 
+class TestMisuseDetection(unittest.TestCase):
+    """Tests for detecting incorrect @BoundInnerClass usage."""
+
+    def test_boundinnerclass_at_module_scope(self):
+        """@BoundInnerClass on a non-nested class raises clear error."""
+        @BoundInnerClass
+        class NotNested:
+            def __init__(self, outer): # pragma: nocover
+                self.outer = outer
+
+        with self.assertRaises(TypeError) as cm:
+            NotNested()
+        self.assertIn("@BoundInnerClass", str(cm.exception))
+        self.assertIn("nested inside another class", str(cm.exception))
+
+    def test_boundinnerclass_inside_method(self):
+        """@BoundInnerClass on a class defined inside a method raises clear error."""
+        class Outer:
+            def make_inner(self):
+                @BoundInnerClass
+                class Inner:
+                    def __init__(self, outer): # pragma: nocover
+                        self.outer = outer
+                return Inner()
+
+        o = Outer()
+        with self.assertRaises(TypeError) as cm:
+            o.make_inner()
+        self.assertIn("@BoundInnerClass", str(cm.exception))
+        self.assertIn("nested inside another class", str(cm.exception))
+
+    def test_unboundinnerclass_at_module_scope(self):
+        """@UnboundInnerClass on a non-nested class raises clear error."""
+        @UnboundInnerClass
+        class NotNested:
+            pass
+
+        with self.assertRaises(TypeError) as cm:
+            NotNested()
+        self.assertIn("@UnboundInnerClass", str(cm.exception))
+        self.assertIn("nested inside another class", str(cm.exception))
+
 def run_tests():
     bigtestlib.run(name="big.boundinnerclass", module=__name__)
 

@@ -274,6 +274,10 @@ class _BoundInnerClassBase(_ClassProxy):
         """Create the wrapper class. Override in subclasses."""
         raise NotImplementedError
 
+    def __call__(self, *args, **kwargs):
+        raise TypeError(
+            f"@{self.__class__.__name__} can only decorate a class nested inside another class"
+        )
 
 @export
 class BoundInnerClass(_BoundInnerClassBase):

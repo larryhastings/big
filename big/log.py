@@ -60,45 +60,56 @@ export_name('default_clock')
 
 
 @export
-class Logger:
+class Destination:
     """
-    Base class for objects that participate in a big.Log.
+    Base class for objects that receive messages from a big.Log.
 
-    All Logger objects must define write(elapsed, thread, s).
-    elapsed is the elapsed time since the log was
-    started/reset, in nanoseconds.  thread is the
-    threading.Thread handle for the thread that logged
-    the message.  s is the formatted log message.
+    All Destination objects must define:
 
-    In addition, Logger objects may optionally define the
+        write(elapsed, thread, s)
+
+    The arguments to write and all other Destination methods:
+
+    * elapsed is the elapsed time since the log was
+      started/reset, in nanoseconds.
+    * thread is the
+      threading.Thread handle for the thread
+      that logged the message.
+    * s is the formatted log message.
+
+    In addition, Destination objects may optionally define the
     following methods:
 
         flush(elapsed, thread)
         close(elapsed, thread)
         reset(elapsed, thread)
 
-    Logger objects may also define any of these methods:
+    Destination objects may also define any of these methods:
 
-        log(elapsed, thread, s, *, flush=False)
-        heading(elapsed, thread, s, marker)
-        enter(elapsed, thread, s)
-        exit(elapsed, thread, s)
+        log(elapsed, thread, message, *, flush=False)
+        heading(elapsed, thread, message, marker)
+        enter(elapsed, thread, message)
+        exit(elapsed, thread)
+
+    * message is the original message passed in to a Log method.
+    * marker 
 
     If these are defined, high-level calls to those
     methods will turn into calls to the equivalent
-    method on the Logger, otherwise the message will
-    be formatted into a string and logged to the Logger
+    method on the Destination, otherwise the message will
+    be formatted into a string and logged to the Destination
     using its write() method.
 
-    For example, if a Logger defines log(), then
+    For example, if a Destination defines log(), then
     calls to log() on the Log object will call
-    log() on the Logger.  Otherwise, the message
+    log() on the Destination.  Otherwise, the message
     will be formatted, and the Log will call the
-    Logger's write() method.
+    Destination's write() method.
 
-    (Note that the log() method only takes a string s;
-    the positional arguments to Log.log() are formatted
-    and passed in to log() as the final formatted string.)
+    (The log() method only takes a message string; the
+    positional arguments to Log.log() are formatted
+    (using sep and end) before they're passed in to
+    Destination.log().)
     """
     def __init__(self):
         self.owner = None
@@ -111,7 +122,7 @@ class Logger:
         self.owner = owner
         self.start = time
 
-    def write(self, elapsed, thread, s):
+    def write(self, elapsed, thread, message):
         raise RuntimeError("virtual write method called on", self)
 
     def flush(self, elapsed, thread):
@@ -126,52 +137,52 @@ class Logger:
 
 
 @export
-class Callable(Logger):
-    "A Logger wrapping a callable."
+class Callable(Destination):
+    "A Destination wrapping a callable."
     def __init__(self, callable):
         super().__init__()
         self.callable = callable
 
-    def write(self, elapsed, thread, s):
-        self.callable(s)
+    def write(self, elapsed, thread, message):
+        self.callable(message)
 
 
 
 @export
-class Print(Logger):
-    "A Logger wrapping builtins.print."
+class Print(Destination):
+    "A Destination wrapping builtins.print."
     def __init__(self):
         super().__init__()
         self.print = builtins.print
 
-    def write(self, elapsed, thread, s):
-        self.print(s, end='', flush=True)
+    def write(self, elapsed, thread, message):
+        self.print(message, end='', flush=True)
 
 
 
 
 @export
-class List(Logger):
-    "A Logger wrapping a Python list."
+class List(Destination):
+    "A Destination wrapping a Python list."
     def __init__(self, list):
         super().__init__()
         self.array = list
 
 
-    def write(self, elapsed, thread, s):
-        self.array.append(s)
+    def write(self, elapsed, thread, message):
+        self.array.append(message)
 
 
 
 @export
-class Buffer(Logger):
-    "A Logger that buffers log messages, printing them with builtins.print when flushed."
+class Buffer(Destination):
+    "A Destination that buffers log messages, printing them with builtins.print when flushed."
     def __init__(self):
         super().__init__()
         self.array = []
 
-    def write(self, elapsed, thread, s):
-        self.array.append(s)
+    def write(self, elapsed, thread, message):
+        self.array.append(message)
 
     def flush(self, elapsed, thread):
         if self.array:
@@ -181,8 +192,8 @@ class Buffer(Logger):
 
 
 @export
-class File(Logger):
-    "A Logger wrapping a file in the filesystem."
+class File(Destination):
+    "A Destination wrapping a file in the filesystem."
     def __init__(self, path, mode="at", *, flush=False):
         super().__init__()
 
@@ -199,12 +210,12 @@ class File(Logger):
         super().reset(elapsed, thread)
         self.f = self.path.open(self.mode) if self.always_flush else None
 
-    def write(self, elapsed, thread, s):
+    def write(self, elapsed, thread, message):
         if self.always_flush:
-            self.f.write(s)
+            self.f.write(message)
             self.f.flush()
         else:
-            self.array.append(s)
+            self.array.append(message)
 
     def flush(self, elapsed, thread):
         if self.array:
@@ -227,15 +238,15 @@ class File(Logger):
 
 
 @export
-class FileHandle(Logger):
-    "A Logger wrapping a Python file handle."
+class FileHandle(Destination):
+    "A Destination wrapping a Python file handle."
     def __init__(self, handle, *, flush=False):
         super().__init__()
         self.handle = handle
         self.immediate = flush
 
-    def write(self, elapsed, thread, s):
-        self.handle.write(s)
+    def write(self, elapsed, thread, message):
+        self.handle.write(message)
         if self.immediate:
             self.handle.flush()
 
@@ -249,9 +260,9 @@ class FileHandle(Logger):
 
 
 @export
-class Sink(Logger):
+class Sink(Destination):
     """
-    A Logger that accumulates log messages for later iteration or printing.
+    A Destination that accumulates log messages for later iteration or printing.
 
     Events include thread information and raw timestamps.
 
@@ -297,17 +308,17 @@ class Sink(Logger):
         events.append([elapsed, 0, thread, self.depth, type, message])
         self.longest_message = max(self.longest_message, len(message))
 
-    def write(self, elapsed, thread, s):
-        self._event(elapsed, thread, self.WRITE, s.rstrip('\n'))
+    def write(self, elapsed, thread, message):
+        self._event(elapsed, thread, self.WRITE, message.rstrip('\n'))
 
-    def log(self, elapsed, thread, s, *, flush=False):
-        self._event(elapsed, thread, self.LOG, s.rstrip('\n'))
+    def log(self, elapsed, thread, message, *, flush=False):
+        self._event(elapsed, thread, self.LOG, message.rstrip('\n'))
 
-    def heading(self, elapsed, thread, s, marker):
-        self._event(elapsed, thread, self.HEADING, s)
+    def heading(self, elapsed, thread, message, marker):
+        self._event(elapsed, thread, self.HEADING, message)
 
-    def enter(self, elapsed, thread, s):
-        self._event(elapsed, thread, self.ENTER, s)
+    def enter(self, elapsed, thread, message):
+        self._event(elapsed, thread, self.ENTER, message)
         self.depth += 1
 
     def exit(self, elapsed, thread):
@@ -382,7 +393,7 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8
     return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
 
 @export
-class Log(Logger):
+class Log:
     """
     A lightweight text-based log suitable for debugging.
 
@@ -417,11 +428,11 @@ class Log(Logger):
         callable object
             The callable object is called with every log message.
             Equivalent to big.log.Callable(argument).
-        Logger object
+        Destination object
             Method calls to the Log are passed through to the
-            Logger object.  If the Logger doesn't define a
-            high-level logging function (log, header, enter, exit)
-            the message is formatted and logged to that Logger
+            Destination object.  If the Destination doesn't define
+            a high-level logging function (log, header, enter, exit)
+            the message is formatted and logged to that Destination
             using its write method.
 
     If you don't pass in any explicit destinations, Log behaves
@@ -490,7 +501,7 @@ class Log(Logger):
 
     """
 
-    def __init__(self, *loggers,
+    def __init__(self, *destinations,
             clock=default_clock,
             delimiter='=',
             final='{name} finish at {timestamp}\n',
@@ -529,7 +540,7 @@ class Log(Logger):
         self._spaces = ''
         self._timestamp = timestamp
 
-        self._loggers = array
+        self._destinations = array
 
         self._queue = None
 
@@ -545,36 +556,36 @@ class Log(Logger):
         self._reset(start_time_ns, start_time_epoch, thread)
 
         print = builtins.print
-        if not loggers:
-            loggers = [print]
+        if not destinations:
+            destinations = [print]
 
-        for logger in loggers:
-            if logger is None:
+        for destination in destinations:
+            if destination is None:
                 continue
 
-            if isinstance(logger, Log):
-                append((logger, True))
+            if isinstance(destination, Log):
+                append((destination, True))
                 continue
 
-            if isinstance(logger, Logger):
+            if isinstance(destination, (Destination, Log)):
                 pass
-            elif logger == print:
-                logger = Print()
-            elif isinstance(logger, str):
-                logger = File(Path(logger))
-            elif isinstance(logger, Path):
-                logger = File(logger)
-            elif isinstance(logger, list):
-                logger = List(logger)
-            elif isinstance(logger, TextIOBase):
-                logger = FileHandle(logger)
-            elif callable(logger):
-                logger = Callable(logger)
+            elif destination == print:
+                destination = Print()
+            elif isinstance(destination, str):
+                destination = File(Path(destination))
+            elif isinstance(destination, Path):
+                destination = File(destination)
+            elif isinstance(destination, list):
+                destination = List(destination)
+            elif isinstance(destination, TextIOBase):
+                destination = FileHandle(destination)
+            elif callable(destination):
+                destination = Callable(destination)
             else:
-                raise ValueError(f"don't know how to log to logger {logger!r}")
+                raise ValueError(f"don't know how to use destination {destination!r}")
 
-            append((logger, False))
-            logger.register(start_time_ns, thread, self)
+            append((destination, False))
+            destination.register(start_time_ns, thread, self)
 
     def _atexit(self):
         self.close()
@@ -603,11 +614,11 @@ class Log(Logger):
 
         self._reset_worker(start_time_ns, start_time_epoch, thread)
 
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.reset()
+                destination.reset()
                 continue
-            logger.reset(start_time_ns, thread)
+            destination.reset(start_time_ns, thread)
 
         if self._threading and (self._thread is None):
             self._queue = Queue()
@@ -687,19 +698,19 @@ class Log(Logger):
         prefix = self._format(elapsed, thread, self._prefix)
         formatted = f"{prefix}{s}"
 
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.log(*args, sep=sep, end=end, flush=flush)
+                destination.log(*args, sep=sep, end=end, flush=flush)
                 continue
 
-            log = getattr(logger, 'log', None)
+            log = getattr(destination, 'log', None)
             if log:
                 log(elapsed, thread, s, flush=flush)
                 continue
 
-            logger.write(elapsed, thread, formatted)
+            destination.write(elapsed, thread, formatted)
             if flush:
-                logger.flush(elapsed, thread)
+                destination.flush(elapsed, thread)
 
 
     def __call__(self, *args, sep=_sep, end=_end, flush=False):
@@ -728,7 +739,20 @@ class Log(Logger):
         return self(*args, end=end, sep=sep, flush=flush)
 
 
-    def _dispatch_s(self, time, s, method):
+
+    def _write(self, time, thread, s):
+        if self._print_header: self._header()
+
+        elapsed = self._elapsed(time)
+
+        for destination, is_log in self._destinations:
+            if is_log:
+                destination.write(s)
+                continue
+            destination.write(elapsed, thread, s)
+
+    def write(self, s):
+        time = self._clock()
         thread = current_thread()
 
         if not isinstance(s, str):
@@ -736,7 +760,7 @@ class Log(Logger):
         if self._closed:
             raise RuntimeError("Log is closed")
 
-        work = [(method, (time, thread, s))]
+        work = [(self._write, (time, thread, s))]
 
         if self._threading:
             self._queue.put(work)
@@ -747,52 +771,36 @@ class Log(Logger):
             fn(*args)
 
 
-    def _write(self, time, thread, s):
-        if self._print_header: self._header()
-
-        elapsed = self._elapsed(time)
-
-        for logger, is_log in self._loggers:
-            if is_log:
-                logger.write(s)
-                continue
-            logger.write(elapsed, thread, s)
-
-    def write(self, s):
-        elapsed = self._clock()
-        self._dispatch_s(elapsed, s, self._write)
-
-
-    def _heading(self, time, thread, s, marker):
+    def _heading(self, time, thread, message, marker):
         if self._print_header: self._header()
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
 
         separator = self._line(prefix, marker)
-        formatted = separator + prefix + s + '\n' + separator
+        formatted = separator + prefix + message + '\n' + separator
 
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.heading(s, marker=marker)
+                destination.heading(message, marker=marker)
                 continue
 
-            heading = getattr(logger, 'heading', None)
+            heading = getattr(destination, 'heading', None)
             if heading:
-                heading(elapsed, thread, s, marker)
+                heading(elapsed, thread, message, marker)
                 continue
-            logger.write(elapsed, thread, formatted)
+            destination.write(elapsed, thread, formatted)
 
-    def heading(self, s, marker=None):
+    def heading(self, message, marker=None):
         time = self._clock()
         thread = current_thread()
 
-        if not isinstance(s, str):
-            raise TypeError('s must be str')
+        if not isinstance(message, str):
+            raise TypeError('message must be str')
         if self._closed:
             raise RuntimeError("Log is closed")
 
-        work = [(self._heading, (time, thread, s, marker))]
+        work = [(self._heading, (time, thread, message, marker))]
 
         if self._threading:
             self._queue.put(work)
@@ -813,32 +821,40 @@ class Log(Logger):
         def __exit__(self, exc_type, exc_value, traceback):
             self.log.exit()
 
-    def _enter(self, time, thread, s):
+    def _enter(self, time, thread, message, marker):
         if self._print_header: self._header()
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
 
-        separator = self._line(prefix, self._separator)
-        formatted = separator + prefix + s + '\n' + separator
+        separator = self._line(prefix, marker)
+        formatted = separator + prefix + message + '\n' + separator
 
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.enter(s)
+                destination.enter(message)
                 continue
 
-            enter = getattr(logger, 'enter', None)
+            enter = getattr(destination, 'enter', None)
             if enter:
-                enter(elapsed, thread, s)
+                enter(elapsed, thread, message)
                 continue
-            logger.write(elapsed, thread, formatted)
+            destination.write(elapsed, thread, formatted)
 
         self._nesting += 1
         self._spaces = _spaces[:self._nesting * self._indent]
 
-    def enter(self, s):
+    def enter(self, message, *, marker=None):
         time = self._clock()
-        self._dispatch_s(time, s, self._enter)
+        thread = current_thread()
+        work = [(self._enter, (time, thread, message, marker))]
+
+        if self._threading:
+            self._queue.put(work)
+        else:
+            with self._lock:
+                fn, args = work[0]
+                fn(*args)
         return self.SubsystemContextManager(self)
 
     def _dispatch_0(self, time, thread, method):
@@ -865,16 +881,16 @@ class Log(Logger):
         prefix = self._format(elapsed, thread, self._prefix)
         separator = self._line(prefix, self._separator)
 
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.exit()
+                destination.exit()
                 continue
 
-            exit = getattr(logger, 'exit', None)
+            exit = getattr(destination, 'exit', None)
             if exit:
                 exit(elapsed, thread)
                 continue
-            logger.write(elapsed, thread, separator)
+            destination.write(elapsed, thread, separator)
 
     def exit(self):
         time = self._clock()
@@ -884,12 +900,12 @@ class Log(Logger):
 
     def _flush(self, time, thread):
         elapsed = self._elapsed(time)
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.flush()
+                destination.flush()
                 continue
 
-            logger.flush(elapsed, thread)
+            destination.flush(elapsed, thread)
 
     def flush(self):
         time = self._clock()
@@ -900,12 +916,12 @@ class Log(Logger):
     def _close(self, time, thread):
         elapsed = self._elapsed(time)
 
-        for logger, is_log in self._loggers:
+        for destination, is_log in self._destinations:
             if is_log:
-                logger.close()
+                destination.close()
                 continue
 
-            logger.close(elapsed, thread)
+            destination.close(elapsed, thread)
 
     def closed(self):
         with self._lock:
@@ -970,9 +986,9 @@ class Log(Logger):
 
 
 @export
-class OldLogger(Logger):
+class OldDestination(Destination):
     """
-    A Logger providing backwards compatibility with the old big.log.Log interface.
+    A Destination providing backwards compatibility with the old big.log.Log interface.
     Accumulates events for later iteration or printing.
     """
 
@@ -996,15 +1012,15 @@ class OldLogger(Logger):
         events.append([t, 0, event, len(self.stack)])
         self.longest_event = max(self.longest_event, len(event))
 
-    def write(self, time, thread, s):
-        self._event(time, s.rstrip('\n'))
+    def write(self, time, thread, message):
+        self._event(time, message.rstrip('\n'))
 
-    def log(self, time, thread, s, *, flush=False):
-        self._event(time, s.rstrip('\n'))
+    def log(self, time, thread, message, *, flush=False):
+        self._event(time, message.rstrip('\n'))
 
-    def enter(self, time, thread, s):
-        self._event(time, s + " start")
-        self.stack.append(s)
+    def enter(self, time, thread, message):
+        self._event(time, message + " start")
+        self.stack.append(message)
 
     def exit(self, time, thread):
         subsystem = self.stack.pop()
@@ -1042,13 +1058,13 @@ class OldLogger(Logger):
 class OldLog:
     """
     A drop-in replacement for the old big.log.Log class.
-    Creates a Log with an OldLogger and exposes the old interface.
+    Creates a Log with an OldDestination and exposes the old interface.
     """
 
     def __init__(self, clock=None):
-        self._logger = OldLogger()
+        self._destination = OldDestination()
         clock=clock or default_clock
-        self._log = Log(self._logger, threading=False, initial='', final='', prefix='', clock=clock)
+        self._log = Log(self._destination, threading=False, initial='', final='', prefix='', clock=clock)
 
     def reset(self):
         self._log.reset()
@@ -1063,8 +1079,8 @@ class OldLog:
         self._log.exit()
 
     def __iter__(self):
-        return iter(self._logger)
+        return iter(self._destination)
 
     def print(self, *, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9):
-        self._logger.print(print=print, title=title, headings=headings, indent=indent, seconds_width=seconds_width, fractional_width=fractional_width)
+        self._destination.print(print=print, title=title, headings=headings, indent=indent, seconds_width=seconds_width, fractional_width=fractional_width)
 
