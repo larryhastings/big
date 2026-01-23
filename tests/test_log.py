@@ -54,21 +54,19 @@ class TestDestination(unittest.TestCase):
     def test_destination_init(self):
         destination = big.Destination()
         self.assertIsNone(destination.owner)
-        self.assertEqual(destination.start, 0)
 
     def test_destination_register(self):
         destination = big.Destination()
         destination.owner = None  # Reset to allow re-registration
-        destination.register(100, None, "test_owner")
+        destination.register("test_owner")
         self.assertEqual(destination.owner, "test_owner")
-        self.assertEqual(destination.start, 100)
 
     def test_destination_register_already_registered(self):
         destination = big.Destination()
         destination.owner = None
-        destination.register(100, None, "owner1")
+        destination.register("owner1")
         with self.assertRaises(RuntimeError) as cm:
-            destination.register(200, None, "owner2")
+            destination.register("owner2")
         self.assertIn("already registered", str(cm.exception))
 
     def test_destination_virtual_write(self):
@@ -78,16 +76,15 @@ class TestDestination(unittest.TestCase):
 
     def test_destination_flush_does_nothing(self):
         destination = big.Destination()
-        destination.flush(0, None)  # Should not raise
+        destination.flush()  # Should not raise
 
     def test_destination_close_does_nothing(self):
         destination = big.Destination()
-        destination.close(0, None)  # Should not raise
+        destination.close()  # Should not raise
 
     def test_destination_reset(self):
         destination = big.Destination()
-        destination.reset(500, None)
-        self.assertEqual(destination.start, 500)
+        destination.reset()
 
 
 class TestCallable(unittest.TestCase):
@@ -140,7 +137,7 @@ class TestBuffer(unittest.TestCase):
             buffer.write(0, None, "hello ")
             buffer.write(0, None, "world")
             self.assertEqual(buffer.array, ["hello ", "world"])
-            buffer.flush(0, None)
+            buffer.flush()
             self.assertEqual(buffer.array, [])
         finally:
             builtins.print = original_print
@@ -149,7 +146,7 @@ class TestBuffer(unittest.TestCase):
 
     def test_buffer_flush_empty(self):
         buffer = big.Buffer()
-        buffer.flush(0, None)  # Should not raise or print
+        buffer.flush()  # Should not raise or print
 
 
 class TestFile(unittest.TestCase):
@@ -169,7 +166,7 @@ class TestFile(unittest.TestCase):
             with open(path, 'r') as f:
                 self.assertEqual(f.read(), "")
 
-            file_destination.flush(0, None)
+            file_destination.flush()
             self.assertEqual(file_destination.array, [])
 
             with open(path, 'r') as f:
@@ -177,7 +174,7 @@ class TestFile(unittest.TestCase):
             self.assertEqual(content, "line1\nline2\n")
 
             # Close should work when array is empty
-            file_destination.close(0, None)
+            file_destination.close()
         finally:
             os.unlink(path)
 
@@ -194,7 +191,7 @@ class TestFile(unittest.TestCase):
                 content = f.read()
             self.assertEqual(content, "immediate\n")
 
-            file_destination.close(0, None)
+            file_destination.close()
         finally:
             os.unlink(path)
 
@@ -206,7 +203,7 @@ class TestFile(unittest.TestCase):
         try:
             file_destination = big.File(path, mode='at')
             file_destination.write(0, None, "appended\n")
-            file_destination.flush(0, None)
+            file_destination.flush()
 
             with open(path, 'r') as f:
                 content = f.read()
@@ -233,13 +230,13 @@ class TestFileHandle(unittest.TestCase):
     def test_filehandle_flush(self):
         buffer = io.StringIO()
         fh_destination = big.FileHandle(buffer)
-        fh_destination.flush(0, None)  # Should not raise
+        fh_destination.flush()  # Should not raise
 
     def test_filehandle_close(self):
         buffer = io.StringIO()
         fh_destination = big.FileHandle(buffer)
         self.assertIsNotNone(fh_destination.handle)
-        fh_destination.close(0, None)
+        fh_destination.close()
         self.assertIsNone(fh_destination.handle)
 
 
@@ -301,48 +298,44 @@ class TestLogBasics(unittest.TestCase):
             log = big.Log(12345, threading=False)
         self.assertIn("don't know how to use destination", str(cm.exception))
 
-    def test_log_closed_error(self):
+    def test_log_after_closed(self):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
         log.close()
-        with self.assertRaises(RuntimeError) as cm:
-            log("after close")
-        self.assertIn("closed", str(cm.exception))
+        log("after close")
 
-    def test_log_write_closed_error(self):
+    def test_log_write_after_closed(self):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
         log.close()
-        with self.assertRaises(RuntimeError):
-            log.write("after close")
+        log.write("after close")
 
-    def test_log_heading_closed_error(self):
+    def test_log_heading_after_closed(self):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
         log.close()
-        with self.assertRaises(RuntimeError):
-            log.heading("after close")
+        log.heading("after close")
 
     def test_log_close_is_idempotent(self):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
-        self.assertFalse(log.closed())
+        self.assertFalse(log.closed)
         log.close()
-        self.assertTrue(log.closed())
+        self.assertTrue(log.closed)
         log.close()
-        self.assertTrue(log.closed())
+        self.assertTrue(log.closed)
 
     def test_log_atexit(self):
         # simulate atexit calls
         log = big.Log([], threading=False)
-        self.assertFalse(log.closed())
+        self.assertFalse(log.closed)
         log._atexit()
-        self.assertTrue(log.closed())
+        self.assertTrue(log.closed)
 
         log = big.Log([], threading=True)
-        self.assertFalse(log.closed())
+        self.assertFalse(log.closed)
         log._atexit()
-        self.assertTrue(log.closed())
+        self.assertTrue(log.closed)
 
 
 class TestLogMethods(unittest.TestCase):
@@ -541,8 +534,7 @@ class TestLogThreading(unittest.TestCase):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
         log.close()
-        with self.assertRaises(RuntimeError):
-            log.flush()
+        log.flush()
 
 
 class TestLogNestedLogs(unittest.TestCase):
