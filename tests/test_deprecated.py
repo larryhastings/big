@@ -123,7 +123,7 @@ class TestOldDestination(unittest.TestCase):
 
     def test_old_logger_basic(self):
         old = big.OldDestination()
-        log = big.Log(old, threading=False, initial='', final='', prefix='')
+        log = big.Log(old, threading=False, header='', footer='', prefix='')
         log("event")
         log.close()
 
@@ -133,7 +133,7 @@ class TestOldDestination(unittest.TestCase):
 
     def test_old_logger_enter_exit(self):
         old = big.OldDestination()
-        log = big.Log(old, threading=False, initial='', final='', prefix='')
+        log = big.Log(old, threading=False, header='', footer='', prefix='')
         log.enter("subsystem")
         log("inside")
         log.exit()
@@ -146,7 +146,7 @@ class TestOldDestination(unittest.TestCase):
 
     def test_old_logger_print(self):
         old = big.OldDestination()
-        log = big.Log(old, threading=False, initial='', final='', prefix='')
+        log = big.Log(old, threading=False, header='', footer='', prefix='')
         log("test")
         log.close()
 
@@ -156,7 +156,7 @@ class TestOldDestination(unittest.TestCase):
 
     def test_old_logger_print_no_title(self):
         old = big.OldDestination()
-        log = big.Log(old, threading=False, initial='', final='', prefix='')
+        log = big.Log(old, threading=False, header='', footer='', prefix='')
         log("test")
         log.close()
 
@@ -167,7 +167,7 @@ class TestOldDestination(unittest.TestCase):
 
     def test_old_logger_print_no_headings(self):
         old = big.OldDestination()
-        log = big.Log(old, threading=False, initial='', final='', prefix='')
+        log = big.Log(old, threading=False, header='', footer='', prefix='')
         log("test")
         log.close()
 
@@ -176,7 +176,7 @@ class TestOldDestination(unittest.TestCase):
 
     def test_old_logger_write(self):
         old = big.OldDestination()
-        log = big.Log(old, threading=False, initial='', final='', prefix='')
+        log = big.Log(old, threading=False, header='', footer='', prefix='')
         log.write("raw write content\n")
         log.close()
 
