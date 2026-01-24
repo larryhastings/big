@@ -218,6 +218,7 @@ class TestFile(unittest.TestCase):
         expected = f"LogName.2026-01-23.19-21-29.123456.PST.{os.getpid()}.txt"
 
         log = big.Log(big.log.TMPFILE, name="LogName", threading=False, header='', footer='', prefix='', timestamp_clock=fake_clock)
+        print("\n\n{log.tmpfile.name=}\n\n")
         self.assertEqual(log.tmpfile.name, expected)
 
         destination = log._destinations[0][0]
