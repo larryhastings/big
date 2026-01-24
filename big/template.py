@@ -34,11 +34,14 @@ import token
 # close delimiter inside a quoted string?
 # if no quotes defined, don't use split quoted strings
 
-__all__ = []
 
-def export(o):
-    __all__.append(o.__name__)
-    return o
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
 
 
 
@@ -399,4 +402,4 @@ def eval_template_string(s, globals, locals=None, *,
     return ''.join(result)
 
 
-del export
+clean()

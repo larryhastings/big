@@ -102,7 +102,7 @@ def run(name, module, permutations=None):
         break
 
 def finish():
-    if not (stats['failures'] or stats['errors']):
+    if not (stats['failures'] or stats['errors']): # pragma: nocover
         result = "OK"
     else: # pragma: no cover
         result = "FAILED"

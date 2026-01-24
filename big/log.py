@@ -48,17 +48,16 @@ except ImportError: # pragma: no cover
         return int(monotonic() * 1_000_000_000.0)
 
 
-__all__ = []
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
 
-def export_name(s):
-    __all__.append(s)
 
-def export(o):
-    export_name(o.__name__)
-    return o
-
-
-export_name('default_clock')
+export('default_clock')
 
 
 @export
@@ -390,6 +389,7 @@ _spaces = " " * 1024
 _sep = " "
 _end = "\n"
 
+@export
 def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8):
     # 1 for the dot
     time_width = time_seconds_width + 1 + time_fractional_width
@@ -397,7 +397,8 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8
 
 
 tmpfile = "{tmpfile}"
-export_name("tmpfile")
+export("tmpfile")
+
 
 @export
 class Log:
@@ -553,7 +554,8 @@ class Log:
         self._spaces = ''
         self._timestamp = timestamp
 
-        tmpfile = f"{name}.{timestamp(start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")}.{os.getpid()}.txt"
+        log_timestamp = timestamp(start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")
+        tmpfile = f"{name}.{log_timestamp}.{os.getpid()}.txt"
         tmpfile = big_file.translate_filename_to_exfat(tmpfile)
         tmpfile = tmpfile.replace(" ", '_')
         self._tmpfile = tmpfile = Path(tempfile.gettempdir()) / tmpfile
@@ -1142,3 +1144,4 @@ class OldLog:
     def print(self, *, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9):
         self._destination.print(print=print, title=title, headings=headings, indent=indent, seconds_width=seconds_width, fractional_width=fractional_width)
 
+clean()

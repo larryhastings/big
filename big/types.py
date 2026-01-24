@@ -48,14 +48,18 @@ except ImportError: # pragma nocover
         s = ", ".join(t.__name__ for t in args)
         return f'{origin.__name__}[{s}]'
 
+from .builtin import ModuleManager
 from .text import linebreaks, multipartition, multisplit, Pattern
 from .tokens import generate_tokens
 
 
-__all__ = []
-def export(o):
-    __all__.append(o.__name__)
-    return o
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('mm', 'export', 'delete', 'clean')
+
+__all__ = mm.__all__
 
 
 _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
@@ -4243,4 +4247,4 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock.release()
 
 
-del export
+clean()

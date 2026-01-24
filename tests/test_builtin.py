@@ -163,6 +163,43 @@ class BigBuiltinTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             uncallable('a')
 
+    def test_ModuleManager(self):
+        ##
+        ## ModuleManager.clean only works properly
+        ## at module scope and class scope.
+        ## (Maybe it works in function scope in 3.13+?)
+        ##
+        ## So, let's test it inside class scope.
+        class PointlessClass:
+            mm = big.ModuleManager()
+            mm.delete('mm')
+
+            with self.assertRaises(TypeError):
+                mm.export(35)
+            with self.assertRaises(TypeError):
+                mm.delete(35)
+
+            def foo(): pass
+            result = mm.export(foo)
+            self.assertIs(result, foo)
+            result = mm.delete(foo)
+            self.assertIs(result, foo)
+
+            mm.export("bar", "bat", "zip")
+            mm.delete("bar", "bat", "zoo")
+
+            self.assertEqual(mm.__all__, ['foo', 'bar', 'bat', 'zip'])
+            self.assertEqual(mm.deletions, ['mm', 'foo', 'bar', 'bat', 'zoo'])
+
+            bar = bat = zoo = 3
+            mm.clean()
+
+        self.assertFalse(hasattr(PointlessClass, 'mm'))
+        self.assertFalse(hasattr(PointlessClass, 'foo'))
+        self.assertFalse(hasattr(PointlessClass, 'bar'))
+        self.assertFalse(hasattr(PointlessClass, 'bat'))
+        self.assertFalse(hasattr(PointlessClass, 'zoo'))
+
 
 
 class TestClassRegistry(unittest.TestCase):

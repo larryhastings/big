@@ -31,3 +31,5 @@ version = Version(big.__version__)
 
 del Version
 del big
+
+__all__ = ['version']

@@ -26,15 +26,17 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import collections
 
-__all__ = [
-    'iterator_context',
-    'iterator_filter',
-    'IteratorContext',
-    'PushbackIterator',
-    'Undefined',
-    'undefined',
-    ]
 
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
+
+
+@export
 class PushbackIterator:
     """
     Wraps any iterator, allowing you to push items back on the iterator.
@@ -121,6 +123,7 @@ class PushbackIterator:
 # --8<-- start tidy itertools --8<--
 
 
+@export
 class IteratorContext:
     "Context object yielded by big.iterator_context."
 
@@ -160,6 +163,7 @@ class IteratorContext:
         return f'IteratorContext(iterator={self._iterator!r}, start={self.start!r}, index={self.index!r}, is_first={self.is_first!r}, is_last={self.is_last!r}, {s})'
 
 
+@export
 def iterator_context(iterator, start=0):
     """
     Wraps any iterator.  Yields (ctx, o) where o
@@ -241,6 +245,7 @@ def iterator_context(iterator, start=0):
 
 undefined = None
 
+@export
 class Undefined:
     def __init__(self):
         global undefined
@@ -254,8 +259,10 @@ class Undefined:
         return False
 
 undefined = Undefined()
+export("undefined")
 
 
+@export
 def iterator_filter(iterator,
     *,
     stop_at_value=undefined,
@@ -400,3 +407,5 @@ def iterator_filter(iterator,
         yield o
 
 # --8<-- end tidy itertools --8<--
+
+clean()

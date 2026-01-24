@@ -31,3 +31,4 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 __version__ = "0.13"
+__all__ = ['__version__']

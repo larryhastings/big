@@ -25,18 +25,58 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-__all__ = []
+class ModuleManager:
+    def __init__(self):
+        self.__all__ = []
+        self.deletions = []
 
-def export(o):
-    __all__.append(o.__name__)
-    return o
+    def export(self, *args):
+        append = self.__all__.append
+        for o in args:
+            name = getattr(o, '__name__', None)
+            if name:
+                append(name)
+                continue
+            if not isinstance(o, str):
+                raise TypeError("{o} isn't a string and doesn't have a __name__")
+            append(o)
+        if len(args) == 1:
+            return args[0]
 
+    def delete(self, *args):
+        append = self.deletions.append
+        for o in args:
+            name = getattr(o, '__name__', None)
+            if name:
+                append(name)
+                continue
+            if not isinstance(o, str):
+                raise TypeError("{o} isn't a string and doesn't have a __name__")
+            append(o)
+        if len(args) == 1:
+            return args[0]
+
+    def clean(self):
+        import sys
+        frame = sys._getframe(1)
+        for name in self.deletions:
+            del frame.f_locals[name]
+
+
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
+
+export(ModuleManager)
 
 from functools import update_wrapper
 from inspect import signature
 
 from types import SimpleNamespace as namespace
-__all__.append('namespace')
+export('namespace')
 
 
 @export
@@ -203,3 +243,5 @@ class ClassRegistry(dict):
             self[key] = cls
             return cls
         return decorator
+
+clean()

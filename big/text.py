@@ -54,15 +54,14 @@ except ImportError: # pragma: no cover
     def isinstance_re_pattern(o):
         return isinstance(o, re_Pattern)
 
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
 
-__all__ = []
-
-def export_name(s):
-    __all__.append(s)
-
-def export(o):
-    export_name(o.__name__)
-    return o
 
 
 def _iterate_over_bytes(b):
@@ -127,7 +126,7 @@ def encode_strings(o, encoding='ascii'):
 # represent, please see the "Whitespace and line-breaking
 # characters in Python and big" deep-dive in big's README.
 
-export_name('str_whitespace')
+export('str_whitespace')
 str_whitespace = (
     # character string
     # |       ordinal number
@@ -174,38 +173,38 @@ str_whitespace = (
     '\u205f', #28  8287 - 0x205f - medium mathematical space
     '\u3000', #29 12288 - 0x3000 - ideographic space
     )
-export_name('str_whitespace_without_crlf')
+export('str_whitespace_without_crlf')
 str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
 
-export_name('whitespace')
+export('whitespace')
 whitespace = str_whitespace
-export_name('whitespace_without_crlf')
+export('whitespace_without_crlf')
 whitespace_without_crlf = str_whitespace_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we remove the four ASCII separator characters.
-export_name('unicode_whitespace')
+export('unicode_whitespace')
 unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
-export_name('unicode_whitespace_without_crlf')
+export('unicode_whitespace_without_crlf')
 unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
 
 # Whitespace as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-export_name('ascii_whitespace')
+export('ascii_whitespace')
 ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
-export_name('ascii_whitespace_without_crlf')
+export('ascii_whitespace_without_crlf')
 ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
 # Bytes objects, using the ASCII encoding.
-export_name('bytes_whitespace')
+export('bytes_whitespace')
 bytes_whitespace = encode_strings(ascii_whitespace)
-export_name('bytes_whitespace_without_crlf')
+export('bytes_whitespace_without_crlf')
 bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
 
 
-export_name('str_linebreaks')
+export('str_linebreaks')
 str_linebreaks = (
     # char    decimal   hex      identity
     ##########################################
@@ -229,27 +228,27 @@ str_linebreaks = (
     # Also: welcome to Big, Acorn and RISC OS users!
     # What are you doing here?  You can't run Python 3.6+!
     )
-export_name('str_linebreaks_without_crlf')
+export('str_linebreaks_without_crlf')
 str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
 
-export_name('linebreaks')
+export('linebreaks')
 linebreaks = str_linebreaks
-export_name('linebreaks_without_crlf')
+export('linebreaks_without_crlf')
 linebreaks_without_crlf = str_linebreaks_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we again remove the four ASCII separator characters.
-export_name('unicode_linebreaks')
+export('unicode_linebreaks')
 unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
-export_name('unicode_linebreaks_without_crlf')
+export('unicode_linebreaks_without_crlf')
 unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
 
 # Linebreaks as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-export_name('ascii_linebreaks')
+export('ascii_linebreaks')
 ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
-export_name('ascii_linebreaks_without_crlf')
+export('ascii_linebreaks_without_crlf')
 ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
@@ -286,7 +285,7 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 # linebreak character, because str.splitlines (and bytes.splitlines)
 # rstrips the string of linebreak characters before it splits lines, sigh.
 
-export_name('bytes_linebreaks')
+export('bytes_linebreaks')
 bytes_linebreaks = (
     b'\n'    , #   10 0x000a - linebreak
     )
@@ -306,7 +305,7 @@ bytes_linebreaks += (
     b'\r\n'  , # bonus! the classic DOS linebreak sequence!
     )
 
-export_name('bytes_linebreaks_without_crlf')
+export('bytes_linebreaks_without_crlf')
 bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
 
 
@@ -957,17 +956,17 @@ def multistrip(s, separators, left=True, right=True):
 
 # for keep
 AS_PAIRS="AS_PAIRS"
-export_name(AS_PAIRS)
+export(AS_PAIRS)
 ALTERNATING="ALTERNATING"
-export_name(ALTERNATING)
+export(ALTERNATING)
 
 # for strip
 LEFT = "LEFT"
-export_name(LEFT)
+export(LEFT)
 RIGHT = "RIGHT"
-export_name(RIGHT)
+export(RIGHT)
 PROGRESSIVE = "PROGRESSIVE"
-export_name(PROGRESSIVE)
+export(PROGRESSIVE)
 
 def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators):
     if maxsplit == None:
@@ -1376,19 +1375,19 @@ def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
 # but that's because ASCII had a limited number of
 # punctuation characters.
 apostrophes = unicode_apostrophes = "'‘’‚‛"
-export_name('apostrophes')
+export('apostrophes')
 double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
-export_name('double_quotes')
+export('double_quotes')
 
 ascii_apostrophes = b"'"
-export_name('ascii_apostrophes')
+export('ascii_apostrophes')
 ascii_double_quotes = b'"'
-export_name('ascii_double_quotes')
+export('ascii_double_quotes')
 
 utf8_apostrophes = apostrophes.encode('utf-8')
-export_name('utf8_apostrophes')
+export('utf8_apostrophes')
 utf8_double_quotes = double_quotes.encode('utf-8')
-export_name('utf8_double_quotes')
+export('utf8_double_quotes')
 
 
 @export
@@ -2329,22 +2328,22 @@ class Delimiter:
 
 
 delimiter_parentheses = Delimiter(")")
-export_name('delimiter_parentheses')
+export('delimiter_parentheses')
 
 delimiter_square_brackets = Delimiter("]")
-export_name('delimiter_square_brackets')
+export('delimiter_square_brackets')
 
 delimiter_curly_braces = Delimiter("}")
-export_name('delimiter_curly_braces')
+export('delimiter_curly_braces')
 
 delimiter_angle_brackets = Delimiter(">")
-export_name('delimiter_angle_brackets')
+export('delimiter_angle_brackets')
 
 delimiter_single_quote = Delimiter("'", escape='\\', multiline=False, quoting=True)
-export_name('delimiter_single_quote')
+export('delimiter_single_quote')
 
 delimiter_double_quotes = Delimiter('"', escape='\\', multiline=False, quoting=True)
-export_name('delimiter_double_quotes')
+export('delimiter_double_quotes')
 
 split_delimiters_default_delimiters = {
     '(': delimiter_parentheses,
@@ -2353,7 +2352,7 @@ split_delimiters_default_delimiters = {
     "'": delimiter_single_quote,
     '"': delimiter_double_quotes,
     }
-export_name('split_delimiters_default_delimiters')
+export('split_delimiters_default_delimiters')
 
 
 split_delimiters_default_delimiters_bytes = {
@@ -2363,7 +2362,7 @@ split_delimiters_default_delimiters_bytes = {
     b"'": Delimiter(b"'", escape=b'\\', multiline=False, quoting=True),
     b'"': Delimiter(b'"', escape=b'\\', multiline=False, quoting=True),
     }
-export_name('split_delimiters_default_delimiters_bytes')
+export('split_delimiters_default_delimiters_bytes')
 
 _ACTION_POP = "<action: pop>"
 # _ACTION_2POP = "<action: pop twice>"
@@ -2963,10 +2962,10 @@ _delimiters_cache.append(
     (python_delimiters, _python_delimiters_cache, 4)
     )
 
-export_name('python_delimiters')
+export('python_delimiters')
 
 python_delimiters_version = { f"3.{minor}": python_delimiters for minor in range(6, 14) }
-export_name('python_delimiters_version')
+export('python_delimiters_version')
 
 @export
 class SplitDelimitersValue:
@@ -5806,5 +5805,4 @@ def strip_line_comments(lines, line_comment_markers, *,
     return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes)
 
 
-del export
-del export_name
+clean()

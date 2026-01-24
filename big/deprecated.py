@@ -31,14 +31,13 @@ from .itertools import PushbackIterator
 import re
 
 
-__all__ = []
-
-def export_name(s):
-    __all__.append(s)
-
-def export(o):
-    export_name(o.__name__)
-    return o
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
 
 
 import builtins
@@ -215,5 +214,4 @@ class Log:
             print(f"{indent}{format_time(start)}  {format_time(elapsed)}  {indent2}{event}")
 
 
-del export_name
-del export
+clean()

@@ -50,14 +50,14 @@ import weakref
 import sys
 _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
 
-__all__ = []
 
-def export_name(name):
-    __all__.append(name)
-
-def export(o):
-    export_name(o.__name__)
-    return o
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
 
 
 
@@ -194,9 +194,9 @@ class _ClassProxy:
 # class Foo:
 #     __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
 BOUNDINNERCLASS_ATTR = '__bound_inner_classes__'
-export_name('BOUNDINNERCLASS_ATTR')
+export('BOUNDINNERCLASS_ATTR')
 BOUNDINNERCLASS_SLOTS = (BOUNDINNERCLASS_ATTR,)
-export_name('BOUNDINNERCLASS_SLOTS')
+export('BOUNDINNERCLASS_SLOTS')
 
 
 def _get_cache(outer):
@@ -499,3 +499,5 @@ def instance_bound_to(instance, outer):
     """
     return class_bound_to(type(instance), outer)
 
+
+clean()

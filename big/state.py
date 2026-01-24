@@ -28,11 +28,13 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from functools import update_wrapper
 from inspect import signature
 
-__all__ = []
-
-def export(o):
-    __all__.append(o.__name__)
-    return o
+from .builtin import ModuleManager
+mm = ModuleManager()
+export = mm.export
+delete = mm.delete
+clean  = mm.clean
+delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
+__all__ = mm.__all__
 
 
 @export
@@ -431,3 +433,5 @@ def dispatch(state_manager='state_manager', *, prefix='', suffix=''):
         wrapper.__signature__ = signature(fn)
         return wrapper
     return dispatch
+
+clean()
