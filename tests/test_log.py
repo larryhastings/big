@@ -211,15 +211,20 @@ class TestFile(unittest.TestCase):
         finally:
             os.unlink(path)
 
-    def test_logfile(self):
+    def test_tmpfile(self):
         def fake_clock():
-            return 1769224889.0
+            return 1769224889.123456
 
-        log = big.Log([], name="LogName", threading=False, header='', footer='', prefix='', timestamp_clock=fake_clock)
-        filename = log._format(0, threading.current_thread(), big.logfile())
+        expected = f"LogName.2026-01-23.19-21-29.123456.PST.{os.getpid()}.txt"
 
-        expected = f"LogName.2026-01-24T03.21.29Z.{os.getpid()}.txt"
-        self.assertEqual(filename.rpartition(os.sep)[2], expected)
+        log = big.Log(big.log.tmpfile, name="LogName", threading=False, header='', footer='', prefix='', timestamp_clock=fake_clock)
+        self.assertEqual(log.tmpfile.name, expected)
+
+        destination = log._destinations[0][0]
+        self.assertIsInstance(destination, big.log.File)
+        self.assertEqual(destination.path, log.tmpfile)
+
+
 
 
 

@@ -237,14 +237,6 @@ class File(Destination):
             self.mode = "at"
 
 
-@export
-def logfile():
-    pid=os.getpid()
-    tempdir=tempfile.gettempdir()
-
-    return f"{tempdir}{os.sep}{{tmpfile}}"
-
-
 
 @export
 class FileHandle(Destination):
@@ -403,6 +395,10 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8
     time_width = time_seconds_width + 1 + time_fractional_width
     return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
 
+
+tmpfile = "{tmpfile}"
+export_name("tmpfile")
+
 @export
 class Log:
     """
@@ -557,10 +553,10 @@ class Log:
         self._spaces = ''
         self._timestamp = timestamp
 
-        tmpfile = f"{name}.{big_time.timestamp_human(start_time_epoch)}.{os.getpid()}.txt"
+        tmpfile = f"{name}.{timestamp(start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")}.{os.getpid()}.txt"
         tmpfile = big_file.translate_filename_to_exfat(tmpfile)
         tmpfile = tmpfile.replace(" ", '_')
-        self._tmpfile = tmpfile
+        self._tmpfile = tmpfile = Path(tempfile.gettempdir()) / tmpfile
 
         self._destinations = array
 
@@ -594,6 +590,8 @@ class Log:
                 pass
             elif destination == print:
                 destination = Print()
+            elif destination == "{tmpfile}":
+                destination = File(self._tmpfile)
             elif isinstance(destination, str):
                 destination = File(Path(self._format(0, thread, destination)))
             elif isinstance(destination, Path):
@@ -677,13 +675,14 @@ class Log:
         elapsed = self._ns_to_float(elapsed)
         epoch = elapsed + self._start_time_epoch
         timestamp = self._timestamp(epoch)
+        start_timestamp = self._timestamp(self._start_time_epoch)
         return format.format(
             elapsed=elapsed,
             name=self._name,
+            start_timestamp=start_timestamp,
             thread=thread,
             time=epoch,
             timestamp=timestamp,
-            tmpfile=self._tmpfile,
             ) + self._spaces
 
     def _line(self, prefix, separator):
@@ -996,6 +995,9 @@ class Log:
     def flush(self):
         self._dispatch( [(self._flush, ())] )
 
+    @property
+    def tmpfile(self):
+        return self._tmpfile
 
     @property
     def closed(self):
