@@ -557,7 +557,7 @@ class Log:
         self._spaces = ''
         self._timestamp = timestamp
 
-        tmpfile = f"{name}.{big_time.timestamp_3339Z(start_time_epoch)}.{os.getpid()}.txt"
+        tmpfile = f"{name}.{big_time.timestamp_human(start_time_epoch)}.{os.getpid()}.txt"
         tmpfile = big_file.translate_filename_to_exfat(tmpfile)
         tmpfile = tmpfile.replace(" ", '_')
         self._tmpfile = tmpfile
