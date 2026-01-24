@@ -1475,19 +1475,6 @@ class linked_list:
     ## There's a similar internal API for linked list iterators,
     ## with just two methods: _internal_lock and _internal_linked_list.
 
-    def _internal_length(self):
-        ## Returns the length for this linked list.
-        return self._length
-
-    def _internal_lock(self):
-        ## Returns the lock for this linked list, if any.
-        ##
-        ## If this linked list has a lock, returns it.  The object
-        ##    returned must support the API of threading.Lock,
-        ##    specifically: acquire, release, and the context manager APIs.
-        ## If this linked list doesn't have a lock, returns None.
-        return self._lock
-
     def _internal_cut(self):
         ## Cuts all nodes internally.  List will be empty afterwards.
         ## Returns a tuple containing (first_node last_node).
@@ -1552,7 +1539,7 @@ class linked_list:
     def _two_locks(self, other):
         "Returns a list containing self._maybe_lock and the equivalent from other, in the order you should acquire them."
         self_lock = self._lock
-        other_lock = other._internal_lock()
+        other_lock = other._lock
         if self_lock is None:
             return [other_lock or _inert_context_manager, _inert_context_manager]
         if other_lock in (self_lock, None):
@@ -1575,7 +1562,7 @@ class linked_list:
                 if self_node.value == other_node.value:
                     continue
                 return False
-            return self._length == other._internal_length()
+            return self._length == other._length
 
     def __ne__(self, other):
         if self is other:
@@ -1587,7 +1574,7 @@ class linked_list:
             for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
                 if self_node.value != other_node.value:
                     return True
-            return self._length != other._internal_length()
+            return self._length != other._length
 
     def __lt__(self, other):
         if self is other:
@@ -1603,7 +1590,7 @@ class linked_list:
                     continue
                 # self_node > other_node
                 return False
-            return self._length < other._internal_length()
+            return self._length < other._length
 
     def __le__(self, other):
         if self is other:
@@ -1619,7 +1606,7 @@ class linked_list:
                     return True
                 # self_node > other_node
                 return False
-            return self._length <= other._internal_length()
+            return self._length <= other._length
 
     def __ge__(self, other):
         if self is other:
@@ -1635,7 +1622,7 @@ class linked_list:
                     return True
                 # self_node < other_node
                 return False
-            return self._length >= other._internal_length()
+            return self._length >= other._length
 
     def __gt__(self, other):
         if self is other:
@@ -1651,7 +1638,7 @@ class linked_list:
                     continue
                 # self_node < other_node
                 return False
-            return self._length > other._internal_length()
+            return self._length > other._length
 
 
     def __copy__(self):
@@ -1698,7 +1685,7 @@ class linked_list:
         with self._maybe_lock:
             t = linked_list((node.value for node in self._internal_iter()))
         if isinstance(other, linked_list):
-            with t._internal_lock() or _inert_context_manager:
+            with t._lock or _inert_context_manager:
                 t.extend((node.value for node in other._internal_iter()))
         else:
             t.extend(other)
@@ -2592,7 +2579,7 @@ class linked_list:
         after = cursor.next
         assert after
 
-        other_length = other._internal_length()
+        other_length = other._length
         assert other_length
         self._length += other_length
 
@@ -3956,7 +3943,7 @@ class linked_list_base_iterator:
                 locks.pop().release()
 
         try:
-            other_lock = other._internal_lock()
+            other_lock = other._lock
 
             while True:
                 self_lock = self._lock
@@ -3991,7 +3978,7 @@ class linked_list_base_iterator:
             list = self._cursor.linked_list
             if other is list:
                 raise ValueError("other and self are the same list")
-            if not other._internal_length():
+            if not other._length:
                 return
             return list._splice(other, self, is_rsplice)
 

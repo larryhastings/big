@@ -211,13 +211,13 @@ class TestFile(unittest.TestCase):
         finally:
             os.unlink(path)
 
-    def test_tmpfile(self):
+    def test_TMPFILE(self):
         def fake_clock():
             return 1769224889.123456
 
         expected = f"LogName.2026-01-23.19-21-29.123456.PST.{os.getpid()}.txt"
 
-        log = big.Log(big.log.tmpfile, name="LogName", threading=False, header='', footer='', prefix='', timestamp_clock=fake_clock)
+        log = big.Log(big.log.TMPFILE, name="LogName", threading=False, header='', footer='', prefix='', timestamp_clock=fake_clock)
         self.assertEqual(log.tmpfile.name, expected)
 
         destination = log._destinations[0][0]

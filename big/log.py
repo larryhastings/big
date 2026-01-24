@@ -396,8 +396,8 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8
     return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
 
 
-tmpfile = "{tmpfile}"
-export("tmpfile")
+TMPFILE = object()
+export("TMPFILE")
 
 
 @export
@@ -592,7 +592,7 @@ class Log:
                 pass
             elif destination == print:
                 destination = Print()
-            elif destination == "{tmpfile}":
+            elif destination == TMPFILE:
                 destination = File(self._tmpfile)
             elif isinstance(destination, str):
                 destination = File(Path(self._format(0, thread, destination)))
