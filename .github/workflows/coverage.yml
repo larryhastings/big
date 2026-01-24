@@ -22,7 +22,9 @@ jobs:
         pip install .
     - name: Run coverage without optional dependencies
       run: |
-        coverage run --parallel-mode tests/test_all.py
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        coverage run --parallel-mode tests/test_all.py >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
     - name: Install optional dependencies
       run: |
         python -m pip install . '.[test]'
