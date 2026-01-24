@@ -211,9 +211,24 @@ class TestFile(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_logfile(self):
+        def fake_clock():
+            return 1769224889.0
+
+        log = big.Log([], name="LogName", threading=False, header='', footer='', prefix='', timestamp_clock=fake_clock)
+        filename = log._format(0, threading.current_thread(), big.logfile())
+
+        expected = f"LogName.2026-01-24T03.21.29Z.{os.getpid()}.txt"
+        self.assertEqual(filename.rpartition(os.sep)[2], expected)
+
+
 
 class TestFileHandle(unittest.TestCase):
     """Tests for the FileHandle destination."""
+
+    def test_invalid_filehandle(self):
+        with self.assertRaises(TypeError):
+            big.FileHandle(None)
 
     def test_filehandle_write(self):
         buffer = io.StringIO()
@@ -231,13 +246,6 @@ class TestFileHandle(unittest.TestCase):
         buffer = io.StringIO()
         fh_destination = big.FileHandle(buffer)
         fh_destination.flush()  # Should not raise
-
-    def test_filehandle_close(self):
-        buffer = io.StringIO()
-        fh_destination = big.FileHandle(buffer)
-        self.assertIsNotNone(fh_destination.handle)
-        fh_destination.close()
-        self.assertIsNone(fh_destination.handle)
 
 
 class TestLogBasics(unittest.TestCase):
@@ -379,9 +387,9 @@ class TestLogMethods(unittest.TestCase):
     def test_log_heading_custom_separator(self):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
-        log.heading("Custom", separator='*')
+        log.heading("Custom", separator='*-')
         log.close()
-        self.assertTrue(any("*" in s for s in array))
+        self.assertTrue(any("*-*-*" in s for s in array))
 
     def test_log_enter_exit(self):
         array = []
@@ -405,36 +413,25 @@ class TestLogMethods(unittest.TestCase):
         self.assertIn("inside context", output)
 
     def test_log_unbalanced_exit(self):
-        array = []
-        log = big.Log(array, threading=False, header='', footer='', prefix='')
-        with self.assertRaises(RuntimeError) as cm:
-            log.exit()
-        self.assertIn("unbalanced", str(cm.exception))
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='', footer='', prefix='')
+        log.enter("entered!")
+        log.exit()
+        log.exit()
+        log.exit()
         log.close()
+        self.assertIn("entered!\n", s.getvalue())
 
-    def test_log_flush(self):
+    def test_reuse_log(self):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
-        log("before flush")
-        log.flush()
-        log.close()
-
-    def test_log_reset(self):
-        array = []
-        log = big.Log(array, threading=False, header='', footer='', prefix='')
-        log("before reset")
-        log.reset()
-        log("after reset")
-        log.close()
-
-    def test_log_reset_after_close(self):
-        array = []
-        log = big.Log(array, threading=False, header='', footer='', prefix='')
-        log("before reset")
+        log.write("before reset")
         log.close()
         log.reset()
-        log("after reset")
+        log.write("after reset")
         log.close()
+        self.assertIn("before reset", array)
+        self.assertIn("after reset", array)
 
     def test_log_sep_end_params(self):
         array = []
@@ -444,10 +441,104 @@ class TestLogMethods(unittest.TestCase):
         self.assertTrue(any("a-b-c!" in s for s in array))
 
     def test_log_with_flush_param(self):
-        array = []
-        log = big.Log(array, threading=False, header='', footer='', prefix='')
-        log("flushed message", flush=True)
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='', footer='', prefix='')
+        log("flushed message!", flush=True)
+        self.assertIn("flushed message!\n", s.getvalue())
         log.close()
+
+    def test_log_messages_after_close(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='', footer='', prefix='')
+        log("kooky!")
+        log.close()
+        log.heading("nope")
+        log.write("nope\n")
+        with log.enter("nope"):
+            log("nope")
+        log.reset()
+        log("wonderful!")
+        value = s.getvalue()
+        self.assertIn("kooky!\n", value)
+        self.assertIn("wonderful!\n", value)
+        self.assertNotIn("nope", value)
+
+class TestLogLazyHeaderAndFooter(unittest.TestCase):
+
+    def test_lazy_header_from_log(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='HEADER', footer='FOOTER', prefix='[PREFIX] ', width=20)
+        log("howdy!")
+        log.close()
+
+        expected = """
+[PREFIX] ===========
+[PREFIX] HEADER
+[PREFIX] ===========
+[PREFIX] howdy!
+[PREFIX] ===========
+[PREFIX] FOOTER
+[PREFIX] ===========
+        """.strip()
+        assert s.getvalue().strip() == expected
+
+    def test_lazy_header_from_write(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='HEADER', footer='FOOTER', prefix='[PREFIX] ', width=20)
+        log.write("howdy!\n")
+        log.close()
+
+        expected = """
+[PREFIX] ===========
+[PREFIX] HEADER
+[PREFIX] ===========
+howdy!
+[PREFIX] ===========
+[PREFIX] FOOTER
+[PREFIX] ===========
+        """.strip()
+        assert s.getvalue().strip() == expected
+
+    def test_lazy_header_from_heading(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='HEADER', footer='FOOTER', prefix='[PREFIX] ', width=20)
+        log.heading("howdy!")
+        log.close()
+
+        expected = """
+[PREFIX] ===========
+[PREFIX] HEADER
+[PREFIX] ===========
+[PREFIX] -----------
+[PREFIX] howdy!
+[PREFIX] -----------
+[PREFIX] ===========
+[PREFIX] FOOTER
+[PREFIX] ===========
+        """.strip()
+        assert s.getvalue().strip() == expected
+
+    def test_lazy_header_from_enter(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, header='HEADER', footer='FOOTER', prefix='[PREFIX] ', width=20)
+        with log.enter("howdy!"):
+            log("woah!")
+        log.close()
+
+        expected = """
+[PREFIX] ===========
+[PREFIX] HEADER
+[PREFIX] ===========
+[PREFIX] -----------
+[PREFIX] howdy!
+[PREFIX] -----------
+[PREFIX]     woah!
+[PREFIX] -----------
+[PREFIX] ===========
+[PREFIX] FOOTER
+[PREFIX] ===========
+        """.strip()
+        assert s.getvalue().strip() == expected
 
 
 class TestLogContextManager(unittest.TestCase):
@@ -527,8 +618,7 @@ class TestLogThreading(unittest.TestCase):
         array = []
         log = big.Log(array, threading=False, header='', footer='', prefix='')
         log.close()
-        with self.assertRaises(RuntimeError):
-            log.exit()
+        log.exit()
 
     def test_log_flush_closed_error(self):
         array = []
