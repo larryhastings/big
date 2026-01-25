@@ -1398,7 +1398,28 @@ class linked_list:
     until you advance it.)
     """
 
-    __slots__ = ('_head', '_tail', '_lock', '_maybe_lock', '_length')
+    __slots__ = ('_head', '_tail', '_lock', '_lock_parameter', '_maybe_lock', '_length')
+
+    def _analyze_lock(self, lock, prototype):
+        # returns (lock_parameter, lock, maybe_lock)
+        if lock is True:
+            l = threading.Lock()
+            return (lock, l, l)
+        if lock is False:
+            return (lock, None, _inert_context_manager)
+        # duck-typed lock
+        if (hasattr(lock, 'acquire')
+            and hasattr(lock, 'release')
+            and hasattr(lock, '__enter__')
+            and hasattr(lock, '__exit__')
+            and bool(lock)
+            ):
+            return (lock, lock, lock)
+        if lock is None:
+            if prototype is not None:
+                return self._analyze_lock(prototype._lock_parameter, None)
+            return (lock, None, _inert_context_manager)
+        raise TypeError(f"lock parameter must be bool, None, or a lock, not {type(lock).__name__}")
 
     def __init__(self, iterable=(), *, lock=None):
         self._head = head = linked_list_node(self, None, 'head')
@@ -1408,25 +1429,11 @@ class linked_list:
         self._length = 0
 
         # append the values *before* setting the lock.
-        # why bother locking before any other thread can see the list?
+        # (why bother locking before any other thread can see the list?)
         self._lock = None
         self._extend(iterable)
 
-        # _lock is either a lock or None
-        # _maybe_lock is always a context manager. you can always write
-        #      with self._maybe_lock:
-        # and it'll work.  if we don't have a lock, it's an inert context manager.
-        self._lock = lock
-        if lock is not None:
-            if not (hasattr(lock, 'acquire') and hasattr(lock, 'release')):
-                raise TypeError('lock object must support acquire and release')
-            if not (hasattr(lock, '__enter__') and hasattr(lock, '__exit__')):
-                raise TypeError('lock object must be a context manager')
-            if not bool(lock):
-                raise ValueError('lock object must always be true')
-            self._maybe_lock = lock
-        else:
-            self._maybe_lock = _inert_context_manager
+        self._lock_parameter, self._lock, self._maybe_lock = self._analyze_lock(lock, None)
 
     def _repr(self):
         buffer = ["linked_list(["]
@@ -1643,13 +1650,16 @@ class linked_list:
 
     def __copy__(self):
         with self._maybe_lock:
-            return linked_list((node.value for node in self._internal_iter()))
+            return linked_list((node.value for node in self._internal_iter()), lock=self._lock_parameter)
 
-    def copy(self):
-        return self.__copy__()
+    def copy(self, *, lock=None):
+        with self._maybe_lock:
+            t = linked_list((node.value for node in self._internal_iter()), lock=False)
+            t._lock_parameter, t._lock, t._maybe_lock = t._analyze_lock(lock, self)
+        return t
 
     def __deepcopy__(self, memo):
-        t = linked_list()
+        t = linked_list(lock=self._lock_parameter)
         append = t.append
         with self._maybe_lock:
             for node in self._internal_iter():
@@ -1658,10 +1668,12 @@ class linked_list:
 
     def __getstate__(self):
         with self._maybe_lock:
+            if self._lock_parameter not in (False, True, None):
+                raise ValueError("can't pickle linked_list with a user-supplied lock")
             return (None, {
                 '_head': self._head,
                 '_tail': self._tail,
-                '_lock': self._lock is not None,
+                '_lock': self._lock_parameter,
                 '_length': self._length,
                 })
 
@@ -1670,11 +1682,7 @@ class linked_list:
         self._head = d['_head']
         self._tail = d['_tail']
         self._length = d['_length']
-        if d['_lock']:
-            self._lock = self._maybe_lock = threading.Lock()
-        else:
-            self._lock = None
-            self._maybe_lock = _inert_context_manager
+        self._lock_parameter, self._lock, self._maybe_lock = self._analyze_lock(d['_lock'], None)
 
     # new in 3.7
     if _python_3_7_plus:
@@ -1683,12 +1691,16 @@ class linked_list:
 
     def __add__(self, other):
         with self._maybe_lock:
-            t = linked_list((node.value for node in self._internal_iter()))
+            t = linked_list((node.value for node in self._internal_iter()), lock=False)
+            lock_parameter = self._lock_parameter
+
         if isinstance(other, linked_list):
-            with t._lock or _inert_context_manager:
+            with other._lock or _inert_context_manager:
                 t.extend((node.value for node in other._internal_iter()))
         else:
             t.extend(other)
+
+        t._lock_parameter, t._lock, t._maybe_lock = t._analyze_lock(lock_parameter, None)
         return t
 
     def __iadd__(self, other):
@@ -1699,12 +1711,14 @@ class linked_list:
         if not hasattr(other, '__index__'):
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         multiplicand = other.__index__()
-        t = linked_list()
-        if multiplicand <= 0:
-            return t
+        t = linked_list(lock=False)
         with self._maybe_lock:
-            for _ in range(multiplicand):
-                t.extend((node.value for node in self._internal_iter()))
+            if multiplicand > 0:
+                for _ in range(multiplicand):
+                    t.extend((node.value for node in self._internal_iter()))
+            lock_parameter = self._lock_parameter
+
+        t._lock_parameter, t._lock, t._maybe_lock = t._analyze_lock(lock_parameter, None)
         return t
 
     __rmul__ = __mul__
@@ -1713,12 +1727,13 @@ class linked_list:
         if not hasattr(other, '__index__'):
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         multiplicand = other.__index__()
-        if multiplicand <= 0:
-            return linked_list()
         with self._maybe_lock:
-            elements = list((node.value for node in self._internal_iter()))
-            for _ in range(multiplicand - 1):
-                self.extend(elements)
+            if multiplicand <= 0:
+                self._clear()
+            else:
+                elements = list((node.value for node in self._internal_iter()))
+                for _ in range(multiplicand - 1):
+                    self.extend(elements)
         return self
 
     def __iter__(self):
@@ -2388,7 +2403,7 @@ class linked_list:
                 # negate is_rcut *here*
                 is_rcut = not is_rcut
 
-            t2 = linked_list(lock=lock)
+            t2 = linked_list(lock=False)
 
             start_iterator = start
             stop_iterator = stop
@@ -2490,10 +2505,12 @@ class linked_list:
             self._length -= count
             t2._length = count
 
+            t2._lock_parameter, t2._lock, t2._maybe_lock = t2._analyze_lock(lock, self)
+
             if not start_is_none:
-                start_iterator._lock = lock
+                start_iterator._lock = t2._lock
             if not stop_is_none:
-                stop_iterator._lock = lock
+                stop_iterator._lock = t2._lock
 
             return t2
         finally:
@@ -2881,6 +2898,7 @@ class linked_list_base_iterator:
         # that means decrementing node.iterator_refcount.
         # and if node.iterator_refcount reaches 0,
         # we *gotta* call unlink.
+        lock = None
         try:
             while True:
                 lock = getattr(self, '_lock', None)
