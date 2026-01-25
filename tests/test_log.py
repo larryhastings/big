@@ -803,12 +803,13 @@ class TestSink(unittest.TestCase):
         log("regular event")
         log.write("write event")
         log.heading("heading event")
-        log.enter("enter event")
-        log.exit()
+        with log.enter("enter event"):
+            pass
         log.close()
 
         events = list(sink)
         types = [e.type for e in events]
+        self.assertIn(big.Sink.START, types)
         self.assertIn(big.Sink.WRITE, types)
         self.assertIn(big.Sink.LOG, types)
         self.assertIn(big.Sink.HEADER, types)
@@ -816,6 +817,7 @@ class TestSink(unittest.TestCase):
         self.assertIn(big.Sink.HEADING, types)
         self.assertIn(big.Sink.ENTER, types)
         self.assertIn(big.Sink.EXIT, types)
+        self.assertIn(big.Sink.END, types)
 
     def test_sink_print(self):
         sink = big.Sink()
@@ -901,12 +903,16 @@ class TestSink(unittest.TestCase):
         log.close()
         events = list(sink)
         self.assertEqual(len(events), 5)
+        self.assertEqual(events[0].type, big.log.Sink.START)
+        self.assertGreater(events[0].epoch, 0)
         self.assertEqual(events[1].type, big.log.Sink.HEADER)
         self.assertEqual(events[1].message, 'Sink start')
         self.assertEqual(events[2].type, big.log.Sink.LOG)
         self.assertEqual(events[2].message, 'message')
         self.assertEqual(events[3].type, big.log.Sink.FOOTER)
         self.assertEqual(events[3].message, 'Sink finish')
+        self.assertEqual(events[4].type, big.log.Sink.END)
+        self.assertGreater(events[4].epoch, 0)
 
 
 class TestOldDestination(unittest.TestCase):
