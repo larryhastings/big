@@ -34,6 +34,7 @@ import io
 import os
 import tempfile
 import threading
+import time
 import unittest
 
 
@@ -183,15 +184,17 @@ class TestFile(unittest.TestCase):
             path = f.name
 
         try:
-            file_destination = big.File(path, mode='wt', flush=True)
-            file_destination.write(0, None, "immediate\n")
+            fd = big.File(path, mode='wt', flush=True)
+            log = big.Log(fd, threading=False)
+
+            log.write("immediate\n")
 
             # File should have content immediately
             with open(path, 'r') as f:
                 content = f.read()
-            self.assertEqual(content, "immediate\n")
+            self.assertIn("immediate\n", content)
 
-            file_destination.close()
+            log.close()
         finally:
             os.unlink(path)
 
@@ -201,28 +204,22 @@ class TestFile(unittest.TestCase):
             f.write("existing\n")
 
         try:
-            file_destination = big.File(path, mode='at')
-            file_destination.write(0, None, "appended\n")
-            file_destination.flush()
+            fd = big.File(path, mode='at')
+            log = big.Log(fd, threading=False)
+            log.write("appended\n")
+            log.close()
 
             with open(path, 'r') as f:
                 content = f.read()
-            self.assertEqual(content, "existing\nappended\n")
+            self.assertIn("existing\n", content)
+            self.assertIn("appended\n", content)
         finally:
             os.unlink(path)
 
-    def test_TMPFILE(self):
-
+    def test_TmpFile(self):
         log = big.Log(big.log.TMPFILE, name="LogName", threading=False, header='', footer='', prefix='', timestamp=lambda x:"ABACAB /DEADBEEF")
-
         expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.txt"
-        self.assertEqual(log.tmpfile.name, expected)
-
-        destination = log._destinations[0][0]
-        self.assertIsInstance(destination, big.log.File)
-        self.assertEqual(destination.path, log.tmpfile)
-
-
+        self.assertEqual(big.log.TMPFILE.path.name, expected)
 
 
 
@@ -253,6 +250,34 @@ class TestFileHandle(unittest.TestCase):
 
 class TestLogBasics(unittest.TestCase):
     """Basic tests for the Log class."""
+
+    def test_log_properties(self):
+        ns = big.log.default_clock()
+        epoch = time.time()
+        time.sleep(0.001)
+
+        log = big.Log(None)
+
+        self.assertEqual(log.clock, big.log.default_clock)
+        self.assertEqual(log.banner_separator, '=')
+        self.assertEqual(log.footer, '{name} finish at {timestamp}\n')
+        self.assertEqual(log.header, '{name} start at {timestamp}')
+        self.assertEqual(log.indent, 4)
+        self.assertEqual(log.name, 'Log')
+        self.assertEqual(log.prefix, big.log.prefix_format(3, 10, 8))
+        self.assertEqual(log.separator, '-')
+        self.assertEqual(log.threading, True)
+        self.assertEqual(log.timestamp, big.time.timestamp_human)
+        self.assertEqual(log.timestamp_clock, time.time)
+        self.assertEqual(log.width, 79)
+
+        self.assertEqual(log.closed, False)
+        self.assertGreater(log.start_time_ns, ns)
+        self.assertGreater(log.start_time_epoch, epoch)
+        self.assertEqual(log.end_time_epoch, None)
+        self.assertEqual(log.nesting, ())
+
+
 
     def test_log_default_destination(self):
         # With no destinations specified, should use print
@@ -756,16 +781,21 @@ class TestSink(unittest.TestCase):
         log.close()
 
         events = list(sink)
-        self.assertEqual(len(events), 2)
+        self.assertEqual(len(events), 4)
+        self.assertIsInstance(events.pop(0), big.SinkStartEvent)
+        self.assertIsInstance(events.pop(-1), big.SinkEndEvent)
         for i, e in enumerate(events, 1):
-            type, thread, elapsed, duration, depth, message = e
-            self.assertGreater(elapsed, 0)
-            self.assertGreaterEqual(duration, 0)
-            self.assertEqual(thread, threading.current_thread())
-            self.assertEqual(depth, 0)
-            self.assertEqual(type, big.log.Sink.LOG)
-            self.assertTrue(message.startswith('message'))
-            self.assertTrue(message.endswith(str(i)))
+            self.assertGreater(e.elapsed, 0)
+            self.assertGreaterEqual(e.duration, 0)
+            self.assertEqual(e.thread, threading.current_thread())
+            self.assertEqual(e.depth, 0)
+            self.assertEqual(e.type, big.log.Sink.LOG)
+            self.assertTrue(e.message.startswith('message'))
+            self.assertTrue(e.message.endswith(str(i)))
+            self.assertEqual(e.epoch, None)
+
+        sse = big.SinkStartEvent(0)
+        self.assertEqual(repr(sse), "SinkStartEvent(type='start', message='', elapsed=0, duration=0, depth=0, epoch=0, thread=None)")
 
     def test_sink_event_types(self):
         sink = big.Sink()
@@ -778,7 +808,7 @@ class TestSink(unittest.TestCase):
         log.close()
 
         events = list(sink)
-        types = [e[0] for e in events]
+        types = [e.type for e in events]
         self.assertIn(big.Sink.WRITE, types)
         self.assertIn(big.Sink.LOG, types)
         self.assertIn(big.Sink.HEADER, types)
@@ -861,8 +891,8 @@ class TestSink(unittest.TestCase):
         log.write(s)
         log.close()
         events = list(sink)
-        self.assertEqual(len(events), 1)
-        self.assertIn(s, events[0])
+        self.assertEqual(len(events), 3) # start, write, end
+        self.assertEqual(s, events[1].message)
 
     def test_sink_with_banners(self):
         sink = big.Sink()
@@ -870,13 +900,13 @@ class TestSink(unittest.TestCase):
         log("message")
         log.close()
         events = list(sink)
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0][0], big.log.Sink.HEADER)
-        self.assertEqual(events[0][-1], 'Sink start')
-        self.assertEqual(events[1][0], big.log.Sink.LOG)
-        self.assertEqual(events[1][-1], 'message')
-        self.assertEqual(events[2][0], big.log.Sink.FOOTER)
-        self.assertEqual(events[2][-1], 'Sink finish')
+        self.assertEqual(len(events), 5)
+        self.assertEqual(events[1].type, big.log.Sink.HEADER)
+        self.assertEqual(events[1].message, 'Sink start')
+        self.assertEqual(events[2].type, big.log.Sink.LOG)
+        self.assertEqual(events[2].message, 'message')
+        self.assertEqual(events[3].type, big.log.Sink.FOOTER)
+        self.assertEqual(events[3].message, 'Sink finish')
 
 
 class TestOldDestination(unittest.TestCase):

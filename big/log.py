@@ -84,6 +84,8 @@ class Destination:
         flush()
         close()
         reset()
+        start(start_time_epoch)
+        end(end_time_epoch)
 
     Destination objects may also define any of these methods:
 
@@ -131,6 +133,12 @@ class Destination:
         pass
 
     def reset(self):
+        pass
+
+    def start(self, start_time_epoch):
+        pass
+
+    def end(self, elapsed, end_time_epoch):
         pass
 
 
@@ -202,7 +210,10 @@ class File(Destination):
         self.path = Path(path)
         self.mode = mode
         self.always_flush = flush
+        self.f = None
 
+    def register(self, owner):
+        super().register(owner)
         self.reset()
 
     def reset(self):
@@ -238,6 +249,28 @@ class File(Destination):
 
 
 @export
+class TmpFile(File):
+    "A Destination that writes to a timestamped temporary file."
+    def __init__(self, *, flush=False):
+        # use a fake path for now
+        path = Path(tempfile.gettempdir()) / f"{os.getpid()}.tmp"
+        super().__init__(path)
+        self.always_flush = flush
+
+    def reset(self):
+        assert self.owner
+        log_timestamp = self.owner.timestamp(self.owner.start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")
+        tmpfile = f"{self.owner.name}.{log_timestamp}.{os.getpid()}.txt"
+        tmpfile = big_file.translate_filename_to_exfat(tmpfile)
+        tmpfile = tmpfile.replace(" ", '_')
+        self.path = Path(tempfile.gettempdir()) / tmpfile
+        super().reset()
+
+TMPFILE = TmpFile()
+export("TMPFILE")
+
+
+@export
 class FileHandle(Destination):
     "A Destination wrapping a Python file handle."
     def __init__(self, handle, *, flush=False):
@@ -254,6 +287,87 @@ class FileHandle(Destination):
 
     def flush(self):
         self.handle.flush()
+
+
+class SinkBaseEvent:
+    __slots__ = (
+        '_type',
+        '_message',
+        '_elapsed',
+        '_duration',
+        '_depth',
+        '_epoch',
+        '_thread',
+        )
+
+    def __init__(self, type, message='', elapsed=0, duration=0, depth=0, epoch=None, thread=None):
+        self._type = type
+        self._message = message
+        self._elapsed = elapsed
+        self._duration = duration
+        self._depth = depth
+        self._epoch = epoch
+        self._thread = thread
+
+    @property
+    def type(self):
+        return self._type
+
+    @property
+    def message(self):
+        return self._message
+
+    @property
+    def elapsed(self):
+        return self._elapsed
+
+    @property
+    def duration(self):
+        return self._duration
+
+    @property
+    def depth(self):
+        return self._depth
+
+    @property
+    def epoch(self):
+        return self._epoch
+
+    @property
+    def thread(self):
+        return self._thread
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(type={self._type!r}, message={self._message!r}, elapsed={self._elapsed}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, thread={self._thread})"
+
+
+@export
+class SinkEvent(SinkBaseEvent):
+    def __init__(self, type, elapsed, thread, message, depth):
+        super().__init__(
+            type=type,
+            message=message,
+            elapsed=elapsed,
+            depth=depth,
+            thread=thread,
+            )
+
+@export
+class SinkStartEvent(SinkBaseEvent):
+    def __init__(self, start_time_epoch):
+        super().__init__(
+            type=Sink.START,
+            epoch=start_time_epoch,
+            )
+
+@export
+class SinkEndEvent(SinkBaseEvent):
+    def __init__(self, elapsed, end_time_epoch):
+        super().__init__(
+            type=Sink.END,
+            elapsed=elapsed,
+            epoch=end_time_epoch,
+            )
 
 
 @export
@@ -276,6 +390,7 @@ class Sink(Destination):
     and prints them using builtins.print.
     """
 
+    START = 'start'
     WRITE = 'write'
     LOG = 'log'
     HEADER = 'header'
@@ -283,63 +398,78 @@ class Sink(Destination):
     HEADING = 'heading'
     ENTER = 'enter'
     EXIT = 'exit'
+    END = 'end'
 
-    def __init__(self, *, timestamp=big_time.timestamp_human):
+    def __init__(self):
         super().__init__()
-        self.timestamp = timestamp
+
+    def register(self, owner):
+        super().register(owner)
         self.reset()
 
     def reset(self):
         super().reset()
+
+        assert self.owner
+
         self.depth = 0
         self.events = []
         self.longest_message = 0
 
-    def _event(self, type, elapsed, thread, message):
+    def _event(self, event):
         events = self.events
         if events:
             previous = events[-1]
-            previous[3] = elapsed - previous[2]
-        events.append([type, thread, elapsed, 0, self.depth, message])
-        self.longest_message = max(self.longest_message, len(message))
+            duration = event.elapsed - previous.elapsed
+            assert duration >= 0, f"duration should be >= 0 but it's {duration}"
+            previous._duration = duration
+        events.append(event)
+        self.longest_message = max(self.longest_message, len(event.message))
+
+    def start(self, start_time_epoch):
+        self._event(SinkStartEvent(start_time_epoch))
+
+    def end(self, elapsed, end_time_epoch):
+        self._event(SinkEndEvent(elapsed, end_time_epoch))
 
     def write(self, elapsed, thread, message):
-        self._event(self.WRITE, elapsed, thread, message)
+        self._event(SinkEvent(self.WRITE, elapsed, thread, message, self.depth))
 
     def log(self, elapsed, thread, message, *, flush=False):
-        self._event(self.LOG, elapsed, thread, message)
+        self._event(SinkEvent(self.LOG, elapsed, thread, message, self.depth))
 
     def header(self, elapsed, thread, message, separator):
-        self._event(self.HEADER, elapsed, thread, message)
+        self._event(SinkEvent(self.HEADER, elapsed, thread, message, self.depth))
 
     def footer(self, elapsed, thread, message, separator):
-        self._event(self.FOOTER, elapsed, thread, message)
+        self._event(SinkEvent(self.FOOTER, elapsed, thread, message, self.depth))
 
     def heading(self, elapsed, thread, message, separator):
-        self._event(self.HEADING, elapsed, thread, message)
+        self._event(SinkEvent(self.HEADING, elapsed, thread, message, self.depth))
 
     def enter(self, elapsed, thread, message):
-        self._event(self.ENTER, elapsed, thread, message)
+        self._event(SinkEvent(self.ENTER, elapsed, thread, message, self.depth))
         self.depth += 1
 
     def exit(self, elapsed, thread):
         self.depth -= 1
-        self._event(self.EXIT, elapsed, thread, '')
+        self._event(SinkEvent(self.EXIT, elapsed, thread, '', self.depth))
 
     def __iter__(self):
         for e in self.events:
-            yield tuple(e)
+            yield e
 
     def print(self, *,
-            prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f}] {indent}',
-            format='{message}',
-            heading='{separator}\n{message}\n{separator}',
             enter='',
             exit='',
-            print=None,
+            format='{message}',
+            heading='{separator}\n{message}\n{separator}',
             indent=2,
-            width=None,
+            prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f}] {indent}',
+            print=None,
             separator='-',
+            timestamp=big_time.timestamp_human,
+            width=None,
             ):
         if not print:
             print = builtins.print
@@ -348,6 +478,7 @@ class Sink(Destination):
             width = self.longest_message
 
         formats = {
+            self.START: heading,
             self.WRITE: format,
             self.LOG: format,
             self.HEADER: heading or format,
@@ -355,26 +486,31 @@ class Sink(Destination):
             self.HEADING: heading or format,
             self.ENTER: enter or heading or format,
             self.EXIT: exit or heading or format,
+            self.END: heading,
         }
 
-        for type, thread, elapsed, duration, depth, message in self.events:
-            elapsed /= 1_000_000_000.0
-            duration /= 1_000_000_000.0
+        for e in self.events:
+            elapsed = e.elapsed / 1_000_000_000.0
+            duration = e.duration / 1_000_000_000.0
             epoch = elapsed + self.owner._start_time_epoch
-            timestamp = self.timestamp(epoch)
-            indent_str = ' ' * (depth * indent)
+            ts = timestamp(epoch)
+            indent_str = ' ' * (e.depth * indent)
             separator_str = (separator * ((width // len(separator)) + 1))[:width] if separator else ''
+            thread = e.thread or current_thread()
 
-            fmt = formats[type]
+            fmt = formats[e.type]
+
+            if e.type in (self.START, self.END):
+                message = e.type
 
             fields = {
                 'elapsed': elapsed,
                 'duration': duration,
-                'timestamp': timestamp,
+                'timestamp': ts,
                 'thread': thread,
-                'message': message,
-                'type': type,
-                'depth': depth,
+                'message': e.message,
+                'type': e.type,
+                'depth': e.depth,
                 'indent': indent_str,
                 'separator': separator_str,
             }
@@ -394,10 +530,6 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8
     # 1 for the dot
     time_width = time_seconds_width + 1 + time_fractional_width
     return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
-
-
-TMPFILE = object()
-export("TMPFILE")
 
 
 @export
@@ -549,16 +681,10 @@ class Log:
 
         self._width = width
         self._prefix = prefix
-        self._nesting = 0
+        self._nesting = []
         self._indent = indent
         self._spaces = ''
         self._timestamp = timestamp
-
-        log_timestamp = timestamp(start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")
-        tmpfile = f"{name}.{log_timestamp}.{os.getpid()}.txt"
-        tmpfile = big_file.translate_filename_to_exfat(tmpfile)
-        tmpfile = tmpfile.replace(" ", '_')
-        self._tmpfile = tmpfile = Path(tempfile.gettempdir()) / tmpfile
 
         self._destinations = array
 
@@ -592,8 +718,6 @@ class Log:
                 pass
             elif destination == print:
                 destination = Print()
-            elif destination == TMPFILE:
-                destination = File(self._tmpfile)
             elif isinstance(destination, str):
                 destination = File(Path(self._format(0, thread, destination)))
             elif isinstance(destination, Path):
@@ -609,6 +733,92 @@ class Log:
 
             append((destination, False))
             destination.register(self)
+            destination.start(self._start_time_epoch)
+
+
+    @property
+    def clock(self):
+        return self._clock
+
+    @property
+    def banner_separator(self):
+        return self._banner_separator
+
+    @property
+    def footer(self):
+        return self._footer
+
+    @property
+    def header(self):
+        return self._header
+
+    @property
+    def indent(self):
+        return self._indent
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def prefix(self):
+        return self._prefix
+
+    @property
+    def separator(self):
+        return self._separator
+
+    @property
+    def threading(self):
+        return self._threading
+
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @property
+    def timestamp_clock(self):
+        return self._timestamp_clock
+
+    @property
+    def width(self):
+        return self._width
+
+
+    @property
+    def closed(self):
+        with self._lock:
+            return self._closed
+
+    @property
+    def start_time_ns(self):
+        with self._lock:
+            return self._start_time_ns
+
+    @property
+    def start_time_epoch(self):
+        with self._lock:
+            return self._start_time_epoch
+
+    @property
+    def end_time_epoch(self):
+        with self._lock:
+            return self._end_time_epoch
+
+    @property
+    def nesting(self):
+        with self._lock:
+            return tuple(self._nesting)
+
+
+    def _reset_worker(self, start_time_ns, start_time_epoch):
+        self._nesting = []
+        self._spaces = ''
+        self._closed = False
+        self._start_time_epoch = start_time_epoch
+        self._end_time_epoch = None
+        self._start_time_ns = start_time_ns
+        self._want_header = bool(self._header)
 
     def _atexit(self):
         self.close()
@@ -622,14 +832,6 @@ class Log:
     def _ns_to_float(self, ns):
         return ns / 1_000_000_000.0
 
-    def _reset_worker(self, start_time_ns, start_time_epoch):
-        self._nesting = 0
-        self._spaces = ''
-        self._closed = False
-        self._start_time_epoch = start_time_epoch
-        self._start_time_ns = start_time_ns
-        self._want_header = bool(self._header)
-
     def _reset(self, start_time_ns, start_time_epoch, signal):
         # if we're not closed, flush before we reset
         if not self._closed:
@@ -639,6 +841,9 @@ class Log:
 
         for destination, is_log in self._destinations:
             destination.reset()
+
+            if not is_log:
+                destination.start(self._start_time_epoch)
 
         if self._threading and (self._thread is None):
             self._queue = Queue()
@@ -910,9 +1115,20 @@ class Log:
             if self.log:
                 self.log.exit()
 
-    def _set_nesting(self, nesting):
-        self._nesting = nesting
-        self._spaces = _spaces[:self._nesting * self._indent]
+    def _cache_spaces(self):
+        self._spaces = _spaces[:len(self._nesting) * self._indent]
+
+    def _append_nesting(self, s):
+        self._nesting.append(s)
+        self._cache_spaces()
+
+    def _pop_nesting(self):
+        self._nesting.pop()
+        self._cache_spaces()
+
+    def _clear_nesting(self):
+        self._nesting.clear()
+        self._cache_spaces()
 
     def _enter(self, time, thread, message, separator):
         if self._want_header:
@@ -935,7 +1151,7 @@ class Log:
                 continue
             destination.write(elapsed, thread, formatted)
 
-        self._set_nesting(self._nesting + 1)
+        self._append_nesting(message)
 
     def enter(self, message, *, separator=None):
         time = self._clock()
@@ -963,7 +1179,7 @@ class Log:
         if not self._nesting:
             return
 
-        self._set_nesting(self._nesting - 1)
+        self._pop_nesting()
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
@@ -997,21 +1213,24 @@ class Log:
     def flush(self):
         self._dispatch( [(self._flush, ())] )
 
-    @property
-    def tmpfile(self):
-        return self._tmpfile
 
-    @property
-    def closed(self):
-        with self._lock:
-            return self._closed
+    def _end(self, time):
+        elapsed = self._elapsed(time)
+
+        for destination, is_log in self._destinations:
+            if not is_log:
+                destination.end(elapsed, self._end_time_epoch)
 
     def _close(self):
         for destination, is_log in self._destinations:
             destination.close()
 
     def close(self):
-        time = self._clock()
+        t1 = self._clock()
+        end_time_epoch = self._timestamp_clock()
+        t2 = self._clock()
+        time = (t1 + t2) / 2
+
         thread = current_thread()
 
         with self._lock:
@@ -1019,13 +1238,15 @@ class Log:
                 return
 
             self._closed = True
+            self._end_time_epoch = end_time_epoch
 
             work = []
             append = work.append
 
             if self._footer:
-                append((self._set_nesting, (0,)))
+                append((self._clear_nesting, ()))
                 append((self._print_footer, (time, thread)))
+            append((self._end, (time,)))
             append((self._flush, ()))
             append((self._close, ()))
             append(None)
