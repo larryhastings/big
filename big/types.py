@@ -1398,15 +1398,18 @@ class linked_list:
     until you advance it.)
     """
 
-    __slots__ = ('_head', '_tail', '_lock', '_lock_parameter', '_maybe_lock', '_length')
+    __slots__ = ('_head', '_tail', '_lock', '_lock_parameter', '_length')
 
     def _analyze_lock(self, lock, prototype):
-        # returns (lock_parameter, lock, maybe_lock)
+        # returns (lock_parameter, lock)
         if lock is True:
-            l = threading.Lock()
-            return (lock, l, l)
+            return threading.Lock()
         if lock is False:
-            return (lock, None, _inert_context_manager)
+            return None
+        if lock is None:
+            if prototype is not None:
+                return self._analyze_lock(prototype._lock_parameter, None)
+            return None
         # duck-typed lock
         if (hasattr(lock, 'acquire')
             and hasattr(lock, 'release')
@@ -1414,11 +1417,7 @@ class linked_list:
             and hasattr(lock, '__exit__')
             and bool(lock)
             ):
-            return (lock, lock, lock)
-        if lock is None:
-            if prototype is not None:
-                return self._analyze_lock(prototype._lock_parameter, None)
-            return (lock, None, _inert_context_manager)
+            return lock
         raise TypeError(f"lock parameter must be bool, None, or a lock, not {type(lock).__name__}")
 
     def __init__(self, iterable=(), *, lock=None):
@@ -1433,7 +1432,8 @@ class linked_list:
         self._lock = None
         self._extend(iterable)
 
-        self._lock_parameter, self._lock, self._maybe_lock = self._analyze_lock(lock, None)
+        self._lock_parameter = lock
+        self._lock = self._analyze_lock(lock, None)
 
     def _repr(self):
         buffer = ["linked_list(["]
@@ -1454,7 +1454,7 @@ class linked_list:
         return ''.join(buffer)
 
     def __repr__(self):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             return self._repr()
 
     ##
@@ -1544,7 +1544,7 @@ class linked_list:
     ##
 
     def _two_locks(self, other):
-        "Returns a list containing self._maybe_lock and the equivalent from other, in the order you should acquire them."
+        "Returns a list containing two context managers, in the order you should acquire them."
         self_lock = self._lock
         other_lock = other._lock
         if self_lock is None:
@@ -1649,25 +1649,26 @@ class linked_list:
 
 
     def __copy__(self):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             return linked_list((node.value for node in self._internal_iter()), lock=self._lock_parameter)
 
     def copy(self, *, lock=None):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
-            t._lock_parameter, t._lock, t._maybe_lock = t._analyze_lock(lock, self)
+            t._lock_parameter = lock
+            t._lock = t._analyze_lock(lock, self)
         return t
 
     def __deepcopy__(self, memo):
         t = linked_list(lock=self._lock_parameter)
         append = t.append
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             for node in self._internal_iter():
                 append(copy.deepcopy(node.value, memo))
         return t
 
     def __getstate__(self):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             if self._lock_parameter not in (False, True, None):
                 raise ValueError("can't pickle linked_list with a user-supplied lock")
             return (None, {
@@ -1682,7 +1683,8 @@ class linked_list:
         self._head = d['_head']
         self._tail = d['_tail']
         self._length = d['_length']
-        self._lock_parameter, self._lock, self._maybe_lock = self._analyze_lock(d['_lock'], None)
+        self._lock_parameter = lock_parameter = d['_lock']
+        self._lock = self._analyze_lock(lock_parameter, None)
 
     # new in 3.7
     if _python_3_7_plus:
@@ -1690,7 +1692,7 @@ class linked_list:
             return GenericAlias(cls, (item,))
 
     def __add__(self, other):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
             lock_parameter = self._lock_parameter
 
@@ -1700,7 +1702,8 @@ class linked_list:
         else:
             t.extend(other)
 
-        t._lock_parameter, t._lock, t._maybe_lock = t._analyze_lock(lock_parameter, None)
+        t._lock_parameter = lock_parameter
+        t._lock = t._analyze_lock(lock_parameter, None)
         return t
 
     def __iadd__(self, other):
@@ -1712,13 +1715,14 @@ class linked_list:
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         multiplicand = other.__index__()
         t = linked_list(lock=False)
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             if multiplicand > 0:
                 for _ in range(multiplicand):
                     t.extend((node.value for node in self._internal_iter()))
             lock_parameter = self._lock_parameter
 
-        t._lock_parameter, t._lock, t._maybe_lock = t._analyze_lock(lock_parameter, None)
+        t._lock_parameter = lock_parameter
+        t._lock = t._analyze_lock(lock_parameter, None)
         return t
 
     __rmul__ = __mul__
@@ -1727,7 +1731,7 @@ class linked_list:
         if not hasattr(other, '__index__'):
             raise TypeError(f"can't multiply sequence by non-int of type {type(other)!r}")
         multiplicand = other.__index__()
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             if multiplicand <= 0:
                 self._clear()
             else:
@@ -2281,21 +2285,21 @@ class linked_list:
         return self.tail().rmatch(predicate)
 
     def remove(self, value, default=_undefined):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             it = self.head()
             value = it._remove(value, default)
             it._del()
             return value
 
     def rremove(self, value, default=_undefined):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             it = self.tail()
             value = it._rremove(value, default)
             it._del()
             return value
 
     def reverse(self):
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             if self._length < 2:
                 # reverse is a no-op for lists of length 0 or 1
                 return self.__iter__()
@@ -2321,7 +2325,7 @@ class linked_list:
         # copy to list, sort, then write back in-place
         # if the list has special nodes, this might be very exciting!
 
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             values = list((node.value for node in self._internal_iter()))
             values.sort(key=key, reverse=reverse)
 
@@ -2505,7 +2509,8 @@ class linked_list:
             self._length -= count
             t2._length = count
 
-            t2._lock_parameter, t2._lock, t2._maybe_lock = t2._analyze_lock(lock, self)
+            t2._lock_parameter = lock
+            t2._lock = t2._analyze_lock(lock, self)
 
             if not start_is_none:
                 start_iterator._lock = t2._lock
@@ -2693,7 +2698,7 @@ class linked_list:
         The value returned will be greater than or equal
         to start, and less than stop.
         """
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             clamp = self._clamp_index
             start = clamp(start, 'start')
             stop = clamp(stop, 'stop')
@@ -2739,7 +2744,7 @@ class linked_list:
         if (not n) or (self._length < 2):
             return
 
-        with self._maybe_lock:
+        with self._lock or _inert_context_manager:
             if n_is_negative:
                 cursor = self._head
                 for _ in range(n + 1):
