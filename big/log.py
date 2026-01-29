@@ -577,8 +577,8 @@ class Log:
         message = self._format(elapsed, thread, format)
 
         separator = self._banner_separator or self._separator
-        separator_line = self._line(prefix, separator)
-        formatted = separator_line + prefix + message + '\n' + separator_line + newlines
+        separator_line = self._line(prefix + "+", separator)
+        formatted = separator_line + prefix + "# " + message + '\n' + separator_line + newlines
 
         for destination in self._destinations:
             handler = getattr(destination, name)
@@ -728,8 +728,8 @@ class Log:
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
 
-        separator = self._line(prefix, separator)
-        formatted = separator + prefix + message + '\n' + separator
+        separator = self._line(prefix + "+", separator)
+        formatted = separator + prefix + "| " + message + '\n' + separator
 
         for destination in self._destinations:
             destination.heading(elapsed, thread, formatted, message, separator)
@@ -777,8 +777,8 @@ class Log:
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
 
-        separator = self._line(prefix, separator)
-        formatted = separator + prefix + message + '\n' + separator
+        separator = self._line(prefix + "+", separator)
+        formatted = separator + prefix + "| " + message + '\n' + separator
 
         for destination in self._destinations:
             destination.enter(elapsed, thread, formatted, message, separator)
