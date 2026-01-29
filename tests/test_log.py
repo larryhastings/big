@@ -53,17 +53,17 @@ class TestDestination(unittest.TestCase):
     """Tests for the base Destination class."""
 
     def test_destination_init(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         self.assertIsNone(destination.owner)
 
     def test_destination_register(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         destination.owner = None  # Reset to allow re-registration
         destination.register("test_owner")
         self.assertEqual(destination.owner, "test_owner")
 
     def test_destination_register_already_registered(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         destination.owner = None
         destination.register("owner1")
         with self.assertRaises(RuntimeError) as cm:
@@ -71,20 +71,20 @@ class TestDestination(unittest.TestCase):
         self.assertIn("already registered", str(cm.exception))
 
     def test_destination_virtual_write(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         with self.assertRaises(RuntimeError):
             destination.write(0, None, "test")
 
     def test_destination_flush_does_nothing(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         destination.flush()  # Should not raise
 
     def test_destination_close_does_nothing(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         destination.close()  # Should not raise
 
     def test_destination_reset(self):
-        destination = big.Destination()
+        destination = big.Log.Destination()
         destination.reset()
 
 
@@ -93,7 +93,7 @@ class TestCallable(unittest.TestCase):
 
     def test_callable_write(self):
         results = []
-        c = big.Callable(results.append)
+        c = big.Log.Callable(results.append)
         c.write(0, None, "test string")
         self.assertEqual(results, ["test string"])
 
@@ -106,7 +106,7 @@ class TestPrint(unittest.TestCase):
         original_print = builtins.print
         builtins.print = lambda *args, **kwargs: captured.append((args, kwargs))
         try:
-            printer = big.Print()
+            printer = big.Log.Print()
             printer.write(0, None, "hello")
         finally:
             builtins.print = original_print
@@ -120,7 +120,7 @@ class TestList(unittest.TestCase):
 
     def test_list_write(self):
         array = []
-        list_destination = big.List(array)
+        list_destination = big.Log.List(array)
         list_destination.write(0, None, "line1\n")
         list_destination.write(0, None, "line2\n")
         self.assertEqual(array, ["line1\n", "line2\n"])
@@ -134,7 +134,7 @@ class TestBuffer(unittest.TestCase):
         original_print = builtins.print
         builtins.print = lambda *args, **kwargs: captured.append((args, kwargs))
         try:
-            buffer = big.Buffer()
+            buffer = big.Log.Buffer()
             buffer.write(0, None, "hello ")
             buffer.write(0, None, "world")
             self.assertEqual(buffer.array, ["hello ", "world"])
@@ -146,7 +146,7 @@ class TestBuffer(unittest.TestCase):
         self.assertEqual(captured[0][0], ("hello world",))
 
     def test_buffer_flush_empty(self):
-        buffer = big.Buffer()
+        buffer = big.Log.Buffer()
         buffer.flush()  # Should not raise or print
 
 
@@ -158,7 +158,7 @@ class TestFile(unittest.TestCase):
             path = f.name
 
         try:
-            file_destination = big.File(path, mode='wt')
+            file_destination = big.Log.File(path, mode='wt')
             file_destination.write(0, None, "line1\n")
             file_destination.write(0, None, "line2\n")
             self.assertEqual(file_destination.array, ["line1\n", "line2\n"])
@@ -184,7 +184,7 @@ class TestFile(unittest.TestCase):
             path = f.name
 
         try:
-            fd = big.File(path, mode='wt', flush=True)
+            fd = big.Log.File(path, mode='wt', flush=True)
             log = big.Log(fd, threading=False)
 
             log.write("immediate\n")
@@ -204,7 +204,7 @@ class TestFile(unittest.TestCase):
             f.write("existing\n")
 
         try:
-            fd = big.File(path, mode='at')
+            fd = big.Log.File(path, mode='at')
             log = big.Log(fd, threading=False)
             log.write("appended\n")
             log.close()
@@ -228,23 +228,23 @@ class TestFileHandle(unittest.TestCase):
 
     def test_invalid_filehandle(self):
         with self.assertRaises(TypeError):
-            big.FileHandle(None)
+            big.Log.FileHandle(None)
 
     def test_filehandle_write(self):
         buffer = io.StringIO()
-        fh_destination = big.FileHandle(buffer)
+        fh_destination = big.Log.FileHandle(buffer)
         fh_destination.write(0, None, "test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
     def test_filehandle_write_with_flush(self):
         buffer = io.StringIO()
-        fh_destination = big.FileHandle(buffer, flush=True)
+        fh_destination = big.Log.FileHandle(buffer, flush=True)
         fh_destination.write(0, None, "test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
     def test_filehandle_flush(self):
         buffer = io.StringIO()
-        fh_destination = big.FileHandle(buffer)
+        fh_destination = big.Log.FileHandle(buffer)
         fh_destination.flush()  # Should not raise
 
 
@@ -694,7 +694,7 @@ class TestSink(unittest.TestCase):
     """Tests for Sink."""
 
     def test_sink_basic(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         log("message1")
         log("message2")
@@ -716,7 +716,7 @@ class TestSink(unittest.TestCase):
             self.assertEqual(e.number, 1)
             self.assertEqual(e.separator, '')
             self.assertEqual(e.thread, threading.current_thread())
-            self.assertEqual(e.type, big.log.Sink.LOG)
+            self.assertEqual(e.type, big.log.Log.Sink.LOG)
 
         event = events[0]
         clone = big.SinkBaseEvent(
@@ -744,7 +744,7 @@ class TestSink(unittest.TestCase):
         self.assertEqual(repr(sse), "SinkStartEvent(number=0, elapsed=0, type='start', message='', duration=0, depth=0, epoch=10, formatted='', ns=5, separator=, thread=None)")
 
     def test_sink_event_types(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False)
         log("regular event")
         log.write("write event")
@@ -755,18 +755,19 @@ class TestSink(unittest.TestCase):
 
         events = list(sink)
         types = [e.type for e in events]
-        self.assertIn(big.Sink.START, types)
-        self.assertIn(big.Sink.WRITE, types)
-        self.assertIn(big.Sink.LOG, types)
-        self.assertIn(big.Sink.HEADER, types)
-        self.assertIn(big.Sink.FOOTER, types)
-        self.assertIn(big.Sink.HEADING, types)
-        self.assertIn(big.Sink.ENTER, types)
-        self.assertIn(big.Sink.EXIT, types)
-        self.assertIn(big.Sink.END, types)
+        Sink = big.Log.Sink
+        self.assertIn(Sink.START, types)
+        self.assertIn(Sink.WRITE, types)
+        self.assertIn(Sink.LOG, types)
+        self.assertIn(Sink.HEADER, types)
+        self.assertIn(Sink.FOOTER, types)
+        self.assertIn(Sink.HEADING, types)
+        self.assertIn(Sink.ENTER, types)
+        self.assertIn(Sink.EXIT, types)
+        self.assertIn(Sink.END, types)
 
     def test_sink_print(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         log("test event")
         log.close()
@@ -776,7 +777,7 @@ class TestSink(unittest.TestCase):
         self.assertTrue(len(output) > 0)
 
     def test_sink_print_with_formats(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         log("test")
         log.heading("heading")
@@ -795,7 +796,7 @@ class TestSink(unittest.TestCase):
         self.assertTrue(len(output) > 0)
 
     def test_sink_print_no_separator(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         log("test event")
         log.close()
@@ -805,7 +806,7 @@ class TestSink(unittest.TestCase):
         self.assertTrue(len(output) > 0)
 
     def test_sink_print_default_print(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         log("test event")
         log.close()
@@ -821,7 +822,7 @@ class TestSink(unittest.TestCase):
         self.assertTrue(len(captured) > 0)
 
     def test_sink_reset(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         log("before reset")
         log.close()
@@ -833,7 +834,7 @@ class TestSink(unittest.TestCase):
         # (events cleared when re-registered)
 
     def test_sink_write(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, header='', footer='', prefix='')
         s = "raw write\n"
         log.write(s)
@@ -843,23 +844,23 @@ class TestSink(unittest.TestCase):
         self.assertEqual(s, events[1].message)
 
     def test_sink_with_banners(self):
-        sink = big.Sink()
+        sink = big.Log.Sink()
         log = big.Log(sink, threading=False, name='Sink', header='{name} start', footer='{name} finish', prefix='[PREFIX] ')
         log("message")
         log.close()
         events = list(sink)
         self.assertEqual(len(events), 5)
-        self.assertEqual(events[0].type, big.log.Sink.START)
+        self.assertEqual(events[0].type, big.log.Log.Sink.START)
         self.assertEqual(events[0].elapsed, 0)
         self.assertGreater(events[0].ns, 0)
         self.assertGreater(events[0].epoch, 0)
-        self.assertEqual(events[1].type, big.log.Sink.HEADER)
+        self.assertEqual(events[1].type, big.log.Log.Sink.HEADER)
         self.assertEqual(events[1].message, 'Sink start')
-        self.assertEqual(events[2].type, big.log.Sink.LOG)
+        self.assertEqual(events[2].type, big.log.Log.Sink.LOG)
         self.assertEqual(events[2].message, 'message')
-        self.assertEqual(events[3].type, big.log.Sink.FOOTER)
+        self.assertEqual(events[3].type, big.log.Log.Sink.FOOTER)
         self.assertEqual(events[3].message, 'Sink finish')
-        self.assertEqual(events[4].type, big.log.Sink.END)
+        self.assertEqual(events[4].type, big.log.Log.Sink.END)
         self.assertGreater(events[4].elapsed, 0)
 
 
@@ -1045,8 +1046,7 @@ class TestExport(unittest.TestCase):
 
     def test_all_exports(self):
         expected = [
-            'Destination', 'Callable', 'Print', 'List', 'Buffer', 'File', 'FileHandle',
-            'Log', 'Sink', 'OldDestination', 'OldLog'
+            'Log', 'OldDestination', 'OldLog'
         ]
         for name in expected:
             self.assertIn(name, log_module.__all__)

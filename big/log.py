@@ -62,256 +62,6 @@ export('default_clock')
 
 
 @export
-class Destination:
-    """
-    Base class for objects that receive messages from a big.Log.
-
-    All Destination objects must define:
-
-        write(elapsed, thread, s)
-
-    The arguments to write and all other Destination methods:
-
-    * elapsed is the elapsed time since the log was
-      started/reset, in nanoseconds.
-    * thread is the
-      threading.Thread handle for the thread
-      that logged the message.
-    * s is the formatted log message.
-
-    In addition, Destination objects may optionally define the
-    following methods:
-
-        flush()
-        close()
-        reset()
-        start(start_time_epoch)
-        end(end_time_epoch)
-
-    Destination objects may also define any of these methods:
-
-        log(elapsed, thread, message, *, flush=False)
-        heading(elapsed, thread, message, separator)
-        enter(elapsed, thread, message, separator)
-        exit(elapsed, thread, separator)
-
-    * message is the original message passed in to a Log method.
-    * separator is the separator string to use, or None if the
-      default separator should be used.
-
-    If these are defined, high-level calls to those
-    methods will turn into calls to the equivalent
-    method on the Destination, otherwise the message will
-    be formatted into a string and logged to the Destination
-    using its write() method.
-
-    For example, if a Destination defines log(), then
-    calls to log() on the Log object will call
-    log() on the Destination.  Otherwise, the message
-    will be formatted, and the Log will call the
-    Destination's write() method.
-
-    (The log() method only takes a message string; the
-    positional arguments to Log.log() are formatted
-    (using sep and end) before they're passed in to
-    Destination.log().)
-    """
-    def __init__(self):
-        self.owner = None
-
-    def register(self, owner):
-        if self.owner is not None:
-            raise RuntimeError(f"can't register owner {owner}, already registered with {self.owner}")
-        self.owner = owner
-
-    def reset(self):
-        pass
-
-    def start(self, start_time_ns, start_time_epoch):
-        pass
-
-    def end(self, elapsed):
-        pass
-
-    def flush(self):
-        pass
-
-    def close(self):
-        pass
-
-    def write(self, elapsed, thread, s):
-        raise RuntimeError("pure virtual Destination.write called")
-
-    def log(self, elapsed, thread, formatted, message):
-        self.write(elapsed, thread, formatted)
-
-    def header(self, elapsed, thread, formatted, message, separator):
-        self.write(elapsed, thread, formatted)
-
-    def footer(self, elapsed, thread, formatted, message, separator):
-        self.write(elapsed, thread, formatted)
-
-    def heading(self, elapsed, thread, formatted, message, separator):
-        self.write(elapsed, thread, formatted)
-
-    def enter(self, elapsed, thread, formatted, message, separator):
-        self.write(elapsed, thread, formatted)
-
-    def exit(self, elapsed, thread, formatted, separator):
-        self.write(elapsed, thread, formatted)
-
-
-
-@export
-class Callable(Destination):
-    "A Destination wrapping a callable."
-    def __init__(self, callable):
-        super().__init__()
-        self.callable = callable
-
-    def write(self, elapsed, thread, s):
-        self.callable(s)
-
-
-
-@export
-class Print(Destination):
-    "A Destination wrapping builtins.print."
-    def __init__(self):
-        super().__init__()
-        self.print = builtins.print
-
-    def write(self, elapsed, thread, s):
-        self.print(s, end='', flush=True)
-
-
-
-
-@export
-class List(Destination):
-    "A Destination wrapping a Python list."
-    def __init__(self, list):
-        super().__init__()
-        self.array = list
-
-    def write(self, elapsed, thread, s):
-        self.array.append(s)
-
-
-
-@export
-class Buffer(Destination):
-    "A Destination that buffers log messages, printing them with builtins.print when flushed."
-    def __init__(self, destination=None):
-        super().__init__()
-        self.array = []
-        self.destination = destination or Print()
-        self.last_elapsed = self.last_thread = None
-
-    def write(self, elapsed, thread, s):
-        self.last_elapsed = elapsed
-        self.last_thread = thread
-        self.array.append(s)
-
-    def flush(self):
-        if self.array:
-            contents = "".join(self.array)
-            self.array.clear()
-            self.destination.write(self.last_elapsed, self.last_thread, contents)
-
-
-@export
-class File(Destination):
-    "A Destination wrapping a file in the filesystem."
-    def __init__(self, path, mode="at", *, flush=False):
-        super().__init__()
-
-        assert mode in ("at", "wt", "xt", "a", "w", "x")
-
-        self.array = array = []
-        self.path = Path(path)
-        self.mode = mode
-        self.always_flush = flush
-        self.f = None
-
-    def register(self, owner):
-        super().register(owner)
-        self.reset()
-
-    def reset(self):
-        super().reset()
-        self.f = self.path.open(self.mode) if self.always_flush else None
-
-    def write(self, elapsed, thread, s):
-        if self.always_flush:
-            self.f.write(s)
-            self.f.flush()
-        else:
-            self.array.append(s)
-
-    def flush(self):
-        if self.array:
-            assert not self.always_flush
-            assert not self.f
-            contents = "".join(self.array)
-            self.array.clear()
-            with self.path.open(self.mode) as f:
-                f.write(contents)
-            self.mode = "at"
-
-    def close(self):
-        assert not self.array
-
-        if self.f:
-            f = self.f
-            self.f = None
-            f.close()
-            self.mode = "at"
-
-
-
-@export
-class TmpFile(File):
-    "A Destination that writes to a timestamped temporary file."
-    def __init__(self, *, flush=False):
-        # use a fake path for now
-        path = Path(tempfile.gettempdir()) / f"{os.getpid()}.tmp"
-        super().__init__(path)
-        self.always_flush = flush
-
-    def reset(self):
-        assert self.owner
-        log_timestamp = self.owner.timestamp(self.owner.start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")
-        tmpfile = f"{self.owner.name}.{log_timestamp}.{os.getpid()}.txt"
-        tmpfile = big_file.translate_filename_to_exfat(tmpfile)
-        tmpfile = tmpfile.replace(" ", '_')
-        self.path = Path(tempfile.gettempdir()) / tmpfile
-        super().reset()
-
-TMPFILE = TmpFile()
-export("TMPFILE")
-
-
-@export
-class FileHandle(Destination):
-    "A Destination wrapping a Python file handle."
-    def __init__(self, handle, *, flush=False):
-        super().__init__()
-        if not isinstance(handle, TextIOBase):
-            raise TypeError(f"invalid file handle {handle}")
-        self.handle = handle
-        self.immediate = flush
-
-    def write(self, elapsed, thread, s):
-        self.handle.write(s)
-        if self.immediate:
-            self.handle.flush()
-
-    def flush(self):
-        self.handle.flush()
-
-
-@export
 class SinkBaseEvent:
     __slots__ = (
         '_depth',
@@ -429,7 +179,7 @@ class SinkStartEvent(SinkBaseEvent):
         super().__init__(
             number=number,
             elapsed=0,
-            type=Sink.START,
+            type=Log.Sink.START,
             ns=start_time_ns,
             epoch=start_time_epoch,
             )
@@ -439,163 +189,11 @@ class SinkEndEvent(SinkBaseEvent):
     def __init__(self, number, elapsed):
         super().__init__(
             number=number,
-            type=Sink.END,
+            type=Log.Sink.END,
             elapsed=elapsed,
             )
 
 
-@export
-class Sink(Destination):
-    """
-    A Destination that accumulates log messages for later iteration or printing.
-
-    Events include thread information and raw timestamps.
-
-    You may iterate over the Sink; this yields 6-tuples:
-        [type, thread, elapsed, duration, depth, message]
-    elapsed and duration are in nanoseconds.  thread is the
-    threading.Thread handle for the thread that logged the message.
-    depth is the current enter/exit depth, as an integer,
-    starting at 0. type is the thread type, one of
-    Sink.{WRITE, LOG, HEADER, FOOTER, HEADING, ENTER, EXIT}.
-    message is the string that was logged.
-
-    You may also call print(), which formats the events
-    and prints them using builtins.print.
-    """
-
-    START = 'start'
-    WRITE = 'write'
-    LOG = 'log'
-    HEADER = 'header'
-    FOOTER = 'footer'
-    HEADING = 'heading'
-    ENTER = 'enter'
-    EXIT = 'exit'
-    END = 'end'
-
-    def __init__(self):
-        super().__init__()
-        self.number = 0
-        self._reset()
-
-    def register(self, owner):
-        super().register(owner)
-        self.reset()
-
-    def _reset(self):
-        self.depth = 0
-        self.events = []
-        self.longest_message = 0
-
-    def reset(self):
-        assert self.owner
-        super().reset()
-        self.number += 1
-        self._reset()
-
-    def _event(self, event):
-        events = self.events
-        if events:
-            previous = events[-1]
-            duration = event.elapsed - previous.elapsed
-            assert duration >= 0, f"duration should be >= 0 but it's {duration}"
-            previous._duration = duration
-        events.append(event)
-        self.longest_message = max(self.longest_message, len(event.message))
-
-    def start(self, start_time_ns, start_time_epoch):
-        self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch))
-
-    def end(self, elapsed):
-        self._event(SinkEndEvent(self.number, elapsed))
-
-    def write(self, elapsed, thread, s):
-        self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, s, None, self.depth))
-
-    def log(self, elapsed, thread, formatted, message):
-        self._event(SinkEvent(self.number, elapsed, self.LOG, thread, message, formatted, self.depth))
-
-    def header(self, elapsed, thread, formatted, message, separator):
-        self._event(SinkEvent(self.number, elapsed, self.HEADER, thread, message, formatted, self.depth, separator=separator))
-
-    def footer(self, elapsed, thread, formatted, message, separator):
-        self._event(SinkEvent(self.number, elapsed, self.FOOTER, thread, message, formatted, self.depth, separator=separator))
-
-    def heading(self, elapsed, thread, formatted, message, separator):
-        self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
-
-    def enter(self, elapsed, thread, formatted, message, separator):
-        self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, message, formatted, self.depth, separator=separator))
-        self.depth += 1
-
-    def exit(self, elapsed, thread, formatted, separator):
-        self.depth -= 1
-        self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, '', formatted, self.depth))
-
-    def __iter__(self):
-        for e in self.events:
-            yield e
-
-    def print(self, *,
-            enter='',
-            exit='',
-            format='{message}',
-            heading='{separator}\n{message}\n{separator}',
-            indent=2,
-            prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f}] {indent}',
-            print=None,
-            separator='-',
-            timestamp=big_time.timestamp_human,
-            width=None,
-            ):
-        if not print:
-            print = builtins.print
-
-        if width is None:
-            width = self.longest_message
-
-        formats = {
-            self.START: heading,
-            self.WRITE: format,
-            self.LOG: format,
-            self.HEADER: heading or format,
-            self.FOOTER: heading or format,
-            self.HEADING: heading or format,
-            self.ENTER: enter or heading or format,
-            self.EXIT: exit or heading or format,
-            self.END: heading,
-        }
-
-        for e in self.events:
-            elapsed = e.elapsed / 1_000_000_000.0
-            duration = e.duration / 1_000_000_000.0
-            epoch = elapsed + self.owner._start_time_epoch
-            ts = timestamp(epoch)
-            indent_str = ' ' * (e.depth * indent)
-            separator_str = (separator * ((width // len(separator)) + 1))[:width] if separator else ''
-            thread = e.thread or current_thread()
-
-            fmt = formats[e.type]
-
-            if e.type in (self.START, self.END):
-                message = e.type
-
-            fields = {
-                'elapsed': elapsed,
-                'duration': duration,
-                'timestamp': ts,
-                'thread': thread,
-                'message': e.message,
-                'type': e.type,
-                'depth': e.depth,
-                'indent': indent_str,
-                'separator': separator_str,
-            }
-            rendered = fmt.format_map(fields)
-            prefix_str = prefix.format_map(fields)
-            for line in rendered.split('\n'):
-                print(prefix_str + line)
 
 
 _spaces = " " * 1024
@@ -788,20 +386,20 @@ class Log:
             if destination is None:
                 continue
 
-            if isinstance(destination, Destination):
+            if isinstance(destination, self.Destination):
                 pass
             elif destination == print:
-                destination = Print()
+                destination = self.Print()
             elif isinstance(destination, str):
-                destination = File(Path(self._format(0, thread, destination)))
+                destination = self.File(Path(self._format(0, thread, destination)))
             elif isinstance(destination, Path):
-                destination = File(destination)
+                destination = self.File(destination)
             elif isinstance(destination, list):
-                destination = List(destination)
+                destination = self.List(destination)
             elif isinstance(destination, TextIOBase):
-                destination = FileHandle(destination)
+                destination = self.FileHandle(destination)
             elif callable(destination):
-                destination = Callable(destination)
+                destination = self.Callable(destination)
             else:
                 raise ValueError(f"don't know how to use destination {destination!r}")
 
@@ -1288,8 +886,404 @@ class Log:
         self.flush()
 
 
+    class Destination:
+        """
+        Base class for objects that receive messages from a big.Log.
+
+        All Destination objects must define:
+
+            write(elapsed, thread, s)
+
+        The arguments to write and all other Destination methods:
+
+        * elapsed is the elapsed time since the log was
+          started/reset, in nanoseconds.
+        * thread is the
+          threading.Thread handle for the thread
+          that logged the message.
+        * s is the formatted log message.
+
+        In addition, Destination objects may optionally define the
+        following methods:
+
+            flush()
+            close()
+            reset()
+            start(start_time_epoch)
+            end(end_time_epoch)
+
+        Destination objects may also define any of these methods:
+
+            log(elapsed, thread, message, *, flush=False)
+            heading(elapsed, thread, message, separator)
+            enter(elapsed, thread, message, separator)
+            exit(elapsed, thread, separator)
+
+        * message is the original message passed in to a Log method.
+        * separator is the separator string to use, or None if the
+          default separator should be used.
+
+        If these are defined, high-level calls to those
+        methods will turn into calls to the equivalent
+        method on the Destination, otherwise the message will
+        be formatted into a string and logged to the Destination
+        using its write() method.
+
+        For example, if a Destination defines log(), then
+        calls to log() on the Log object will call
+        log() on the Destination.  Otherwise, the message
+        will be formatted, and the Log will call the
+        Destination's write() method.
+
+        (The log() method only takes a message string; the
+        positional arguments to Log.log() are formatted
+        (using sep and end) before they're passed in to
+        Destination.log().)
+        """
+        def __init__(self):
+            self.owner = None
+
+        def register(self, owner):
+            if self.owner is not None:
+                raise RuntimeError(f"can't register owner {owner}, already registered with {self.owner}")
+            self.owner = owner
+
+        def reset(self):
+            pass
+
+        def start(self, start_time_ns, start_time_epoch):
+            pass
+
+        def end(self, elapsed):
+            pass
+
+        def flush(self):
+            pass
+
+        def close(self):
+            pass
+
+        def write(self, elapsed, thread, s):
+            raise RuntimeError("pure virtual Destination.write called")
+
+        def log(self, elapsed, thread, formatted, message):
+            self.write(elapsed, thread, formatted)
+
+        def header(self, elapsed, thread, formatted, message, separator):
+            self.write(elapsed, thread, formatted)
+
+        def footer(self, elapsed, thread, formatted, message, separator):
+            self.write(elapsed, thread, formatted)
+
+        def heading(self, elapsed, thread, formatted, message, separator):
+            self.write(elapsed, thread, formatted)
+
+        def enter(self, elapsed, thread, formatted, message, separator):
+            self.write(elapsed, thread, formatted)
+
+        def exit(self, elapsed, thread, formatted, separator):
+            self.write(elapsed, thread, formatted)
+
+
+
+    class Callable(Destination):
+        "A Destination wrapping a callable."
+        def __init__(self, callable):
+            super().__init__()
+            self.callable = callable
+
+        def write(self, elapsed, thread, s):
+            self.callable(s)
+
+
+
+    class Print(Destination):
+        "A Destination wrapping builtins.print."
+        def __init__(self):
+            super().__init__()
+            self.print = builtins.print
+
+        def write(self, elapsed, thread, s):
+            self.print(s, end='', flush=True)
+
+
+
+
+    class List(Destination):
+        "A Destination wrapping a Python list."
+        def __init__(self, list):
+            super().__init__()
+            self.array = list
+
+        def write(self, elapsed, thread, s):
+            self.array.append(s)
+
+
+
+    class Buffer(Destination):
+        "A Destination that buffers log messages, printing them with builtins.print when flushed."
+        def __init__(self, destination=None):
+            super().__init__()
+            self.array = []
+            self.destination = destination or Log.Print()
+            self.last_elapsed = self.last_thread = None
+
+        def write(self, elapsed, thread, s):
+            self.last_elapsed = elapsed
+            self.last_thread = thread
+            self.array.append(s)
+
+        def flush(self):
+            if self.array:
+                contents = "".join(self.array)
+                self.array.clear()
+                self.destination.write(self.last_elapsed, self.last_thread, contents)
+
+
+    class File(Destination):
+        "A Destination wrapping a file in the filesystem."
+        def __init__(self, path, mode="at", *, flush=False):
+            super().__init__()
+
+            assert mode in ("at", "wt", "xt", "a", "w", "x")
+
+            self.array = array = []
+            self.path = Path(path)
+            self.mode = mode
+            self.always_flush = flush
+            self.f = None
+
+        def register(self, owner):
+            super().register(owner)
+            self.reset()
+
+        def reset(self):
+            super().reset()
+            self.f = self.path.open(self.mode) if self.always_flush else None
+
+        def write(self, elapsed, thread, s):
+            if self.always_flush:
+                self.f.write(s)
+                self.f.flush()
+            else:
+                self.array.append(s)
+
+        def flush(self):
+            if self.array:
+                assert not self.always_flush
+                assert not self.f
+                contents = "".join(self.array)
+                self.array.clear()
+                with self.path.open(self.mode) as f:
+                    f.write(contents)
+                self.mode = "at"
+
+        def close(self):
+            assert not self.array
+
+            if self.f:
+                f = self.f
+                self.f = None
+                f.close()
+                self.mode = "at"
+
+
+
+    class TmpFile(File):
+        "A Destination that writes to a timestamped temporary file."
+        def __init__(self, *, flush=False):
+            # use a fake path for now
+            path = Path(tempfile.gettempdir()) / f"{os.getpid()}.tmp"
+            super().__init__(path)
+            self.always_flush = flush
+
+        def reset(self):
+            assert self.owner
+            log_timestamp = self.owner.timestamp(self.owner.start_time_epoch).replace("/", "-").replace(":", "-").replace(" ", ".")
+            tmpfile = f"{self.owner.name}.{log_timestamp}.{os.getpid()}.txt"
+            tmpfile = big_file.translate_filename_to_exfat(tmpfile)
+            tmpfile = tmpfile.replace(" ", '_')
+            self.path = Path(tempfile.gettempdir()) / tmpfile
+            super().reset()
+
+
+
+    class FileHandle(Destination):
+        "A Destination wrapping a Python file handle."
+        def __init__(self, handle, *, flush=False):
+            super().__init__()
+            if not isinstance(handle, TextIOBase):
+                raise TypeError(f"invalid file handle {handle}")
+            self.handle = handle
+            self.immediate = flush
+
+        def write(self, elapsed, thread, s):
+            self.handle.write(s)
+            if self.immediate:
+                self.handle.flush()
+
+        def flush(self):
+            self.handle.flush()
+
+
+    class Sink(Destination):
+        """
+        A Destination that accumulates log messages for later iteration or printing.
+
+        Events include thread information and raw timestamps.
+
+        You may iterate over the Sink; this yields 6-tuples:
+            [type, thread, elapsed, duration, depth, message]
+        elapsed and duration are in nanoseconds.  thread is the
+        threading.Thread handle for the thread that logged the message.
+        depth is the current enter/exit depth, as an integer,
+        starting at 0. type is the thread type, one of
+        Sink.{WRITE, LOG, HEADER, FOOTER, HEADING, ENTER, EXIT}.
+        message is the string that was logged.
+
+        You may also call print(), which formats the events
+        and prints them using builtins.print.
+        """
+
+        START = 'start'
+        WRITE = 'write'
+        LOG = 'log'
+        HEADER = 'header'
+        FOOTER = 'footer'
+        HEADING = 'heading'
+        ENTER = 'enter'
+        EXIT = 'exit'
+        END = 'end'
+
+        def __init__(self):
+            super().__init__()
+            self.number = 0
+            self._reset()
+
+        def register(self, owner):
+            super().register(owner)
+            self.reset()
+
+        def _reset(self):
+            self.depth = 0
+            self.events = []
+            self.longest_message = 0
+
+        def reset(self):
+            assert self.owner
+            super().reset()
+            self.number += 1
+            self._reset()
+
+        def _event(self, event):
+            events = self.events
+            if events:
+                previous = events[-1]
+                duration = event.elapsed - previous.elapsed
+                assert duration >= 0, f"duration should be >= 0 but it's {duration}"
+                previous._duration = duration
+            events.append(event)
+            self.longest_message = max(self.longest_message, len(event.message))
+
+        def start(self, start_time_ns, start_time_epoch):
+            self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch))
+
+        def end(self, elapsed):
+            self._event(SinkEndEvent(self.number, elapsed))
+
+        def write(self, elapsed, thread, s):
+            self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, s, None, self.depth))
+
+        def log(self, elapsed, thread, formatted, message):
+            self._event(SinkEvent(self.number, elapsed, self.LOG, thread, message, formatted, self.depth))
+
+        def header(self, elapsed, thread, formatted, message, separator):
+            self._event(SinkEvent(self.number, elapsed, self.HEADER, thread, message, formatted, self.depth, separator=separator))
+
+        def footer(self, elapsed, thread, formatted, message, separator):
+            self._event(SinkEvent(self.number, elapsed, self.FOOTER, thread, message, formatted, self.depth, separator=separator))
+
+        def heading(self, elapsed, thread, formatted, message, separator):
+            self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
+
+        def enter(self, elapsed, thread, formatted, message, separator):
+            self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, message, formatted, self.depth, separator=separator))
+            self.depth += 1
+
+        def exit(self, elapsed, thread, formatted, separator):
+            self.depth -= 1
+            self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, '', formatted, self.depth))
+
+        def __iter__(self):
+            for e in self.events:
+                yield e
+
+        def print(self, *,
+                enter='',
+                exit='',
+                format='{message}',
+                heading='{separator}\n{message}\n{separator}',
+                indent=2,
+                prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f}] {indent}',
+                print=None,
+                separator='-',
+                timestamp=big_time.timestamp_human,
+                width=None,
+                ):
+            if not print:
+                print = builtins.print
+
+            if width is None:
+                width = self.longest_message
+
+            formats = {
+                self.START: heading,
+                self.WRITE: format,
+                self.LOG: format,
+                self.HEADER: heading or format,
+                self.FOOTER: heading or format,
+                self.HEADING: heading or format,
+                self.ENTER: enter or heading or format,
+                self.EXIT: exit or heading or format,
+                self.END: heading,
+            }
+
+            for e in self.events:
+                elapsed = e.elapsed / 1_000_000_000.0
+                duration = e.duration / 1_000_000_000.0
+                epoch = elapsed + self.owner._start_time_epoch
+                ts = timestamp(epoch)
+                indent_str = ' ' * (e.depth * indent)
+                separator_str = (separator * ((width // len(separator)) + 1))[:width] if separator else ''
+                thread = e.thread or current_thread()
+
+                fmt = formats[e.type]
+
+                if e.type in (self.START, self.END):
+                    message = e.type
+
+                fields = {
+                    'elapsed': elapsed,
+                    'duration': duration,
+                    'timestamp': ts,
+                    'thread': thread,
+                    'message': e.message,
+                    'type': e.type,
+                    'depth': e.depth,
+                    'indent': indent_str,
+                    'separator': separator_str,
+                }
+                rendered = fmt.format_map(fields)
+                prefix_str = prefix.format_map(fields)
+                for line in rendered.split('\n'):
+                    print(prefix_str + line)
+
+TMPFILE = Log.TmpFile()
+export("TMPFILE")
+
+
 @export
-class OldDestination(Destination):
+class OldDestination(Log.Destination):
     """
     A Destination providing backwards compatibility with the old big.log.Log interface.
     Accumulates events for later iteration or printing.
