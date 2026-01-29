@@ -34,6 +34,7 @@ from pathlib import Path
 from queue import Queue
 import tempfile
 from threading import current_thread, Lock, Thread
+from .boundinnerclass import BoundInnerClass
 from . import time as big_time
 from . import file as big_file
 import time
@@ -123,8 +124,14 @@ class Destination:
             raise RuntimeError(f"can't register owner {owner}, already registered with {self.owner}")
         self.owner = owner
 
-    def write(self, elapsed, thread, message):
-        raise RuntimeError("virtual write method called on", self)
+    def reset(self):
+        pass
+
+    def start(self, start_time_ns, start_time_epoch):
+        pass
+
+    def end(self, elapsed):
+        pass
 
     def flush(self):
         pass
@@ -132,14 +139,26 @@ class Destination:
     def close(self):
         pass
 
-    def reset(self):
-        pass
+    def write(self, elapsed, thread, s):
+        raise RuntimeError("pure virtual Destination.write called")
 
-    def start(self, start_time_epoch):
-        pass
+    def log(self, elapsed, thread, formatted, message):
+        self.write(elapsed, thread, formatted)
 
-    def end(self, elapsed, end_time_epoch):
-        pass
+    def header(self, elapsed, thread, formatted, message, separator):
+        self.write(elapsed, thread, formatted)
+
+    def footer(self, elapsed, thread, formatted, message, separator):
+        self.write(elapsed, thread, formatted)
+
+    def heading(self, elapsed, thread, formatted, message, separator):
+        self.write(elapsed, thread, formatted)
+
+    def enter(self, elapsed, thread, formatted, message, separator):
+        self.write(elapsed, thread, formatted)
+
+    def exit(self, elapsed, thread, formatted, separator):
+        self.write(elapsed, thread, formatted)
 
 
 
@@ -150,8 +169,8 @@ class Callable(Destination):
         super().__init__()
         self.callable = callable
 
-    def write(self, elapsed, thread, message):
-        self.callable(message)
+    def write(self, elapsed, thread, s):
+        self.callable(s)
 
 
 
@@ -162,8 +181,8 @@ class Print(Destination):
         super().__init__()
         self.print = builtins.print
 
-    def write(self, elapsed, thread, message):
-        self.print(message, end='', flush=True)
+    def write(self, elapsed, thread, s):
+        self.print(s, end='', flush=True)
 
 
 
@@ -175,27 +194,30 @@ class List(Destination):
         super().__init__()
         self.array = list
 
-
-    def write(self, elapsed, thread, message):
-        self.array.append(message)
+    def write(self, elapsed, thread, s):
+        self.array.append(s)
 
 
 
 @export
 class Buffer(Destination):
     "A Destination that buffers log messages, printing them with builtins.print when flushed."
-    def __init__(self):
+    def __init__(self, destination=None):
         super().__init__()
         self.array = []
+        self.destination = destination or Print()
+        self.last_elapsed = self.last_thread = None
 
-    def write(self, elapsed, thread, message):
-        self.array.append(message)
+    def write(self, elapsed, thread, s):
+        self.last_elapsed = elapsed
+        self.last_thread = thread
+        self.array.append(s)
 
     def flush(self):
         if self.array:
             contents = "".join(self.array)
             self.array.clear()
-            print(contents, end='')
+            self.destination.write(self.last_elapsed, self.last_thread, contents)
 
 
 @export
@@ -220,12 +242,12 @@ class File(Destination):
         super().reset()
         self.f = self.path.open(self.mode) if self.always_flush else None
 
-    def write(self, elapsed, thread, message):
+    def write(self, elapsed, thread, s):
         if self.always_flush:
-            self.f.write(message)
+            self.f.write(s)
             self.f.flush()
         else:
-            self.array.append(message)
+            self.array.append(s)
 
     def flush(self):
         if self.array:
@@ -280,8 +302,8 @@ class FileHandle(Destination):
         self.handle = handle
         self.immediate = flush
 
-    def write(self, elapsed, thread, message):
-        self.handle.write(message)
+    def write(self, elapsed, thread, s):
+        self.handle.write(s)
         if self.immediate:
             self.handle.flush()
 
@@ -297,29 +319,40 @@ class SinkBaseEvent:
         '_duration',
         '_depth',
         '_epoch',
+        '_formatted',
+        '_ns',
         '_thread',
         )
 
-    def __init__(self, type, message='', elapsed=0, duration=0, depth=0, epoch=None, thread=None):
-        self._type = type
-        self._message = message
+    def __init__(self, log, elapsed, type, duration=0, depth=0, epoch=None, formatted='', separator='', message='', ns=None, thread=None):
+        self._log = log
         self._elapsed = elapsed
+        self._type = type
+
+        self._message = message
         self._duration = duration
         self._depth = depth
         self._epoch = epoch
+        self._formatted = formatted
+        self._separator = separator
+        self._ns = ns
         self._thread = thread
+
+    @property
+    def log(self):
+        return self._log
 
     @property
     def type(self):
         return self._type
 
     @property
-    def message(self):
-        return self._message
-
-    @property
     def elapsed(self):
         return self._elapsed
+
+    @property
+    def message(self):
+        return self._message
 
     @property
     def duration(self):
@@ -337,36 +370,73 @@ class SinkBaseEvent:
     def thread(self):
         return self._thread
 
+    @property
+    def ns(self):
+        return self._ns
+
+    @property
+    def formatted(self):
+        return self._formatted
+
+    @property
+    def separator(self):
+        return self._separator
+
     def __repr__(self):
-        return f"{self.__class__.__name__}(type={self._type!r}, message={self._message!r}, elapsed={self._elapsed}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, thread={self._thread})"
+        return f"{self.__class__.__name__}(log={self._log}, elapsed={self._elapsed}, type={self._type!r}, message={self._message!r}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, formatted={self._formatted!r}, ns={self._ns!r}, separator={self._separator}, thread={self._thread})"
+
+    def __eq__(self, other):
+        return (other.isinstance(SinkBaseEvent)
+            and (self._log == other._log)
+            and (self._elapsed == other._elapsed)
+            and (self._type == other._type)
+            and (self._message == other._message)
+            and (self._separator == other._separator)
+            and (self._thread == other._thread)
+            and (self._epoch == other._epoch)
+            and (self._depth == other._depth)
+            )
+
+    def __lt__(self, other):
+        if not other.isinstance(SinkBaseEvent):
+            raise TypeError(f"'<' not supported between instances of SinkBaseEvent and {type(other)}")
+        if self._log >= other._log:
+            return False
+        return self._elapsed < other._elapsed
 
 
 @export
 class SinkEvent(SinkBaseEvent):
-    def __init__(self, type, elapsed, thread, message, depth):
+    def __init__(self, log, elapsed, type, thread, message, formatted, depth, **kwargs):
         super().__init__(
+            log=log,
+            elapsed=elapsed,
             type=type,
             message=message,
-            elapsed=elapsed,
             depth=depth,
+            formatted=formatted,
             thread=thread,
+            **kwargs
             )
 
 @export
 class SinkStartEvent(SinkBaseEvent):
-    def __init__(self, start_time_epoch):
+    def __init__(self, log, start_time_ns, start_time_epoch):
         super().__init__(
+            log=log,
+            elapsed=0,
             type=Sink.START,
+            ns=start_time_ns,
             epoch=start_time_epoch,
             )
 
 @export
 class SinkEndEvent(SinkBaseEvent):
-    def __init__(self, elapsed, end_time_epoch):
+    def __init__(self, log, elapsed):
         super().__init__(
+            log=log,
             type=Sink.END,
             elapsed=elapsed,
-            epoch=end_time_epoch,
             )
 
 
@@ -402,19 +472,23 @@ class Sink(Destination):
 
     def __init__(self):
         super().__init__()
+        self.number = 0
+        self._reset()
 
     def register(self, owner):
         super().register(owner)
         self.reset()
 
-    def reset(self):
-        super().reset()
-
-        assert self.owner
-
+    def _reset(self):
         self.depth = 0
         self.events = []
         self.longest_message = 0
+
+    def reset(self):
+        assert self.owner
+        super().reset()
+        self.number += 1
+        self._reset()
 
     def _event(self, event):
         events = self.events
@@ -426,38 +500,41 @@ class Sink(Destination):
         events.append(event)
         self.longest_message = max(self.longest_message, len(event.message))
 
-    def start(self, start_time_epoch):
-        self._event(SinkStartEvent(start_time_epoch))
+    def start(self, start_time_ns, start_time_epoch):
+        self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch))
 
-    def end(self, elapsed, end_time_epoch):
-        self._event(SinkEndEvent(elapsed, end_time_epoch))
+    def end(self, elapsed):
+        self._event(SinkEndEvent(self.number, elapsed))
 
-    def write(self, elapsed, thread, message):
-        self._event(SinkEvent(self.WRITE, elapsed, thread, message, self.depth))
+    def write(self, elapsed, thread, s):
+        self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, s, None, self.depth))
 
-    def log(self, elapsed, thread, message, *, flush=False):
-        self._event(SinkEvent(self.LOG, elapsed, thread, message, self.depth))
+    def log(self, elapsed, thread, formatted, message):
+        self._event(SinkEvent(self.number, elapsed, self.LOG, thread, message, formatted, self.depth))
 
-    def header(self, elapsed, thread, message, separator):
-        self._event(SinkEvent(self.HEADER, elapsed, thread, message, self.depth))
+    def header(self, elapsed, thread, formatted, message, separator):
+        self._event(SinkEvent(self.number, elapsed, self.HEADER, thread, message, formatted, self.depth, separator=separator))
 
-    def footer(self, elapsed, thread, message, separator):
-        self._event(SinkEvent(self.FOOTER, elapsed, thread, message, self.depth))
+    def footer(self, elapsed, thread, formatted, message, separator):
+        self._event(SinkEvent(self.number, elapsed, self.FOOTER, thread, message, formatted, self.depth, separator=separator))
 
-    def heading(self, elapsed, thread, message, separator):
-        self._event(SinkEvent(self.HEADING, elapsed, thread, message, self.depth))
+    def heading(self, elapsed, thread, formatted, message, separator):
+        self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
 
-    def enter(self, elapsed, thread, message):
-        self._event(SinkEvent(self.ENTER, elapsed, thread, message, self.depth))
+    def enter(self, elapsed, thread, formatted, message, separator):
+        self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, message, formatted, self.depth, separator=separator))
         self.depth += 1
 
-    def exit(self, elapsed, thread):
+    def exit(self, elapsed, thread, formatted, separator):
         self.depth -= 1
-        self._event(SinkEvent(self.EXIT, elapsed, thread, '', self.depth))
+        self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, '', formatted, self.depth))
 
     def __iter__(self):
         for e in self.events:
             yield e
+
+    def sort(self):
+        self.events.sort()
 
     def print(self, *,
             enter='',
@@ -698,7 +775,7 @@ class Log:
         self._blocker = blocker = Lock()
         blocker.acquire()
 
-        self._reset(start_time_ns, start_time_epoch, None)
+        self._reset(start_time_ns, start_time_epoch, False, None)
 
         print = builtins.print
         if not destinations:
@@ -710,11 +787,7 @@ class Log:
             if destination is None:
                 continue
 
-            if isinstance(destination, Log):
-                append((destination, True))
-                continue
-
-            if isinstance(destination, (Destination, Log)):
+            if isinstance(destination, Destination):
                 pass
             elif destination == print:
                 destination = Print()
@@ -731,9 +804,9 @@ class Log:
             else:
                 raise ValueError(f"don't know how to use destination {destination!r}")
 
-            append((destination, False))
+            append(destination)
             destination.register(self)
-            destination.start(self._start_time_epoch)
+            destination.start(self._start_time_ns, self._start_time_epoch)
 
 
     @property
@@ -811,15 +884,6 @@ class Log:
             return tuple(self._nesting)
 
 
-    def _reset_worker(self, start_time_ns, start_time_epoch):
-        self._nesting = []
-        self._spaces = ''
-        self._closed = False
-        self._start_time_epoch = start_time_epoch
-        self._end_time_epoch = None
-        self._start_time_ns = start_time_ns
-        self._want_header = bool(self._header)
-
     def _atexit(self):
         self.close()
 
@@ -832,18 +896,23 @@ class Log:
     def _ns_to_float(self, ns):
         return ns / 1_000_000_000.0
 
-    def _reset(self, start_time_ns, start_time_epoch, signal):
+    def _reset(self, start_time_ns, start_time_epoch, send_reset, signal):
         # if we're not closed, flush before we reset
         if not self._closed:
             self._flush()
 
-        self._reset_worker(start_time_ns, start_time_epoch)
+        self._nesting = []
+        self._spaces = ''
+        self._closed = False
+        self._start_time_ns = start_time_ns
+        self._start_time_epoch = start_time_epoch
+        self._end_time_epoch = None
+        self._want_header = bool(self._header)
 
-        for destination, is_log in self._destinations:
-            destination.reset()
-
-            if not is_log:
-                destination.start(self._start_time_epoch)
+        for destination in self._destinations:
+            if send_reset:
+                destination.reset()
+            destination.start(self._start_time_ns, self._start_time_epoch)
 
         if self._threading and (self._thread is None):
             self._queue = Queue()
@@ -864,7 +933,7 @@ class Log:
 
             if self._threading and (self._thread is not None):
                 blocker = self._blocker
-                args = [start_time_ns, start_time_epoch, blocker.release]
+                args = [start_time_ns, start_time_epoch, True, blocker.release]
 
                 work = [(self._reset, args)]
                 self._queue.put(work)
@@ -873,7 +942,11 @@ class Log:
 
                 return
 
-            self._reset(start_time_ns, start_time_epoch, None)
+            self._reset(start_time_ns, start_time_epoch, True, None)
+
+    def _start(self, start_time_ns, start_time_epoch):
+        self._start_time_epoch = start_time_epoch
+        self._start_time_ns = start_time_ns
 
     def _format(self, elapsed, thread, format):
         if not format:
@@ -912,15 +985,9 @@ class Log:
         separator_line = self._line(prefix, separator)
         formatted = separator_line + prefix + message + '\n' + separator_line + newlines
 
-        for destination, is_log in self._destinations:
-            if is_log:
-                continue
-
-            handler = getattr(destination, name, None)
-            if handler:
-                handler(elapsed, thread, message, separator)
-                continue
-            destination.write(elapsed, thread, formatted)
+        for destination in self._destinations:
+            handler = getattr(destination, name)
+            handler(elapsed, thread, formatted, message, separator)
 
     def _print_header(self, thread):
         self._want_header = False
@@ -1010,25 +1077,14 @@ class Log:
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
-        formatted = prefix + f"\n{prefix}".join(messages) + "\n"
+        formatted_messages = [ f"{prefix}{m}\n" for m in messages]
 
-        messages_and_flush = [[message, False] for message in messages]
-        messages_and_flush[-1][-1] = flush
 
-        for destination, is_log in self._destinations:
-            if is_log:
-                destination.log(*args, sep=sep, end=end, flush=flush)
-                continue
+        message_and_formatted = list(zip(messages, formatted_messages))
 
-            log = getattr(destination, 'log', None)
-            if log:
-                for message, _flush in messages_and_flush:
-                    log(elapsed, thread, message, flush=_flush)
-                continue
-
-            destination.write(elapsed, thread, formatted)
-            if flush:
-                destination.flush()
+        for destination in self._destinations:
+            for message, formatted in message_and_formatted:
+                destination.log(elapsed, thread, formatted, message)
 
 
     def __call__(self, *args, sep=_sep, end=_end, flush=False):
@@ -1058,10 +1114,7 @@ class Log:
 
         elapsed = self._elapsed(time)
 
-        for destination, is_log in self._destinations:
-            if is_log:
-                destination.write(s)
-                continue
+        for destination in self._destinations:
             destination.write(elapsed, thread, s)
 
     def write(self, s):
@@ -1083,16 +1136,8 @@ class Log:
         separator = self._line(prefix, separator)
         formatted = separator + prefix + message + '\n' + separator
 
-        for destination, is_log in self._destinations:
-            if is_log:
-                destination.heading(message, separator=separator)
-                continue
-
-            heading = getattr(destination, 'heading', None)
-            if heading:
-                heading(elapsed, thread, message, separator)
-                continue
-            destination.write(elapsed, thread, formatted)
+        for destination in self._destinations:
+            destination.heading(elapsed, thread, formatted, message, separator)
 
     def heading(self, message, separator=None):
         time = self._clock()
@@ -1140,16 +1185,8 @@ class Log:
         separator = self._line(prefix, separator)
         formatted = separator + prefix + message + '\n' + separator
 
-        for destination, is_log in self._destinations:
-            if is_log:
-                destination.enter(message)
-                continue
-
-            enter = getattr(destination, 'enter', None)
-            if enter:
-                enter(elapsed, thread, message)
-                continue
-            destination.write(elapsed, thread, formatted)
+        for destination in self._destinations:
+            destination.enter(elapsed, thread, formatted, message, separator)
 
         self._append_nesting(message)
 
@@ -1183,18 +1220,10 @@ class Log:
 
         elapsed = self._elapsed(time)
         prefix = self._format(elapsed, thread, self._prefix)
-        separator = self._line(prefix, separator)
+        formatted = self._line(prefix, separator)
 
-        for destination, is_log in self._destinations:
-            if is_log:
-                destination.exit()
-                continue
-
-            exit = getattr(destination, 'exit', None)
-            if exit:
-                exit(elapsed, thread)
-                continue
-            destination.write(elapsed, thread, separator)
+        for destination in self._destinations:
+            destination.exit(elapsed, thread, formatted, separator)
 
     def exit(self, *, separator=None):
         time = self._clock()
@@ -1203,11 +1232,7 @@ class Log:
 
 
     def _flush(self):
-        for destination, is_log in self._destinations:
-            if is_log:
-                destination.flush()
-                continue
-
+        for destination in self._destinations:
             destination.flush()
 
     def flush(self):
@@ -1217,12 +1242,11 @@ class Log:
     def _end(self, time):
         elapsed = self._elapsed(time)
 
-        for destination, is_log in self._destinations:
-            if not is_log:
-                destination.end(elapsed, self._end_time_epoch)
+        for destination in self._destinations:
+            destination.end(elapsed)
 
     def _close(self):
-        for destination, is_log in self._destinations:
+        for destination in self._destinations:
             destination.close()
 
     def close(self):
@@ -1293,17 +1317,17 @@ class OldDestination(Destination):
         events.append([elapsed, 0, event, len(self.stack)])
         self.longest_event = max(self.longest_event, len(event))
 
-    def write(self, elapsed, thread, message):
+    def write(self, elapsed, thread, s):
+        self._event(elapsed, s.rstrip('\n'))
+
+    def log(self, elapsed, thread, formatted, message):
         self._event(elapsed, message.rstrip('\n'))
 
-    def log(self, elapsed, thread, message, *, flush=False):
-        self._event(elapsed, message.rstrip('\n'))
-
-    def enter(self, elapsed, thread, message):
+    def enter(self, elapsed, thread, formatted, message, separator):
         self._event(elapsed, message + " start")
         self.stack.append(message)
 
-    def exit(self, elapsed, thread):
+    def exit(self, elapsed, thread, formatted, separator):
         subsystem = self.stack.pop()
         self._event(elapsed, subsystem + " end")
 

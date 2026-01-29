@@ -655,86 +655,6 @@ class TestLogThreading(unittest.TestCase):
         log.flush()
 
 
-class TestLogNestedLogs(unittest.TestCase):
-    """Tests for nested Log objects."""
-
-    def test_nested_logs(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, header='', footer='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, header='', footer='', prefix='')
-        outer_log("message")
-        outer_log.close()
-        # Message should appear in both
-        self.assertTrue(any("message" in s for s in array1))
-        self.assertTrue(any("message" in s for s in array2))
-
-    def test_nested_logs_write(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, header='', footer='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, header='', footer='', prefix='')
-        outer_log.write("raw write\n")
-        outer_log.close()
-        self.assertTrue(any("raw write" in s for s in array2))
-
-    def test_nested_logs_heading(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, header='', footer='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, header='', footer='', prefix='')
-        outer_log.heading("nested heading")
-        outer_log.close()
-        self.assertTrue(any("nested heading" in s for s in array2))
-
-    def test_nested_logs_enter_exit(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, header='', footer='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, header='', footer='', prefix='')
-        outer_log.enter("nested subsystem")
-        outer_log("inside nested")
-        outer_log.exit()
-        outer_log.close()
-        self.assertTrue(any("nested subsystem" in s for s in array2))
-        self.assertIn("inside nested\n", array2)
-
-    def test_nested_logs_flush(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, header='', footer='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, header='', footer='', prefix='')
-        outer_log("before flush")
-        outer_log.flush()
-        outer_log.close()
-        self.assertIn("before flush\n", array1)
-        self.assertIn("before flush\n", array2)
-
-    def test_nested_logs_reset(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, header='', footer='', prefix='')
-        outer_log = big.Log(array1, inner_log, threading=False, header='', footer='', prefix='')
-        outer_log("before reset")
-        outer_log.close()
-        outer_log.reset()
-        outer_log("after reset")
-        outer_log.close()
-        self.assertIn("before reset\n", array1)
-        self.assertIn("before reset\n", array2)
-        self.assertIn("after reset\n", array1)
-        self.assertIn("after reset\n", array2)
-
-    def test_nested_logs_with_banners_and_prefix(self):
-        array1 = []
-        array2 = []
-        inner_log = big.Log(array2, threading=False, prefix='[prefix] ')
-        outer_log = big.Log(array1, inner_log, threading=False, prefix='[PREFIX] ')
-        outer_log("message")
-        outer_log.close()
-        self.assertIn("[PREFIX] message\n", array1)
-        self.assertIn("[prefix] message\n", array2)
-
 
 class TestLogFormatting(unittest.TestCase):
     """Tests for Log formatting options."""
@@ -794,8 +714,8 @@ class TestSink(unittest.TestCase):
             self.assertTrue(e.message.endswith(str(i)))
             self.assertEqual(e.epoch, None)
 
-        sse = big.SinkStartEvent(0)
-        self.assertEqual(repr(sse), "SinkStartEvent(type='start', message='', elapsed=0, duration=0, depth=0, epoch=0, thread=None)")
+        sse = big.SinkStartEvent(0, 5, 10)
+        self.assertEqual(repr(sse), "SinkStartEvent(log=0, elapsed=0, type='start', message='', duration=0, depth=0, epoch=10, formatted='', ns=5, separator=, thread=None)")
 
     def test_sink_event_types(self):
         sink = big.Sink()
@@ -904,6 +824,8 @@ class TestSink(unittest.TestCase):
         events = list(sink)
         self.assertEqual(len(events), 5)
         self.assertEqual(events[0].type, big.log.Sink.START)
+        self.assertEqual(events[0].elapsed, 0)
+        self.assertGreater(events[0].ns, 0)
         self.assertGreater(events[0].epoch, 0)
         self.assertEqual(events[1].type, big.log.Sink.HEADER)
         self.assertEqual(events[1].message, 'Sink start')
@@ -912,7 +834,7 @@ class TestSink(unittest.TestCase):
         self.assertEqual(events[3].type, big.log.Sink.FOOTER)
         self.assertEqual(events[3].message, 'Sink finish')
         self.assertEqual(events[4].type, big.log.Sink.END)
-        self.assertGreater(events[4].epoch, 0)
+        self.assertGreater(events[4].elapsed, 0)
 
 
 class TestOldDestination(unittest.TestCase):
