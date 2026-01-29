@@ -311,83 +311,86 @@ class FileHandle(Destination):
         self.handle.flush()
 
 
+@export
 class SinkBaseEvent:
     __slots__ = (
-        '_type',
-        '_message',
-        '_elapsed',
-        '_duration',
         '_depth',
+        '_duration',
+        '_elapsed',
         '_epoch',
         '_formatted',
+        '_message',
         '_ns',
+        '_number',
+        '_separator',
         '_thread',
+        '_type',
         )
 
-    def __init__(self, log, elapsed, type, duration=0, depth=0, epoch=None, formatted='', separator='', message='', ns=None, thread=None):
-        self._log = log
-        self._elapsed = elapsed
-        self._type = type
-
-        self._message = message
-        self._duration = duration
+    def __init__(self, number, elapsed, type, duration=0, depth=0, epoch=None, formatted='', separator='', message='', ns=None, thread=None):
         self._depth = depth
+        self._duration = duration
+        self._elapsed = elapsed
         self._epoch = epoch
         self._formatted = formatted
-        self._separator = separator
+        self._message = message
         self._ns = ns
+        self._number = number
+        self._separator = separator
         self._thread = thread
-
-    @property
-    def log(self):
-        return self._log
-
-    @property
-    def type(self):
-        return self._type
-
-    @property
-    def elapsed(self):
-        return self._elapsed
-
-    @property
-    def message(self):
-        return self._message
-
-    @property
-    def duration(self):
-        return self._duration
+        self._type = type
 
     @property
     def depth(self):
         return self._depth
 
     @property
+    def duration(self):
+        return self._duration
+
+    @property
+    def elapsed(self):
+        return self._elapsed
+
+    @property
     def epoch(self):
         return self._epoch
-
-    @property
-    def thread(self):
-        return self._thread
-
-    @property
-    def ns(self):
-        return self._ns
 
     @property
     def formatted(self):
         return self._formatted
 
     @property
+    def message(self):
+        return self._message
+
+    @property
+    def ns(self):
+        return self._ns
+
+    @property
+    def number(self):
+        return self._number
+
+    @property
     def separator(self):
         return self._separator
 
+    @property
+    def thread(self):
+        return self._thread
+
+    @property
+    def type(self):
+        return self._type
+
+
     def __repr__(self):
-        return f"{self.__class__.__name__}(log={self._log}, elapsed={self._elapsed}, type={self._type!r}, message={self._message!r}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, formatted={self._formatted!r}, ns={self._ns!r}, separator={self._separator}, thread={self._thread})"
+        return f"{self.__class__.__name__}(number={self._number}, elapsed={self._elapsed}, type={self._type!r}, message={self._message!r}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, formatted={self._formatted!r}, ns={self._ns!r}, separator={self._separator}, thread={self._thread})"
 
     def __eq__(self, other):
-        return (other.isinstance(SinkBaseEvent)
-            and (self._log == other._log)
+        return (isinstance(other, SinkBaseEvent)
+            and (self._number == other._number)
             and (self._elapsed == other._elapsed)
             and (self._type == other._type)
             and (self._message == other._message)
@@ -398,18 +401,19 @@ class SinkBaseEvent:
             )
 
     def __lt__(self, other):
-        if not other.isinstance(SinkBaseEvent):
+        if not isinstance(other, SinkBaseEvent):
             raise TypeError(f"'<' not supported between instances of SinkBaseEvent and {type(other)}")
-        if self._log >= other._log:
-            return False
-        return self._elapsed < other._elapsed
+        return (
+                (self._number  <= other._number)
+            and (self._elapsed <  other._elapsed)
+            )
 
 
 @export
 class SinkEvent(SinkBaseEvent):
-    def __init__(self, log, elapsed, type, thread, message, formatted, depth, **kwargs):
+    def __init__(self, number, elapsed, type, thread, message, formatted, depth, **kwargs):
         super().__init__(
-            log=log,
+            number=number,
             elapsed=elapsed,
             type=type,
             message=message,
@@ -421,9 +425,9 @@ class SinkEvent(SinkBaseEvent):
 
 @export
 class SinkStartEvent(SinkBaseEvent):
-    def __init__(self, log, start_time_ns, start_time_epoch):
+    def __init__(self, number, start_time_ns, start_time_epoch):
         super().__init__(
-            log=log,
+            number=number,
             elapsed=0,
             type=Sink.START,
             ns=start_time_ns,
@@ -432,9 +436,9 @@ class SinkStartEvent(SinkBaseEvent):
 
 @export
 class SinkEndEvent(SinkBaseEvent):
-    def __init__(self, log, elapsed):
+    def __init__(self, number, elapsed):
         super().__init__(
-            log=log,
+            number=number,
             type=Sink.END,
             elapsed=elapsed,
             )
@@ -532,9 +536,6 @@ class Sink(Destination):
     def __iter__(self):
         for e in self.events:
             yield e
-
-    def sort(self):
-        self.events.sort()
 
     def print(self, *,
             enter='',
@@ -943,10 +944,6 @@ class Log:
                 return
 
             self._reset(start_time_ns, start_time_epoch, True, None)
-
-    def _start(self, start_time_ns, start_time_epoch):
-        self._start_time_epoch = start_time_epoch
-        self._start_time_ns = start_time_ns
 
     def _format(self, elapsed, thread, format):
         if not format:

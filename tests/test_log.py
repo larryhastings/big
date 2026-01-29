@@ -705,17 +705,43 @@ class TestSink(unittest.TestCase):
         self.assertIsInstance(events.pop(0), big.SinkStartEvent)
         self.assertIsInstance(events.pop(-1), big.SinkEndEvent)
         for i, e in enumerate(events, 1):
-            self.assertGreater(e.elapsed, 0)
-            self.assertGreaterEqual(e.duration, 0)
-            self.assertEqual(e.thread, threading.current_thread())
             self.assertEqual(e.depth, 0)
-            self.assertEqual(e.type, big.log.Sink.LOG)
+            self.assertGreaterEqual(e.duration, 0)
+            self.assertGreater(e.elapsed, 0)
+            self.assertEqual(e.epoch, None)
+            self.assertIn('message', e.formatted)
             self.assertTrue(e.message.startswith('message'))
             self.assertTrue(e.message.endswith(str(i)))
-            self.assertEqual(e.epoch, None)
+            self.assertEqual(e.ns, None)
+            self.assertEqual(e.number, 1)
+            self.assertEqual(e.separator, '')
+            self.assertEqual(e.thread, threading.current_thread())
+            self.assertEqual(e.type, big.log.Sink.LOG)
+
+        event = events[0]
+        clone = big.SinkBaseEvent(
+            depth = event.depth,
+            duration = event.duration,
+            elapsed = event.elapsed,
+            epoch = event.epoch,
+            formatted = event.formatted,
+            message = event.message,
+            ns = event.ns,
+            number = event.number,
+            separator = event.separator,
+            thread = event.thread,
+            type = event.type,
+            )
+        self.assertEqual(event, clone)
+        self.assertNotEqual(event, events[1])
+        self.assertLess(event, events[1])
+
+        with self.assertRaises(TypeError):
+            event < 3.1415
+
 
         sse = big.SinkStartEvent(0, 5, 10)
-        self.assertEqual(repr(sse), "SinkStartEvent(log=0, elapsed=0, type='start', message='', duration=0, depth=0, epoch=10, formatted='', ns=5, separator=, thread=None)")
+        self.assertEqual(repr(sse), "SinkStartEvent(number=0, elapsed=0, type='start', message='', duration=0, depth=0, epoch=10, formatted='', ns=5, separator=, thread=None)")
 
     def test_sink_event_types(self):
         sink = big.Sink()
