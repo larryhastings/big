@@ -68,6 +68,7 @@ class SinkBaseEvent:
         '_duration',
         '_elapsed',
         '_epoch',
+        '_format',
         '_formatted',
         '_message',
         '_ns',
@@ -77,11 +78,12 @@ class SinkBaseEvent:
         '_type',
         )
 
-    def __init__(self, number, elapsed, type, duration=0, depth=0, epoch=None, formatted='', separator='', message='', ns=None, thread=None):
+    def __init__(self, number, elapsed, type, duration=0, depth=0, epoch=None, format=None, formatted='', separator='', message='', ns=None, thread=None):
         self._depth = depth
         self._duration = duration
         self._elapsed = elapsed
         self._epoch = epoch
+        self._format = format
         self._formatted = formatted
         self._message = message
         self._ns = ns
@@ -105,6 +107,10 @@ class SinkBaseEvent:
     @property
     def epoch(self):
         return self._epoch
+
+    @property
+    def format(self):
+        return self._format
 
     @property
     def formatted(self):
@@ -161,11 +167,12 @@ class SinkBaseEvent:
 
 @export
 class SinkEvent(SinkBaseEvent):
-    def __init__(self, number, elapsed, type, thread, message, formatted, depth, **kwargs):
+    def __init__(self, number, elapsed, type, thread, format, message, formatted, depth, **kwargs):
         super().__init__(
             number=number,
             elapsed=elapsed,
             type=type,
+            format=format,
             message=message,
             depth=depth,
             formatted=formatted,
@@ -323,13 +330,12 @@ class Log:
 
     def __init__(self, *destinations,
             clock=default_clock,
-            banner_separator='=',
-            footer='{name} finish at {timestamp}\n',
-            header='{name} start at {timestamp}',
+
+            formats = {},
+
             indent=4,
             name='Log',
             prefix=prefix_format(3, 10, 8),
-            separator='-',
             threading=True,
             timestamp=big_time.timestamp_human,
             timestamp_clock=time.time,
@@ -338,6 +344,86 @@ class Log:
 
         self._clock = clock
         self._timestamp_clock = timestamp_clock
+
+        base_formats = {
+            "box" : {
+                "format": '+{line}\n| {message}\n+{line}',
+                "line": '-',
+            },
+            "end" : {
+                "format": '{line}\n{name} finish at {timestamp}\n{line}',
+                "line": '=',
+            },
+            "enter": {
+                "format": '+-----+{line}\n|start| {message}\n+-----+{line}',
+                "line": '-',
+            },
+            "exit": {
+                "format": '+-----+{line}\n| end | {message}\n+-----+{line}',
+                "line": '-',
+            },
+            "start": {
+                "format": '{line}\n{name} start at {timestamp}\n{line}',
+                "line": '=',
+            },
+        }
+
+        for key, value in formats.items():
+            if value is None:
+                base_formats.pop(key, None)
+            else:
+                d = base_formats.setdefault(key, {})
+                d.update(value)
+
+        self._formats = {}
+
+        for key, value in base_formats.items():
+            if not isinstance(key, str):
+                raise TypeError(f"format keys must be str, not {type(key)}")
+            if not key.isidentifier():
+                raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
+            value_is_dict = isinstance(value, dict)
+            if not ((value is None) or value_is_dict):
+                raise TypeError(f"format values must be dict or None, not {type(value)}")
+            if value_is_dict and (not (isinstance(value.get('format', None), str) and isinstance(value.get('line', None), str))):
+                raise ValueError(f"format dicts must contain 'format' and 'line' keys with value str, not {value!r}")
+
+            if not value_is_dict:
+                continue
+
+            attribute_exists = hasattr(self, key)
+            predefined_key = key in ("enter", "exit", "footer", "header")
+            if (not predefined_key) and attribute_exists:
+                raise ValueError(f'format {key} attribute is already in use')
+
+            format = value['format']
+            line = value['line']
+            repeated_line = line * ((width // len(line)) + 1)
+
+            format_lines = []
+            for format_line in format.split('\n'):
+                s = format_line.replace("{{", "")
+                contains_message = "{message}" in s
+                append_repeated_line = s.endswith("{line}")
+                if append_repeated_line:
+                    format_line = format_line[:-6]
+                    append_repeated_line = repeated_line
+                format_lines.append((format_line, line, contains_message, append_repeated_line))
+            self._formats[key] = format_lines
+
+            if not attribute_exists:
+                def make_method():
+                    def method(message):
+                        time = self._clock()
+                        thread = current_thread()
+
+                        if not isinstance(message, str):
+                            raise TypeError('message must be str')
+
+                        self._dispatch( [(self._log, (time, thread, key, message))] )
+                    return method
+                setattr(self, key, make_method())
+
 
         atexit.register(self._atexit)
 
@@ -350,10 +436,6 @@ class Log:
         append = array.append
 
         self._name = name
-        self._header = header
-        self._footer = footer
-        self._banner_separator = banner_separator
-        self._separator = separator
 
         self._width = width
         self._prefix = prefix
@@ -413,16 +495,44 @@ class Log:
         return self._clock
 
     @property
-    def banner_separator(self):
-        return self._banner_separator
+    def footer_format(self):
+        return self._footer_format
 
     @property
-    def footer(self):
-        return self._footer
+    def footer_separator(self):
+        return self._footer_separator
 
     @property
-    def header(self):
-        return self._header
+    def header_format(self):
+        return self._header_format
+
+    @property
+    def header_separator(self):
+        return self._header_separator
+
+    @property
+    def heading_format(self):
+        return self._heading_format
+
+    @property
+    def heading_separator(self):
+        return self._heading_separator
+
+    @property
+    def enter_format(self):
+        return self._enter_format
+
+    @property
+    def enter_separator(self):
+        return self._enter_separator
+
+    @property
+    def exit_format(self):
+        return self._exit_format
+
+    @property
+    def exit_separator(self):
+        return self._exit_separator
 
     @property
     def indent(self):
@@ -435,10 +545,6 @@ class Log:
     @property
     def prefix(self):
         return self._prefix
-
-    @property
-    def separator(self):
-        return self._separator
 
     @property
     def threading(self):
@@ -506,7 +612,8 @@ class Log:
         self._start_time_ns = start_time_ns
         self._start_time_epoch = start_time_epoch
         self._end_time_epoch = None
-        self._want_header = bool(self._header)
+        self._want_header = "start" in self._formats
+        self._want_footer = "end" in self._formats
 
         for destination in self._destinations:
             if send_reset:
@@ -543,7 +650,7 @@ class Log:
 
             self._reset(start_time_ns, start_time_epoch, True, None)
 
-    def _format(self, elapsed, thread, format):
+    def _format(self, elapsed, thread, format, *, message=None, line=None):
         if not format:
             return ''
 
@@ -551,16 +658,24 @@ class Log:
         epoch = elapsed + self._start_time_epoch
         timestamp = self._timestamp(epoch)
         start_timestamp = self._timestamp(self._start_time_epoch)
-        return format.format(
-            elapsed=elapsed,
-            name=self._name,
-            start_timestamp=start_timestamp,
-            thread=thread,
-            time=epoch,
-            timestamp=timestamp,
-            ) + self._spaces
+
+        substitutions = {
+            "elapsed": elapsed,
+            "name": self._name,
+            "start_timestamp": start_timestamp,
+            "thread": thread,
+            "time": epoch,
+            "timestamp": timestamp,
+            }
+        if message is not None:
+            substitutions['message'] = message
+        if line is not None:
+            substitutions['line'] = line
+
+        return format.format_map(substitutions)
 
     def _line(self, prefix, separator):
+        return
         line = prefix
 
         if not separator:
@@ -583,16 +698,6 @@ class Log:
         for destination in self._destinations:
             handler = getattr(destination, name)
             handler(elapsed, thread, formatted, message, separator)
-
-    def _print_header(self, thread):
-        self._want_header = False
-        self._print_banner('header', self._start_time_ns, thread, self._header, '')
-
-    def _print_footer(self, time, thread):
-        footer = self._footer
-        stripped = footer.rstrip('\n')
-        newlines = footer[len(stripped):]
-        self._print_banner('footer', time, thread, stripped, newlines)
 
 
     ##
@@ -646,63 +751,6 @@ class Log:
                 self._execute(work)
 
 
-    def _log(self, time, thread, args, sep, end, flush):
-        ## If you call
-        ##     log("abc", "def\nghi", sep='\n')
-        ## then here's what happens at the destinations:
-        ##
-        ## If the destination is a Log, it calls
-        ##     destination.log("abc", "def\nghi", sep='\n')
-        ## If the destination is a Destination with log defined, it calls
-        ##     destination.log(elapsed, thread, "abc")
-        ##     destination.log(elapsed, thread, "def")
-        ##     destination.log(elapsed, thread, "ghi")
-        ## If the destination is a Destination without log defined,
-        ## assuming prefix='[prefix] ', it calls
-        ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
-
-        if self._want_header:
-            self._print_header(thread)
-
-        message = f"{sep.join(args)}{end}"
-
-        messages = message.split('\n')
-        if (len(messages) > 1) and (not messages[-1]):
-            messages.pop()
-
-        elapsed = self._elapsed(time)
-        prefix = self._format(elapsed, thread, self._prefix)
-        formatted_messages = [ f"{prefix}{m}\n" for m in messages]
-
-
-        message_and_formatted = list(zip(messages, formatted_messages))
-
-        for destination in self._destinations:
-            for message, formatted in message_and_formatted:
-                destination.log(elapsed, thread, formatted, message)
-
-
-    def __call__(self, *args, sep=_sep, end=_end, flush=False):
-        "Alias for Log.log()."
-
-        time = self._clock()
-        thread = current_thread()
-
-        if end is not _end:
-            end = str(end)
-        if sep is not _sep:
-            sep = str(sep)
-        args = [str(a) for a in args]
-
-        self._dispatch( [(self._log, (time, thread, args, sep, end, flush))] )
-
-    def log(self, *args, end=_end, sep=_sep, flush=False):
-        """
-        Logs a message, with the interface of builtins.print.
-        """
-        return self(*args, end=end, sep=sep, flush=flush)
-
-
     def _write(self, time, thread, s):
         if self._want_header:
             self._print_header(thread)
@@ -721,7 +769,117 @@ class Log:
 
         self._dispatch( [(self._write, (time, thread, s))] )
 
+    def _print_header(self, thread):
+        self._want_header = False
+        self._log(self._start_time_ns, thread, 'start', self._name)
+        # pass
+        # self._print_banner('header', self._start_time_ns, thread, self._header, '')
+
+    def _print_footer(self, time, thread):
+        self._clear_nesting()
+        self._log(time, thread, 'end', self._name)
+        # pass
+        # footer = self._footer
+        # stripped = footer.rstrip('\n')
+        # newlines = footer[len(stripped):]
+        # self._print_banner('footer', time, thread, stripped, newlines)
+
+    def _log(self, time, thread, format, message):
+        ## If you call
+        ##     log("abc", "def\nghi", sep='\n')
+        ## then here's what happens at the destinations:
+        ##
+        ## If the destination is a Log, it calls
+        ##     destination.log("abc", "def\nghi", sep='\n')
+        ## If the destination is a Destination with log defined, it calls
+        ##     destination.log(elapsed, thread, "abc")
+        ##     destination.log(elapsed, thread, "def")
+        ##     destination.log(elapsed, thread, "ghi")
+        ## If the destination is a Destination without log defined,
+        ## assuming prefix='[prefix] ', it calls
+        ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
+
+        if self._want_header:
+            self._print_header(thread)
+
+        elapsed = self._elapsed(time)
+        prefix = self._format(elapsed, thread, self._prefix) + self._spaces
+
+        message_lines = message.split('\n')
+
+        if format is None:
+            buffer = [f"{prefix}{ml}\n" for ml in message_lines]
+        else:
+            buffer = []
+            append = buffer.append
+            for t in self._formats[format]:
+                f, l, contains_message, append_repeated_line = t
+                if contains_message:
+                    iterable = message_lines
+                else:
+                    iterable = [None]
+                for ml in iterable:
+                    formatted = prefix + self._format(elapsed, thread, f, message=ml, line=l)
+                    append(formatted)
+                    if append_repeated_line:
+                        length = len(formatted)
+                        delta = self._width - length
+                        if delta > 0:
+                            append(append_repeated_line[:delta])
+                    append("\n")
+
+        formatted = "".join(buffer)
+        for destination in self._destinations:
+            destination.log(elapsed, thread, format, message, formatted)
+
+
+    def _format_and_log(self, time, thread, args, sep, end, flush, format):
+        ## If you call
+        ##     log("abc", "def\nghi", sep='\n')
+        ## then here's what happens at the destinations:
+        ##
+        ## If the destination is a Log, it calls
+        ##     destination.log("abc", "def\nghi", sep='\n')
+        ## If the destination is a Destination with log defined, it calls
+        ##     destination.log(elapsed, thread, "abc")
+        ##     destination.log(elapsed, thread, "def")
+        ##     destination.log(elapsed, thread, "ghi")
+        ## If the destination is a Destination without log defined,
+        ## assuming prefix='[prefix] ', it calls
+        ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
+        if end is _end:
+            end = ''
+        elif end.endswith('\n'):
+            end = end[:-1]
+        message = f"{sep.join(args)}{end}"
+        self._log(time, thread, format, message)
+
+
+    def __call__(self, *args, sep=_sep, end=_end, flush=False, format=None):
+        "Alias for Log.log()."
+
+        time = self._clock()
+        thread = current_thread()
+
+        if (format is not None) and (format not in self._formats):
+            raise ValueError(f"undefined format {format!r}")
+
+        if end is not _end:
+            end = str(end)
+        if sep is not _sep:
+            sep = str(sep)
+        args = [str(a) for a in args]
+
+        self._dispatch( [(self._format_and_log, (time, thread, args, sep, end, flush, format))] )
+
+    def log(self, *args, end=_end, sep=_sep, flush=False, format=None):
+        """
+        Logs a message, with the interface of builtins.print.
+        """
+        return self(*args, end=end, sep=sep, flush=flush, format=format)
+
     def _heading(self, time, thread, message, separator):
+        return
         if self._want_header:
             self._print_header(thread)
 
@@ -758,19 +916,21 @@ class Log:
     def _cache_spaces(self):
         self._spaces = _spaces[:len(self._nesting) * self._indent]
 
-    def _append_nesting(self, s):
-        self._nesting.append(s)
+    def _append_nesting(self, message):
+        self._nesting.append(message)
         self._cache_spaces()
 
     def _pop_nesting(self):
-        self._nesting.pop()
+        message = self._nesting.pop()
         self._cache_spaces()
+        return message
 
     def _clear_nesting(self):
         self._nesting.clear()
         self._cache_spaces()
 
     def _enter(self, time, thread, message, separator):
+        return
         if self._want_header:
             self._print_header(thread)
 
@@ -785,45 +945,31 @@ class Log:
 
         self._append_nesting(message)
 
-    def enter(self, message, *, separator=None):
+    def enter(self, message):
         time = self._clock()
         thread = current_thread()
-        log = None
 
-        work = [(self._enter, (time, thread, message, separator))]
-
-        if self._threading:
-            if not self._closed:
-                self._queue.put(work)
-                log = self
-        else:
-            with self._lock:
-                if not self._closed:
-                    self._execute(work)
-                    log = self
-
-        return self.SubsystemContextManager(log)
+        self._dispatch([
+                    (self._log, (time, thread, 'enter', message)),
+                    (self._append_nesting, (message,)),
+                    ])
+        return self.SubsystemContextManager(self)
 
 
-    def _exit(self, time, thread, separator):
+    def _exit(self, time, thread):
         assert not self._want_header
 
         if not self._nesting:
             return
 
-        self._pop_nesting()
-
-        elapsed = self._elapsed(time)
-        prefix = self._format(elapsed, thread, self._prefix)
-        formatted = self._line(prefix, separator)
-
-        for destination in self._destinations:
-            destination.exit(elapsed, thread, formatted, separator)
+        message = self._pop_nesting()
+        self._log(time, thread, 'exit', message)
 
     def exit(self, *, separator=None):
         time = self._clock()
         thread = current_thread()
-        self._dispatch( [(self._exit, (time, thread, separator))] )
+
+        self._dispatch([(self._exit, (time, thread))])
 
 
     def _flush(self):
@@ -862,8 +1008,7 @@ class Log:
             work = []
             append = work.append
 
-            if self._footer:
-                append((self._clear_nesting, ()))
+            if self._want_footer:
                 append((self._print_footer, (time, thread)))
             append((self._end, (time,)))
             append((self._flush, ()))
@@ -966,23 +1111,23 @@ class Log:
         def write(self, elapsed, thread, s):
             raise RuntimeError("pure virtual Destination.write called")
 
-        def log(self, elapsed, thread, formatted, message):
+        def log(self, elapsed, thread, format, message, formatted):
             self.write(elapsed, thread, formatted)
 
-        def header(self, elapsed, thread, formatted, message, separator):
-            self.write(elapsed, thread, formatted)
+        # def header(self, elapsed, thread, formatted, message, separator):
+        #     self.write(elapsed, thread, formatted)
 
-        def footer(self, elapsed, thread, formatted, message, separator):
-            self.write(elapsed, thread, formatted)
+        # def footer(self, elapsed, thread, formatted, message, separator):
+        #     self.write(elapsed, thread, formatted)
 
-        def heading(self, elapsed, thread, formatted, message, separator):
-            self.write(elapsed, thread, formatted)
+        # def heading(self, elapsed, thread, formatted, message, separator):
+        #     self.write(elapsed, thread, formatted)
 
-        def enter(self, elapsed, thread, formatted, message, separator):
-            self.write(elapsed, thread, formatted)
+        # def enter(self, elapsed, thread, formatted, message, separator):
+        #     self.write(elapsed, thread, formatted)
 
-        def exit(self, elapsed, thread, formatted, separator):
-            self.write(elapsed, thread, formatted)
+        # def exit(self, elapsed, thread, formatted, separator):
+        #     self.write(elapsed, thread, formatted)
 
 
 
@@ -1145,15 +1290,15 @@ class Log:
         and prints them using builtins.print.
         """
 
-        START = 'start'
         WRITE = 'write'
         LOG = 'log'
-        HEADER = 'header'
-        FOOTER = 'footer'
-        HEADING = 'heading'
-        ENTER = 'enter'
-        EXIT = 'exit'
-        END = 'end'
+        # START = 'start'
+        # HEADER = 'header'
+        # FOOTER = 'footer'
+        # HEADING = 'heading'
+        # ENTER = 'enter'
+        # EXIT = 'exit'
+        # END = 'end'
 
         def __init__(self):
             super().__init__()
@@ -1185,34 +1330,34 @@ class Log:
             events.append(event)
             self.longest_message = max(self.longest_message, len(event.message))
 
-        def start(self, start_time_ns, start_time_epoch):
-            self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch))
+        # def start(self, start_time_ns, start_time_epoch):
+        #     self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch))
 
-        def end(self, elapsed):
-            self._event(SinkEndEvent(self.number, elapsed))
+        # def end(self, elapsed):
+        #     self._event(SinkEndEvent(self.number, elapsed))
 
         def write(self, elapsed, thread, s):
-            self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, s, None, self.depth))
+            self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, None, s, None, self.depth))
 
-        def log(self, elapsed, thread, formatted, message):
-            self._event(SinkEvent(self.number, elapsed, self.LOG, thread, message, formatted, self.depth))
+        def log(self, elapsed, thread, format, message, formatted):
+            self._event(SinkEvent(self.number, elapsed, self.LOG, thread, format, message, formatted, self.depth))
 
-        def header(self, elapsed, thread, formatted, message, separator):
-            self._event(SinkEvent(self.number, elapsed, self.HEADER, thread, message, formatted, self.depth, separator=separator))
+        # def header(self, elapsed, thread, formatted, message, separator):
+        #     self._event(SinkEvent(self.number, elapsed, self.HEADER, thread, message, formatted, self.depth, separator=separator))
 
-        def footer(self, elapsed, thread, formatted, message, separator):
-            self._event(SinkEvent(self.number, elapsed, self.FOOTER, thread, message, formatted, self.depth, separator=separator))
+        # def footer(self, elapsed, thread, formatted, message, separator):
+        #     self._event(SinkEvent(self.number, elapsed, self.FOOTER, thread, message, formatted, self.depth, separator=separator))
 
-        def heading(self, elapsed, thread, formatted, message, separator):
-            self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
+        # def heading(self, elapsed, thread, formatted, message, separator):
+        #     self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
 
-        def enter(self, elapsed, thread, formatted, message, separator):
-            self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, message, formatted, self.depth, separator=separator))
-            self.depth += 1
+        # def enter(self, elapsed, thread, formatted, message, separator):
+        #     self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, message, formatted, self.depth, separator=separator))
+        #     self.depth += 1
 
-        def exit(self, elapsed, thread, formatted, separator):
-            self.depth -= 1
-            self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, '', formatted, self.depth))
+        # def exit(self, elapsed, thread, formatted, separator):
+        #     self.depth -= 1
+        #     self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, '', formatted, self.depth))
 
         def __iter__(self):
             for e in self.events:
@@ -1237,15 +1382,15 @@ class Log:
                 width = self.longest_message
 
             formats = {
-                self.START: heading,
                 self.WRITE: format,
                 self.LOG: format,
-                self.HEADER: heading or format,
-                self.FOOTER: heading or format,
-                self.HEADING: heading or format,
-                self.ENTER: enter or heading or format,
-                self.EXIT: exit or heading or format,
-                self.END: heading,
+                # self.START: heading,
+                # self.HEADER: heading or format,
+                # self.FOOTER: heading or format,
+                # self.HEADING: heading or format,
+                # self.ENTER: enter or heading or format,
+                # self.EXIT: exit or heading or format,
+                # self.END: heading,
             }
 
             for e in self.events:
@@ -1259,8 +1404,8 @@ class Log:
 
                 fmt = formats[e.type]
 
-                if e.type in (self.START, self.END):
-                    message = e.type
+                # if e.type in (self.START, self.END):
+                #     message = e.type
 
                 fields = {
                     'elapsed': elapsed,
