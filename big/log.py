@@ -73,12 +73,11 @@ class SinkBaseEvent:
         '_message',
         '_ns',
         '_number',
-        '_separator',
         '_thread',
         '_type',
         )
 
-    def __init__(self, number, elapsed, type, duration=0, depth=0, epoch=None, format=None, formatted='', separator='', message='', ns=None, thread=None):
+    def __init__(self, number, elapsed, type, duration=0, depth=0, epoch=None, format='', formatted='', message='', ns=None, thread=None):
         self._depth = depth
         self._duration = duration
         self._elapsed = elapsed
@@ -88,7 +87,6 @@ class SinkBaseEvent:
         self._message = message
         self._ns = ns
         self._number = number
-        self._separator = separator
         self._thread = thread
         self._type = type
 
@@ -129,10 +127,6 @@ class SinkBaseEvent:
         return self._number
 
     @property
-    def separator(self):
-        return self._separator
-
-    @property
     def thread(self):
         return self._thread
 
@@ -142,7 +136,7 @@ class SinkBaseEvent:
 
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(number={self._number}, elapsed={self._elapsed}, type={self._type!r}, message={self._message!r}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, formatted={self._formatted!r}, ns={self._ns!r}, separator={self._separator}, thread={self._thread})"
+        return f"{self.__class__.__name__}(number={self._number}, elapsed={self._elapsed}, type={self._type!r}, message={self._message!r}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, formatted={self._formatted!r}, ns={self._ns!r}, thread={self._thread})"
 
     def __eq__(self, other):
         return (isinstance(other, SinkBaseEvent)
@@ -150,7 +144,6 @@ class SinkBaseEvent:
             and (self._elapsed == other._elapsed)
             and (self._type == other._type)
             and (self._message == other._message)
-            and (self._separator == other._separator)
             and (self._thread == other._thread)
             and (self._epoch == other._epoch)
             and (self._depth == other._depth)
@@ -182,22 +175,24 @@ class SinkEvent(SinkBaseEvent):
 
 @export
 class SinkStartEvent(SinkBaseEvent):
-    def __init__(self, number, start_time_ns, start_time_epoch):
+    def __init__(self, number, start_time_ns, start_time_epoch, formatted):
         super().__init__(
             number=number,
             elapsed=0,
             type=Log.Sink.START,
             ns=start_time_ns,
             epoch=start_time_epoch,
+            formatted=formatted,
             )
 
 @export
 class SinkEndEvent(SinkBaseEvent):
-    def __init__(self, number, elapsed):
+    def __init__(self, number, elapsed, formatted):
         super().__init__(
             number=number,
             type=Log.Sink.END,
             elapsed=elapsed,
+            formatted=formatted,
             )
 
 
@@ -209,10 +204,10 @@ _sep = " "
 _end = "\n"
 
 @export
-def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=8):
+def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12):
     # 1 for the dot
     time_width = time_seconds_width + 1 + time_fractional_width
-    return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} :: {{thread.name:{thread_name_width}}}] '
+    return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}] '
 
 
 @export
@@ -335,7 +330,7 @@ class Log:
 
             indent=4,
             name='Log',
-            prefix=prefix_format(3, 10, 8),
+            prefix=prefix_format(3, 10, 12),
             threading=True,
             timestamp=big_time.timestamp_human,
             timestamp_clock=time.time,
@@ -347,7 +342,7 @@ class Log:
 
         base_formats = {
             "box" : {
-                "format": '+{line}\n| {message}\n+{line}',
+                "format": '{prefix}+{line}\n{prefix}| {message}\n{prefix}+{line}',
                 "line": '-',
             },
             "end" : {
@@ -355,12 +350,16 @@ class Log:
                 "line": '=',
             },
             "enter": {
-                "format": '+-----+{line}\n|start| {message}\n+-----+{line}',
+                "format": '{prefix}+-----+{line}\n{prefix}|start| {message}\n{prefix}+-----+{line}',
                 "line": '-',
             },
             "exit": {
-                "format": '+-----+{line}\n| end | {message}\n+-----+{line}',
+                "format": '{prefix}+-----+{line}\n{prefix}| end | {message}\n{prefix}+-----+{line}',
                 "line": '-',
+            },
+            "print": {
+                "format": '{prefix}{message}',
+                "line": '',
             },
             "start": {
                 "format": '{line}\n{name} start at {timestamp}\n{line}',
@@ -370,8 +369,12 @@ class Log:
 
         for key, value in formats.items():
             if value is None:
+                if key not in ("start", "end"):
+                    raise ValueError("None is only a valid value for keys 'start' and 'end'")
                 base_formats.pop(key, None)
             else:
+                if not isinstance(value, dict):
+                    raise TypeError(f"format values must be dict or None, not {type(value)}")
                 d = base_formats.setdefault(key, {})
                 d.update(value)
 
@@ -382,23 +385,21 @@ class Log:
                 raise TypeError(f"format keys must be str, not {type(key)}")
             if not key.isidentifier():
                 raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
-            value_is_dict = isinstance(value, dict)
-            if not ((value is None) or value_is_dict):
-                raise TypeError(f"format values must be dict or None, not {type(value)}")
-            if value_is_dict and (not (isinstance(value.get('format', None), str) and isinstance(value.get('line', None), str))):
+            assert isinstance(value, dict)
+            if not (isinstance(value.get('format', None), str) and isinstance(value.get('line', None), str)):
                 raise ValueError(f"format dicts must contain 'format' and 'line' keys with value str, not {value!r}")
 
-            if not value_is_dict:
-                continue
-
             attribute_exists = hasattr(self, key)
-            predefined_key = key in ("enter", "exit", "footer", "header")
+            predefined_key = key in ("enter", "exit", "start", "end", "print")
             if (not predefined_key) and attribute_exists:
                 raise ValueError(f'format {key} attribute is already in use')
 
             format = value['format']
             line = value['line']
-            repeated_line = line * ((width // len(line)) + 1)
+            if line:
+                repeated_line = line * ((width // len(line)) + 1)
+            else:
+                repeated_line = ''
 
             format_lines = []
             for format_line in format.split('\n'):
@@ -406,13 +407,14 @@ class Log:
                 contains_message = "{message}" in s
                 append_repeated_line = s.endswith("{line}")
                 if append_repeated_line:
+                    assert line
                     format_line = format_line[:-6]
                     append_repeated_line = repeated_line
                 format_lines.append((format_line, line, contains_message, append_repeated_line))
             self._formats[key] = format_lines
 
             if not attribute_exists:
-                def make_method():
+                def make_method(key):
                     def method(message):
                         time = self._clock()
                         thread = current_thread()
@@ -422,7 +424,7 @@ class Log:
 
                         self._dispatch( [(self._log, (time, thread, key, message))] )
                     return method
-                setattr(self, key, make_method())
+                setattr(self, key, make_method(key))
 
 
         atexit.register(self._atexit)
@@ -465,74 +467,35 @@ class Log:
         thread = current_thread()
 
         for destination in destinations:
-            if destination is None:
-                continue
+            destination = Log.destination(destination)
 
-            if isinstance(destination, self.Destination):
-                pass
-            elif destination == print:
-                destination = self.Print()
-            elif isinstance(destination, str):
-                destination = self.File(Path(self._format(0, thread, destination)))
-            elif isinstance(destination, Path):
-                destination = self.File(destination)
-            elif isinstance(destination, list):
-                destination = self.List(destination)
-            elif isinstance(destination, TextIOBase):
-                destination = self.FileHandle(destination)
-            elif callable(destination):
-                destination = self.Callable(destination)
-            else:
-                raise ValueError(f"don't know how to use destination {destination!r}")
+            if destination is not None:
+                append(destination)
+                destination.register(self)
 
-            append(destination)
-            destination.register(self)
-            destination.start(self._start_time_ns, self._start_time_epoch)
-
+    @classmethod
+    def destination(cls, destination):
+        if destination is None:
+            return None
+        if isinstance(destination, cls.Destination):
+            return destination
+        if destination is print:
+            return cls.Print()
+        if isinstance(destination, str):
+            return cls.File(Path(destination))
+        if isinstance(destination, Path):
+            return cls.File(destination)
+        if isinstance(destination, list):
+            return cls.List(destination)
+        if isinstance(destination, TextIOBase):
+            return cls.FileHandle(destination)
+        if callable(destination):
+            return cls.Callable(destination)
+        raise ValueError(f"don't know how to log to destination {destination!r}")
 
     @property
     def clock(self):
         return self._clock
-
-    @property
-    def footer_format(self):
-        return self._footer_format
-
-    @property
-    def footer_separator(self):
-        return self._footer_separator
-
-    @property
-    def header_format(self):
-        return self._header_format
-
-    @property
-    def header_separator(self):
-        return self._header_separator
-
-    @property
-    def heading_format(self):
-        return self._heading_format
-
-    @property
-    def heading_separator(self):
-        return self._heading_separator
-
-    @property
-    def enter_format(self):
-        return self._enter_format
-
-    @property
-    def enter_separator(self):
-        return self._enter_separator
-
-    @property
-    def exit_format(self):
-        return self._exit_format
-
-    @property
-    def exit_separator(self):
-        return self._exit_separator
 
     @property
     def indent(self):
@@ -561,7 +524,6 @@ class Log:
     @property
     def width(self):
         return self._width
-
 
     @property
     def closed(self):
@@ -612,13 +574,12 @@ class Log:
         self._start_time_ns = start_time_ns
         self._start_time_epoch = start_time_epoch
         self._end_time_epoch = None
-        self._want_header = "start" in self._formats
-        self._want_footer = "end" in self._formats
+        self._want_start = "start" in self._formats
+        self._want_end = "end" in self._formats
 
         for destination in self._destinations:
             if send_reset:
                 destination.reset()
-            destination.start(self._start_time_ns, self._start_time_epoch)
 
         if self._threading and (self._thread is None):
             self._queue = Queue()
@@ -650,7 +611,7 @@ class Log:
 
             self._reset(start_time_ns, start_time_epoch, True, None)
 
-    def _format(self, elapsed, thread, format, *, message=None, line=None):
+    def _format_s(self, elapsed, thread, format, *, message=None, line=None, prefix=None):
         if not format:
             return ''
 
@@ -671,33 +632,38 @@ class Log:
             substitutions['message'] = message
         if line is not None:
             substitutions['line'] = line
+        if prefix is not None:
+            substitutions['prefix'] = prefix
 
         return format.format_map(substitutions)
 
-    def _line(self, prefix, separator):
-        return
-        line = prefix
-
-        if not separator:
-            separator = self._separator or ''
-        if separator:
-            length = len(separator)
-            separator = separator * ((self._width + length) // length)
-            line = line + separator
-        return line[:self._width] + '\n'
-
-    def _print_banner(self, name, time, thread, format, newlines):
+    def _format_message(self, time, thread, format, message):
         elapsed = self._elapsed(time)
-        prefix = self._format(elapsed, thread, self._prefix)
-        message = self._format(elapsed, thread, format)
+        prefix = self._format_s(elapsed, thread, self._prefix) + self._spaces
 
-        separator = self._banner_separator or self._separator
-        separator_line = self._line(prefix + "+", separator)
-        formatted = separator_line + prefix + "# " + message + '\n' + separator_line + newlines
+        if message:
+            message_lines = message.split('\n')
+        else:
+            message_lines = ('',)
 
-        for destination in self._destinations:
-            handler = getattr(destination, name)
-            handler(elapsed, thread, formatted, message, separator)
+        buffer = []
+        append = buffer.append
+        for t in self._formats[format]:
+            f, l, contains_message, append_repeated_line = t
+            if contains_message:
+                iterable = message_lines
+            else:
+                iterable = [None]
+            for ml in iterable:
+                formatted = self._format_s(elapsed, thread, f, message=ml, line=l, prefix=prefix)
+                append(formatted)
+                if append_repeated_line:
+                    length = len(formatted)
+                    delta = self._width - length
+                    if delta > 0:
+                        append(append_repeated_line[:delta])
+                append("\n")
+        return "".join(buffer)
 
 
     ##
@@ -752,8 +718,8 @@ class Log:
 
 
     def _write(self, time, thread, s):
-        if self._want_header:
-            self._print_header(thread)
+        if self._want_start:
+            self._log_start(thread)
 
         elapsed = self._elapsed(time)
 
@@ -769,22 +735,24 @@ class Log:
 
         self._dispatch( [(self._write, (time, thread, s))] )
 
-    def _print_header(self, thread):
-        self._want_header = False
-        self._log(self._start_time_ns, thread, 'start', self._name)
-        # pass
-        # self._print_banner('header', self._start_time_ns, thread, self._header, '')
+    def _log_banner(self, time, thread, format, args):
+        assert format in self._formats
+        formatted = self._format_message(time, thread, format, None)
+        args.append(formatted)
 
-    def _print_footer(self, time, thread):
+        for destination in self._destinations:
+            getattr(destination, format)(*args)
+
+    def _log_start(self, thread):
+        self._want_start = False
+        self._log_banner(self._start_time_ns, thread, 'start', [self._start_time_ns, self._start_time_epoch])
+
+    def _log_end(self, time, thread):
         self._clear_nesting()
-        self._log(time, thread, 'end', self._name)
-        # pass
-        # footer = self._footer
-        # stripped = footer.rstrip('\n')
-        # newlines = footer[len(stripped):]
-        # self._print_banner('footer', time, thread, stripped, newlines)
+        elapsed = self._elapsed(time)
+        self._log_banner(time, thread, 'end', [elapsed])
 
-    def _log(self, time, thread, format, message):
+    def _log(self, time, thread, format, message, method='log'):
         ## If you call
         ##     log("abc", "def\nghi", sep='\n')
         ## then here's what happens at the destinations:
@@ -799,41 +767,17 @@ class Log:
         ## assuming prefix='[prefix] ', it calls
         ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
 
-        if self._want_header:
-            self._print_header(thread)
+        if self._want_start:
+            self._log_start(thread)
 
         elapsed = self._elapsed(time)
-        prefix = self._format(elapsed, thread, self._prefix) + self._spaces
+        formatted = self._format_message(time, thread, format, message)
 
-        message_lines = message.split('\n')
-
-        if format is None:
-            buffer = [f"{prefix}{ml}\n" for ml in message_lines]
-        else:
-            buffer = []
-            append = buffer.append
-            for t in self._formats[format]:
-                f, l, contains_message, append_repeated_line = t
-                if contains_message:
-                    iterable = message_lines
-                else:
-                    iterable = [None]
-                for ml in iterable:
-                    formatted = prefix + self._format(elapsed, thread, f, message=ml, line=l)
-                    append(formatted)
-                    if append_repeated_line:
-                        length = len(formatted)
-                        delta = self._width - length
-                        if delta > 0:
-                            append(append_repeated_line[:delta])
-                    append("\n")
-
-        formatted = "".join(buffer)
         for destination in self._destinations:
-            destination.log(elapsed, thread, format, message, formatted)
+            getattr(destination, method)(elapsed, thread, format, message, formatted)
 
 
-    def _format_and_log(self, time, thread, args, sep, end, flush, format):
+    def _print(self, time, thread, args, sep, end, flush, format):
         ## If you call
         ##     log("abc", "def\nghi", sep='\n')
         ## then here's what happens at the destinations:
@@ -855,13 +799,13 @@ class Log:
         self._log(time, thread, format, message)
 
 
-    def __call__(self, *args, sep=_sep, end=_end, flush=False, format=None):
-        "Alias for Log.log()."
+    def __call__(self, *args, sep=_sep, end=_end, flush=False, format='print'):
+        "Alias for Log.print()."
 
         time = self._clock()
         thread = current_thread()
 
-        if (format is not None) and (format not in self._formats):
+        if format and (format not in self._formats):
             raise ValueError(f"undefined format {format!r}")
 
         if end is not _end:
@@ -870,37 +814,13 @@ class Log:
             sep = str(sep)
         args = [str(a) for a in args]
 
-        self._dispatch( [(self._format_and_log, (time, thread, args, sep, end, flush, format))] )
+        self._dispatch( [(self._print, (time, thread, args, sep, end, flush, format))] )
 
-    def log(self, *args, end=_end, sep=_sep, flush=False, format=None):
+    def print(self, *args, end=_end, sep=_sep, flush=False, format='print'):
         """
         Logs a message, with the interface of builtins.print.
         """
         return self(*args, end=end, sep=sep, flush=flush, format=format)
-
-    def _heading(self, time, thread, message, separator):
-        return
-        if self._want_header:
-            self._print_header(thread)
-
-        elapsed = self._elapsed(time)
-        prefix = self._format(elapsed, thread, self._prefix)
-
-        separator = self._line(prefix + "+", separator)
-        formatted = separator + prefix + "| " + message + '\n' + separator
-
-        for destination in self._destinations:
-            destination.heading(elapsed, thread, formatted, message, separator)
-
-    def heading(self, message, separator=None):
-        time = self._clock()
-        thread = current_thread()
-
-        if not isinstance(message, str):
-            raise TypeError('message must be str')
-
-        self._dispatch( [(self._heading, (time, thread, message, separator))] )
-
 
     class SubsystemContextManager:
         def __init__(self, log):
@@ -929,43 +849,38 @@ class Log:
         self._nesting.clear()
         self._cache_spaces()
 
-    def _enter(self, time, thread, message, separator):
-        return
-        if self._want_header:
-            self._print_header(thread)
+
+    def _enter_exit(self, verb, time, thread, message):
+        if self._want_start:
+            self._log_start(thread)
 
         elapsed = self._elapsed(time)
-        prefix = self._format(elapsed, thread, self._prefix)
-
-        separator = self._line(prefix + "+", separator)
-        formatted = separator + prefix + "| " + message + '\n' + separator
+        formatted = self._format_message(time, thread, verb, message)
 
         for destination in self._destinations:
-            destination.enter(elapsed, thread, formatted, message, separator)
-
-        self._append_nesting(message)
+            getattr(destination, verb)(elapsed, thread, message, formatted)
 
     def enter(self, message):
         time = self._clock()
         thread = current_thread()
 
         self._dispatch([
-                    (self._log, (time, thread, 'enter', message)),
+                    (self._enter_exit, ('enter', time, thread, message)),
                     (self._append_nesting, (message,)),
                     ])
         return self.SubsystemContextManager(self)
 
 
     def _exit(self, time, thread):
-        assert not self._want_header
+        assert not self._want_start
 
         if not self._nesting:
             return
 
         message = self._pop_nesting()
-        self._log(time, thread, 'exit', message)
+        self._enter_exit('exit', time, thread, message)
 
-    def exit(self, *, separator=None):
+    def exit(self):
         time = self._clock()
         thread = current_thread()
 
@@ -978,13 +893,6 @@ class Log:
 
     def flush(self):
         self._dispatch( [(self._flush, ())] )
-
-
-    def _end(self, time):
-        elapsed = self._elapsed(time)
-
-        for destination in self._destinations:
-            destination.end(elapsed)
 
     def _close(self):
         for destination in self._destinations:
@@ -1008,9 +916,8 @@ class Log:
             work = []
             append = work.append
 
-            if self._want_footer:
-                append((self._print_footer, (time, thread)))
-            append((self._end, (time,)))
+            if self._want_end:
+                append((self._log_end, (time, thread)))
             append((self._flush, ()))
             append((self._close, ()))
             append(None)
@@ -1096,12 +1003,6 @@ class Log:
         def reset(self):
             pass
 
-        def start(self, start_time_ns, start_time_epoch):
-            pass
-
-        def end(self, elapsed):
-            pass
-
         def flush(self):
             pass
 
@@ -1114,20 +1015,17 @@ class Log:
         def log(self, elapsed, thread, format, message, formatted):
             self.write(elapsed, thread, formatted)
 
-        # def header(self, elapsed, thread, formatted, message, separator):
-        #     self.write(elapsed, thread, formatted)
+        def start(self, start_time_ns, start_time_epoch, formatted):
+            self.write(0, None, formatted)
 
-        # def footer(self, elapsed, thread, formatted, message, separator):
-        #     self.write(elapsed, thread, formatted)
+        def end(self, elapsed, formatted):
+            self.write(elapsed, None, formatted)
 
-        # def heading(self, elapsed, thread, formatted, message, separator):
-        #     self.write(elapsed, thread, formatted)
+        def enter(self, elapsed, thread, message, formatted):
+            self.write(elapsed, thread, formatted)
 
-        # def enter(self, elapsed, thread, formatted, message, separator):
-        #     self.write(elapsed, thread, formatted)
-
-        # def exit(self, elapsed, thread, formatted, separator):
-        #     self.write(elapsed, thread, formatted)
+        def exit(self, elapsed, thread, message, formatted):
+            self.write(elapsed, thread, formatted)
 
 
 
@@ -1170,7 +1068,7 @@ class Log:
         def __init__(self, destination=None):
             super().__init__()
             self.array = []
-            self.destination = destination or Log.Print()
+            self.destination = Log.destination(destination) or Log.Print()
             self.last_elapsed = self.last_thread = None
 
         def write(self, elapsed, thread, s):
@@ -1292,13 +1190,13 @@ class Log:
 
         WRITE = 'write'
         LOG = 'log'
-        # START = 'start'
+        START = 'start'
         # HEADER = 'header'
         # FOOTER = 'footer'
         # HEADING = 'heading'
-        # ENTER = 'enter'
-        # EXIT = 'exit'
-        # END = 'end'
+        ENTER = 'enter'
+        EXIT = 'exit'
+        END = 'end'
 
         def __init__(self):
             super().__init__()
@@ -1330,14 +1228,14 @@ class Log:
             events.append(event)
             self.longest_message = max(self.longest_message, len(event.message))
 
-        # def start(self, start_time_ns, start_time_epoch):
-        #     self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch))
+        def start(self, start_time_ns, start_time_epoch, formatted):
+            self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch, formatted))
 
-        # def end(self, elapsed):
-        #     self._event(SinkEndEvent(self.number, elapsed))
+        def end(self, elapsed, formatted):
+            self._event(SinkEndEvent(self.number, elapsed, formatted))
 
         def write(self, elapsed, thread, s):
-            self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, None, s, None, self.depth))
+            self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, '', s, None, self.depth))
 
         def log(self, elapsed, thread, format, message, formatted):
             self._event(SinkEvent(self.number, elapsed, self.LOG, thread, format, message, formatted, self.depth))
@@ -1351,13 +1249,13 @@ class Log:
         # def heading(self, elapsed, thread, formatted, message, separator):
         #     self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
 
-        # def enter(self, elapsed, thread, formatted, message, separator):
-        #     self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, message, formatted, self.depth, separator=separator))
-        #     self.depth += 1
+        def enter(self, elapsed, thread, message, formatted):
+            self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, 'enter', message, formatted, self.depth))
+            self.depth += 1
 
-        # def exit(self, elapsed, thread, formatted, separator):
-        #     self.depth -= 1
-        #     self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, '', formatted, self.depth))
+        def exit(self, elapsed, thread, message, formatted):
+            self.depth -= 1
+            self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, 'exit', message, formatted, self.depth))
 
         def __iter__(self):
             for e in self.events:
@@ -1366,12 +1264,9 @@ class Log:
         def print(self, *,
                 enter='',
                 exit='',
-                format='{message}',
-                heading='{separator}\n{message}\n{separator}',
                 indent=2,
-                prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f}] {indent}',
+                prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f} {format:>8} {type:>5}] {indent}',
                 print=None,
-                separator='-',
                 timestamp=big_time.timestamp_human,
                 width=None,
                 ):
@@ -1381,47 +1276,30 @@ class Log:
             if width is None:
                 width = self.longest_message
 
-            formats = {
-                self.WRITE: format,
-                self.LOG: format,
-                # self.START: heading,
-                # self.HEADER: heading or format,
-                # self.FOOTER: heading or format,
-                # self.HEADING: heading or format,
-                # self.ENTER: enter or heading or format,
-                # self.EXIT: exit or heading or format,
-                # self.END: heading,
-            }
-
             for e in self.events:
                 elapsed = e.elapsed / 1_000_000_000.0
                 duration = e.duration / 1_000_000_000.0
                 epoch = elapsed + self.owner._start_time_epoch
                 ts = timestamp(epoch)
                 indent_str = ' ' * (e.depth * indent)
-                separator_str = (separator * ((width // len(separator)) + 1))[:width] if separator else ''
                 thread = e.thread or current_thread()
-
-                fmt = formats[e.type]
-
-                # if e.type in (self.START, self.END):
-                #     message = e.type
 
                 fields = {
                     'elapsed': elapsed,
                     'duration': duration,
+                    'format': e.format,
                     'timestamp': ts,
                     'thread': thread,
-                    'message': e.message,
                     'type': e.type,
                     'depth': e.depth,
                     'indent': indent_str,
-                    'separator': separator_str,
                 }
-                rendered = fmt.format_map(fields)
                 prefix_str = prefix.format_map(fields)
-                for line in rendered.split('\n'):
+                space_str = " " * len(prefix_str)
+                message = e.message
+                for line in message.split('\n'):
                     print(prefix_str + line)
+                    prefix_str = space_str
 
 TMPFILE = Log.TmpFile()
 export("TMPFILE")
@@ -1456,14 +1334,14 @@ class OldDestination(Log.Destination):
     def write(self, elapsed, thread, s):
         self._event(elapsed, s.rstrip('\n'))
 
-    def log(self, elapsed, thread, formatted, message):
+    def log(self, elapsed, thread, format, message, formatted):
         self._event(elapsed, message.rstrip('\n'))
 
-    def enter(self, elapsed, thread, formatted, message, separator):
+    def enter(self, elapsed, thread, message, formatted):
         self._event(elapsed, message + " start")
         self.stack.append(message)
 
-    def exit(self, elapsed, thread, formatted, separator):
+    def exit(self, elapsed, thread, message, formatted):
         subsystem = self.stack.pop()
         self._event(elapsed, subsystem + " end")
 
@@ -1505,7 +1383,7 @@ class OldLog:
     def __init__(self, clock=None):
         self._destination = OldDestination()
         clock=clock or default_clock
-        self._log = Log(self._destination, threading=False, header='', footer='', prefix='', clock=clock)
+        self._log = Log(self._destination, threading=False, formats={"start": None, "end": None }, prefix='', clock=clock)
 
     def reset(self):
         self._log.reset()
