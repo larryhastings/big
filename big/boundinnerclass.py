@@ -390,11 +390,11 @@ class UnboundInnerClass(_BoundInnerClassBase):
 
         return Wrapper
 
-if _python_3_7_plus:
+if _python_3_7_plus: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
         return o
-else:
+else: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
         return o.cls
