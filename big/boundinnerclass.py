@@ -188,33 +188,33 @@ class _ClassProxy:
 
 # Storage attribute name for bound inner classes cache.
 # If you use bound inner classes inside a class using slots,
-# add BOUNDINNERCLASS_SLOTS to your slots declaration:
+# add BOUNDINNERCLASS_OUTER_SLOTS to your slots declaration:
 #
 # class Foo:
-#     __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
-BOUNDINNERCLASS_ATTR = '__bound_inner_classes__'
-export('BOUNDINNERCLASS_ATTR')
-BOUNDINNERCLASS_SLOTS = (BOUNDINNERCLASS_ATTR,)
-export('BOUNDINNERCLASS_SLOTS')
+#     __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
+BOUNDINNERCLASS_OUTER_ATTR = '__bound_inner_class_outer__'
+export('BOUNDINNERCLASS_OUTER_ATTR')
+BOUNDINNERCLASS_OUTER_SLOTS = (BOUNDINNERCLASS_OUTER_ATTR,)
+export('BOUNDINNERCLASS_OUTER_SLOTS')
 
-BOUNDINNERCLASS_INFO_ATTR = '__bound_inner_class_info__'
-export('BOUNDINNERCLASS_INFO_ATTR')
+BOUNDINNERCLASS_INNER_ATTR = '__bound_inner_class_inner__'
+export('BOUNDINNERCLASS_INNER_ATTR')
 
 
 def _get_cache(outer):
     """Get or create the bound inner classes cache dict on outer."""
-    cache = getattr(outer, BOUNDINNERCLASS_ATTR, None)
+    cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
     if cache is None:
         cache = {}
         # Try to set it - will fail if outer uses __slots__ without this attr
         try:
-            object.__setattr__(outer, BOUNDINNERCLASS_ATTR, cache)
+            object.__setattr__(outer, BOUNDINNERCLASS_OUTER_ATTR, cache)
         except AttributeError:
             # outer uses __slots__ and doesn't have __bound_inner_classes__
             # (If outer had __dict__, object.__setattr__ would have succeeded)
             raise TypeError(
                 f"Cannot cache bound inner class on {type(outer).__name__}. "
-                f"Add '{BOUNDINNERCLASS_ATTR}' to __slots__ (or remove '__slots__')."
+                f"Add '{BOUNDINNERCLASS_OUTER_ATTR}' to __slots__ (or remove '__slots__')."
             ) from None
     return cache
 
@@ -284,33 +284,75 @@ class _BoundInnerClassBase(_ClassProxy):
 @export
 class BoundInnerClass(_BoundInnerClassBase):
     """
-    Class decorator for an inner class.  When accessing the inner class
-    through an instance of the outer class, this decorator "binds" the
-    inner class to that instance. This changes the signature of the inner
-    class's __init__ from
+    Class decorator for an inner class, binding them similarly to methods.
 
-        def __init__(self, *args, **kwargs):
+    In Python, if you access a function defined inside a class via an
+    instance of that class, you get a "method", and the instance of the
+    class is passed in automatically:
 
-    to
+        class Outer:
+            def fn(self):
+                ...
 
-        def __init__(self, outer, *args, **kwargs):
+        o = Outer()
+        o.fn()
 
-    where "outer" is the instance of the outer class.
+    Here, o.fn is a "method", a bound function, and "o" is automatically
+    passed in to fn when o.fn is called.
+
+    The BoundInnerClass decorator adds this for classes.  When accessing
+    an inner class via an instance of the outer class, this decorator "binds"
+    the inner class to that instance.  This changes the signature of the
+    inner class's __init__; now the "outer" class's instance is passed
+    in automatically:
+
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):
+                    ...
+
+        o = Outer()
+        i = o.Inner()
+
+    Here, o.Inner is a "bound inner class", and "o" (the instance of the
+    Outer class) is automatically passed in to Inner.__init__ when o.Inner
+    is instantiated.  Since the first positional parameter is already
+    "self", "o" is passed in as the *second* positional parameter, which
+    by convention is called "outer".
 
     Note that this has implications for all subclasses. If class B is
     decorated with BoundInnerClass, and class S is a subclass of B,
     such that issubclass(S, B) returns True, class S must be decorated
     with either @BoundInnerClass or @UnboundInnerClass.
 
-    How does it work?  The decorator returns a proxy for the class
-    that implements the descriptor protocol; when you access this
-    proxy through an instance, the descriptor creates a custom subclass
-    with a custom __init__.  This __init__ is a closure with a reference
-    to the instance, and it passes that instance in as an argument to
-    the base class's __init__.
+    Internally, o.Inner is constructed once, and cached; this is necessary
+    for stable subclassing and isinstance checks.
 
-    Bound classes have a __bound_inner_class_info__ attribute containing
-    a 2-tuple of (unbound_class, outer_weakref).
+    The implementation of BoundInnerClass is a class decorator.  It
+    returns a "proxy" for the decorated class implementing the descriptor
+    protocol; when you access this proxy through an instance, the descriptor
+    creates a custom subclass with a custom __init__.  This __init__ is a closure with a reference to the instance, and it passes
+    that instance in as an argument to the base class's __init__.
+
+    BoundInnerClass caches the bound inner classes in the outer class,
+    in an attribute called "__bound_inner_class_outer__".  If you use
+    BoundInnerClass on an inner class, and the outer class uses slots,
+    you must add this attribute to your __slots__ declaration.  Instead
+    of hard-coding this, please use the symbolic value
+    BOUNDINNERCLASS_OUTER_SLOTS, like so:
+
+        class Foo:
+            __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
+
+            @BoundInnerClass
+            class Bar:
+                ...
+
+    Bound classes themselves also have a __bound_inner_class_inner__
+    attribute containing a 2-tuple of (unbound_class, outer_weakref).
+
+    See also big.ClassRegistry.
     """
 
     __slots__ = ()
@@ -349,7 +391,7 @@ class BoundInnerClass(_BoundInnerClassBase):
             Wrapper.__annotations__ = cls.__annotations__
 
         # Mark as a bound inner class with info about its binding
-        setattr(Wrapper, BOUNDINNERCLASS_INFO_ATTR, (cls, outer_weakref))
+        setattr(Wrapper, BOUNDINNERCLASS_INNER_ATTR, (cls, outer_weakref))
 
         # Set proper signature (without 'outer' param since it's injected)
         bound_signature = _make_bound_signature(cls.__init__)
@@ -390,13 +432,44 @@ class UnboundInnerClass(_BoundInnerClassBase):
 
         return Wrapper
 
+
 if _python_3_7_plus: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
+        """
+        Returns the base class for declaring a subclass
+        of a bound inner class while still in the outer
+        class scope. Unnecessary in Python 3.7+, or when
+        the child class is defined outside the outer
+        class scope.
+
+        class Outer:
+            @BoundInnerClass
+            class InnerParent:
+                ...
+            @BoundInnerClass
+            class InnerChild(bound_inner_base(InnerParent)):
+                ...
+        """
         return o
 else: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
+        """
+        Returns the base class for declaring a subclass
+        of a bound inner class while still in the outer
+        class scope. Unnecessary in Python 3.7+, or when
+        the child class is defined outside the outer
+        class scope.
+
+        class Outer:
+            @BoundInnerClass
+            class InnerParent:
+                ...
+            @BoundInnerClass
+            class InnerChild(bound_inner_base(InnerParent)):
+                ...
+        """
         return o.cls
 
 
@@ -426,7 +499,7 @@ def unbound(cls):
     # Check cls.__dict__ directly, not inherited attributes
     if not isinstance(cls, type):
         raise TypeError(f"unbound() argument must be a class, not {type(cls).__name__}")
-    info = cls.__dict__.get(BOUNDINNERCLASS_INFO_ATTR)
+    info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
     if info is not None:
         return info[0]
     return cls
@@ -439,7 +512,7 @@ def _get_outer_weakref(cls):
     Returns None if cls is not a bound class.
     """
     # Check cls.__dict__ directly, not inherited attributes
-    info = cls.__dict__.get(BOUNDINNERCLASS_INFO_ATTR)
+    info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
     if info is None: # pragma: nocover
         return None
     return info[1]
@@ -447,7 +520,7 @@ def _get_outer_weakref(cls):
 
 def _is_bound(cls):
     """Return True if cls is a bound inner class."""
-    return BOUNDINNERCLASS_INFO_ATTR in cls.__dict__
+    return BOUNDINNERCLASS_INNER_ATTR in cls.__dict__
 
 
 @export
@@ -583,7 +656,7 @@ def reparent(child, parent, *, replace=None):
     reparented.__qualname__ = child.__qualname__
 
     # Mark as a bound inner class with info about its binding
-    setattr(reparented, BOUNDINNERCLASS_INFO_ATTR, (unbound_child, outer_weakref))
+    setattr(reparented, BOUNDINNERCLASS_INNER_ATTR, (unbound_child, outer_weakref))
 
     # Cache the result with a weakref to child for validation
     cache[cache_key] = (reparented, weakref.ref(child))
@@ -678,7 +751,7 @@ def class_bound_to(cls, outer):
     Note: this is NOT transitive. If cls is bound to x,
     and x is bound to y, class_bound_to(cls, y) returns False.
     """
-    cache = getattr(outer, BOUNDINNERCLASS_ATTR, None)
+    cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
     if cache is None:
         return False
     name = getattr(cls, '__name__', None)

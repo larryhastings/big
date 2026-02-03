@@ -816,7 +816,7 @@ class TestCaching(unittest.TestCase):
         self.assertEqual(instance1.child_attr, 'original')
 
         # Now simulate a stale cache entry by replacing the weakref with a dead one
-        cache = o.__bound_inner_classes__
+        cache = getattr(o, BOUNDINNERCLASS_OUTER_ATTR)
         child_id = id(Child)
         cache_key = (child_id, 'Parent')
 
@@ -942,12 +942,12 @@ class TestSlotsCompatibility(unittest.TestCase):
         o = Outer()
         i = o.Inner()
         self.assertIs(i.outer, o)
-        self.assertIn(BOUNDINNERCLASS_ATTR, o.__dict__)
+        self.assertIn(BOUNDINNERCLASS_OUTER_ATTR, o.__dict__)
 
     def test_outer_with_slots_and_cache_slot(self):
         """Works with __slots__ that includes __bound_inner_classes__ and __weakref__."""
         class Outer:
-            __slots__ = ('__weakref__', 'x') + BOUNDINNERCLASS_SLOTS
+            __slots__ = ('__weakref__', 'x') + BOUNDINNERCLASS_OUTER_SLOTS
 
             @BoundInnerClass
             class Inner:
@@ -970,7 +970,7 @@ class TestSlotsCompatibility(unittest.TestCase):
         o = Outer()
         with self.assertRaises(TypeError) as cm:
             o.Inner
-        self.assertIn('__bound_inner_classes__', str(cm.exception))
+        self.assertIn(BOUNDINNERCLASS_OUTER_ATTR, str(cm.exception))
 
 
 class TestWeakref(unittest.TestCase):
