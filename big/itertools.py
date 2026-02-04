@@ -162,12 +162,13 @@ class IteratorContext:
 @export
 def iterator_context(iterator, start=0):
     """
-    Wraps any iterator.  Yields (ctx, o) where o
-    is each value yielded by iterable, and ctx is a
-    "context" variable containing metadata about
-    the iteration.
+    Wraps any iterator, yielding values with a helpful context object.
 
-    These six context attributes work with any iterator:
+    Wraps any iterator.  Yields (ctx, o), where o is each value
+    yielded by iterable, and ctx is a "context" variable containing
+    metadata about the iteration.
+
+    ctx will always have these six attributes:
 
     * ctx.is_first is true for the first value yielded
       and false otherwise.
@@ -192,15 +193,19 @@ def iterator_context(iterator, start=0):
 
     These last two attributes, ctx.length and ctx.countdown,
     require the "iterator" object to support __len__.  If
-    the iterator object doesn't support __len__, they are
-    undefined, and accessing them will raise an exception.
+    the iterator object doesn't support __len__, these two
+    attributes are not defined, and accessing them will
+    raise an exception.
 
     * ctx.countdown contains the "opposite" value of ctx.index.
       The values yielded by ctx.countdown are the same as
       ctx.index, but in reversed order.  (If start is 0,
       and the iterator yields four items, ctx.index will
       be 0, 1, 2, and 3 in that order, and ctx.countdown
-      will be 3, 2, 1, and 0 in that order.)
+      will be 3, 2, 1, and 0 in that order.  If start is 3,
+      and the iterator yields four items, ctx.index will
+      be 3, 4, 5, and 6 in that order, and ctx.countdown
+      will be 6, 5, 4, and 3 in that order.)
     * ctx.length contains the total number of items that
       will be yielded.
     """

@@ -135,57 +135,60 @@ class TidyItertoolsTests(unittest.TestCase):
                     self.assertEqual(repr(ctx), f"IteratorContext(iterator=('abc',), start={start}, index={start}, is_first=True, is_last=True, current='abc')")
 
 
-        # iterator yields four things
         for start in range(-2, 5):
-            with self.subTest(start=start):
-                i = start
-                items = 'abcd'
-                is_first = True
+            for items in ('abc', 'abcd'):
+                with self.subTest(start=start, items=items):
+                    buffer = [undefined]
+                    buffer.extend(items)
+                    buffer.append(undefined)
 
-                my_items = list(items)
-                my_items.append(undefined)
-                my_iterator = iter(my_items)
-                buffer = [undefined, undefined, next(my_iterator)]
+                    countdowns = []
+                    indices = []
 
-                countdowns = []
-                indices = []
+                    is_first = True
+                    computed_index = start
+                    computed_countdown = start + len(items) - 1
 
-                for ctx, o in iterator_context(items, start):
-                    self.assertIsInstance(ctx, IteratorContext)
-                    self.assertEqual(ctx.is_first, is_first)
-                    is_last = (o == items[-1])
-                    self.assertEqual(ctx.is_last, is_last)
+                    for ctx, o in iterator_context(items, start):
+                        self.assertIsInstance(ctx, IteratorContext)
+                        self.assertEqual(ctx.is_first, is_first)
+                        is_last = (o == items[-1])
+                        self.assertEqual(ctx.is_last, is_last)
 
-                    self.assertEqual(ctx.index, i)
-                    # ... and examine countdown first this time.
-                    self.assertEqual(ctx.countdown, start + len(items) - (1 + i - start))
+                        self.assertEqual(ctx.index, computed_index)
+                        self.assertEqual(ctx.countdown, computed_countdown)
 
-                    buffer.pop(0)
-                    buffer.append(next(my_iterator))
+                        previous, current, next = buffer[:3]
 
-                    if is_first:
-                        with self.assertRaises(AttributeError):
-                            print(ctx.previous)
-                    else:
-                        self.assertEqual(ctx.previous, buffer[0])
-                    self.assertEqual(ctx.current, buffer[1])
-                    if is_last:
-                        with self.assertRaises(AttributeError):
-                            print(ctx.next)
-                    else:
-                        self.assertEqual(ctx.next, buffer[2])
+                        if not is_first:
+                            self.assertEqual(ctx.previous, previous)
+                        else:
+                            with self.assertRaises(AttributeError):
+                                print(ctx.previous)
+                            self.assertEqual(previous, undefined)
 
-                    self.assertEqual(ctx.length, len(items))
+                        self.assertEqual(ctx.current, current)
 
-                    countdowns.append(ctx.countdown)
-                    indices.append(ctx.index)
+                        if not is_last:
+                            self.assertEqual(ctx.next, next)
+                        else:
+                            with self.assertRaises(AttributeError):
+                                print(ctx.next)
+                            self.assertEqual(next, undefined)
 
-                    i += 1
-                    is_first = False
+                        self.assertEqual(ctx.length, len(items))
 
-                reversed_countdowns = list(countdowns)
-                reversed_countdowns.reverse()
-                self.assertEqual(reversed_countdowns, indices)
+                        countdowns.append(ctx.countdown)
+                        indices.append(ctx.index)
+
+                        is_first = False
+                        computed_index += 1
+                        computed_countdown -= 1
+                        buffer.pop(0)
+
+                    reversed_countdowns = list(countdowns)
+                    reversed_countdowns.reverse()
+                    self.assertEqual(reversed_countdowns, indices)
 
     def test_iterator_filter(self):
         l = [1, 'a', 2, 'b', 3, 'c', 4, 'd', 5]
