@@ -35,13 +35,9 @@ import sys
 import time
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 class InertContextManager:
@@ -405,4 +401,4 @@ class Scheduler:
         """
         return self.NonBlockingSchedulerIterator(self)
 
-clean()
+mm()

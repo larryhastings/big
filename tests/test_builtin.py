@@ -27,8 +27,8 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
-import big.all as big
-from big.all import ClassRegistry
+import big.builtin as big
+from big.builtin import ClassRegistry
 import unittest
 
 
@@ -172,34 +172,45 @@ class BigBuiltinTests(unittest.TestCase):
         ## So, let's test it inside class scope.
         class PointlessClass:
             mm = big.ModuleManager()
-            mm.delete('mm')
+
+            export = mm.export
+            delete = mm.delete
 
             with self.assertRaises(TypeError):
-                mm.export(35)
+                export(35)
             with self.assertRaises(TypeError):
-                mm.delete(35)
+                delete(35)
 
             def foo(): pass
-            result = mm.export(foo)
+            result = export(foo)
             self.assertIs(result, foo)
-            result = mm.delete(foo)
+            result = delete(foo)
             self.assertIs(result, foo)
 
             mm.export("bar", "bat", "zip")
             mm.delete("bar", "bat", "zoo")
 
-            self.assertEqual(mm.__all__, ['foo', 'bar', 'bat', 'zip'])
-            self.assertEqual(mm.deletions, ['mm', 'foo', 'bar', 'bat', 'zoo'])
+            self.assertEqual(mm.all, ['foo', 'bar', 'bat', 'zip'])
+            self.assertIs(mm.all, __all__)
+            self.assertEqual(mm.deletions, ['foo', 'bar', 'bat', 'zoo'])
 
             bar = bat = zoo = 3
-            mm.clean()
+            mm()
 
         self.assertFalse(hasattr(PointlessClass, 'mm'))
         self.assertFalse(hasattr(PointlessClass, 'foo'))
         self.assertFalse(hasattr(PointlessClass, 'bar'))
         self.assertFalse(hasattr(PointlessClass, 'bat'))
         self.assertFalse(hasattr(PointlessClass, 'zoo'))
+        self.assertFalse(hasattr(PointlessClass, 'export'))
+        self.assertFalse(hasattr(PointlessClass, 'delete'))
 
+    def test_ModuleManager_use_existing_all(self):
+        class PointlessClass:
+            __all__ = ['abc']
+            mm = big.ModuleManager()
+
+            self.assertIs(mm.all, __all__)
 
 
 class TestClassRegistry(unittest.TestCase):

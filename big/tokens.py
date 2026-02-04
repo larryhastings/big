@@ -180,13 +180,9 @@ except AttributeError: # pragma: nocover
     TOKEN_TSTRING_MIDDLE = TOKEN_INVALID
     TOKEN_TSTRING_END = TOKEN_INVALID
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 __all__.extend([name for name in globals() if name.startswith('TOKEN_')])
 
@@ -288,4 +284,4 @@ def generate_tokens(s):
         yield TokenInfo(t[0], string, t[2], t[3], line)
 
 
-clean()
+mm()

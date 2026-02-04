@@ -49,13 +49,9 @@ except ImportError: # pragma: no cover
         return int(monotonic() * 1_000_000_000.0)
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 export('default_clock')
@@ -1403,4 +1399,4 @@ class OldLog:
     def print(self, *, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9):
         self._destination.print(print=print, title=title, headings=headings, indent=indent, seconds_width=seconds_width, fractional_width=fractional_width)
 
-clean()
+mm()

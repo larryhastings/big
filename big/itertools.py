@@ -27,13 +27,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import collections
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 @export
@@ -408,4 +404,4 @@ def iterator_filter(iterator,
 
 # --8<-- end tidy itertools --8<--
 
-clean()
+mm()

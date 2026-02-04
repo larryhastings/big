@@ -35,14 +35,9 @@ import token
 # if no quotes defined, don't use split quoted strings
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
-
 
 
 _TOKEN_OP = token.OP
@@ -402,4 +397,4 @@ def eval_template_string(s, globals, locals=None, *,
     return ''.join(result)
 
 
-clean()
+mm()

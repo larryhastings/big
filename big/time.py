@@ -37,13 +37,9 @@ except ImportError: # pragma: no cover
 import time
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 _timestamp_human_format_with_us = "%Y/%m/%d %H:%M:%S.%f %Z"
@@ -223,4 +219,4 @@ if have_dateutils:
         d = datetime_ensure_timezone(d, timezone)
         return d
 
-clean()
+mm()

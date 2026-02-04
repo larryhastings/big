@@ -41,13 +41,9 @@ except ImportError: # pragma: no cover
 from .text import decode_python_script
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 import shutil
@@ -610,4 +606,4 @@ def search_path(paths, extensions=('',),
     return search
 
 
-clean()
+mm()

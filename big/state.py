@@ -28,13 +28,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from functools import update_wrapper
 from inspect import signature
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 @export
@@ -434,4 +430,4 @@ def dispatch(state_manager='state_manager', *, prefix='', suffix=''):
         return wrapper
     return dispatch
 
-clean()
+mm()

@@ -31,13 +31,9 @@ from .itertools import PushbackIterator
 import re
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 import builtins
@@ -214,4 +210,4 @@ class Log:
             print(f"{indent}{format_time(start)}  {format_time(elapsed)}  {indent2}{event}")
 
 
-clean()
+mm()

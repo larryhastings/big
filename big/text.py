@@ -54,14 +54,9 @@ except ImportError: # pragma: no cover
     def isinstance_re_pattern(o):
         return isinstance(o, re_Pattern)
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
-
 
 
 def _iterate_over_bytes(b):
@@ -5805,4 +5800,4 @@ def strip_line_comments(lines, line_comment_markers, *,
     return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes)
 
 
-clean()
+mm()

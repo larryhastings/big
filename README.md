@@ -6476,16 +6476,18 @@ It's been a whole year... and I've been busy!
   `eval_template_string` calls `parse_template_string` to
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
-* Rewrote `BoundInnerClass`.
+* Rewrote `BoundInnerClass`.  You no longer need the `parent.cls`
+  hack!
 * Added new functions to the *big.boundinnerclass* module:
     * `bind` binds a child class to an outer instance.
-    * `unbound` returns the unbound base class of a bound inner class.
-    * `reparent` takes a child class and returns a variant
-      bound to a different bound inner base class.
-    * `class_bound_to` tests if a class is bound to a specific
-      instance.
-    * `instance_bound_to` tests if an object is an instance of
-      a class bound to a specific (other) instance.
+    * `unbound` returns the unbound base class
+      of a bound inner class.
+    * `reparent` takes a child class and returns a
+      variant bound to a different bound inner base class.
+    * `class_bound_to` tests if a class is bound
+      to a specific instance.
+    * `instance_bound_to` tests if an object is an instance
+      of a class bound to a specific (other) instance.
 * Added `generate_tokens` to new module *big.tokens*.
   `generate_tokens` is a convenience wrapper around
   Python's `tokenize.generate_tokens`, which has an
@@ -6535,6 +6537,7 @@ It's been a whole year... and I've been busy!
   `ClassRegistry` helps you use inheritance with heavily
   nested class hierarchies, by giving you a place to
   store references to base classes you can access later.
+  Very useful with [`BoundInnerClass`](#boundinnerclasscls)!
 * `big.time.timestamp_human` now prints the timezone.
   Also, if you want it to use a specific timezone,
   you can specify a `datetime.timezone` object via

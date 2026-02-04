@@ -51,13 +51,9 @@ import sys
 _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
 
 
-from .builtin import ModuleManager
-mm = ModuleManager()
+from . import builtin
+mm = builtin.ModuleManager()
 export = mm.export
-delete = mm.delete
-clean  = mm.clean
-delete('ModuleManager', 'mm', 'export', 'delete', 'clean')
-__all__ = mm.__all__
 
 
 def _make_bound_signature(original_init):
@@ -188,16 +184,22 @@ class _ClassProxy:
 
 # Storage attribute name for bound inner classes cache.
 # If you use bound inner classes inside a class using slots,
-# add BOUNDINNERCLASS_OUTER_SLOTS to your slots declaration:
+# add BOUNDINNERCLASS_OUTER_SLOTS to your slots declaration,
+# like so:
 #
 # class Foo:
 #     __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
-BOUNDINNERCLASS_OUTER_ATTR = '__bound_inner_class_outer__'
+#
+#     @BoundInnerClass
+#     class Whatnot:
+#         ...
+#
+BOUNDINNERCLASS_OUTER_ATTR = '__boundinnerclass_outer__'
 export('BOUNDINNERCLASS_OUTER_ATTR')
 BOUNDINNERCLASS_OUTER_SLOTS = (BOUNDINNERCLASS_OUTER_ATTR,)
 export('BOUNDINNERCLASS_OUTER_SLOTS')
 
-BOUNDINNERCLASS_INNER_ATTR = '__bound_inner_class_inner__'
+BOUNDINNERCLASS_INNER_ATTR = '__boundinnerclass_inner__'
 export('BOUNDINNERCLASS_INNER_ATTR')
 
 
@@ -284,11 +286,11 @@ class _BoundInnerClassBase(_ClassProxy):
 @export
 class BoundInnerClass(_BoundInnerClassBase):
     """
-    Class decorator for an inner class, binding them similarly to methods.
+    Class decorator for nested classes, binding them like methods.
 
     In Python, if you access a function defined inside a class via an
-    instance of that class, you get a "method", and the instance of the
-    class is passed in automatically:
+    instance of that class, you get a "method", which means the instance
+    of the class is passed in automatically:
 
         class Outer:
             def fn(self):
@@ -297,14 +299,14 @@ class BoundInnerClass(_BoundInnerClassBase):
         o = Outer()
         o.fn()
 
-    Here, o.fn is a "method", a bound function, and "o" is automatically
-    passed in to fn when o.fn is called.
+    Here, o.fn is a bound function, and "o" is automatically
+    passed in to fn when o.fn is called.  We call that a "method".
 
-    The BoundInnerClass decorator adds this for classes.  When accessing
-    an inner class via an instance of the outer class, this decorator "binds"
-    the inner class to that instance.  This changes the signature of the
-    inner class's __init__; now the "outer" class's instance is passed
-    in automatically:
+    The BoundInnerClass decorator adds this feature for classes.  When
+    accessing an inner class via an instance of the outer class,
+    this decorator "binds" the inner class to that instance.
+    This changes the signature of the inner class's __init__;
+    now the "outer" class's instance is passed in automatically:
 
         class Outer:
             @BoundInnerClass
@@ -315,11 +317,11 @@ class BoundInnerClass(_BoundInnerClassBase):
         o = Outer()
         i = o.Inner()
 
-    Here, o.Inner is a "bound inner class", and "o" (the instance of the
-    Outer class) is automatically passed in to Inner.__init__ when o.Inner
-    is instantiated.  Since the first positional parameter is already
-    "self", "o" is passed in as the *second* positional parameter, which
-    by convention is called "outer".
+    Here, o.Inner is a "bound inner class".  When you instantiate o.Inner,
+    "o" (the instance of the Outer class) is automatically passed in to
+    Inner.__init__.  Since the first positional parameter is already
+    "self", "o" is passed in as the *second* positional parameter.
+    (By convention we call this "outer".)
 
     Note that this has implications for all subclasses. If class B is
     decorated with BoundInnerClass, and class S is a subclass of B,
@@ -332,7 +334,8 @@ class BoundInnerClass(_BoundInnerClassBase):
     The implementation of BoundInnerClass is a class decorator.  It
     returns a "proxy" for the decorated class implementing the descriptor
     protocol; when you access this proxy through an instance, the descriptor
-    creates a custom subclass with a custom __init__.  This __init__ is a closure with a reference to the instance, and it passes
+    creates a custom subclass with a custom __init__.  This __init__ is a
+    closure with a reference to the instance, and it passes
     that instance in as an argument to the base class's __init__.
 
     BoundInnerClass caches the bound inner classes in the outer class,
@@ -351,6 +354,9 @@ class BoundInnerClass(_BoundInnerClassBase):
 
     Bound classes themselves also have a __bound_inner_class_inner__
     attribute containing a 2-tuple of (unbound_class, outer_weakref).
+
+    If you support Python 3.6, please see the bound_inner_base
+    function.
 
     See also big.ClassRegistry.
     """
@@ -478,13 +484,15 @@ def unbound(cls):
     """
     Return the unbound version of a bound inner class.
 
-    If cls is a bound inner class (created by accessing a @BoundInnerClass
-    through an instance), returns the original unbound class.
+    If cls is a bound inner class (created by accessing an inner
+    class decorated with @BoundInnerClass through an instance),
+    returns the original unbound class.
 
-    If cls is already unbound or is not a bound inner class, returns cls
-    unchanged.
+    If cls is already unbound or is not a bound inner class,
+    returns cls unchanged.
 
     Example:
+
         class Outer:
             @BoundInnerClass
             class Inner:
@@ -502,7 +510,28 @@ def unbound(cls):
     info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
     if info is not None:
         return info[0]
+    # Check if cls inherits from a bound class - if so, there's no unbound version
+    if _inherits_from_bound(cls):
+        raise ValueError(
+            f"{cls.__name__} inherits from a bound class and has no unbound version"
+        )
     return cls
+
+
+def _inherits_from_bound(cls):
+    """
+    Return True if cls inherits directly from a bound inner class.
+
+    This detects classes like:
+        class Child(o.Parent):  # o.Parent is bound
+            pass
+
+    Such classes have no unbound version and cannot be reparented.
+    """
+    for base in cls.__bases__:
+        if _is_bound(base):
+            return True
+    return False
 
 
 def _get_outer_weakref(cls):
@@ -533,7 +562,7 @@ def reparent(child, parent, *, replace=None):
     that child inherits from.
 
     If parent is bound, returns a new class that inherits from the bound
-    version, so when instantiated, the outer instance is automatically
+    version--so, when instantiated, that outer instance is automatically
     passed to __init__.
 
     If parent is unbound, returns the unbound version of child's base.
@@ -549,17 +578,19 @@ def reparent(child, parent, *, replace=None):
                 def __init__(self, outer):
                     self.outer = outer
 
+        # subclass of the *unbound* Outer.Parent
         class Child(Outer.Parent):
             def __init__(self, outer):
                 super().__init__(outer)
 
         o = Outer()
-        Bound = reparent(Child, o.Parent)
-        instance = Bound()  # o is passed automatically
-        assert instance.outer is o
+        # BoundChild is Child, bound to o
+        BoundChild = reparent(Child, o.Parent)
+        bound_child = BoundChild()  # o is passed automatically
+        assert bound_child.outer is o
 
-        # Reparenting to unbound returns the unbound base
-        assert reparent(Bound, Outer.Parent) is Outer.Parent
+        # Reparenting to unbound returns the unbound child
+        assert reparent(BoundChild, Outer.Parent) is Child
     """
     # Validate parent is a class
     if not isinstance(parent, type):
@@ -567,8 +598,15 @@ def reparent(child, parent, *, replace=None):
             f"parent must be a class, not {type(parent).__name__}"
         )
 
+    # Check if child inherits directly from a bound class (not itself bound)
+    # Such classes cannot be reparented at all
+    if not _is_bound(child) and _inherits_from_bound(child):
+        raise ValueError(
+            f"{child.__name__} inherits from a bound class and cannot be reparented"
+        )
+
     unbound_parent = unbound(parent)
-    parent_is_bound = _is_bound(parent)
+    parent_is_bound = parent is not unbound_parent
 
     # Handle replace parameter
     if replace is not None:
@@ -610,7 +648,7 @@ def reparent(child, parent, *, replace=None):
                 f"{unbound_parent.__name__} is not a base of {child.__name__}"
             )
 
-        if len(matching_bases) > 1:
+        if len(matching_bases) > 1:  # pragma: nocover
             raise ValueError(
                 f"{child.__name__} has multiple bases matching {unbound_parent.__name__}, "
                 f"use replace= to specify which one"
@@ -622,9 +660,9 @@ def reparent(child, parent, *, replace=None):
         if not parent_is_bound and not _is_bound(target_base):
             return child
 
-    # If parent is unbound, return the unbound base
+    # If parent is unbound, return the unbound version of child
     if not parent_is_bound:
-        return unbound_parent
+        return unbound(child)
 
     # parent is bound - check cache first
     outer_weakref = _get_outer_weakref(parent)
@@ -673,18 +711,20 @@ def bind(child, outer):
     inner class (e.g. Outer.Inner).  outer should be an instance
     of the outer class containing that inner class, or None.
 
-    If outer is an instance, returns a new class that, when instantiated,
-    automatically receives outer as its first argument (after self).
+    If outer is an instance, returns a new class that,
+    when instantiated, automatically receives outer as
+    its first argument (after self).
 
-    If outer is None, returns the unbound base class (equivalent to
-    calling unbound(child)).
+    If outer is None, returns the unbound base class
+    (equivalent to calling unbound(child)).
 
     This is a convenience wrapper around reparent() that finds
     the appropriate bound parent class.  If child inherits from
-    multiple BoundInnerClasses from the same outer class,
-    bind declines to guess which one you meant.  In this case
-    you should use reparent(), which lets you explicitly specify
-    the correct parent.
+    multiple BoundInnerClasses from the same outer class, the
+    correct bound parent class can be ambiguous--in which case
+    bind declines to guess which one you meant, and raises.
+    If this happens, you should use reparent() directly, and
+    explicitly specify the correct parent.
 
     Example:
         class Outer:
@@ -698,17 +738,24 @@ def bind(child, outer):
                 super().__init__(outer)
 
         o = Outer()
-        Bound = bind(Child, o)
+        BoundChild = bind(Child, o)
 
-        instance = Bound()  # o is passed in automatically
-        assert instance.outer is o
+        bound_child = BoundChild()  # o is passed in automatically
+        assert bound_child.outer is o
 
-        # Unbind by passing None
-        assert bind(Bound, None) is Outer.Parent
+        # Unbind by passing None as the outer instance
+        assert bind(BoundChild, None) is Outer.Parent
     """
     # Handle unbinding (outer is None)
     if outer is None:
         return unbound(child)
+
+    # Check if child inherits directly from a bound class
+    # Such classes cannot be bound at all
+    if not _is_bound(child) and _inherits_from_bound(child):
+        raise ValueError(
+            f"{child.__name__} inherits from a bound class and cannot be bound"
+        )
 
     outer_class = type(outer)
     bound_parents = []
@@ -740,15 +787,17 @@ def class_bound_to(cls, outer):
     """
     Return True if cls is a BoundInnerClass bound to outer.
 
-    This checks if cls was created by accessing a BoundInnerClass-decorated
-    inner class through that specific outer instance.
+    This checks if cls was created by accessing a
+    BoundInnerClass-decorated inner class
+    through that specific outer instance.
 
-    cls should be the class to check, and outer should be an instance
-    of an outer class.
+    cls should be the class to check, and outer
+    should be an instance of an outer class.
 
-    Returns True if cls is an inner class bound to outer, False otherwise.
+    Returns True if cls is an inner class
+    bound to outer, False otherwise.
 
-    Note: this is NOT transitive. If cls is bound to x,
+    Note: this is NOT transitive.  If cls is bound to x,
     and x is bound to y, class_bound_to(cls, y) returns False.
     """
     cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
@@ -765,17 +814,17 @@ def instance_bound_to(instance, outer):
     """
     Return True if instance is an instance of a class bound to outer.
 
-    instance should be the object to check, and outer should be an
-    instance of an outer class.
+    instance should be the object to check,
+    and outer should be an instance of an outer class.
 
-    Returns True if instance is an instance of an inner class
-    bound to outer, False otherwise.
+    Returns True if instance is an instance
+    of an inner class bound to outer, False otherwise.
 
-    Note: this is NOT transitive. If instance is an instance of a class
-    bound to x, and x is bound to y, instance_bound_to(instance, y)
-    returns False.
+    Note: this is NOT transitive. If instance is an instance
+    of a class bound to x, and x is bound to y,
+    instance_bound_to(instance, y) returns False.
     """
     return class_bound_to(type(instance), outer)
 
 
-clean()
+mm()
