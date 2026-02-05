@@ -704,8 +704,11 @@ class Log:
 
                     if self._formats.get('start') is not None:
                         formatted = self._format_message(self._start_time_ns, None, 'start', None)
-                        for destination in self._destinations:
-                            destination.start(self._start_time_ns, self._start_time_epoch, formatted)
+                    else:
+                        formatted = None
+
+                    for destination in self._destinations:
+                        destination.start(self._start_time_ns, self._start_time_epoch, formatted)
                         self._dirty = True
 
                     if self._threading:
@@ -737,9 +740,11 @@ class Log:
                     if self._formats.get('end') is not None:
                         elapsed = self._elapsed(self._end_time_ns)
                         formatted = self._format_message(self._end_time_ns, None, 'end', None)
-                        for destination in self._destinations:
-                            destination.end(elapsed, formatted)
-                        self._dirty = True
+                    else:
+                        formatted = None
+                    for destination in self._destinations:
+                        destination.end(elapsed, formatted)
+                    self._dirty = True
 
                     self._flush()
                     self._close()
