@@ -220,7 +220,7 @@ str_linebreaks = (
     # I'm worried it would cause bugs with a malformed DOS string,
     # or maybe when operating in reverse mode.
     #
-    # Also: welcome to Big, Acorn and RISC OS users!
+    # Also: welcome to big, Acorn and RISC OS users!
     # What are you doing here?  You can't run Python 3.6+!
     )
 export('str_linebreaks_without_crlf')
@@ -1360,31 +1360,6 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
-
-# I declare that, for our purposes,
-#     ` (the "back-tick" character U+0060)
-# is *not* an apostrophe.  it's a diacritical
-# used to modify a letter, rather than a
-# separator used to separate letters.
-# It's been (ab)used as an apostrophe historically,
-# but that's because ASCII had a limited number of
-# punctuation characters.
-apostrophes = unicode_apostrophes = "'‘’‚‛"
-export('apostrophes')
-double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
-export('double_quotes')
-
-ascii_apostrophes = b"'"
-export('ascii_apostrophes')
-ascii_double_quotes = b'"'
-export('ascii_double_quotes')
-
-utf8_apostrophes = apostrophes.encode('utf-8')
-export('utf8_apostrophes')
-utf8_double_quotes = double_quotes.encode('utf-8')
-export('utf8_double_quotes')
-
-
 @export
 def format_map(s, mapping):
     """
@@ -1461,6 +1436,32 @@ def format_map(s, mapping):
                 saw_backslash = True
 
     return ''.join(words)
+
+
+
+# I declare that, for our purposes,
+#     `
+# (the "back-tick" character, U+0060)
+# is *not* an apostrophe.  it's a diacritical
+# used to modify a letter, rather than a
+# separator used to separate letters.
+# It's been (ab)used as an apostrophe historically,
+# but that's because ASCII had a limited number of
+# punctuation characters.
+apostrophes = unicode_apostrophes = "'‘’‚‛"
+export('apostrophes')
+double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
+export('double_quotes')
+
+ascii_apostrophes = b"'"
+export('ascii_apostrophes')
+ascii_double_quotes = b'"'
+export('ascii_double_quotes')
+
+utf8_apostrophes = apostrophes.encode('utf-8')
+export('utf8_apostrophes')
+utf8_double_quotes = double_quotes.encode('utf-8')
+export('utf8_double_quotes')
 
 
 
@@ -2710,7 +2711,7 @@ print(f"{all_prefixes=}")
 
 ----------------------------------------------------------------------------
 
-The list is short, here it is:
+The list is short, here it is, for Python 3.6 - 3.13 anyway:
 
 prefixes = [
     '',
@@ -2728,7 +2729,7 @@ However, Python allows you to use the upper-case version of
 any letter, in any combination.  So the actual list is longer,
 as you can uppercase any letter and get a new prefix.
 
-Python 3.14 adds the 't' prefix for strings, for t-strings.
+Also, Python 3.14 adds the 't' prefix for t-strings.
 Big supports all the new prefixes that adds, too.
 
 """
@@ -3459,6 +3460,10 @@ class LineInfo:
     via `**kwargs`; you can also add new attributes
     or modify existing attributes as needed from
     inside a "lines modifier" function.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, source='', **kwargs):
         is_str = isinstance(line, str)
@@ -3679,6 +3684,10 @@ class lines:
         only yield str or bytes objects for line.
 
         Composable with all the lines_ modifier functions in the big.text module.
+
+        Note: lines, LineInfo, and all the lines modifier
+        functions are now deprecated, and will be removed
+        no sooner than February 2027.
         """
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
@@ -3781,6 +3790,10 @@ def lines_rstrip(li, separators=None):
     empty after stripping, the entire line is clipped to info.trailing.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     if separators is None:
         for info, line in li:
@@ -3812,6 +3825,10 @@ def lines_strip(li, separators=None):
     empty after stripping, the entire line is clipped to info.trailing.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     if separators is not None:
 
@@ -3892,6 +3909,10 @@ def lines_filter_line_comment_lines(li, comment_markers):
         line but still always yields the line.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     if not comment_markers:
         raise ValueError("illegal comment_markers")
@@ -3930,6 +3951,10 @@ def lines_containing(li, s, *, invert=False):
     filters out lines that contain s.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     if invert:
         for t in li:
@@ -3981,10 +4006,14 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     any valid identifier, and it will instead write the re.Match
     object (or None) to the identifier you specify.
 
-    Composable with all the lines_ functions from the big.text module.
-
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
+
+    Composable with all the lines_ functions from the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     if not match.isidentifier():
         raise ValueError('match must be a valid identifier')
@@ -4009,6 +4038,10 @@ def lines_sort(li, *, key=None, reverse=False):
     If reverse is true, lines are sorted from highest to lowest.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     lines = list(li)
     if key == None:
@@ -4151,6 +4184,10 @@ def lines_strip_line_comments(li, line_comment_markers, *,
         line but still always yields the line.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
 
     # check line_comment_markers
@@ -4203,6 +4240,10 @@ def lines_convert_tabs_to_spaces(li):
     of a "lines iterator", using the tab_width passed in to lines.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     for info, line in li:
         yield (info, info.detab(line))
@@ -4233,6 +4274,10 @@ def lines_strip_indent(li):
     non-blank lines.
 
     Composable with all the lines_ functions from the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     indent = 0
     leadings = []
@@ -4343,6 +4388,10 @@ def lines_filter_empty_lines(li):
     of lines modifiers before lines_filter_empty_lines.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than February 2027.
     """
     for t in li:
         if not t[1]:
@@ -4979,7 +5028,7 @@ def int_to_words(i, flowery=True, ordinal=False):
     competition.  int_to_words(1) returns the string 'one',
     but int_to_words(1, ordinal=True) returns the string 'first'.
 
-    Numbers >= 10*75 (one quadrillion vigintillion)
+    Numbers >= 10**75 (one quadrillion vigintillion)
     are only converted using str(i).  Sorry!
     """
     if not isinstance(i, int):
@@ -5749,16 +5798,16 @@ def strip_line_comments(lines, line_comment_markers, *,
 
     What's the difference between lines_strip_line_comments and
     lines_filter_line_comment_lines?
-      * lines_filter_line_comment_lines only recognizes lines that
+      * lines_filter_line_comment_lines is a lines modifier
+        function.  It only recognizes lines that
         *start* with a comment separator (ignoring leading
         whitespace).  Also, it filters out those lines
         completely, rather than modifying the line.
-      * lines_strip_line_comments handles comment characters
-        anywhere in the line, although it can ignore
-        comments inside quoted strings.  It truncates the
-        line but still always yields the line.
-
-    Composable with all the lines_ modifier functions in the big.text module.
+      * strip_line_comments is not a lines modifier function;
+        it iterates over lines, not (LineInfo, line) pairs.
+        It handles comment characters anywhere in the line,
+        although it can ignore comments inside quoted strings.
+        It truncates the line but still always yields the line.
     """
 
     # check line_comment_markers
