@@ -58,7 +58,7 @@ export('default_clock')
 
 
 @export
-class SinkBaseEvent:
+class SinkEvent:
     __slots__ = (
         '_depth',
         '_duration',
@@ -73,7 +73,41 @@ class SinkBaseEvent:
         '_type',
         )
 
-    def __init__(self, number, elapsed, type, duration=0, depth=0, epoch=None, format='', formatted='', message='', ns=None, thread=None):
+    _DEFAULT_DEPTH = 0
+    _DEFAULT_DURATION = 0
+    _DEFAULT_ELAPSED = 0
+    _DEFAULT_EPOCH = None
+    _DEFAULT_FORMAT = None
+    _DEFAULT_FORMATTED = None
+    _DEFAULT_MESSAGE = None
+    _DEFAULT_NS = None
+    _DEFAULT_NUMBER = 0
+    _DEFAULT_THREAD = None
+    _DEFAULT_TYPE = None
+
+    TYPE_RESET = "reset"
+    TYPE_START = 'start'
+    TYPE_END   = 'end'
+    TYPE_FLUSH = "flush"
+    TYPE_CLOSE = "close"
+    TYPE_WRITE = 'write'
+    TYPE_LOG   = 'log'
+    TYPE_ENTER = 'enter'
+    TYPE_EXIT  = 'exit'
+
+    def __init__(self, *,
+        depth=_DEFAULT_DEPTH,
+        duration=_DEFAULT_DURATION,
+        elapsed=_DEFAULT_ELAPSED,
+        epoch=_DEFAULT_EPOCH,
+        format=_DEFAULT_FORMAT,
+        formatted=_DEFAULT_FORMATTED,
+        message=_DEFAULT_MESSAGE,
+        ns=_DEFAULT_NS,
+        number=_DEFAULT_NUMBER,
+        thread=_DEFAULT_THREAD,
+        type=_DEFAULT_TYPE,
+        ):
         self._depth = depth
         self._duration = duration
         self._elapsed = elapsed
@@ -132,10 +166,30 @@ class SinkBaseEvent:
 
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(number={self._number}, elapsed={self._elapsed}, type={self._type!r}, message={self._message!r}, duration={self._duration}, depth={self._depth}, epoch={self._epoch}, formatted={self._formatted!r}, ns={self._ns!r}, thread={self._thread})"
+        buffer = []
+        append = buffer.append
+        for name in (
+            "depth",
+            "duration",
+            "elapsed",
+            "epoch",
+            "format",
+            "formatted",
+            "message",
+            "ns",
+            "number",
+            "thread",
+            ):
+            value = getattr(self, name)
+            default = getattr(self, "_DEFAULT_" + name.upper())
+            if value != default:
+                append(f"{name}={value!r}")
+
+        text = ", ".join(buffer)
+        return f"{self.__class__.__name__}({text})"
 
     def __eq__(self, other):
-        return (isinstance(other, SinkBaseEvent)
+        return (isinstance(other, SinkEvent)
             and (self._number == other._number)
             and (self._elapsed == other._elapsed)
             and (self._type == other._type)
@@ -146,8 +200,8 @@ class SinkBaseEvent:
             )
 
     def __lt__(self, other):
-        if not isinstance(other, SinkBaseEvent):
-            raise TypeError(f"'<' not supported between instances of SinkBaseEvent and {type(other)}")
+        if not isinstance(other, SinkEvent):
+            raise TypeError(f"'<' not supported between instances of SinkEvent and {type(other)}")
         return (
                 (self._number  <= other._number)
             and (self._elapsed <  other._elapsed)
@@ -155,49 +209,111 @@ class SinkBaseEvent:
 
 
 @export
-class SinkEvent(SinkBaseEvent):
-    def __init__(self, number, elapsed, type, thread, format, message, formatted, depth, **kwargs):
+class SinkResetEvent(SinkEvent):
+    def __init__(self, number):
         super().__init__(
+            type=self.TYPE_RESET,
             number=number,
-            elapsed=elapsed,
-            type=type,
-            format=format,
-            message=message,
-            depth=depth,
-            formatted=formatted,
-            thread=thread,
-            **kwargs
             )
 
 @export
-class SinkStartEvent(SinkBaseEvent):
+class SinkStartEvent(SinkEvent):
     def __init__(self, number, start_time_ns, start_time_epoch, formatted):
         super().__init__(
+            type=self.TYPE_START,
             number=number,
-            elapsed=0,
-            type=Log.Sink.START,
             ns=start_time_ns,
             epoch=start_time_epoch,
             formatted=formatted,
             )
 
 @export
-class SinkEndEvent(SinkBaseEvent):
+class SinkEndEvent(SinkEvent):
     def __init__(self, number, elapsed, formatted):
         super().__init__(
+            type=self.TYPE_END,
             number=number,
-            type=Log.Sink.END,
             elapsed=elapsed,
             formatted=formatted,
             )
 
+@export
+class SinkFlushEvent(SinkEvent):
+    def __init__(self, number):
+        super().__init__(
+            type=self.TYPE_FLUSH,
+            number=number,
+            )
+
+@export
+class SinkCloseEvent(SinkEvent):
+    def __init__(self, number):
+        super().__init__(
+            type=self.TYPE_CLOSE,
+            number=number,
+            )
+
+@export
+class SinkWriteEvent(SinkEvent):
+    def __init__(self, number, depth, elapsed, thread, s):
+        super().__init__(
+            type=self.TYPE_WRITE,
+            number=number,
+            elapsed=elapsed,
+            thread=thread,
+            message=s,
+            depth=depth,
+            )
+
+@export
+class SinkLogEvent(SinkEvent):
+    def __init__(self, number, depth, elapsed, thread, format, message, formatted):
+        super().__init__(
+            type=self.TYPE_LOG,
+            number=number,
+            elapsed=elapsed,
+            thread=thread,
+            format=format,
+            message=message,
+            formatted=formatted,
+            depth=depth,
+            )
+
+@export
+class SinkEnterEvent(SinkEvent):
+    def __init__(self, number, depth, elapsed, thread, message, formatted):
+        super().__init__(
+            type=self.TYPE_ENTER,
+            format='enter',
+            number=number,
+            elapsed=elapsed,
+            thread=thread,
+            message=message,
+            formatted=formatted,
+            depth=depth,
+            )
+
+@export
+class SinkExitEvent(SinkEvent):
+    def __init__(self, number, depth, elapsed, thread, message, formatted):
+        super().__init__(
+            type=self.TYPE_EXIT,
+            format='exit',
+            number=number,
+            elapsed=elapsed,
+            thread=thread,
+            message=message,
+            formatted=formatted,
+            depth=depth,
+            )
 
 
-
-_spaces = " " * 1024
 
 _sep = " "
 _end = "\n"
+
+_spaces = _sep * 1024
+
 
 @export
 def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12):
@@ -418,7 +534,8 @@ class Log:
                         if not isinstance(message, str):
                             raise TypeError('message must be str')
 
-                        self._dispatch( [(self._log, (time, thread, key, message))] )
+                        if self._to('logging'):
+                            self._dispatch( [(self._log, (time, thread, key, message))] )
                     return method
                 setattr(self, key, make_method(key))
 
@@ -435,26 +552,30 @@ class Log:
 
         self._name = name
 
+        self._state = 'initial'
+
         self._width = width
         self._prefix = prefix
         self._nesting = []
-        self._indent = indent
         self._spaces = ''
+        self._indent = indent
         self._timestamp = timestamp
 
         self._destinations = array
 
         self._threading = threading
-        self._queue = None
+        if self._threading:
+            self._queue = Queue()
+        else:
+            self._queue = None
         self._thread = None
-        self._closed = True
 
         # if threading is True, _lock is only used for close and reset
         self._lock = Lock()
         self._blocker = blocker = Lock()
         blocker.acquire()
 
-        self._reset(start_time_ns, start_time_epoch, False, None)
+        self._reset(start_time_ns, start_time_epoch)
 
         print = builtins.print
         if not destinations:
@@ -524,7 +645,7 @@ class Log:
     @property
     def closed(self):
         with self._lock:
-            return self._closed
+            return self._state == 'closed'
 
     @property
     def start_time_ns(self):
@@ -559,53 +680,99 @@ class Log:
     def _ns_to_float(self, ns):
         return ns / 1_000_000_000.0
 
-    def _reset(self, start_time_ns, start_time_epoch, send_reset, signal):
-        # if we're not closed, flush before we reset
-        if not self._closed:
-            self._flush()
 
-        self._nesting = []
-        self._spaces = ''
-        self._closed = False
+    def _reset(self, start_time_ns, start_time_epoch):
         self._start_time_ns = start_time_ns
         self._start_time_epoch = start_time_epoch
+        self._end_time_ns = None
         self._end_time_epoch = None
-        self._want_start = "start" in self._formats
-        self._want_end = "end" in self._formats
+        self._dirty = False
 
-        for destination in self._destinations:
-            if send_reset:
-                destination.reset()
+    def _to(self, state, *, ns=None, epoch=None):
 
-        if self._threading and (self._thread is None):
-            self._queue = Queue()
-            self._thread = Thread(target=self._worker_thread, args=(self._queue,), daemon=True)
-            self._thread.start()
+        with self._lock:
+            while True:
+                if state == self._state:
+                    return True
 
-        if signal:
-            signal()
+                if self._state == 'initial':
+                    if state == 'closed':
+                        self._state = 'closed'
+                        continue
+
+                    assert state == 'logging'
+
+                    if self._formats.get('start') is not None:
+                        formatted = self._format_message(self._start_time_ns, None, 'start', None)
+                        for destination in self._destinations:
+                            destination.start(self._start_time_ns, self._start_time_epoch, formatted)
+                        self._dirty = True
+
+                    if self._threading:
+                        assert self._thread is None
+                        self._queue = Queue()
+                        self._thread = Thread(target=self._worker_thread, args=(self._queue,), daemon=True)
+                        self._thread.start()
+
+                    self._state = 'logging'
+                    continue
+
+                if self._state == 'logging':
+                    assert state in ('closed', 'initial')
+                    assert ns is not None
+                    assert epoch is not None
+
+                    if self._threading:
+                        thread = self._thread
+                        self._thread = None
+                        assert thread is not None
+                        self._queue.put([None])
+                        thread.join()
+
+                    self._clear_nesting()
+
+                    self._end_time_ns = ns
+                    self._end_time_epoch = epoch
+
+                    if self._formats.get('end') is not None:
+                        elapsed = self._elapsed(self._end_time_ns)
+                        formatted = self._format_message(self._end_time_ns, None, 'end', None)
+                        for destination in self._destinations:
+                            destination.end(elapsed, formatted)
+                        self._dirty = True
+
+                    self._flush()
+                    self._close()
+
+                    self._state = 'closed'
+                    continue
+
+                if self._state == 'closed':
+                    if state == 'logging':
+                        return False
+
+                    assert state == 'initial'
+                    assert ns is not None
+                    assert epoch is not None
+
+                    self._reset(ns, epoch)
+
+                    for destination in self._destinations:
+                        destination.reset()
+
+                    self._state = 'initial'
+                    continue
+
 
     def reset(self):
-        with self._lock:
+        clock = self._clock
+        ns1 = clock()
+        epoch = self._timestamp_clock()
+        ns2 = clock()
+        ns = (ns1 + ns2) // 2
 
-            clock = self._clock
-            t1 = clock()
-            start_time_epoch = self._timestamp_clock()
-            t2 = clock()
-            start_time_ns = (t1 + t2) // 2
+        self._to('initial', ns=ns, epoch=epoch)
 
-            if self._threading and (self._thread is not None):
-                blocker = self._blocker
-                args = [start_time_ns, start_time_epoch, True, blocker.release]
-
-                work = [(self._reset, args)]
-                self._queue.put(work)
-
-                blocker.acquire()
-
-                return
-
-            self._reset(start_time_ns, start_time_epoch, True, None)
 
     def _format_s(self, elapsed, thread, format, *, message=None, line=None, prefix=None):
         if not format:
@@ -635,7 +802,10 @@ class Log:
 
     def _format_message(self, time, thread, format, message):
         elapsed = self._elapsed(time)
-        prefix = self._format_s(elapsed, thread, self._prefix) + self._spaces
+        if thread:
+            prefix = self._format_s(elapsed, thread, self._prefix) + self._spaces
+        else:
+            prefix = ''
 
         if message:
             message_lines = message.split('\n')
@@ -704,23 +874,19 @@ class Log:
 
     def _dispatch(self, work):
         if self._threading:
-            if not self._closed:
-                self._queue.put(work)
+            self._queue.put(work)
             return
 
         with self._lock:
-            if not self._closed:
-                self._execute(work)
+            self._execute(work)
 
 
     def _write(self, time, thread, s):
-        if self._want_start:
-            self._log_start(thread)
-
         elapsed = self._elapsed(time)
 
         for destination in self._destinations:
             destination.write(elapsed, thread, s)
+        self._dirty = True
 
     def write(self, s):
         time = self._clock()
@@ -729,24 +895,8 @@ class Log:
         if not isinstance(s, str):
             raise TypeError('s must be str')
 
-        self._dispatch( [(self._write, (time, thread, s))] )
-
-    def _log_banner(self, time, thread, format, args):
-        assert format in self._formats
-        formatted = self._format_message(time, thread, format, None)
-        args.append(formatted)
-
-        for destination in self._destinations:
-            getattr(destination, format)(*args)
-
-    def _log_start(self, thread):
-        self._want_start = False
-        self._log_banner(self._start_time_ns, thread, 'start', [self._start_time_ns, self._start_time_epoch])
-
-    def _log_end(self, time, thread):
-        self._clear_nesting()
-        elapsed = self._elapsed(time)
-        self._log_banner(time, thread, 'end', [elapsed])
+        if self._to('logging'):
+            self._dispatch( [(self._write, (time, thread, s))] )
 
     def _log(self, time, thread, format, message, method='log'):
         ## If you call
@@ -763,14 +913,12 @@ class Log:
         ## assuming prefix='[prefix] ', it calls
         ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
 
-        if self._want_start:
-            self._log_start(thread)
-
         elapsed = self._elapsed(time)
         formatted = self._format_message(time, thread, format, message)
 
         for destination in self._destinations:
             getattr(destination, method)(elapsed, thread, format, message, formatted)
+        self._dirty = True
 
 
     def _print(self, time, thread, args, sep, end, flush, format):
@@ -810,7 +958,8 @@ class Log:
             sep = str(sep)
         args = [str(a) for a in args]
 
-        self._dispatch( [(self._print, (time, thread, args, sep, end, flush, format))] )
+        if self._to('logging'):
+            self._dispatch( [(self._print, (time, thread, args, sep, end, flush, format))] )
 
     def print(self, *args, end=_end, sep=_sep, flush=False, format='print'):
         """
@@ -843,33 +992,32 @@ class Log:
 
     def _clear_nesting(self):
         self._nesting.clear()
-        self._cache_spaces()
+        self._spaces = ''
 
 
     def _enter_exit(self, verb, time, thread, message):
-        if self._want_start:
-            self._log_start(thread)
-
         elapsed = self._elapsed(time)
         formatted = self._format_message(time, thread, verb, message)
 
         for destination in self._destinations:
             getattr(destination, verb)(elapsed, thread, message, formatted)
+        self._dirty = True
 
     def enter(self, message):
         time = self._clock()
         thread = current_thread()
 
-        self._dispatch([
-                    (self._enter_exit, ('enter', time, thread, message)),
-                    (self._append_nesting, (message,)),
-                    ])
-        return self.SubsystemContextManager(self)
-
+        if not self._to('logging'):
+            log = None
+        else:
+            self._dispatch([
+                        (self._enter_exit, ('enter', time, thread, message)),
+                        (self._append_nesting, (message,)),
+                        ])
+            log = self
+        return self.SubsystemContextManager(log)
 
     def _exit(self, time, thread):
-        assert not self._want_start
-
         if not self._nesting:
             return
 
@@ -880,51 +1028,30 @@ class Log:
         time = self._clock()
         thread = current_thread()
 
-        self._dispatch([(self._exit, (time, thread))])
-
+        if self._to('logging'):
+            self._dispatch([(self._exit, (time, thread))])
 
     def _flush(self):
-        for destination in self._destinations:
-            destination.flush()
+        if self._dirty:
+            for destination in self._destinations:
+                destination.flush()
+            self._dirty = False
 
     def flush(self):
-        self._dispatch( [(self._flush, ())] )
+        if self._to('logging'):
+            self._dispatch( [(self._flush, ())] )
 
     def _close(self):
         for destination in self._destinations:
             destination.close()
 
     def close(self):
-        t1 = self._clock()
-        end_time_epoch = self._timestamp_clock()
-        t2 = self._clock()
-        time = (t1 + t2) / 2
+        ns1 = self._clock()
+        epoch = self._timestamp_clock()
+        ns2 = self._clock()
+        ns = (ns1 + ns2) / 2
 
-        thread = current_thread()
-
-        with self._lock:
-            if self._closed:
-                return
-
-            self._closed = True
-            self._end_time_epoch = end_time_epoch
-
-            work = []
-            append = work.append
-
-            if self._want_end:
-                append((self._log_end, (time, thread)))
-            append((self._flush, ()))
-            append((self._close, ()))
-            append(None)
-
-            if self._threading:
-                assert self._thread is not None
-                self._queue.put(work)
-                self._thread.join()
-                self._thread = None
-            else:
-                self._execute(work)
+        self._to('closed', ns=ns, epoch=epoch)
 
 
     def __enter__(self):
@@ -1184,29 +1311,25 @@ class Log:
         and prints them using builtins.print.
         """
 
-        WRITE = 'write'
-        LOG = 'log'
-        START = 'start'
-        # HEADER = 'header'
-        # FOOTER = 'footer'
-        # HEADING = 'heading'
-        ENTER = 'enter'
-        EXIT = 'exit'
-        END = 'end'
-
         def __init__(self):
             super().__init__()
-            self.number = 0
+            self.number = 1
+            self.events = []
+            self.longest_message = 0
             self._reset()
-
-        def register(self, owner):
-            super().register(owner)
-            self.reset()
 
         def _reset(self):
             self.depth = 0
-            self.events = []
-            self.longest_message = 0
+            self.previous_message_elapsed = 0
+
+        def _event(self, event):
+            if event.message is not None:
+                duration = event.elapsed - self.previous_message_elapsed
+                assert duration >= 0, f"duration should be >= 0 but it's {duration}"
+                event._duration = duration
+                self.previous_message_elapsed = event.elapsed
+                self.longest_message = max(self.longest_message, len(event.message))
+            self.events.append(event)
 
         def reset(self):
             assert self.owner
@@ -1214,15 +1337,7 @@ class Log:
             self.number += 1
             self._reset()
 
-        def _event(self, event):
-            events = self.events
-            if events:
-                previous = events[-1]
-                duration = event.elapsed - previous.elapsed
-                assert duration >= 0, f"duration should be >= 0 but it's {duration}"
-                previous._duration = duration
-            events.append(event)
-            self.longest_message = max(self.longest_message, len(event.message))
+            self._event(SinkResetEvent(self.number))
 
         def start(self, start_time_ns, start_time_epoch, formatted):
             self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch, formatted))
@@ -1230,28 +1345,25 @@ class Log:
         def end(self, elapsed, formatted):
             self._event(SinkEndEvent(self.number, elapsed, formatted))
 
+        def flush(self):
+            self._event(SinkFlushEvent(self.number))
+
+        def close(self):
+            self._event(SinkCloseEvent(self.number))
+
         def write(self, elapsed, thread, s):
-            self._event(SinkEvent(self.number, elapsed, self.WRITE, thread, '', s, None, self.depth))
+            self._event(SinkWriteEvent(self.number, self.depth, elapsed, thread, s))
 
         def log(self, elapsed, thread, format, message, formatted):
-            self._event(SinkEvent(self.number, elapsed, self.LOG, thread, format, message, formatted, self.depth))
-
-        # def header(self, elapsed, thread, formatted, message, separator):
-        #     self._event(SinkEvent(self.number, elapsed, self.HEADER, thread, message, formatted, self.depth, separator=separator))
-
-        # def footer(self, elapsed, thread, formatted, message, separator):
-        #     self._event(SinkEvent(self.number, elapsed, self.FOOTER, thread, message, formatted, self.depth, separator=separator))
-
-        # def heading(self, elapsed, thread, formatted, message, separator):
-        #     self._event(SinkEvent(self.number, elapsed, self.HEADING, thread, message, formatted, self.depth, separator=separator))
+            self._event(SinkLogEvent(self.number, self.depth, elapsed, thread, format, message, formatted))
 
         def enter(self, elapsed, thread, message, formatted):
-            self._event(SinkEvent(self.number, elapsed, self.ENTER, thread, 'enter', message, formatted, self.depth))
+            self._event(SinkEnterEvent(self.number, self.depth, elapsed, thread, message, formatted))
             self.depth += 1
 
         def exit(self, elapsed, thread, message, formatted):
             self.depth -= 1
-            self._event(SinkEvent(self.number, elapsed, self.EXIT, thread, 'exit', message, formatted, self.depth))
+            self._event(SinkExitEvent(self.number, self.depth, elapsed, thread, message, formatted))
 
         def __iter__(self):
             for e in self.events:
@@ -1283,7 +1395,7 @@ class Log:
                 fields = {
                     'elapsed': elapsed,
                     'duration': duration,
-                    'format': e.format,
+                    'format': e.format or '',
                     'timestamp': ts,
                     'thread': thread,
                     'type': e.type,
@@ -1292,7 +1404,7 @@ class Log:
                 }
                 prefix_str = prefix.format_map(fields)
                 space_str = " " * len(prefix_str)
-                message = e.message
+                message = e.message or ''
                 for line in message.split('\n'):
                     print(prefix_str + line)
                     prefix_str = space_str

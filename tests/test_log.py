@@ -685,8 +685,13 @@ class TestSink(unittest.TestCase):
         log.close()
 
         events = list(sink)
-        self.assertEqual(len(events), 2)
+        self.assertEqual(len(events), 4)
+
+        self.assertIsInstance(events.pop(), log_module.SinkCloseEvent)
+        self.assertIsInstance(events.pop(), log_module.SinkFlushEvent)
+
         for i, e in enumerate(events, 1):
+            self.assertIsInstance(e, log_module.SinkLogEvent)
             self.assertEqual(e.depth, 0)
             self.assertGreaterEqual(e.duration, 0)
             self.assertGreater(e.elapsed, 0)
@@ -697,30 +702,27 @@ class TestSink(unittest.TestCase):
             self.assertEqual(e.ns, None)
             self.assertEqual(e.number, 1)
             self.assertEqual(e.thread, threading.current_thread())
-            self.assertEqual(e.type, big.log.Log.Sink.LOG)
 
-        event = events[0]
-        clone = big.SinkBaseEvent(
-            depth = event.depth,
-            duration = event.duration,
-            elapsed = event.elapsed,
-            epoch = event.epoch,
-            formatted = event.formatted,
-            message = event.message,
-            ns = event.ns,
-            number = event.number,
-            thread = event.thread,
-            type = event.type,
+        e = events[0]
+        clone = log_module.SinkLogEvent(
+            number=e.number,
+            elapsed=e.elapsed,
+            thread=e.thread,
+            format=e.format,
+            message=e.message,
+            formatted=e.formatted,
+            depth=e.depth,
             )
-        self.assertEqual(event, clone)
-        self.assertNotEqual(event, events[1])
-        self.assertLess(event, events[1])
+        clone._duration = e.duration
+        self.assertEqual(e, clone)
+        self.assertNotEqual(e, events[1])
+        self.assertLess(e, events[1])
 
         with self.assertRaises(TypeError):
-            event < 3.1415
+            e < 3.1415
 
         sse = big.SinkStartEvent(0, 5, 10, '')
-        self.assertEqual(repr(sse), "SinkStartEvent(number=0, elapsed=0, type='start', message='', duration=0, depth=0, epoch=10, formatted='', ns=5, thread=None)")
+        self.assertEqual(repr(sse), "SinkStartEvent(epoch=10, formatted='', ns=5)")
 
     def test_sink_event_types(self):
         sink = big.Log.Sink()
@@ -731,16 +733,22 @@ class TestSink(unittest.TestCase):
         with log.enter("enter event"):
             pass
         log.close()
+        log.reset()
+
+        SinkEvent = log_module.SinkEvent
 
         events = list(sink)
         types = [e.type for e in events]
         Sink = big.Log.Sink
-        self.assertIn(Sink.START, types)
-        self.assertIn(Sink.WRITE, types)
-        self.assertIn(Sink.LOG, types)
-        self.assertIn(Sink.ENTER, types)
-        self.assertIn(Sink.EXIT, types)
-        self.assertIn(Sink.END, types)
+        self.assertIn(SinkEvent.TYPE_RESET, types)
+        self.assertIn(SinkEvent.TYPE_START, types)
+        self.assertIn(SinkEvent.TYPE_END, types)
+        self.assertIn(SinkEvent.TYPE_FLUSH, types)
+        self.assertIn(SinkEvent.TYPE_CLOSE, types)
+        self.assertIn(SinkEvent.TYPE_WRITE, types)
+        self.assertIn(SinkEvent.TYPE_LOG, types)
+        self.assertIn(SinkEvent.TYPE_ENTER, types)
+        self.assertIn(SinkEvent.TYPE_EXIT, types)
 
     def test_sink_print(self):
         sink = big.Log.Sink()
@@ -787,7 +795,7 @@ class TestSink(unittest.TestCase):
         log.write(s)
         log.close()
         events = list(sink)
-        self.assertEqual(len(events), 1)
+        self.assertEqual(len(events), 3)
         self.assertEqual(s, events[0].message)
 
     def test_sink_with_banners(self):
@@ -796,17 +804,23 @@ class TestSink(unittest.TestCase):
         log("message")
         log.close()
         events = list(sink)
-        self.assertEqual(len(events), 3)
-        self.assertEqual(events[0].type, big.log.Log.Sink.START)
+        self.assertEqual(len(events), 5)
+
+        SinkEvent = log_module.SinkEvent
+        self.assertEqual(events[0].type, SinkEvent.TYPE_START)
         self.assertEqual(events[0].elapsed, 0)
         self.assertGreater(events[0].ns, 0)
         self.assertGreater(events[0].epoch, 0)
 
-        self.assertEqual(events[1].type, big.log.Log.Sink.LOG)
+        self.assertEqual(events[1].type, SinkEvent.TYPE_LOG)
         self.assertEqual(events[1].message, 'message')
 
-        self.assertEqual(events[2].type, big.log.Log.Sink.END)
+        self.assertEqual(events[2].type, SinkEvent.TYPE_END)
         self.assertGreater(events[2].elapsed, 0)
+
+        self.assertEqual(events[3].type, SinkEvent.TYPE_FLUSH)
+
+        self.assertEqual(events[4].type, SinkEvent.TYPE_CLOSE)
 
 
 class TestOldDestination(unittest.TestCase):
