@@ -79,7 +79,7 @@ class ModuleManager:
     """
 
     def __init__(self):
-        parent_locals = sys._getframe(1).f_locals
+        self.parent_locals = parent_locals = sys._getframe(1).f_locals
         existing_all = parent_locals.get('__all__', None)
         if existing_all is None:
             parent_locals['__all__'] = existing_all = []
@@ -114,7 +114,7 @@ class ModuleManager:
             return args[0]
 
     def __call__(self):
-        parent_locals = sys._getframe(1).f_locals
+        parent_locals = self.parent_locals
 
         append = self.deletions.append
         methods = [self.export, self.delete]
