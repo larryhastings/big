@@ -52,9 +52,9 @@ class ModuleManager:
           it adds that symbol to __all__.
         * If you call mm.delete('x', 'y', ...), or decorate a
           function or class with @mm.delete, it adds those symbols
-          to a "deletions" list.
+          to an internal "deletions" list.
         * When you call the mm instance, it deletes all the symbols
-          on the deletions list.  It also detects and removes itself,
+          on the deletions list.  It also detects and removes *itself*,
           and if you bound mm.export or mm.delete to a global value
           in the module, it deletes those too.
 
@@ -68,6 +68,9 @@ class ModuleManager:
         def externally_visible_symbol():
             ...
 
+        TEMP_VALUE = 83
+        delete('TEMP_VALUE')
+
         @delete
         def temporary_fn():
             ...
@@ -75,11 +78,12 @@ class ModuleManager:
 
         ...
 
-        mm() # deletes "mm", "export", "delete", and "temporary_fn"
+        # deletes "mm", "export", "delete", 'TEMP_VALUE', and "temporary_fn"
+        mm()
     """
 
     def __init__(self):
-        parent_locals = sys._getframe(1).f_locals
+        self.parent_locals = parent_locals = sys._getframe(1).f_locals
         existing_all = parent_locals.get('__all__', None)
         if existing_all is None:
             parent_locals['__all__'] = existing_all = []
@@ -114,7 +118,7 @@ class ModuleManager:
             return args[0]
 
     def __call__(self):
-        parent_locals = sys._getframe(1).f_locals
+        parent_locals = self.parent_locals
 
         append = self.deletions.append
         methods = [self.export, self.delete]
