@@ -790,14 +790,13 @@ class Log:
     def _stop_thread(self):
         if self._threading:
             with self._lock:
-                thread = self._thread
-                queue = self._queue
-                self._thread = self._queue = None
-                if thread is not None:
-                    queue.put([None])
-                    thread.join()
-
-                self._threading = False
+                if self._thread:
+                    thread = self._thread
+                    queue = self._queue
+                    self._thread = self._queue = None
+                    if thread is not None:
+                        queue.put([None])
+                        thread.join()
 
     def _atexit(self):
         self.close()
@@ -816,7 +815,7 @@ class Log:
             if notify:
                 lock = self._lock
                 lock.acquire()
-                if not self._threading: lock.release() ; lock = None ; return self._dispatch(work, notify=notify)
+                if not self._thread: lock.release() ; lock = None ; self._execute(work); notify and notify() ; return
 
                 work.append( (notify, ()) )
 
@@ -968,7 +967,7 @@ class Log:
                 destination.flush()
             self._dirty = False
 
-    def flush(self, block=False):
+    def flush(self, block=True):
         if not block:
             notify = None
         else:

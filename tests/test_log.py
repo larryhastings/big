@@ -628,7 +628,7 @@ class TestLogThreading(unittest.TestCase):
         log("before")
         log.reset()
         log("after")
-        log.flush(block=True)
+        log.flush()
 
         text = "\n".join(array)
         self.assertIn('before', text)
@@ -642,7 +642,7 @@ class TestLogThreading(unittest.TestCase):
         log("dropped")
         log.reset()
         log("after")
-        log.flush(block=True)
+        log.flush()
 
         text = "\n".join(array)
         self.assertIn('before', text)
@@ -663,7 +663,7 @@ class TestLogThreading(unittest.TestCase):
         log("message")
         text = "\n".join(array)
         self.assertNotIn('message', text)
-        log.flush(block=True)
+        log.flush()
         text = "\n".join(array)
         self.assertIn('message', text)
 
@@ -674,7 +674,7 @@ class TestLogThreading(unittest.TestCase):
         log("message")
         text = "\n".join(array)
         self.assertNotIn('message', text)
-        log.flush()
+        log.flush(block=False)
         log.write("sentinel")
         # I hate doing it, but how else do you test an asynchronous method?!
         while not log._queue.empty():
