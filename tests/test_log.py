@@ -217,7 +217,7 @@ class TestFile(unittest.TestCase):
             os.unlink(path)
 
     def test_TmpFile(self):
-        log = big.Log(big.log.TMPFILE, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp=lambda x:"ABACAB /DEADBEEF")
+        log = big.Log(big.log.TMPFILE, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
         expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.txt"
         self.assertEqual(big.log.TMPFILE.path.name, expected)
 
@@ -263,7 +263,7 @@ class TestLogBasics(unittest.TestCase):
         self.assertEqual(log.name, 'Log')
         self.assertEqual(log.prefix, big.log.prefix_format(3, 10, 12))
         self.assertEqual(log.threading, True)
-        self.assertEqual(log.timestamp, big.time.timestamp_human)
+        self.assertEqual(log.timestamp_format, big.time.timestamp_human)
         self.assertEqual(log.timestamp_clock, time.time)
         self.assertEqual(log.width, 79)
 
@@ -333,18 +333,24 @@ class TestLogBasics(unittest.TestCase):
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
         log.close()
         log("after close")
+        log.close()
+        self.assertFalse(array)
 
     def test_log_write_after_closed(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
-        log.close()
+        log.close(block=False)
         log.write("after close")
+        log.close(block=True)
+        self.assertFalse(array)
 
     def test_log_heading_after_closed(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
         log.close()
         log.box("after close")
+        log.close()
+        self.assertFalse(array)
 
     def test_log_close_is_idempotent(self):
         array = []
@@ -357,11 +363,6 @@ class TestLogBasics(unittest.TestCase):
 
     def test_log_atexit(self):
         # simulate atexit calls
-        log = big.Log([], threading=False)
-        self.assertFalse(log.closed)
-        log._atexit()
-        self.assertTrue(log.closed)
-
         log = big.Log([], threading=True)
         self.assertFalse(log.closed)
         log._atexit()
@@ -392,14 +393,23 @@ class TestLogMethods(unittest.TestCase):
             log.write(12345)
         log.close()
 
-    def test_log_heading(self):
+    def test_log_blank_line(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": None, "end": None}, prefix='[PREFIX] ')
+        log("before")
+        log() # should inject an empty line into the log (but should still have the prefix)
+        log("after")
+        log.close()
+        self.assertEqual(s.getvalue(), "[PREFIX] before\n[PREFIX]\n[PREFIX] after\n")
+
+    def test_log_box(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
-        log.box("My Heading")
+        log.box("call-out text")
         log.close()
-        self.assertTrue(any("My Heading" in s for s in array))
+        self.assertTrue(any("call-out text" in s for s in array))
 
-    def test_log_heading_not_string(self):
+    def test_log_box_not_string(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
         with self.assertRaises(TypeError):
@@ -454,6 +464,15 @@ class TestLogMethods(unittest.TestCase):
         log("a", "b", "c", sep="-", end="!\n")
         log.close()
         self.assertTrue(any("a-b-c!" in s for s in array))
+
+        with self.assertRaises(TypeError):
+            log(35, sep=35)
+        with self.assertRaises(TypeError):
+            log(36, end=36)
+        with self.assertRaises(TypeError):
+            log.print(37, sep=37)
+        with self.assertRaises(TypeError):
+            log.print(38, end=38)
 
     def test_log_with_flush_param(self):
         s = io.StringIO()
@@ -609,36 +628,59 @@ class TestLogThreading(unittest.TestCase):
         log("before")
         log.reset()
         log("after")
-        log.close()
+        log.flush(block=True)
+
+        text = "\n".join(array)
+        self.assertIn('before', text)
+        self.assertIn('after', text)
 
     def test_log_threaded_reset_after_close(self):
         array = []
         log = big.Log(array, threading=True, formats={"start": None, "end": None}, prefix='')
         log("before")
         log.close()
+        log("dropped")
         log.reset()
         log("after")
-        log.close()
+        log.flush(block=True)
 
-    def test_log_threaded_heading(self):
+        text = "\n".join(array)
+        self.assertIn('before', text)
+        self.assertIn('after', text)
+        self.assertNotIn('dropped', text)
+
+    def test_log_threaded_box(self):
         array = []
         log = big.Log(array, threading=True, formats={"start": None, "end": None}, prefix='')
         log.box("threaded heading")
         log.close()
         self.assertTrue(any("threaded heading" in s for s in array))
 
-    def test_log_threaded_flush(self):
+    def test_log_threaded_blocking_flush(self):
         array = []
-        log = big.Log(array, threading=True, formats={"start": None, "end": None}, prefix='')
+        buffer = big.Log.Buffer(array)
+        log = big.Log(buffer, threading=True, formats={"start": None, "end": None}, prefix='')
         log("message")
-        log.flush()
-        log.close()
+        text = "\n".join(array)
+        self.assertNotIn('message', text)
+        log.flush(block=True)
+        text = "\n".join(array)
+        self.assertIn('message', text)
 
-    def test_log_exit_closed_error(self):
+    def test_log_threaded_asynchronous_flush(self):
         array = []
-        log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
-        log.close()
-        log.exit()
+        buffer = big.Log.Buffer(array)
+        log = big.Log(buffer, threading=True, formats={"start": None, "end": None}, prefix='')
+        log("message")
+        text = "\n".join(array)
+        self.assertNotIn('message', text)
+        log.flush()
+        log.write("sentinel")
+        # I hate doing it, but how else do you test an asynchronous method?!
+        while not log._queue.empty():
+            time.sleep(0.0000001)
+        text = "\n".join(array)
+        self.assertIn('message', text)
 
     def test_log_flush_closed_error(self):
         array = []
@@ -674,6 +716,7 @@ class TestLogFormatting(unittest.TestCase):
         log.close()
 
 
+
 class TestSink(unittest.TestCase):
     """Tests for Sink."""
 
@@ -687,8 +730,9 @@ class TestSink(unittest.TestCase):
         events = list(sink)
         self.assertEqual(len(events), 4)
 
-        self.assertIsInstance(events.pop(), log_module.SinkCloseEvent)
-        self.assertIsInstance(events.pop(), log_module.SinkFlushEvent)
+        self.assertIsInstance(events.pop(0), log_module.SinkStartEvent)
+
+        self.assertIsInstance(events.pop(), log_module.SinkEndEvent)
 
         for i, e in enumerate(events, 1):
             self.assertIsInstance(e, log_module.SinkLogEvent)
@@ -740,15 +784,27 @@ class TestSink(unittest.TestCase):
         events = list(sink)
         types = [e.type for e in events]
         Sink = big.Log.Sink
-        self.assertIn(SinkEvent.TYPE_RESET, types)
         self.assertIn(SinkEvent.TYPE_START, types)
         self.assertIn(SinkEvent.TYPE_END, types)
-        self.assertIn(SinkEvent.TYPE_FLUSH, types)
-        self.assertIn(SinkEvent.TYPE_CLOSE, types)
         self.assertIn(SinkEvent.TYPE_WRITE, types)
         self.assertIn(SinkEvent.TYPE_LOG, types)
         self.assertIn(SinkEvent.TYPE_ENTER, types)
         self.assertIn(SinkEvent.TYPE_EXIT, types)
+
+    def test_sink_events_without_any_logging(self):
+        sink = big.Log.Sink()
+        log = big.Log(sink, threading=False)
+        log.close()
+        log.reset()
+        log.close()
+
+        events = list(sink)
+        self.assertEqual(len(events), 4)
+        self.assertIsInstance(events[0], log_module.SinkStartEvent)
+        self.assertIsInstance(events[1], log_module.SinkEndEvent)
+        self.assertIsInstance(events[2], log_module.SinkStartEvent)
+        self.assertIsInstance(events[3], log_module.SinkEndEvent)
+
 
     def test_sink_print(self):
         sink = big.Log.Sink()
@@ -796,7 +852,7 @@ class TestSink(unittest.TestCase):
         log.close()
         events = list(sink)
         self.assertEqual(len(events), 3)
-        self.assertEqual(s, events[0].message)
+        self.assertEqual(s, events[1].formatted)
 
     def test_sink_with_banners(self):
         sink = big.Log.Sink()
@@ -804,23 +860,86 @@ class TestSink(unittest.TestCase):
         log("message")
         log.close()
         events = list(sink)
-        self.assertEqual(len(events), 5)
+        self.assertEqual(len(events), 3)
 
         SinkEvent = log_module.SinkEvent
-        self.assertEqual(events[0].type, SinkEvent.TYPE_START)
+        self.assertIsInstance(events[0], big.SinkStartEvent)
         self.assertEqual(events[0].elapsed, 0)
         self.assertGreater(events[0].ns, 0)
         self.assertGreater(events[0].epoch, 0)
 
-        self.assertEqual(events[1].type, SinkEvent.TYPE_LOG)
+        self.assertIsInstance(events[1], big.SinkLogEvent)
         self.assertEqual(events[1].message, 'message')
 
-        self.assertEqual(events[2].type, SinkEvent.TYPE_END)
+        self.assertIsInstance(events[2], big.SinkEndEvent)
         self.assertGreater(events[2].elapsed, 0)
 
-        self.assertEqual(events[3].type, SinkEvent.TYPE_FLUSH)
 
-        self.assertEqual(events[4].type, SinkEvent.TYPE_CLOSE)
+class EventSink(big.Log.Destination):
+    """
+    A custom destination that just logs event names.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.value = ''
+
+    def _event(self, s):
+        if self.value:
+            s = f"{self.value} {s}"
+
+        self.value = s
+
+    def reset(self):
+        self._event("reset")
+
+    def flush(self):
+        self._event("flush")
+
+    def close(self):
+        self._event("close")
+
+    def start(self, start_time_ns, start_time_epoch, formatted):
+        self._event("start")
+
+    def end(self, elapsed, formatted):
+        self._event("end")
+
+    def write(self, elapsed, thread, formatted):
+        self._event("write")
+
+    def log(self, elapsed, thread, format, message, formatted):
+        self._event("log")
+
+    def enter(self, elapsed, thread, message, formatted):
+        self._event("enter")
+
+    def exit(self, elapsed, thread, message, formatted):
+        self._event("exit")
+
+
+class TestEventSink(unittest.TestCase):
+    """Tests for our custom EventSink."""
+
+    def test_sink_events_without_any_logging(self):
+        esink = EventSink()
+        log = big.Log(esink, threading=False)
+        log.close()
+        log.reset()
+        log.close()
+
+        self.assertEqual(esink.value, "start end flush close reset start end flush close")
+
+    def test_sink_events(self):
+        esink = EventSink()
+        log = big.Log(esink, threading=False)
+        log.write("abc")
+        log("xyz")
+        with log.enter("subsystem"):
+            log.box("xyz")
+        log.close()
+
+        self.assertEqual(esink.value, "start write log enter log exit end flush close")
 
 
 class TestOldDestination(unittest.TestCase):
