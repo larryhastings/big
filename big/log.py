@@ -559,9 +559,8 @@ class Log:
         self._manage_thread()
 
 
-
     @classmethod
-    def destination(cls, destination):
+    def base_destination_mapper(cls, destination):
         if destination is None:
             return None
         if isinstance(destination, cls.Destination):
@@ -578,11 +577,29 @@ class Log:
             return cls.FileHandle(destination)
         if callable(destination):
             return cls.Callable(destination)
-        raise ValueError(f"don't know how to log to destination {destination!r}")
+        raise TypeError(f"don't know how to log to destination {destination!r}")
+
+    destination_mappers = []
+
+    @classmethod
+    def destination(cls, destination):
+        for mapper in cls.destination_mappers:
+            result = mapper(destination)
+            if result is not None:
+                return result
+
+        return cls.base_destination_mapper(destination)
+
+
 
     @property
     def clock(self):
         return self._clock
+
+    @property
+    def destinations(self):
+        for d in self._destinations:
+            yield d
 
     @property
     def indent(self):
@@ -1300,6 +1317,7 @@ class Log:
                 contents = "".join(self.array)
                 self.array.clear()
                 self.destination.write(self.last_elapsed, self.last_thread, contents)
+                self.destination.flush()
 
 
     class File(Destination):

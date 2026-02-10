@@ -324,9 +324,30 @@ class TestLogBasics(unittest.TestCase):
         self.assertTrue(len(array) > 0)
 
     def test_log_with_invalid_destination(self):
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             log = big.Log(12345, threading=False)
         self.assertIn("don't know how to log to destination", str(cm.exception))
+
+    def test_extensible_destination_mapper(self):
+        with self.assertRaises(TypeError) as cm:
+            log = big.Log(12345, threading=False)
+
+        try:
+            # undocumented interface!
+            def custom_destination_mapper(o):
+                if isinstance(o, int):
+                    return EventSink()
+                return None
+
+            big.Log.destination_mappers.append(custom_destination_mapper)
+            log = big.Log(12345, [], print, threading=False)
+            destinations = list(log.destinations)
+            self.assertIsInstance(destinations[0], EventSink)
+            self.assertIsInstance(destinations[1], big.Log.List)
+            self.assertIsInstance(destinations[2], big.Log.Print)
+        finally:
+            big.Log.destination_mappers.clear()
+
 
     def test_log_after_closed(self):
         array = []
@@ -516,9 +537,11 @@ class TestLogMethods(unittest.TestCase):
             l.print("abc", format="spooky")
         l.close()
 
-class TestLogLazyHeaderAndFooter(unittest.TestCase):
 
-    def test_lazy_header_from_log(self):
+
+class TestLogLazyStartAndEnd(unittest.TestCase):
+
+    def test_lazy_start_from_log(self):
         s = io.StringIO()
         log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
         log("howdy!")
@@ -531,7 +554,7 @@ END
         """.strip()
         self.assertEqual(s.getvalue().strip(), expected)
 
-    def test_lazy_header_from_write(self):
+    def test_lazy_start_from_write(self):
         s = io.StringIO()
         log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
         log.write("howdy!\n")
@@ -544,7 +567,7 @@ END
         """.strip()
         self.assertEqual(s.getvalue().strip(), expected)
 
-    def test_lazy_header_from_heading(self):
+    def test_lazy_start_from_heading(self):
         s = io.StringIO()
         log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
         log.box("howdy!")
@@ -559,7 +582,7 @@ END
         """.strip()
         self.assertEqual(s.getvalue().strip(), expected)
 
-    def test_lazy_header_from_enter(self):
+    def test_lazy_start_from_enter(self):
         s = io.StringIO()
         log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
         with log.enter("howdy!"):
