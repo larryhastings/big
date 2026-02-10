@@ -35,22 +35,29 @@ export = mm.export
 @export
 class PushbackIterator:
     """
-    Wraps any iterator, allowing you to push items back on the iterator.
-    This allows you to "peek" at the next item (or items); you can get the
-    next item, examine it, and then push it back.  If any objects have
-    been pushed onto the iterator, they are yielded first, before attempting
-    to yield from the wrapped iterator.
+    Wraps any iterator, letting you FIFO push items to be yielded.
 
-    Pass in any iterable to the constructor.  Passing in an iterable of None
-    means the PushbackIterator is created in an exhausted state.
+    PushbackIterator accepts one parameter, any iterable.  It also
+    accepts a value of None, which means the PushbackIterator is
+    created in an exhausted state.
+
+    PushbackIterator also supports a push(o) method, which "pushes"
+    values onto the iterator.  If any objects have been pushed onto
+    the iterator, they're yielded first, before attempting to yield
+    from the wrapped iterator.  Pushed values are yielded in
+    first-in-first-out order like a stack.
+
+    Example: you have a pushback iterator J, and you call J.push(3)
+    followed by J.push('x').  The next two times you iterate over
+    J, it will yield 'x' followed by 3.
 
     When the wrapped iterable is exhausted (or if you passed in None to
     the constructor) you can still call push to add new items, at which
-    point the PushBackIterator can be iterated over again.
+    point the PushbackIterator can be iterated over again.
 
     It's explicitly supported to push values that were never yielded by
-    the wrapped iterator.  If you create x = PushbackIterator(range(1, 20)),
-    you may call x.push(33), or x.push('xyz'), or x.push(None), etc.
+    the wrapped iterator.  If you create J = PushbackIterator(range(1, 20)),
+    you may still call J.push(33), or J.push('xyz'), or J.push(None), etc.
     """
 
     __slots__ = ('i', 'stack')
@@ -164,9 +171,9 @@ def iterator_context(iterator, start=0):
     """
     Wraps any iterator, yielding values with a helpful context object.
 
-    Wraps any iterator.  Yields (ctx, o), where o is each value
-    yielded by iterable, and ctx is a "context" variable containing
-    metadata about the iteration.
+    Wraps any iterator.  Yields (ctx, o), where o is a value
+    yielded by iterable, and ctx is a "context" variable
+    containing metadata about the iteration.
 
     ctx will always have these six attributes:
 
@@ -179,10 +186,9 @@ def iterator_context(iterator, start=0):
       iterator.   (The same as the 'o' value in the
       yielded tuple).
     * ctx.previous contains the previous value yielded, if
-      this is the second or subsequent time this iterator
-      has yielded a value.  If is_first is true, ctx.previous
-      will be undefined, and accessing it will raise
-      AttributeError.
+      this is after the first time this iterator has yielded
+      a value.  If is_first is true, ctx.previous will be
+      undefined, and accessing it will raise AttributeError.
     * ctx.next contains the next value to be yielded by this
       iterator if there is one.  If is_last is True,
       ctx.previous will be undefined, and accessing it will
@@ -191,30 +197,27 @@ def iterator_context(iterator, start=0):
       time the iterator yields a value, this will be "start";
       the second time, it will be start + 1, etc.
 
-    These last two attributes, ctx.length and ctx.countdown,
-    require the "iterator" object to support __len__.  If
-    the iterator object doesn't support __len__, these two
-    attributes are not defined, and accessing them will
-    raise an exception.
+    ctx also supports two more attributes, ctx.length and
+    ctx.countdown, but these require the "iterator" object
+    to support __len__.  If the iterator object doesn't
+    support __len__, these two attributes are not defined,
+    and accessing them will raise an exception.
 
     * ctx.countdown contains the "opposite" value of ctx.index.
       The values yielded by ctx.countdown are the same as
-      ctx.index, but in reversed order.  (If start is 0,
+      ctx.index but in reversed order.  If start is 0,
       and the iterator yields four items, ctx.index will
       be 0, 1, 2, and 3 in that order, and ctx.countdown
       will be 3, 2, 1, and 0 in that order.  If start is 3,
       and the iterator yields four items, ctx.index will
       be 3, 4, 5, and 6 in that order, and ctx.countdown
-      will be 6, 5, 4, and 3 in that order.)
+      will be 6, 5, 4, and 3 in that order.
     * ctx.length contains the total number of items that
       will be yielded.
     """
     index = start
 
-    # next is a keyword, so we'll call ours _next.
-    # (it's okay to have an attribute called 'next',
-    # just not a global/local variable.)
-    previous = current = _next = undefined
+    previous = current = next = undefined = object()
     is_first = True
     is_last = False
 
@@ -223,25 +226,25 @@ def iterator_context(iterator, start=0):
     # what's *this* doing here?
     # this saves us an "if" statement in the main loop.
     # also, I suspect using a for loop that you immediately
-    # break out of is cheaper than "try: _next = next(i)".
-    for _next in i:
+    # break out of is cheaper than "try: next = next(i)".
+    for next in i:
         break
 
     for o in i:
         previous = current
-        current = _next
-        _next = o
+        current = next
+        next = o
 
-        ctx = IteratorContext(iterator, start, index, is_first, False, previous, current, _next)
+        ctx = IteratorContext(iterator, start, index, is_first, False, previous, current, next)
 
         yield (ctx, current)
         index += 1
         is_first = False
 
     # if the iterator yielded *any* values, yield the final one
-    if _next != undefined:
-        ctx = IteratorContext(iterator, start, index, is_first, True, current, _next, undefined)
-        yield (ctx, _next)
+    if next != undefined:
+        ctx = IteratorContext(iterator, start, index, is_first, True, current, next, undefined)
+        yield (ctx, next)
 
 
 undefined = None

@@ -308,8 +308,8 @@ class Log:
     to builtins.print, except the Log instance doesn't support
     the "file" keyword-only parameter.
 
-    Log supports a header(s) method.  This logs a string
-    preceded and followed by a "separator line", which makes
+    Log supports a box(s) method.  This logs a string
+    with a three-sided box drawn around it, which makes
     it stand out in the log.
 
     Log supports enter(s) and exit() methods.
