@@ -48,9 +48,9 @@ class PushbackIterator:
     the constructor) you can still call push to add new items, at which
     point the PushBackIterator can be iterated over again.
 
-    It's supported to push values that were never yielded by the wrapped
-    iterator.  If you create x = PushbackIterator(range(1, 20)), you may
-    call x.push(33), or x.push('xyz'), or x.push(None), etc.
+    It's explicitly supported to push values that were never yielded by
+    the wrapped iterator.  If you create x = PushbackIterator(range(1, 20)),
+    you may call x.push(33), or x.push('xyz'), or x.push(None), etc.
     """
 
     __slots__ = ('i', 'stack')
@@ -350,20 +350,18 @@ def iterator_filter(iterator,
     in an exhausted state and does not yield any values.
     """
 
-    un = undefined
-
-    stop_at_value_active     = stop_at_value     is not un
+    stop_at_value_active     = stop_at_value     is not undefined
     stop_at_in_active        = stop_at_in        is not None
     stop_at_predicate_active = stop_at_predicate is not None
     stop_at_count_active     = stop_at_count     is not None
     stop_at = stop_at_value_active or stop_at_in_active or stop_at_predicate_active or stop_at_count_active
 
-    reject_value_active     = reject_value     is not un
+    reject_value_active     = reject_value     is not undefined
     reject_in_active        = reject_in        is not None
     reject_predicate_active = reject_predicate is not None
     reject  = reject_value_active or reject_in_active or reject_predicate_active
 
-    only_value_active     = only_value     is not un
+    only_value_active     = only_value     is not undefined
     only_in_active        = only_in        is not None
     only_predicate_active = only_predicate is not None
     only    = only_value_active or only_in_active or only_predicate_active
