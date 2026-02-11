@@ -255,11 +255,11 @@ class TestInheritance(unittest.TestCase):
         self.assertIsInstance(c, o.Parent)
 
 
-class TestReparent(unittest.TestCase):
-    """Tests for the reparent() function."""
+class TestRebase(unittest.TestCase):
+    """Tests for the rebase() function."""
 
-    def test_reparent_basic(self):
-        """reparent() creates working rebound class."""
+    def test_rebase_basic(self):
+        """rebase() creates working rebound class."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -280,8 +280,8 @@ class TestReparent(unittest.TestCase):
         # First bind Child to o1
         BoundChild = bind(Child, o1)
 
-        # Now reparent to o2
-        ReboundChild = reparent(BoundChild, o2.Parent)
+        # Now rebase to o2
+        ReboundChild = rebase(BoundChild, o2.Parent)
         rechild = ReboundChild()
 
         self.assertEqual(rechild.method(), 'CHILD')
@@ -291,8 +291,8 @@ class TestReparent(unittest.TestCase):
         self.assertIsInstance(rechild, o2.Parent)
         self.assertIsInstance(rechild, Outer.Parent)
 
-    def test_reparent_different_instances(self):
-        """reparent() with different outer instances."""
+    def test_rebase_different_instances(self):
+        """rebase() with different outer instances."""
         class Outer:
             def __init__(self, name):
                 self.name = name
@@ -312,8 +312,8 @@ class TestReparent(unittest.TestCase):
         # First bind Child to o1
         BoundChild = bind(Child, o1)
 
-        # Now reparent to o2
-        Child2 = reparent(BoundChild, o2.Inner)
+        # Now rebase to o2
+        Child2 = rebase(BoundChild, o2.Inner)
 
         c1 = BoundChild()
         c2 = Child2()
@@ -323,8 +323,8 @@ class TestReparent(unittest.TestCase):
         self.assertEqual(c1.outer.name, 'first')
         self.assertEqual(c2.outer.name, 'second')
 
-    def test_reparent_bound_to_unbound_noop(self):
-        """reparent(bound_class, unbound_parent) is a no-op when base is already unbound."""
+    def test_rebase_bound_to_unbound_noop(self):
+        """rebase(bound_class, unbound_parent) is a no-op when base is already unbound."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -334,11 +334,11 @@ class TestReparent(unittest.TestCase):
         o = Outer()
         BoundParent = o.Parent
         # BoundParent's base is already Outer.Parent (unbound), so this is a no-op
-        result = reparent(BoundParent, Outer.Parent)
+        result = rebase(BoundParent, Outer.Parent)
         self.assertIs(result, BoundParent)
 
-    def test_reparent_bound_to_different_bound(self):
-        """reparent(bound_to_o1, o2.Parent) rebinds to o2."""
+    def test_rebase_bound_to_different_bound(self):
+        """rebase(bound_to_o1, o2.Parent) rebinds to o2."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -349,86 +349,12 @@ class TestReparent(unittest.TestCase):
         o2 = Outer()
         BoundToO1 = o1.Parent
 
-        Rebound = reparent(BoundToO1, o2.Parent)
+        Rebound = rebase(BoundToO1, o2.Parent)
         instance = Rebound()
         self.assertIs(instance.outer, o2)
 
-    def test_reparent_with_replace_parameter(self):
-        """reparent with replace parameter works."""
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):
-                    self.outer = outer
-
-        class Child(Outer.Parent):
-            def __init__(self, outer):
-                super().__init__(outer)
-
-        o1 = Outer()
-        o2 = Outer()
-        BoundChild = bind(Child, o1)
-
-        # BoundChild's bases include o1.Parent, so we can replace it with o2.Parent
-        Rebound = reparent(BoundChild, o2.Parent, replace=o1.Parent)
-        instance = Rebound()
-        self.assertIs(instance.outer, o2)
-
-    def test_reparent_replace_not_in_bases_raises(self):
-        """reparent raises if replace is not in child's bases."""
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-            @BoundInnerClass
-            class Other:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-        class Child(Outer.Parent):
-            def __init__(self, outer):  # pragma: nocover
-                super().__init__(outer)
-
-        o = Outer()
-        BoundChild = bind(Child, o)
-        with self.assertRaises(ValueError) as cm:
-            reparent(BoundChild, o.Parent, replace=Outer.Other)
-        self.assertIn("is not a direct base of", str(cm.exception))
-
-    def test_reparent_replace_mismatch_raises(self):
-        """reparent raises if unbound(parent) != unbound(replace)."""
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-            @BoundInnerClass
-            class Other:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-        o1 = Outer()
-        o2 = Outer()
-
-        # Start with class inheriting from unbound Parent
-        class Child(Outer.Parent):
-            def __init__(self, outer):  # pragma: nocover
-                super().__init__(outer)
-
-        # Bind to o1 - BoundChild.__bases__ is (o1.Parent, Child)
-        BoundChild = bind(Child, o1)
-
-        # Try to reparent to o2.Other but specify o1.Parent as replace
-        # unbound(o2.Other) is Outer.Other, unbound(o1.Parent) is Outer.Parent - mismatch!
-        with self.assertRaises(ValueError) as cm:
-            reparent(BoundChild, o2.Other, replace=o1.Parent)
-        self.assertIn("doesn't match", str(cm.exception))
-
-    def test_reparent_parent_not_a_class_raises(self):
-        """reparent raises TypeError if parent is not a class."""
+    def test_rebase_base_not_a_class_raises(self):
+        """rebase raises TypeError if base is not a class."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -439,15 +365,15 @@ class TestReparent(unittest.TestCase):
         BoundParent = o.Parent
 
         with self.assertRaises(TypeError) as cm:
-            reparent(BoundParent, None)
+            rebase(BoundParent, None)
         self.assertIn("must be a class", str(cm.exception))
 
         with self.assertRaises(TypeError) as cm:
-            reparent(BoundParent, 42)
+            rebase(BoundParent, 42)
         self.assertIn("must be a class", str(cm.exception))
 
-    def test_reparent_child_inherits_from_bound_cannot_reparent(self):
-        """reparent raises ValueError if child inherits from bound class."""
+    def test_rebase_child_inherits_from_bound_cannot_rebase(self):
+        """rebase raises ValueError if child inherits from bound class."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -462,43 +388,14 @@ class TestReparent(unittest.TestCase):
             def __init__(self, outer):  # pragma: nocover
                 super().__init__()
 
-        # Trying to reparent at all should fail - Child has no unbound version
+        # Trying to rebase at all should fail - Child has no unbound version
         with self.assertRaises(ValueError) as cm:
-            reparent(Child, Outer.Parent)
+            rebase(Child, Outer.Parent)
         self.assertIn("inherits from a bound class", str(cm.exception))
-        self.assertIn("cannot be reparented", str(cm.exception))
+        self.assertIn("can't be rebased", str(cm.exception))
 
-    def test_reparent_replace_not_a_class_raises(self):
-        """reparent raises TypeError if replace is not a class."""
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-        o = Outer()
-        BoundParent = o.Parent
-        with self.assertRaises(TypeError) as cm:
-            reparent(BoundParent, o.Parent, replace="not a class")
-        self.assertIn("replace must be a class", str(cm.exception))
-
-    def test_reparent_noop_with_replace_both_unbound(self):
-        """reparent with replace specified, both unbound, is a no-op."""
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-        o = Outer()
-        BoundParent = o.Parent
-
-        # Both parent and replace are unbound, this is a no-op
-        result = reparent(BoundParent, Outer.Parent, replace=Outer.Parent)
-        self.assertIs(result, BoundParent)
-
-    def test_reparent_unbound_parent_bound_target_base(self):
-        """reparent with unbound parent where target base is bound returns unbound child."""
+    def test_rebase_bound_child_to_unbound_base(self):
+        """rebasing a bound child to an unbound base returns unbound child."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -512,11 +409,11 @@ class TestReparent(unittest.TestCase):
                 super().__init__(outer)
 
         BoundChild = bind(Child, o)
-        result = reparent(BoundChild, Outer.Parent)
+        result = rebase(BoundChild, Outer.Parent)
         self.assertIs(result, Child)
 
-    def test_reparent_parent_not_a_base_raises(self):
-        """reparent raises if parent is not a base of child."""
+    def test_rebase_base_not_actually_a_base_class_raises(self):
+        """rebase raises if parent is not a base of child."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -531,7 +428,35 @@ class TestReparent(unittest.TestCase):
         o = Outer()
         BoundParent = o.Parent
         with self.assertRaises(ValueError) as cm:
-            reparent(BoundParent, o.Other)
+            rebase(BoundParent, o.Other)
+        self.assertIn("is not a base of", str(cm.exception))
+
+    def test_rebase_multiply_inherits_from_base(self):
+        """rebase raises if child multiply inherits from base."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+            @BoundInnerClass
+            class A(Parent):
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+            @BoundInnerClass
+            class B(Parent):
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+            @BoundInnerClass
+            class Child(A, B):
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        o = Outer()
+        with self.assertRaises(ValueError) as cm:
+            rebase(Outer.Child, o.Parent)
         self.assertIn("is not a base of", str(cm.exception))
 
 
@@ -619,7 +544,7 @@ class TestBind(unittest.TestCase):
             bind(Child, o)
         self.assertIn("Child", str(cm.exception))
         self.assertIn("multiple BoundInnerClasses", str(cm.exception))
-        self.assertIn("reparent()", str(cm.exception))
+        self.assertIn("rebase()", str(cm.exception))
 
     def test_bind_none_returns_unbound_base(self):
         """bind(child, None) returns the unbound base class."""
@@ -756,7 +681,7 @@ class TestUnbound(unittest.TestCase):
 
 
 class TestCaching(unittest.TestCase):
-    """Tests for caching behavior of bind and reparent."""
+    """Tests for caching behavior of bind and rebase."""
 
     def test_bind_returns_same_object(self):
         """bind() returns the same object on repeated calls."""
@@ -778,8 +703,8 @@ class TestCaching(unittest.TestCase):
         instance = Bound1()
         self.assertIs(instance.outer, o)
 
-    def test_reparent_returns_same_object(self):
-        """reparent() returns the same object on repeated calls."""
+    def test_rebase_returns_same_object(self):
+        """rebase() returns the same object on repeated calls."""
         class Outer:
             @BoundInnerClass
             class Parent:
@@ -794,13 +719,13 @@ class TestCaching(unittest.TestCase):
         o2 = Outer()
         BoundChild = bind(Child, o1)
 
-        # Reparent to o2 twice - should get same object
-        Reparented1 = reparent(BoundChild, o2.Parent)
-        Reparented2 = reparent(BoundChild, o2.Parent)
-        self.assertIs(Reparented1, Reparented2)
+        # rebase to o2 twice - should get same object
+        Rebased1 = rebase(BoundChild, o2.Parent)
+        Rebased2 = rebase(BoundChild, o2.Parent)
+        self.assertIs(Rebased1, Rebased2)
 
-        # Verify the reparented class works
-        instance = Reparented1()
+        # Verify the rebased class works
+        instance = Rebased1()
         self.assertIs(instance.outer, o2)
 
     def test_different_outers_get_different_classes(self):
@@ -900,48 +825,31 @@ class TestCaching(unittest.TestCase):
 
 
 class TestBoundToFunctions(unittest.TestCase):
-    """Tests for class_bound_to and instance_bound_to functions."""
+    """Tests for bound_to and type_bound_to functions."""
 
-    def test_class_bound_to_true(self):
-        """class_bound_to returns True for bound inner class."""
+    def test_bound_to(self):
+        """bound_to returns the instance for bound inner class, or None for unbound inner classes."""
         class Outer:
             @BoundInnerClass
             class Inner:
                 def __init__(self, outer):
                     self.outer = outer
 
+        self.assertIsNone(bound_to(Outer.Inner))
+
         o = Outer()
         BoundInner = o.Inner
-        self.assertTrue(class_bound_to(BoundInner, o))
+        self.assertIs(o,  bound_to(BoundInner))
         # Verify the class works
         instance = BoundInner()
         self.assertIs(instance.outer, o)
 
-    def test_class_bound_to_false_different_outer(self):
-        """class_bound_to returns False for different outer."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
+    def test_bound_to_false_no_cache(self):
+        """bound_to returns None on classes not using BoundInnerClass."""
+        self.assertIsNone(bound_to(str))
 
-        o1 = Outer()
-        o2 = Outer()
-        BoundInner = o1.Inner
-        self.assertFalse(class_bound_to(BoundInner, o2))
-        # Verify the class is bound to o1
-        self.assertTrue(class_bound_to(BoundInner, o1))
-
-    def test_class_bound_to_false_no_cache(self):
-        """class_bound_to returns False when no cache exists."""
-        class Outer:
-            pass
-
-        o = Outer()
-        self.assertFalse(class_bound_to(str, o))
-
-    def test_instance_bound_to_true(self):
-        """instance_bound_to returns True for instance of bound class."""
+    def test_type_bound_to(self):
+        """type_bound_to returns outer for instance of bound class."""
         class Outer:
             @BoundInnerClass
             class Inner:
@@ -950,22 +858,12 @@ class TestBoundToFunctions(unittest.TestCase):
 
         o = Outer()
         i = o.Inner()
-        self.assertTrue(instance_bound_to(i, o))
+        self.assertIs(o, type_bound_to(i))
         self.assertIs(i.outer, o)
 
-    def test_instance_bound_to_false(self):
-        """instance_bound_to returns False for different outer."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):
-                    self.outer = outer
+        self.assertIsNone(None, type_bound_to(Outer.Inner))
+        self.assertIsNone(None, type_bound_to(35))
 
-        o1 = Outer()
-        o2 = Outer()
-        i = o1.Inner()
-        self.assertFalse(instance_bound_to(i, o2))
-        self.assertTrue(instance_bound_to(i, o1))
 
     def test_not_transitive(self):
         """Bound-to relationship is not transitive."""
@@ -982,13 +880,13 @@ class TestBoundToFunctions(unittest.TestCase):
         a = A()
         b = a.B()
 
-        self.assertTrue(class_bound_to(a.B, a))
-        self.assertTrue(instance_bound_to(b, a))
+        self.assertIs(a, bound_to(a.B))
+        self.assertTrue(a, type_bound_to(b))
         self.assertIs(b.a, a)
 
         c = C(b)
         # c is not bound to a (no transitive relationship)
-        self.assertFalse(instance_bound_to(c, a))
+        self.assertNotEqual(a, type_bound_to(c))
 
 
 class TestSlotsCompatibility(unittest.TestCase):
@@ -1051,7 +949,7 @@ class TestWeakref(unittest.TestCase):
         ref = weakref.ref(o)
         BoundInner = o.Inner
         # Verify it's the right class
-        self.assertTrue(class_bound_to(BoundInner, o))
+        self.assertIs(o, bound_to(BoundInner))
 
         del o
         # The bound inner class holds a weakref, so outer should be collected
@@ -1378,20 +1276,6 @@ class TestEdgeCases(unittest.TestCase):
         # Pass a non-callable - inspect.signature raises TypeError
         result = _make_bound_signature(42)
         self.assertIsNone(result)
-
-    def test_class_bound_to_with_no_name(self):
-        """class_bound_to handles objects without __name__."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-        o = Outer()
-        _ = o.Inner
-
-        self.assertFalse(class_bound_to(42, o))
-        self.assertFalse(class_bound_to(None, o))
 
     def test_get_cache_with_slots_and_dict(self):
         """Works with __slots__ that includes __dict__."""
