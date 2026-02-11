@@ -6282,11 +6282,17 @@ outer class, the "class" you see is actually an instance of a
 superclass's `__init__`. You don't need to pass in the `outer` parameter;
 it'll be automatically passed in to the superclass's `__init__` as before.*
 
-4. *An inner class that inherits from a bound inner class, and which also
+4. **Directly** *inheriting from a bound inner class is unsupported.*
+If `o` is an instance of `Outer`, and `Outer.Inner` is an inner class
+decorated with `@BoundInnerClass`, don't write a class that directly inherits
+from `o.Inner` (e.g. `class Mistake(o.Inner)`).  You should always inherit
+from the unbound version (e.g. `class GotItRight(Outer.Inner)`).
+
+5. *An inner class that inherits from a bound inner class, and which also
 wants to be bound to the outer object, should be decorated with
 [`BoundInnerClass`](#boundinnerclasscls).*
 
-5. *An inner class that inherits from a bound inner class, but doesn't
+6. *An inner class that inherits from a bound inner class, but doesn't
 want to be bound to the outer object, should be decorated with
 [`UnboundInnerClass`](#unboundinnerclasscls).*
 

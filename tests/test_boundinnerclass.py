@@ -1,36 +1,13 @@
 #!/usr/bin/env python3
 
-_license = """
-big
-Copyright 2022-2026 Larry Hastings
-All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-"""
-
-
 import inspect
 import types
+import sys
 import unittest
 import weakref
 
 import bigtestlib
+bigtestlib.preload_local_big()
 
 from big.boundinnerclass import *
 
@@ -38,6 +15,7 @@ from big.boundinnerclass import (
     _BoundInnerClassBase,
     _ClassProxy,
     _make_bound_signature,
+    _get_outer_weakref,
     )
 
 
@@ -63,7 +41,6 @@ class TestBoundInnerClass(unittest.TestCase):
             class Inner:
                 pass
 
-        # Outer.Inner returns the raw class (no proxy wrapper)
         self.assertTrue(isinstance(Outer.Inner, type))
 
     def test_instance_access_returns_bound(self):
@@ -113,7 +90,6 @@ class TestBoundInnerClass(unittest.TestCase):
         self.assertIs(i.outer, o)
         self.assertEqual(i.x, 42)
         self.assertEqual(i.y, 'hello')
-
 
     def test_isinstance_with_unbound(self):
         """Instances are isinstance of the unbound class."""
@@ -169,7 +145,6 @@ class TestBoundInnerClass(unittest.TestCase):
         self.assertEqual(repr(i), 'custom repr')
 
 
-
 class TestUnboundInnerClass(unittest.TestCase):
     """Tests for UnboundInnerClass decorator."""
 
@@ -188,7 +163,6 @@ class TestUnboundInnerClass(unittest.TestCase):
 
         o = Outer()
         c = o.Child()
-        # The outer is still passed via the MRO to Parent
         self.assertIs(c.outer, o)
 
 
@@ -203,7 +177,6 @@ class TestInheritance(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
-            # No .cls needed!
             @BoundInnerClass
             class Child(bound_inner_base(Parent)):
                 def __init__(self, outer):
@@ -266,9 +239,10 @@ class TestRebase(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
                 self.child_attr = 'set by child init'
 
             def method(self):
@@ -277,16 +251,13 @@ class TestRebase(unittest.TestCase):
         o1 = Outer()
         o2 = Outer()
 
-        # First bind Child to o1
         BoundChild = bind(Child, o1)
-
-        # Now rebase to o2
         ReboundChild = rebase(BoundChild, o2.Parent)
         rechild = ReboundChild()
 
         self.assertEqual(rechild.method(), 'CHILD')
         self.assertEqual(rechild.child_attr, 'set by child init')
-        self.assertIs(rechild.outer, o2)  # Now bound to o2!
+        self.assertIs(rechild.outer, o2)
         self.assertIsInstance(rechild, Child)
         self.assertIsInstance(rechild, o2.Parent)
         self.assertIsInstance(rechild, Outer.Parent)
@@ -302,17 +273,15 @@ class TestRebase(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Inner):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
 
         o1 = Outer('first')
         o2 = Outer('second')
 
-        # First bind Child to o1
         BoundChild = bind(Child, o1)
-
-        # Now rebase to o2
         Child2 = rebase(BoundChild, o2.Inner)
 
         c1 = BoundChild()
@@ -333,7 +302,6 @@ class TestRebase(unittest.TestCase):
 
         o = Outer()
         BoundParent = o.Parent
-        # BoundParent's base is already Outer.Parent (unbound), so this is a no-op
         result = rebase(BoundParent, Outer.Parent)
         self.assertIs(result, BoundParent)
 
@@ -383,16 +351,13 @@ class TestRebase(unittest.TestCase):
         o = Outer()
         BoundParent = o.Parent
 
-        # Child inherits from a BOUND class (o.Parent), not the unbound Outer.Parent
         class Child(BoundParent):
             def __init__(self, outer):  # pragma: nocover
                 super().__init__()
 
-        # Trying to rebase at all should fail - Child has no unbound version
         with self.assertRaises(ValueError) as cm:
             rebase(Child, Outer.Parent)
-        self.assertIn("inherits from a bound class", str(cm.exception))
-        self.assertIn("can't be rebased", str(cm.exception))
+        self.assertEqual("Child is not a bindable inner class", str(cm.exception))
 
     def test_rebase_bound_child_to_unbound_base(self):
         """rebasing a bound child to an unbound base returns unbound child."""
@@ -404,9 +369,10 @@ class TestRebase(unittest.TestCase):
 
         o = Outer()
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):  # pragma: nocover
-                super().__init__(outer)
+                super().__init__()
 
         BoundChild = bind(Child, o)
         result = rebase(BoundChild, Outer.Parent)
@@ -440,17 +406,17 @@ class TestRebase(unittest.TestCase):
                     self.outer = outer
 
             @BoundInnerClass
-            class A(Parent):
+            class A(bound_inner_base(Parent)):
                 def __init__(self, outer):  # pragma: nocover
                     self.outer = outer
 
             @BoundInnerClass
-            class B(Parent):
+            class B(bound_inner_base(Parent)):
                 def __init__(self, outer):  # pragma: nocover
                     self.outer = outer
 
             @BoundInnerClass
-            class Child(A, B):
+            class Child(bound_inner_base(A), bound_inner_base(B)):
                 def __init__(self, outer):  # pragma: nocover
                     self.outer = outer
 
@@ -471,9 +437,10 @@ class TestBind(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
                 self.child_attr = 'set by child'
 
         o = Outer()
@@ -490,9 +457,10 @@ class TestBind(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
 
         o1 = Outer()
         o2 = Outer()
@@ -518,33 +486,7 @@ class TestBind(unittest.TestCase):
         o = Outer()
         with self.assertRaises(ValueError) as cm:
             bind(Child, o)
-        self.assertIn("Child", str(cm.exception))
-        self.assertIn("doesn't inherit from any BoundInnerClass", str(cm.exception))
-        self.assertIn("Outer", str(cm.exception))
-
-    def test_bind_multiple_boundinnerclass_parents_raises(self):
-        """bind() raises if child inherits from multiple BoundInnerClasses."""
-        class Outer:
-            @BoundInnerClass
-            class Parent1:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-            @BoundInnerClass
-            class Parent2:
-                def __init__(self, outer):  # pragma: nocover
-                    self.outer = outer
-
-        class Child(Outer.Parent1, Outer.Parent2):
-            def __init__(self, outer):  # pragma: nocover
-                super().__init__(outer)
-
-        o = Outer()
-        with self.assertRaises(ValueError) as cm:
-            bind(Child, o)
-        self.assertIn("Child", str(cm.exception))
-        self.assertIn("multiple BoundInnerClasses", str(cm.exception))
-        self.assertIn("rebase()", str(cm.exception))
+        self.assertEqual("Child is not a bindable inner class", str(cm.exception))
 
     def test_bind_none_returns_unbound_base(self):
         """bind(child, None) returns the unbound base class."""
@@ -557,7 +499,6 @@ class TestBind(unittest.TestCase):
         o = Outer()
         BoundParent = o.Parent
 
-        # bind with None returns the unbound version
         result = bind(BoundParent, None)
         self.assertIs(result, Outer.Parent)
 
@@ -569,7 +510,6 @@ class TestBind(unittest.TestCase):
                 def __init__(self, outer):  # pragma: nocover
                     self.outer = outer
 
-        # Outer.Parent is not a bound class, so it returns unchanged
         result = bind(Outer.Parent, None)
         self.assertIs(result, Outer.Parent)
 
@@ -578,7 +518,6 @@ class TestBind(unittest.TestCase):
         class Regular:
             pass
 
-        # Regular class returns unchanged
         result = bind(Regular, None)
         self.assertIs(result, Regular)
 
@@ -593,7 +532,6 @@ class TestBind(unittest.TestCase):
         o = Outer()
         BoundParent = o.Parent
 
-        # Child inherits from a BOUND class (o.Parent), not the unbound Outer.Parent
         class Child(BoundParent):
             def __init__(self, outer):  # pragma: nocover
                 super().__init__()
@@ -601,7 +539,56 @@ class TestBind(unittest.TestCase):
         o2 = Outer()
         with self.assertRaises(ValueError) as cm:
             bind(Child, o2)
-        self.assertIn("inherits from a bound class", str(cm.exception))
+        self.assertEqual("Child is not a bindable inner class", str(cm.exception))
+
+    def test_bind_boundinnerclass_directly(self):
+        """bind() works when called directly on a BoundInnerClass."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        o = Outer()
+        BoundInner = bind(Outer.Inner, o)
+        instance = BoundInner()
+
+        self.assertIs(instance.outer, o)
+
+    def test_bind_already_bound_to_same_outer_returns_cached(self):
+        """bind() with already-bound class to same outer returns cached."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer): # pragma: nocover
+                    self.outer = outer
+
+        o = Outer()
+        BoundInner1 = o.Inner
+        BoundInner2 = bind(Outer.Inner, o)
+
+        self.assertIs(BoundInner1, BoundInner2)
+
+    def test_bind_bindable_no_matching_descriptor_raises(self):
+        """bind() raises if Bindable class has no matching BIC in outer."""
+        class Outer1:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        class Outer2:
+            pass  # No BoundInnerClass here
+
+        @Bindable
+        class Child(Outer1.Inner):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        o2 = Outer2()
+        with self.assertRaises(ValueError) as cm:
+            bind(Child, o2)
+        self.assertIn("doesn't inherit from any BoundInnerClass", str(cm.exception))
 
 
 class TestUnbound(unittest.TestCase):
@@ -669,7 +656,6 @@ class TestUnbound(unittest.TestCase):
         o = Outer()
         BoundParent = o.Parent
 
-        # Child inherits from a BOUND class (o.Parent), not the unbound Outer.Parent
         class Child(BoundParent):
             def __init__(self, outer):  # pragma: nocover
                 super().__init__()
@@ -691,15 +677,15 @@ class TestCaching(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
 
         o = Outer()
         Bound1 = bind(Child, o)
         Bound2 = bind(Child, o)
         self.assertIs(Bound1, Bound2)
-        # Verify the bound class works
         instance = Bound1()
         self.assertIs(instance.outer, o)
 
@@ -711,20 +697,19 @@ class TestCaching(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
 
         o1 = Outer()
         o2 = Outer()
         BoundChild = bind(Child, o1)
 
-        # rebase to o2 twice - should get same object
         Rebased1 = rebase(BoundChild, o2.Parent)
         Rebased2 = rebase(BoundChild, o2.Parent)
         self.assertIs(Rebased1, Rebased2)
 
-        # Verify the rebased class works
         instance = Rebased1()
         self.assertIs(instance.outer, o2)
 
@@ -736,9 +721,10 @@ class TestCaching(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
 
         o1 = Outer()
         o2 = Outer()
@@ -756,14 +742,16 @@ class TestCaching(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
+        @Bindable
         class Child1(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
                 self.which = 'child1'
 
+        @Bindable
         class Child2(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
                 self.which = 'child2'
 
         o = Outer()
@@ -783,10 +771,10 @@ class TestCaching(unittest.TestCase):
 
         o = Outer()
 
-        # Create a child class and bind it
+        @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__()
                 self.child_attr = 'original'
 
         Bound1 = bind(Child, o)
@@ -794,13 +782,11 @@ class TestCaching(unittest.TestCase):
         self.assertIs(instance1.outer, o)
         self.assertEqual(instance1.child_attr, 'original')
 
-        # Now simulate a stale cache entry by replacing the weakref with a dead one
+        # Access cache internals - now a _BoundInnerClassCache object
         cache = getattr(o, BOUNDINNERCLASS_OUTER_ATTR)
         child_id = id(Child)
-        cache_key = (child_id, 'Parent')
-
-        # Get the cached class
-        cached_class, _ = cache[cache_key]
+        cache_key = (child_id, Child.__name__)
+        cached_class, _ = cache._cache[cache_key]
 
         # Create a dead weakref
         class Temp:
@@ -808,27 +794,25 @@ class TestCaching(unittest.TestCase):
         temp = Temp()
         dead_ref = weakref.ref(temp)
         del temp
-        # Now dead_ref() returns None
 
         # Replace cache entry with dead weakref
-        cache[cache_key] = (cached_class, dead_ref)
+        cache._cache[cache_key] = (cached_class, dead_ref)
 
-        # Now call bind again with the SAME Child
-        # The weakref check will fail (dead_ref() is not Child), triggering stale removal
+        # Now call bind again - the stale entry should be detected and replaced
         Bound2 = bind(Child, o)
         instance2 = Bound2()
         self.assertIs(instance2.outer, o)
         self.assertEqual(instance2.child_attr, 'original')
 
         # Verify we got a fresh class stored in the cache
-        self.assertIs(Bound2, cache[cache_key][0])
+        self.assertIs(Bound2, cache._cache[cache_key][0])
 
 
 class TestBoundToFunctions(unittest.TestCase):
     """Tests for bound_to and type_bound_to functions."""
 
     def test_bound_to(self):
-        """bound_to returns the instance for bound inner class, or None for unbound inner classes."""
+        """bound_to returns the instance for bound inner class, or None for unbound."""
         class Outer:
             @BoundInnerClass
             class Inner:
@@ -839,8 +823,7 @@ class TestBoundToFunctions(unittest.TestCase):
 
         o = Outer()
         BoundInner = o.Inner
-        self.assertIs(o,  bound_to(BoundInner))
-        # Verify the class works
+        self.assertIs(o, bound_to(BoundInner))
         instance = BoundInner()
         self.assertIs(instance.outer, o)
 
@@ -861,32 +844,11 @@ class TestBoundToFunctions(unittest.TestCase):
         self.assertIs(o, type_bound_to(i))
         self.assertIs(i.outer, o)
 
-        self.assertIsNone(None, type_bound_to(Outer.Inner))
-        self.assertIsNone(None, type_bound_to(35))
-
-
-    def test_not_transitive(self):
-        """Bound-to relationship is not transitive."""
-        class A:
-            @BoundInnerClass
-            class B:
-                def __init__(self, a):
-                    self.a = a
-
-        class C:
-            def __init__(self, b_instance):
-                self.b_instance = b_instance
-
-        a = A()
-        b = a.B()
-
-        self.assertIs(a, bound_to(a.B))
-        self.assertTrue(a, type_bound_to(b))
-        self.assertIs(b.a, a)
-
-        c = C(b)
-        # c is not bound to a (no transitive relationship)
-        self.assertNotEqual(a, type_bound_to(c))
+    def test_bound_to_with_non_class(self):
+        """bound_to returns None for non-class arguments."""
+        self.assertIsNone(bound_to(42))
+        self.assertIsNone(bound_to("string"))
+        self.assertIsNone(bound_to(None))
 
 
 class TestSlotsCompatibility(unittest.TestCase):
@@ -948,11 +910,9 @@ class TestWeakref(unittest.TestCase):
         o = Outer()
         ref = weakref.ref(o)
         BoundInner = o.Inner
-        # Verify it's the right class
         self.assertIs(o, bound_to(BoundInner))
 
         del o
-        # The bound inner class holds a weakref, so outer should be collected
         self.assertIsNone(ref())
 
 
@@ -969,23 +929,19 @@ class TestSignature(unittest.TestCase):
                     self.x = x
                     self.y = y
 
-        # Unbound has original signature
         sig = inspect.signature(Outer.Inner)
         params = list(sig.parameters.keys())
         self.assertEqual(params, ['outer', 'x', 'y'])
 
-        # Bound omits 'outer'
         o = Outer()
         sig = inspect.signature(o.Inner)
         params = list(sig.parameters.keys())
         self.assertEqual(params, ['x', 'y'])
 
-        # __init__ signature also correct
         sig = inspect.signature(o.Inner.__init__)
         params = list(sig.parameters.keys())
         self.assertEqual(params, ['x', 'y'])
 
-        # And it actually works
         i = o.Inner(42, y='hello')
         self.assertIs(i.outer, o)
         self.assertEqual(i.x, 42)
@@ -1007,7 +963,6 @@ class TestSignature(unittest.TestCase):
         params = list(sig.parameters.keys())
         self.assertEqual(params, ['x', 'args', 'kwargs'])
 
-        # And it works
         i = o.Inner(1, 2, 3, foo='bar')
         self.assertIs(i.outer, o)
         self.assertEqual(i.x, 1)
@@ -1030,7 +985,6 @@ class TestSignature(unittest.TestCase):
         self.assertEqual(sig.parameters['y'].default, 42)
         self.assertEqual(sig.parameters['z'].default, 'hello')
 
-        # Defaults work
         i = o.Inner(1)
         self.assertIs(i.outer, o)
         self.assertEqual(i.y, 42)
@@ -1059,10 +1013,7 @@ class TestClassProxyBehavior(unittest.TestCase):
                 """Inner class docstring."""
                 pass
 
-        # When accessed through Outer.Inner (triggers __get__), we get the wrapped class
         self.assertEqual(Outer.Inner.__doc__, 'Inner class docstring.')
-
-        # The descriptor itself has BoundInnerClass's docstring, but __wrapped__ has the right one
         descriptor = Outer.__dict__['Inner']
         self.assertEqual(descriptor.__wrapped__.__doc__, 'Inner class docstring.')
 
@@ -1073,10 +1024,7 @@ class TestClassProxyBehavior(unittest.TestCase):
             class Inner:
                 pass
 
-        # When accessed through Outer.Inner (triggers __get__), we get the wrapped class
         self.assertEqual(Outer.Inner.__module__, __name__)
-
-        # The descriptor's __wrapped__ has the right module
         descriptor = Outer.__dict__['Inner']
         self.assertEqual(descriptor.__wrapped__.__module__, __name__)
 
@@ -1101,12 +1049,11 @@ class TestClassProxyBehavior(unittest.TestCase):
 
         class Child(Outer.Inner):
             def __init__(self, outer):
-                super().__init__(outer)
+                super().__init__(outer)  # Must pass outer - not using bind()
                 self.child_flag = True
 
         self.assertTrue(issubclass(Child, Outer.Inner))
 
-        # Also instantiate to cover the __init__ bodies
         o = Outer()
         c = Child(o)
         self.assertIs(c.outer, o)
@@ -1130,7 +1077,6 @@ class TestClassProxyBehavior(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
-            # Old-style using .cls still works
             @BoundInnerClass
             class Child(Parent.cls):
                 def __init__(self, outer):
@@ -1144,12 +1090,10 @@ class TestClassProxyBehavior(unittest.TestCase):
 
         o = Outer()
 
-        # BoundInnerClass with .cls works
         c = o.Child()
         self.assertIs(c.outer, o)
         self.assertTrue(c.child)
 
-        # UnboundInnerClass with .cls works
         uc = o.UnboundChild()
         self.assertIs(uc.outer, o)
 
@@ -1176,6 +1120,7 @@ class TestClassProxyBehavior(unittest.TestCase):
         self.assertFalse(hasattr(proxy, 'custom'))
         self.assertFalse(hasattr(Inner, 'custom'))
 
+    @unittest.skipIf(sys.version_info < (3, 7), "__qualname__ not in slots on 3.6")
     def test_proxy_setattr_qualname(self):
         """Setting __qualname__ updates both proxy and wrapped."""
         class Inner:
@@ -1186,7 +1131,6 @@ class TestClassProxyBehavior(unittest.TestCase):
         proxy.__qualname__ = 'NewQualname'
         self.assertEqual(proxy.__qualname__, 'NewQualname')
         self.assertEqual(Inner.__qualname__, 'NewQualname')
-        # Restore
         proxy.__qualname__ = original_qualname
 
     def test_proxy_setattr_annotations(self):
@@ -1259,21 +1203,18 @@ class TestEdgeCases(unittest.TestCase):
                 pass
 
         o = Outer()
-        # Should not raise
         BoundInner = o.Inner
         self.assertIsNotNone(BoundInner)
         self.assertTrue(issubclass(BoundInner, int))
 
     def test_signature_with_minimal_params(self):
         """Signature handling when __init__ has fewer than 2 params."""
-        # We test _make_bound_signature with a function that has only 'self'
         sig = _make_bound_signature(lambda self: None)
         self.assertIsNotNone(sig)
         self.assertEqual(len(list(sig.parameters)), 0)
 
     def test_make_bound_signature_exception(self):
         """Test _make_bound_signature when inspect.signature raises."""
-        # Pass a non-callable - inspect.signature raises TypeError
         result = _make_bound_signature(42)
         self.assertIsNone(result)
 
@@ -1355,7 +1296,6 @@ class TestEdgeCases(unittest.TestCase):
         replacement.__name__ = 'Replacement'
 
         proxy = _ClassProxy(Original)
-        # Should not raise
         proxy.__wrapped__ = replacement
         self.assertIs(proxy.__wrapped__, replacement)
 
@@ -1382,7 +1322,6 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(proxy.__doc__, 'New doc.')
         self.assertEqual(Inner.__doc__, 'New doc.')
 
-        # Restore
         Inner.__name__ = original_name
         Inner.__module__ = original_module
         Inner.__doc__ = original_doc
@@ -1401,10 +1340,9 @@ class TestNewEdgeCases(unittest.TestCase):
 
     def test_same_name_base_skipped(self):
         """When a base has the same name as the inner class, it's skipped."""
-        # Create a base class and rename it to match the inner class name
         class Base:
             pass
-        Base.__name__ = 'Inner'  # Same name as the inner class
+        Base.__name__ = 'Inner'
 
         class Outer:
             @BoundInnerClass
@@ -1412,7 +1350,6 @@ class TestNewEdgeCases(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
-        # This triggers the same-name skip in __get__
         o = Outer()
         i = o.Inner()
         self.assertIs(i.outer, o)
@@ -1423,56 +1360,7 @@ class TestRegressions(unittest.TestCase):
     """Regression tests for bugs that have been fixed."""
 
     def test_outer_evaluates_to_false(self):
-        """
-        Regression test for a bugfix!
-
-        The behavior:
-
-            If you have an outer class Outer, and it contains an
-            inner class Inner decorated with @BoundInnerClass,
-            and o is an instance of Outer, and o evaluates to
-            false in a boolean context,
-            o.Inner would be the *unbound* version of Inner.
-
-        The bug:
-            When you access a class descriptor--an object that
-            implements __get__--the parameters are contingent
-            on how you were accessed.
-
-            If you access Inner through an instance, e.g. o.Inner,
-            the descriptor is called with the instance:
-                __get__(self, o, Outer)
-
-            If you access Inner through the class itself,
-            e.g. Outer.Inner, the descriptor is called with None
-            instead of the instance:
-                __get__(self, None, Outer)
-
-            See
-                https://docs.python.org/3/howto/descriptor.html#invocation-from-an-instance
-            vs.
-                https://docs.python.org/3/howto/descriptor.html#invocation-from-a-class
-
-            The bug was, I wasn't checking to see if obj was None,
-            I was checking to see if obj was false.  Oops.
-
-        The fix:
-            Easy.  Use "if obj is None" instead of "if not obj".
-
-        -----
-
-        This bug is thirteen years old!
-        It's in the second revision of the Bound Inner Classes
-        recipe I posted to the good ol' cookbook:
-
-            https://code.activestate.com/recipes/577070-bound-inner-classes/history/2/
-
-        Before I made "big", it was inconvenient for me
-        to use BoundInnerClasses.  So I rarely used them.
-        I guess I just didn't put enough CPU seconds
-        through the class to stumble over this bug before.
-        """
-
+        """Regression: outer instance that evaluates to false still works."""
         class Outer:
             def __bool__(self):
                 return False
@@ -1489,16 +1377,7 @@ class TestRegressions(unittest.TestCase):
         self.assertEqual(o, i.outer)
 
     def test_nested_boundinnerclass_inheritance_single_outer_injection(self):
-        """
-        Regression test: nested BoundInnerClass inheritance should inject outer only once.
-
-        Bug: When class C inherits from class B which inherits from class A,
-        and all three are BoundInnerClasses, each wrapper's __init__ was calling
-        super().__init__(outer, *args), causing outer to be passed multiple times.
-        This resulted in "takes N arguments but N+M were given" errors.
-
-        Fix: Changed wrappers to call cls.__init__ directly instead of super().__init__.
-        """
+        """Regression: nested BoundInnerClass inheritance injects outer only once."""
         class Outer:
             @BoundInnerClass
             class GrandParent:
@@ -1519,11 +1398,8 @@ class TestRegressions(unittest.TestCase):
                     self.child_called = True
 
         o = Outer()
-
-        # This used to raise: "takes 2 positional arguments but 4 were given"
         c = o.Child()
 
-        # Verify all __init__ methods were called correctly
         self.assertIs(c.outer, o)
         self.assertTrue(c.grandparent_called)
         self.assertTrue(c.parent_called)
@@ -1537,7 +1413,7 @@ class TestMisuseDetection(unittest.TestCase):
         """@BoundInnerClass on a non-nested class raises clear error."""
         @BoundInnerClass
         class NotNested:
-            def __init__(self, outer): # pragma: nocover
+            def __init__(self, outer):  # pragma: nocover
                 self.outer = outer
 
         with self.assertRaises(TypeError) as cm:
@@ -1551,7 +1427,7 @@ class TestMisuseDetection(unittest.TestCase):
             def make_inner(self):
                 @BoundInnerClass
                 class Inner:
-                    def __init__(self, outer): # pragma: nocover
+                    def __init__(self, outer):  # pragma: nocover
                         self.outer = outer
                 return Inner()
 
@@ -1573,7 +1449,503 @@ class TestMisuseDetection(unittest.TestCase):
         self.assertIn("nested inside another class", str(cm.exception))
 
 
-def run_tests():  # pragma: nocover
+class TestBindable(unittest.TestCase):
+    """Tests for @Bindable decorator."""
+
+    def test_bindable_marks_class_as_participating(self):
+        """@Bindable sets the participation attribute."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        @Bindable
+        class Child(Outer.Inner):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        self.assertTrue(is_bindable(Child))
+        self.assertFalse(is_bound(Child))
+
+    def test_bindable_class_can_be_bound(self):
+        """@Bindable class can be bound with bind()."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        @Bindable
+        class Child(Outer.Inner):
+            def __init__(self, outer):
+                super().__init__()
+                self.child_flag = True
+
+        o = Outer()
+        BoundChild = bind(Child, o)
+        instance = BoundChild()
+
+        self.assertIs(instance.outer, o)
+        self.assertTrue(instance.child_flag)
+
+    def test_bindable_returns_class_unchanged(self):
+        """@Bindable returns the class itself (not a proxy)."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        @Bindable
+        class Child(Outer.Inner):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        self.assertIsInstance(Child, type)
+
+
+class TestIsBindable(unittest.TestCase):
+    """Tests for is_bindable() function."""
+
+    def test_is_bindable_with_boundinnerclass(self):
+        """is_bindable returns True for @BoundInnerClass decorated classes."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                pass
+
+        self.assertTrue(is_bindable(Outer.Inner))
+
+    def test_is_bindable_with_bindable(self):
+        """is_bindable returns True for @Bindable decorated classes."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                pass
+
+        @Bindable
+        class Child(Outer.Inner):
+            pass
+
+        self.assertTrue(is_bindable(Child))
+
+    def test_is_bindable_with_regular_class(self):
+        """is_bindable returns False for regular classes."""
+        class Regular:
+            pass
+
+        self.assertFalse(is_bindable(Regular))
+
+    def test_is_bindable_with_non_class(self):
+        """is_bindable returns False for non-class arguments."""
+        self.assertFalse(is_bindable(42))
+        self.assertFalse(is_bindable("string"))
+        self.assertFalse(is_bindable(None))
+
+
+class TestIsBound(unittest.TestCase):
+    """Tests for is_bound() function."""
+
+    def test_is_bound_with_bound_class(self):
+        """is_bound returns True for bound classes."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        o = Outer()
+        BoundInner = o.Inner
+        self.assertTrue(is_bound(BoundInner))
+
+    def test_is_bound_with_unbound_class(self):
+        """is_bound returns False for unbound classes."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                pass
+
+        self.assertFalse(is_bound(Outer.Inner))
+
+    def test_is_bound_with_regular_class(self):
+        """is_bound returns False for regular classes."""
+        class Regular:
+            pass
+
+        self.assertFalse(is_bound(Regular))
+
+    def test_is_bound_with_non_class(self):
+        """is_bound returns False for non-class arguments."""
+        self.assertFalse(is_bound(42))
+        self.assertFalse(is_bound("string"))
+        self.assertFalse(is_bound(None))
+
+
+class TestRebaseNonBindable(unittest.TestCase):
+    """Tests for rebase() with non-bindable classes."""
+
+    def test_rebase_child_not_bindable_raises(self):
+        """rebase raises if child is not bindable."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        class Child(Outer.Parent):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__(outer)  # Must pass outer - not @Bindable
+
+        o = Outer()
+        with self.assertRaises(ValueError) as cm:
+            rebase(Child, o.Parent)
+        self.assertIn("is not a bindable inner class", str(cm.exception))
+
+    def test_rebase_base_not_bindable_raises(self):
+        """rebase raises if base is not bindable."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):  # pragma: nocover
+                    self.outer = outer
+
+        @Bindable
+        class Child(Outer.Parent):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        class NotBindable:
+            pass
+
+        with self.assertRaises(ValueError) as cm:
+            rebase(Child, NotBindable)
+        self.assertIn("is not a bindable inner class", str(cm.exception))
+
+
+class TestBindSlowPaths(unittest.TestCase):
+    """Tests for bind() slow paths when name lookup doesn't match."""
+
+    def test_bind_bic_slow_path_renamed_descriptor(self):
+        """bind() finds BIC by identity search when name lookup fails."""
+        # Create a BIC class
+        @BoundInnerClass
+        class Inner:
+            def __init__(self, outer):
+                self.outer = outer
+
+        # Get the wrapped class BEFORE adding to Outer
+        # Inner is a proxy, Inner.__wrapped__ doesn't work via class access
+        # But the raw class is what we get from Outer.Inner
+        inner_cls = Inner.__wrapped__  # Access __wrapped__ on the proxy directly
+
+        # Create Outer class with the descriptor stored under a DIFFERENT name
+        # than inner_cls.__name__
+        class Outer:
+            pass
+
+        # Store descriptor under 'SomethingElse', not 'Inner'
+        Outer.SomethingElse = BoundInnerClass(inner_cls)
+
+        # Now bind should:
+        # 1. Cache lookup fails (first time)
+        # 2. Fast path fails: Outer.__dict__.get('Inner') returns None
+        # 3. Slow path succeeds: finds SomethingElse descriptor where __wrapped__ is inner_cls
+
+        o = Outer()
+        BoundInner = bind(inner_cls, o)
+        instance = BoundInner()
+        self.assertIs(instance.outer, o)
+
+    def test_bind_bindable_skips_non_bindable_bases(self):
+        """bind() skips non-bindable bases when searching for BIC."""
+        class NonBindableBase:
+            """A base class that is NOT decorated."""
+            pass
+
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        # Child inherits from BOTH NonBindableBase and Inner
+        # When searching bases, it should skip NonBindableBase (not bindable)
+        # and find Inner
+        @Bindable
+        class Child(NonBindableBase, Outer.Inner):
+            def __init__(self, outer):
+                super().__init__()
+                self.child_flag = True
+
+        o = Outer()
+        BoundChild = bind(Child, o)
+        instance = BoundChild()
+        self.assertIs(instance.outer, o)
+        self.assertTrue(instance.child_flag)
+
+    def test_bind_bindable_slow_path_renamed_base(self):
+        """bind() finds Bindable's base by identity when name lookup fails."""
+        # Create BIC
+        @BoundInnerClass
+        class OriginalInner:
+            def __init__(self, outer):
+                self.outer = outer
+
+        # Get the wrapped class
+        inner_cls = OriginalInner.__wrapped__
+
+        # Create Outer with the descriptor under a different name
+        class Outer:
+            pass
+
+        # Store under 'DifferentName', not 'OriginalInner'
+        Outer.DifferentName = BoundInnerClass(inner_cls)
+
+        # Create Bindable child that inherits from inner_cls
+        @Bindable
+        class Child(inner_cls):
+            def __init__(self, outer):
+                super().__init__()
+                self.child_flag = True
+
+        o = Outer()
+
+        # bind should:
+        # 1. Cache lookup fails
+        # 2. Fast path for cls itself fails (Child is not directly a BIC in Outer)
+        # 3. Slow path for cls itself fails (no descriptor wraps Child)
+        # 4. Search bases: inner_cls is bindable
+        # 5. Fast path for base fails: Outer.__dict__.get('OriginalInner') returns None
+        # 6. Slow path for base succeeds: finds DifferentName where __wrapped__ is inner_cls
+
+        BoundChild = bind(Child, o)
+        instance = BoundChild()
+        self.assertIs(instance.outer, o)
+        self.assertTrue(instance.child_flag)
+
+
+class TestRebaseMultipleMatchingBases(unittest.TestCase):
+    """Tests for rebase() with multiple matching bases."""
+
+    def test_rebase_multiple_matching_bases_raises(self):
+        """rebase raises ValueError if child inherits from same unbound class multiple times."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer): # pragma: nocover
+                    self.outer = outer
+
+        o1 = Outer()
+        o2 = Outer()
+        o3 = Outer()
+
+        # Child inherits from TWO different bound versions of the same unbound class
+        # This is unsupported - inheriting directly from bound classes is "off the reservation"
+        @Bindable
+        class Child(o1.Parent, o2.Parent):
+            def __init__(self, outer): # pragma: nocover
+                super().__init__()
+
+        with self.assertRaises(ValueError) as cm:
+            rebase(Child, o3.Parent)
+        self.assertIn("inherits from", str(cm.exception))
+        self.assertIn("multiple times", str(cm.exception))
+
+    def test_rebase_three_levels_direct(self):
+        """rebase works with three levels of BIC nesting, rebasing directly."""
+        class Outer:
+            @BoundInnerClass
+            class A:
+                def __init__(self, outer):
+                    self.outer = outer
+                    self.a_init = True
+
+            @BoundInnerClass
+            class B(bound_inner_base(A)):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.b_init = True
+
+            @BoundInnerClass
+            class C(bound_inner_base(B)):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.c_init = True
+
+        o1 = Outer()
+        o2 = Outer()
+
+        # Rebase o1.C to use o2.B
+        rebased_C = rebase(o1.C, o2.B)
+
+        # Verify the result
+        self.assertTrue(is_bound(rebased_C))
+        self.assertIs(bound_to(rebased_C), o2)
+        self.assertIs(unbound(rebased_C), Outer.C)
+
+        # Instantiate and verify all inits are called with correct outer
+        instance = rebased_C()
+        self.assertIs(instance.outer, o2)
+        self.assertTrue(instance.a_init)
+        self.assertTrue(instance.b_init)
+        self.assertTrue(instance.c_init)
+
+    def test_rebase_three_levels_two_step(self):
+        """rebase works with three levels via two-step rebasing."""
+        class Outer:
+            @BoundInnerClass
+            class A:
+                def __init__(self, outer):
+                    self.outer = outer
+                    self.a_init = True
+
+            @BoundInnerClass
+            class B(bound_inner_base(A)):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.b_init = True
+
+            @BoundInnerClass
+            class C(bound_inner_base(B)):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.c_init = True
+
+        o1 = Outer()
+        o2 = Outer()
+
+        # Two-step: first rebase B, then rebase C onto the rebased B
+        rebased_B = rebase(o1.B, o2.A)
+        self.assertTrue(is_bound(rebased_B))
+        self.assertIs(bound_to(rebased_B), o2)
+        self.assertIs(unbound(rebased_B), Outer.B)
+
+        rebased_C = rebase(o1.C, rebased_B)
+        self.assertTrue(is_bound(rebased_C))
+        self.assertIs(bound_to(rebased_C), o2)
+        self.assertIs(unbound(rebased_C), Outer.C)
+
+        # Instantiate and verify
+        instance = rebased_C()
+        self.assertIs(instance.outer, o2)
+        self.assertTrue(instance.a_init)
+        self.assertTrue(instance.b_init)
+        self.assertTrue(instance.c_init)
+
+    def test_rebase_bic_renamed_descriptor_slow_path(self):
+        """rebase finds BIC by identity when descriptor name doesn't match class name."""
+        # Create a BIC
+        @BoundInnerClass
+        class Inner:
+            def __init__(self, outer):
+                self.outer = outer
+
+        inner_cls = Inner.__wrapped__
+
+        # Create Outer with descriptor under a DIFFERENT name than the class
+        class Outer:
+            pass
+
+        Outer.DifferentName = BoundInnerClass(inner_cls)
+
+        o1 = Outer()
+        o2 = Outer()
+
+        # Get bound version from o1 via the different name
+        bound_o1 = o1.DifferentName
+
+        # Rebase to o2 - this should trigger the slow path in rebase
+        # because inner_cls.__name__ is 'Inner' but the descriptor is under 'DifferentName'
+        result = rebase(bound_o1, o2.DifferentName)
+
+        # Verify the result is bound to o2
+        self.assertTrue(is_bound(result))
+        self.assertIs(bound_to(result), o2)
+
+        # Instantiate and verify
+        instance = result()
+        self.assertIs(instance.outer, o2)
+
+
+class TestBindableRepr(unittest.TestCase):
+    """Tests for custom repr on @Bindable class instances."""
+
+    def test_bindable_instance_has_custom_repr(self):
+        """Instances of bound @Bindable classes have informative repr."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        # Bindable class without custom __repr__
+        @Bindable
+        class Child(Outer.Parent):
+            def __init__(self, outer):
+                super().__init__()
+
+        o = Outer()
+        BoundChild = bind(Child, o)
+        instance = BoundChild()
+
+        r = repr(instance)
+        self.assertIn('Child', r)
+        self.assertIn('bound to', r)
+        self.assertIn('0x', r)  # hex address
+
+    def test_bindable_with_custom_repr_not_overridden(self):
+        """@Bindable class with custom __repr__ keeps its own repr."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        @Bindable
+        class Child(Outer.Parent):
+            def __init__(self, outer):
+                super().__init__()
+
+            def __repr__(self):
+                return 'custom child repr'
+
+        o = Outer()
+        BoundChild = bind(Child, o)
+        instance = BoundChild()
+
+        self.assertEqual(repr(instance), 'custom child repr')
+
+
+class TestGetOuterWeakrefInternal(unittest.TestCase):
+    """Tests for _get_outer_weakref internal function."""
+
+    def test_get_outer_weakref_with_regular_class(self):
+        """_get_outer_weakref returns None for regular classes."""
+        class Regular:
+            pass
+
+        result = _get_outer_weakref(Regular)
+        self.assertIsNone(result)
+
+    def test_get_outer_weakref_with_bound_class(self):
+        """_get_outer_weakref returns the weakref for bound classes."""
+
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer): # pragma: nocover
+                    self.outer = outer
+
+        o = Outer()
+        BoundInner = o.Inner
+
+        result = _get_outer_weakref(BoundInner)
+        self.assertIsNotNone(result)
+        self.assertIs(result(), o)
+
+
+def run_tests():
     bigtestlib.run(name="big.boundinnerclass", module=__name__)
 
 
