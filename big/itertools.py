@@ -35,25 +35,30 @@ export = mm.export
 @export
 class PushbackIterator:
     """
-    Wraps any iterator, letting you FIFO push items to be yielded.
+    Wraps any iterator, letting you push items to be yielded first.
 
-    PushbackIterator accepts one parameter, any iterable.  It also
-    accepts a value of None, which means the PushbackIterator is
-    created in an exhausted state.
+    The PushbackIterator constructor accepts one argument, any iterable.
+    When you iterate over the PushbackIterator instance, it yields values
+    from that iterable.  You may also pass in None, in which case the
+    PushbackIterator is created in an "exhausted" state.
 
     PushbackIterator also supports a push(o) method, which "pushes"
     values onto the iterator.  If any objects have been pushed onto
     the iterator, they're yielded first, before attempting to yield
     from the wrapped iterator.  Pushed values are yielded in
-    first-in-first-out order like a stack.
+    first-in-first-out order, like a stack.
 
     Example: you have a pushback iterator J, and you call J.push(3)
     followed by J.push('x').  The next two times you iterate over
-    J, it will yield 'x' followed by 3.
+    J, it will yield 'x', followed by 3.
 
-    When the wrapped iterable is exhausted (or if you passed in None to
-    the constructor) you can still call push to add new items, at which
+    When the wrapped iterable is exhausted--or if you passed in None to
+    the constructor--you can still call push to add new items, at which
     point the PushbackIterator can be iterated over again.
+
+    PushbackIterator also supports a next(default=None) method,
+    like Python's builtin next function.  It also supports __bool__,
+    returning True if it's exhausted.
 
     It's explicitly supported to push values that were never yielded by
     the wrapped iterator.  If you create J = PushbackIterator(range(1, 20)),
@@ -186,11 +191,11 @@ def iterator_context(iterator, start=0):
       iterator.   (The same as the 'o' value in the
       yielded tuple).
     * ctx.previous contains the previous value yielded, if
-      this is after the first time this iterator has yielded
-      a value.  If is_first is true, ctx.previous will be
-      undefined, and accessing it will raise AttributeError.
+      is_first is false.  If is_first is true, ctx.previous
+      will be undefined, and accessing it will raise
+      AttributeError.
     * ctx.next contains the next value to be yielded by this
-      iterator if there is one.  If is_last is True,
+      iterator if is_last is False.  If is_last is True,
       ctx.previous will be undefined, and accessing it will
       raise AttributeError.
     * ctx.index contains the index of this value.  The first
@@ -199,9 +204,9 @@ def iterator_context(iterator, start=0):
 
     ctx also supports two more attributes, ctx.length and
     ctx.countdown, but these require the "iterator" object
-    to support __len__.  If the iterator object doesn't
-    support __len__, these two attributes are not defined,
-    and accessing them will raise an exception.
+    to support __len__.  If the iterator doesn't support
+    __len__, these two attributes are not defined, and
+    accessing them will raise an exception.
 
     * ctx.countdown contains the "opposite" value of ctx.index.
       The values yielded by ctx.countdown are the same as
@@ -284,14 +289,16 @@ def iterator_filter(iterator,
     Wraps any iterator, filtering the values yielded.
 
     iterator_filter accepts one positional parameter, "iterator", and
-    ten keyword-only parameters which constitute tests for the values
-    called "rules".  iterator_filter is itself an iterator; it yields
-    values yielded by the iterator you pass in, but only if they pass
-    all the "rules" you supplied.
+    ten keyword-only parameters collectively called "rules" which
+    constitute tests applied to the values yielded by the iterator.
+    iterator_filter is itself an iterator; it yields the values
+    yielded by the iterator you pass in, but only if they pass
+    all the "rules" you specified as arguments to the constructor.
 
-    Generally, the rules are formed from three prefixes: "stop_at",
+    The rules are generally formed from three prefixes: "stop_at",
     "reject", and "only", as well as three suffixes, "_value", "_in",
     and "_predicate".  Here's a list of all the "rule" parameters:
+
         stop_at_value
         stop_at_in
         stop_at_predicate
@@ -306,8 +313,8 @@ def iterator_filter(iterator,
         only_predicate
 
     There are three categories of rule actions, differentiated by the
-    prefix of the rule's name.  They're examined in this order:
-    "stop_at", "reject", "only".
+    prefix of the rule's name.  They're examined in the order
+    "stop_at", "reject", and finally "only":
 
         "stop_at" rules cause iterator_filter to become exhausted.
         If a value yielded by iterator passes a "stop_at" rule,
@@ -337,7 +344,7 @@ def iterator_filter(iterator,
         A rule ending in "_in" means "pass if the value is in this argument".
         The test is performed using the "in" operator; the value passed in
         must therefore support the "in" operator (__contains__). For example,
-        "reject_in=(1, 2, 3)" would reject the value if it's 1, 2, or 3.
+        "reject_in={1, 2, 3}" would reject the value if it's 1, 2, or 3.
 
         A rule that ends in "_predicate" means "pass if calling this argument
         and passing in the value returns a true value".  The argument to this
@@ -349,8 +356,8 @@ def iterator_filter(iterator,
     "stop_at_count", an number.  This exhausts the iterator after
     yielding "stop_at_count" items.  If you pass in stop_at_count=5,
     the iterator becomes exhausted after yielding five values.
-    If "stop_at_count" is initially <= 0, the iterator starts out
-    in an exhausted state and does not yield any values.
+    If "stop_at_count" is initially <= 0, the iterator is initialized
+    in an exhausted state, and will never yield any values.
     """
 
     stop_at_value_active     = stop_at_value     is not undefined

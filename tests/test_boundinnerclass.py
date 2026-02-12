@@ -34,7 +34,7 @@ class TestBoundInnerClass(unittest.TestCase):
 
         o = Outer()
         BoundInner = o.Inner
-        self.assertIsSubclass(BoundInner, Outer.Inner)
+        self.assertTrue(issubclass(BoundInner, Outer.Inner))
 
         i = o.Inner()
         self.assertIs(i.outer, o)
@@ -174,7 +174,7 @@ class TestRebase(unittest.TestCase):
             def __init__(self, name):
                 self.name = name
 
-            def __repr__(self):
+            def __repr__(self): # pragma: nocover
                 return f"<Outer {self.name!r}>"
 
             @BoundInnerClass

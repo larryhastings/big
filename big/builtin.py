@@ -255,9 +255,12 @@ class ClassRegistry(dict):
     """
     A dict subclass with attribute-style access, useful as a class decorator.
 
-    Python's scoping rules make it clumsy to work with heavily-nested classes.
-    ClassRegistry makes it easy to reference base classes in a different class
-    scope for easier subclassing.  To use:
+    big's BoundInnerClass decorator encourages heavily-nested classes,
+    but Python's scoping rules make them clumsy to work with. ClassRegistry
+    makes it easy to reference base classes in a different class scope
+    for easier subclassing.
+
+    To use:
         1. Create a ClassRegistry object.
         2. Decorate the base classes you need with a call to that instance.
         3. Access those base classes as attributes on the ClassRegistry.
@@ -267,24 +270,24 @@ class ClassRegistry(dict):
     when you decorate the class.
 
     Example:
-        # 1. Create a registry
+        # Step 1: Create a registry, here named "base"
         base = ClassRegistry()
 
-        # 2. Register a class using the decorator
+        # Step 2: Register a class by using "base" as a decorator
         @base()
         class Dingus:
             pass
 
-        # 3. Access the class defined in 2. using an attribute on the registry
+        # Step 3: Access the class defined in step 2, as an attribute on "base"
         class Doodad(base.Dingus):
             pass
 
-        # Register a class using a custom name
+        # Step 4: Register a class using a custom name
         @base('MyName')
         class SomeClass:
             pass
 
-        # Access the class created in 4. using that custom name
+        # Step 5: Access the class created in step 4, via that custom name
         class Other(base.MyName):
             pass
 

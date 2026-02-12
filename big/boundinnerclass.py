@@ -37,55 +37,81 @@ mm = builtin.ModuleManager()
 export = mm.export
 
 
+# BOUNDINNERCLASS_OUTER_ATTR is stored in the outer *instance*,
 BOUNDINNERCLASS_OUTER_ATTR = '__boundinnerclass_outer__'
-BOUNDINNERCLASS_INNER_ATTR = '__boundinnerclass_inner__'
+# which is why you might need to add it to __slots__.
+BOUNDINNERCLASS_OUTER_SLOTS = (BOUNDINNERCLASS_OUTER_ATTR,)
 
 export('BOUNDINNERCLASS_OUTER_ATTR')
-export('BOUNDINNERCLASS_INNER_ATTR')
+export('BOUNDINNERCLASS_OUTER_SLOTS')
+
+
+# _BOUNDINNERCLASS_INNER_ATTR is stored in the inner *class*,
+# and classes always have a __dict__.  They never use __slots__.
+# So we don't have to worry about slots.
+_BOUNDINNERCLASS_INNER_ATTR = '__boundinnerclass_inner__'
+
 
 
 if _python_3_7_plus: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
         """
-        Returns the base class for declaring a subclass
-        of a bound inner class while still in the outer
-        class scope. Unnecessary in Python 3.7+, or when
-        the child class is defined outside the outer
-        class scope.
+        Returns the base class for declaring a subclass of a
+        bound inner class while still in the outer class scope.
+        Only needed for Python 3.6 compatibility.
 
-        class Outer:
-            @BoundInnerClass
-            class InnerParent:
-                ...
-            @BoundInnerClass
-            class InnerChild(bound_inner_base(InnerParent)):
-                ...
+        Example:
+
+            class Outer:
+                @BoundInnerClass
+                class InnerParent:
+                    ...
+                @BoundInnerClass
+                class InnerChild(InnerParent):
+                    ...
+
+        This would fail in Python 3.6.  If you change the
+        declaration of "InnerChild" to this:
+
+                class InnerChild(bound_inner_base(InnerParent)):
+
+        then it works.
+
+        Unnecessary in Python 3.7+, or when the child class
+        is defined after exiting the outer class scope.
         """
         return o
 else: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
         """
-        Returns the base class for declaring a subclass
-        of a bound inner class while still in the outer
-        class scope. Unnecessary in Python 3.7+, or when
-        the child class is defined outside the outer
-        class scope.
+        Returns the base class for declaring a subclass of a
+        bound inner class while still in the outer class scope.
+        Only needed for Python 3.6 compatibility.
 
-        class Outer:
-            @BoundInnerClass
-            class InnerParent:
-                ...
-            @BoundInnerClass
-            class InnerChild(bound_inner_base(InnerParent)):
-                ...
+        Example:
+
+            class Outer:
+                @BoundInnerClass
+                class InnerParent:
+                    ...
+                @BoundInnerClass
+                class InnerChild(InnerParent):
+                    ...
+
+        This would fail in Python 3.6.  If you change the
+        declaration of "InnerChild" to this:
+
+                class InnerChild(bound_inner_base(InnerParent)):
+
+        then it works.
+
+        Unnecessary in Python 3.7+, or when the child class
+        is defined after exiting the outer class scope.
         """
         return o.cls
 
-
-BOUNDINNERCLASS_OUTER_SLOTS = (BOUNDINNERCLASS_OUTER_ATTR,)
-export('BOUNDINNERCLASS_OUTER_SLOTS')
 
 
 def _make_bound_signature(original_init):
@@ -313,7 +339,7 @@ def _make_bound_class(unbound_cls, outer, base, extra_base=None):
         Wrapper.__annotations__ = unbound_cls.__annotations__
 
     # Mark as a bound inner class with info about its binding
-    setattr(Wrapper, BOUNDINNERCLASS_INNER_ATTR, (unbound_cls, outer_weakref))
+    setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (unbound_cls, outer_weakref))
 
     # Set proper signature (without 'outer' param since it's injected)
     bound_signature = _make_bound_signature(unbound_cls.__init__)
@@ -337,7 +363,7 @@ class _BoundInnerClassBase(_ClassProxy):
         super().__init__(wrapped)
         # Mark the wrapped class as a bindable inner class
         # (unbound_class, outer_weakref) - outer_weakref is None for unbound
-        setattr(wrapped, BOUNDINNERCLASS_INNER_ATTR, (wrapped, None))
+        setattr(wrapped, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, None))
 
     def __get__(self, outer, outer_class):
         # Accessed via class (Outer.Inner) - return unwrapped class
@@ -394,9 +420,11 @@ class BoundInnerClass(_BoundInnerClassBase):
     """
     Class decorator for nested classes, binding them like methods.
 
-    In Python, if you access a function defined inside a class via an
-    instance of that class, you get a "method", which means the instance
-    of the class is passed in automatically:
+    In Python, if you access a function defined inside a class via
+    an instance of that class, this "binds" the function to that
+    instance, and the object you get back is called a "method".
+    When you call the method, that instance is passed in automatically
+    as the first parameter, which by convention we call "self":
 
         class Outer:
             def fn(self):
@@ -406,13 +434,14 @@ class BoundInnerClass(_BoundInnerClassBase):
         o.fn()
 
     Here, o.fn is a bound function, and "o" is automatically
-    passed in to fn when o.fn is called.  We call that a "method".
+    passed in to fn when o.fn is called.
 
-    The BoundInnerClass decorator adds this feature for classes.  When
-    accessing an inner class via an instance of the outer class,
-    this decorator "binds" the inner class to that instance.
+    The BoundInnerClass decorator adds this feature for classes.
+    When accessing an inner class via an instance of the outer
+    class, this decorator "binds" the inner class to that instance.
     This changes the signature of the inner class's __init__;
-    now the "outer" class's instance is passed in automatically:
+    now the "outer" class's instance is passed in automatically,
+    as the *second* parameter:
 
         class Outer:
             @BoundInnerClass
@@ -423,8 +452,11 @@ class BoundInnerClass(_BoundInnerClassBase):
         o = Outer()
         i = o.Inner()
 
-    Here, i is an instance of Inner, and "o" was passed in automatically
-    as the first argument to Inner.__init__.
+    Here, i is an instance of Inner.  It was passed automatically
+    as the first argument to Inner.__init__, which by convention we
+    call "self".  But "o" was *also* passed in automatically as the
+    *second* argument to Inner.__init__, which by convention we
+    call "outer".
 
     @BoundInnerClass also lets an inner class inherit from another
     bound inner class.  These classes will be bound to the same
@@ -446,13 +478,11 @@ class BoundInnerClass(_BoundInnerClassBase):
                     # all we need to do is call super().__init__()
                     super().__init__()
 
-    Note: The "outer" class of a BIC uses a special attribute to
-    cache bound inner classes.  If that outer class uses __slots__,
-    it must also include the special attribute name inside the slots,
-    available in the constant BOUNDINNERCLASS_OUTER_SLOTS.
-
-    For convenience, this constant already contains
-    BOUNDINNERCLASS_OUTER_SLOTS, like so:
+    Note for slots users: The "outer" class of a BIC uses a special
+    attribute to cache bound inner classes.  If that outer class
+    uses __slots__, it must add a slot for BIC's special attribute.
+    We provide a predefined constant you can simply "add" to your
+    slots tuple, BOUNDINNERCLASS_OUTER_SLOTS.  Example:
 
         class Foo:
             __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
@@ -460,9 +490,6 @@ class BoundInnerClass(_BoundInnerClassBase):
             @BoundInnerClass
             class Bar:
                 ...
-
-    Bound classes themselves have a __bound_inner_class_inner__
-    attribute containing a 2-tuple of (unbound_class, outer_weakref).
 
     If you support Python 3.6, please see the bound_inner_base
     function.
@@ -487,6 +514,11 @@ class UnboundInnerClass(_BoundInnerClassBase):
     is a subclass of B, such that issubclass(S, B) returns True,
     class S must be decorated with either @BoundInnerClass
     or @UnboundInnerClass.
+
+    Accessing an UnboundInnerClass through an instance of the
+    outer class still gives you a "bound" class; although this
+    specific class won't get "outer" passed in automatically,
+    base classes that are decorated with BoundInnerClass *will*.
     """
 
     __slots__ = ()
@@ -506,7 +538,7 @@ class UnboundInnerClass(_BoundInnerClassBase):
             Wrapper.__annotations__ = cls.__annotations__
 
         # Mark as a bound inner class with info about its binding
-        setattr(Wrapper, BOUNDINNERCLASS_INNER_ATTR, (cls, outer_weakref))
+        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (cls, outer_weakref))
 
         return Wrapper
 
@@ -517,8 +549,8 @@ def Bindable(cls):
     Mark a class as participating in the bound inner class system.
 
     Use this decorator for classes defined outside a class body that
-    inherit from a @BoundInnerClass class. Unlike @BoundInnerClass,
-    this doesn't create a descriptor - the class remains a normal class.
+    inherit from a @BoundInnerClass class.  Unlike @BoundInnerClass,
+    this doesn't create a descriptor--the class remains a normal class.
 
     To bind a @Bindable class to an outer instance, use the bind() function.
 
@@ -532,20 +564,17 @@ def Bindable(cls):
         @Bindable
         class Child(Outer.Inner):
             def __init__(self, outer):
-                super().__init__()  # outer is injected automatically
+                super().__init__()
+                assert self.outer is outer
 
         o = Outer()
         BoundChild = bind(Child, o)
         instance = BoundChild()
         assert instance.outer is o
-
-    Note: @Bindable classes should NOT pass outer to super().__init__().
-    The binding system handles outer injection automatically, just like
-    @BoundInnerClass.
     """
     # Mark the class as participating in the bound inner class system
     # (unbound_class, outer_weakref) - outer_weakref is None for unbound
-    setattr(cls, BOUNDINNERCLASS_INNER_ATTR, (cls, None))
+    setattr(cls, _BOUNDINNERCLASS_INNER_ATTR, (cls, None))
     return cls
 
 
@@ -557,8 +586,9 @@ def unbound(cls):
     If cls is a bound inner class, returns the original unbound class.
     If cls is already unbound (or not a bindable inner class), returns cls.
 
-    Raises ValueError if cls inherits directly from a bound class,
-    since such classes have no unbound version.
+    Raises ValueError if cls inherits *directly* from a bound class
+    (e.g. "class Child(o.Inner)"), since such classes have no unbound
+    version.
 
     Example:
 
@@ -575,7 +605,7 @@ def unbound(cls):
     """
     if not isinstance(cls, type):
         raise TypeError(f"unbound() argument must be a class, not {type(cls).__name__}")
-    info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
     if info is not None:
         return info[0]
     # Check if cls inherits directly from a bound class
@@ -595,7 +625,7 @@ def _get_outer_weakref(cls):
     Returns None if cls is not a bound class.
     """
     # Check cls.__dict__ directly, not inherited attributes
-    info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
     if info is None:
         return None
     return info[1]
@@ -613,7 +643,7 @@ def is_bindable(cls):
     """
     if not isinstance(cls, type):
         return False
-    return BOUNDINNERCLASS_INNER_ATTR in cls.__dict__
+    return _BOUNDINNERCLASS_INNER_ATTR in cls.__dict__
 
 
 @export
@@ -621,14 +651,16 @@ def is_bound(cls):
     """
     Return True if cls is a bound inner class.
 
-    A class is bound if it's a bindable inner class that has been
-    bound to a specific outer instance.
+    A class is bound if it's a bindable inner class
+    that has been bound to a specific outer instance.
+    (Said another way: is_bound(cls) returns True if
+    bound_to(cls) returns non-None.)
 
     Returns False for non-participating classes.
     """
     if not isinstance(cls, type):
         return False
-    info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
     if info is None:
         return False
     outer_weakref = info[1]
@@ -749,12 +781,12 @@ def bind(cls, outer):
     """
     Bind a class to an outer instance.
 
-    cls must be a bindable inner class (decorated with @BoundInnerClass,
-    @UnboundInnerClass, or @Bindable).  outer should be an instance of
-    the outer class, or None.
+    cls must be a bindable inner class--a class decorated with
+    @BoundInnerClass, @UnboundInnerClass, or @Bindable.
+    outer should be an instance of the outer class, or None.
 
-    If outer is an instance, returns the bound version of cls
-    for that instance.
+    If outer is an instance, returns the bound version
+    of cls for that instance.
 
     If outer is None, returns the unbound version of cls.
 
@@ -771,8 +803,9 @@ def bind(cls, outer):
         instance = BoundInner()  # o is passed in automatically
         assert instance.outer is o
 
-        # Unbind by passing None
+        # Unbind by passing in None
         assert bind(BoundInner, None) is Outer.Inner
+        assert bind(BoundInner, None) is unbound(BoundInner)
     """
     if outer is None:
         return unbound(cls)
@@ -843,15 +876,15 @@ def bound_to(cls):
     Return the outer instance that cls is bound to, or None.
 
     If cls is a bindable inner class that was bound to an outer
-    instance, returns that outer instance. Otherwise returns None.
+    instance, returns that outer instance.  Otherwise returns None.
 
     BoundInnerClass doesn't keep strong references to outer instances.
-    If cls was bound to an object that has since been destroyed
-    (garbage collected), bound_to(cls) will return None.
+    If cls was bound to an object that has since been destroyed,
+    bound_to(cls) will return None.
     """
     if not isinstance(cls, type):
         return None
-    info = cls.__dict__.get(BOUNDINNERCLASS_INNER_ATTR)
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
     if info is None:
         return None
     outer_weakref = info[1]
@@ -866,12 +899,11 @@ def type_bound_to(instance):
     Return the outer instance that instance's type is bound to, or None.
 
     If type(instance) is a bindable inner class that was bound to an
-    outer instance, returns that outer instance. Otherwise returns None.
+    outer instance, returns that outer instance.  Otherwise returns None.
 
     BoundInnerClass doesn't keep strong references to outer instances.
     If type(instance) was bound to an object that has since been
-    destroyed (garbage collected), type_bound_to(instance) will
-    return None.
+    destroyed, type_bound_to(instance) will return None.
     """
     return bound_to(type(instance))
 

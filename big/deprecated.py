@@ -50,7 +50,7 @@ except ImportError: # pragma: no cover
 # This is the old Log class.  big 0.13 added a new Log
 # that's way way cooler.  You should definitely use that one
 # instead.  This old Log class is deprecated, and will be
-# removed no earlier than January 2027.
+# removed no earlier than March 2027.
 @export
 class Log:
     """
