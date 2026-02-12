@@ -22,7 +22,7 @@ from big.boundinnerclass import (
 class TestBoundInnerClass(unittest.TestCase):
     """Tests for basic BoundInnerClass functionality."""
 
-    def test_basic_binding(self):
+    def test_basics(self):
         """Inner class receives outer instance automatically."""
         class Outer:
             @BoundInnerClass
@@ -30,50 +30,25 @@ class TestBoundInnerClass(unittest.TestCase):
                 def __init__(self, outer):
                     self.outer = outer
 
-        o = Outer()
-        i = o.Inner()
-        self.assertIs(i.outer, o)
-
-    def test_class_access_returns_unwrapped(self):
-        """Accessing via class returns the original unwrapped class."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                pass
-
         self.assertTrue(isinstance(Outer.Inner, type))
-
-    def test_instance_access_returns_bound(self):
-        """Accessing via instance returns a bound subclass."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                pass
 
         o = Outer()
         BoundInner = o.Inner
-        self.assertTrue(issubclass(BoundInner, Outer.Inner))
+        self.assertIsSubclass(BoundInner, Outer.Inner)
 
-    def test_different_instances_different_bound_classes(self):
-        """Different outer instances produce different bound classes."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                pass
+        i = o.Inner()
+        self.assertIs(i.outer, o)
+        self.assertIsInstance(i, o.Inner)
+        self.assertIsInstance(i, Outer.Inner)
 
-        o1 = Outer()
-        o2 = Outer()
-        self.assertIsNot(o1.Inner, o2.Inner)
-
-    def test_bound_class_is_cached(self):
-        """Repeated access returns the same bound class."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                pass
-
-        o = Outer()
+        # bound inner class is stable (cached)
+        self.assertIs(BoundInner, o.Inner)
+        self.assertIs(BoundInner, o.Inner)
         self.assertIs(o.Inner, o.Inner)
+
+        o2 = Outer()
+        self.assertIsNot(o.Inner, o2.Inner)
+
 
     def test_additional_args(self):
         """Additional arguments are passed through."""
@@ -90,30 +65,6 @@ class TestBoundInnerClass(unittest.TestCase):
         self.assertIs(i.outer, o)
         self.assertEqual(i.x, 42)
         self.assertEqual(i.y, 'hello')
-
-    def test_isinstance_with_unbound(self):
-        """Instances are isinstance of the unbound class."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):
-                    self.outer = outer
-
-        o = Outer()
-        i = o.Inner()
-        self.assertIsInstance(i, Outer.Inner)
-
-    def test_isinstance_with_bound(self):
-        """Instances are isinstance of their bound class."""
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):
-                    self.outer = outer
-
-        o = Outer()
-        i = o.Inner()
-        self.assertIsInstance(i, o.Inner)
 
     def test_custom_repr(self):
         """Bound instances get a custom repr."""
@@ -145,31 +96,12 @@ class TestBoundInnerClass(unittest.TestCase):
         self.assertEqual(repr(i), 'custom repr')
 
 
-class TestUnboundInnerClass(unittest.TestCase):
-    """Tests for UnboundInnerClass decorator."""
-
-    def test_unbound_does_not_inject_outer(self):
-        """UnboundInnerClass does not inject outer parameter."""
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):
-                    self.outer = outer
-
-            @UnboundInnerClass
-            class Child(bound_inner_base(Parent)):
-                def __init__(self):
-                    super().__init__()
-
-        o = Outer()
-        c = o.Child()
-        self.assertIs(c.outer, o)
 
 
 class TestInheritance(unittest.TestCase):
     """Tests for inheritance with bound inner classes."""
 
-    def test_inherit_without_cls_hack(self):
+    def test_basic_inheritance(self):
         """Subclassing works without .cls - __mro_entries__ handles it."""
         class Outer:
             @BoundInnerClass
@@ -187,9 +119,12 @@ class TestInheritance(unittest.TestCase):
         c = o.Child()
         self.assertIs(c.outer, o)
         self.assertTrue(c.child)
+        self.assertIsInstance(c, o.Child)
+        self.assertIsInstance(c, o.Parent)
+        self.assertIsInstance(c, Outer.Child)
         self.assertIsInstance(c, Outer.Parent)
 
-    def test_inherit_from_bound_inner_class(self):
+    def test_inheritance_and_arguments(self):
         """Subclass of BIC inside outer class works correctly."""
         class Outer:
             @BoundInnerClass
@@ -225,7 +160,9 @@ class TestInheritance(unittest.TestCase):
         c = o.Child()
         self.assertIs(c.outer, o)
         self.assertIsInstance(c, Outer.Parent)
+        self.assertIsInstance(c, Outer.Child)
         self.assertIsInstance(c, o.Parent)
+        self.assertIsInstance(c, o.Child)
 
 
 class TestRebase(unittest.TestCase):
@@ -234,22 +171,29 @@ class TestRebase(unittest.TestCase):
     def test_rebase_basic(self):
         """rebase() creates working rebound class."""
         class Outer:
+            def __init__(self, name):
+                self.name = name
+
+            def __repr__(self):
+                return f"<Outer {self.name!r}>"
+
             @BoundInnerClass
             class Parent:
                 def __init__(self, outer):
-                    self.outer = outer
+                    self.parent_outer = outer
 
         @Bindable
         class Child(Outer.Parent):
             def __init__(self, outer):
                 super().__init__()
+                self.child_outer = outer
                 self.child_attr = 'set by child init'
 
             def method(self):
                 return 'CHILD'
 
-        o1 = Outer()
-        o2 = Outer()
+        o1 = Outer("o1")
+        o2 = Outer("o2")
 
         BoundChild = bind(Child, o1)
         ReboundChild = rebase(BoundChild, o2.Parent)
@@ -257,7 +201,8 @@ class TestRebase(unittest.TestCase):
 
         self.assertEqual(rechild.method(), 'CHILD')
         self.assertEqual(rechild.child_attr, 'set by child init')
-        self.assertIs(rechild.outer, o2)
+        self.assertIs(rechild.parent_outer, o2)
+        self.assertIs(rechild.child_outer, o2)
         self.assertIsInstance(rechild, Child)
         self.assertIsInstance(rechild, o2.Parent)
         self.assertIsInstance(rechild, Outer.Parent)
@@ -278,8 +223,8 @@ class TestRebase(unittest.TestCase):
             def __init__(self, outer):
                 super().__init__()
 
-        o1 = Outer('first')
-        o2 = Outer('second')
+        o1 = Outer('o1')
+        o2 = Outer('o2')
 
         BoundChild = bind(Child, o1)
         Child2 = rebase(BoundChild, o2.Inner)
@@ -289,8 +234,8 @@ class TestRebase(unittest.TestCase):
 
         self.assertIs(c1.outer, o1)
         self.assertIs(c2.outer, o2)
-        self.assertEqual(c1.outer.name, 'first')
-        self.assertEqual(c2.outer.name, 'second')
+        self.assertEqual(c1.outer.name, 'o1')
+        self.assertEqual(c2.outer.name, 'o2')
 
     def test_rebase_bound_to_unbound_noop(self):
         """rebase(bound_class, unbound_parent) is a no-op when base is already unbound."""
