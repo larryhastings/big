@@ -51,15 +51,16 @@ _delimiter_map = {
 @export
 class Interpolation:
     """
-    Represents a {{ }} expression interpolation
-    in a parsed template.  See big.parse_template_string.
+    Represents a {{ }} expression interpolation from a parsed template.
 
     The expression attribute contains the text of the
     expression.  The filters attribute is a list, containing
-    the text of all filter expressions (if any).  If the
+    the text of each filter expression (if any).  If the
     expression ended with '=', the debug attribute will contain
     the text of the expression along with the '=' and all
     whitespace, otherwise it will be an empty string.
+
+    See big.template.parse_template_string.
     """
     def __init__(self, expression, *filters, debug=''):
         self.expression = expression
@@ -83,12 +84,13 @@ class Interpolation:
 @export
 class Statement:
     """
-    Represents a {% %} statement interpolation
-    in a parsed template.  See big.parse_template_string.
+    Represents a {% %} statement interpolation from a parsed template.
 
     The statement attribute contains the text of the
     statement, including all leading and trailing
     whitespace.
+
+    See big.template.parse_template_string.
     """
 
     def __init__(self, statement):
@@ -296,13 +298,12 @@ def parse_template_string(s, *,
     """
     Parses a string containing simple markup, yielding its components.
 
-    The markup is patterened after Django Templates and Jinja.
+    The markup is patterned after Django Templates and Jinja.
     parse_template_string supports the following delimiters:
         * {{ ... }} represents an "expression", a Python expression.
           A template library generally calls eval() on this string
           and replaces the text of the expression with the resulting
-          value.
-            * The expression can also specify "filters".
+          value.  The expression can also specify "filters".
         * {% ... %} represents a "statement", a Python (or other)
           statement.  A template library generally parses the text
           of the statement and performs the action specified, like
