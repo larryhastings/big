@@ -1927,7 +1927,7 @@ class StateMachine:
             ...
 
     @BoundInnerClass
-    class Off(State.cls):
+    class Off(State):
         def on_enter(self):
             print("off!")
 
@@ -1936,7 +1936,7 @@ class StateMachine:
             sm.state = sm.On() # sm.state is the accessor
 
     @BoundInnerClass
-    class On(State.cls):
+    class On(State):
         def on_enter(self):
             print("on!")
 
@@ -6260,9 +6260,10 @@ When it's called, `o` is magically passed in to `outer`!
 Thanks, [`BoundInnerClass`](#boundinnerclasscls)!  You've saved the day!
 
 Decorating an inner class like this always adds a second positional
-parameter, after `self`.  And, like `self`, you don't have
-to use the name `outer`, you can use any name you like.
-(Although it's probably a good idea, for consistency's sakes.)
+parameter, after `self`.  And, like `self`, you don't *have*
+to use the name `outer`; you can use any name you like.
+(Although it's probably a good idea, for consistency's sakes.
+We'll always use the name `outer` in this documentation.)
 
 #### Inheritance
 
@@ -6271,34 +6272,27 @@ It's not all that difficult, you merely need to obey the following rules:
 
 1. *A bound inner class can inherit normally from any unbound class.*
 
-2. *To subclass from a bound inner class while still inside the outer
-class scope, or when referencing the inner class from the outer class
-(as opposed to an instance of the outer class), you must actually
-subclass or reference `classname.cls`.*  This is because inside the
-outer class, the "class" you see is actually an instance of a
-[`BoundInnerClass`](#boundinnerclasscls) object.
-
-3. *All classes that inherit from a bound inner class must always call the
+2. *All classes that inherit from a bound inner class must always call the
 superclass's `__init__`. You don't need to pass in the `outer` parameter;
 it'll be automatically passed in to the superclass's `__init__` as before.*
 
-4. **Directly** *inheriting from a bound inner class is unsupported.*
+3. **Directly** *inheriting from a* **bound** *inner class is unsupported.*
 If `o` is an instance of `Outer`, and `Outer.Inner` is an inner class
 decorated with `@BoundInnerClass`, don't write a class that directly inherits
 from `o.Inner` (e.g. `class Mistake(o.Inner)`).  You should always inherit
 from the unbound version (e.g. `class GotItRight(Outer.Inner)`).
 
-5. *An inner class that inherits from a bound inner class, and which also
+4. *An inner class that inherits from a bound inner class, and which also
 wants to be bound to the outer object, should be decorated with
 [`BoundInnerClass`](#boundinnerclasscls).*
 
-6. *An inner class that inherits from a bound inner class, but doesn't
+5. *An inner class that inherits from a bound inner class, but doesn't
 want to be bound to the outer object, should be decorated with
 [`UnboundInnerClass`](#unboundinnerclasscls).*
 
 Restating the last two rules: every class that descends from any
 [`BoundInnerClass`](#boundinnerclasscls)
-should be decorated with either
+must be decorated with either
 [`BoundInnerClass`](#boundinnerclasscls)
 or
 [`UnboundInnerClass`](#unboundinnerclasscls).
@@ -6314,41 +6308,40 @@ from big import BoundInnerClass, UnboundInnerClass
 class Outer(object):
 
     @BoundInnerClass
-    class Inner(object):
+    class Parent(object):
         def __init__(self, outer):
             self.outer = outer
 
     @UnboundInnerClass
-    class ChildOfInner(Inner.cls):
+    class Child(Parent):
         def __init__(self):
             super().__init__()
 
 o = Outer()
-i = o.ChildOfInner()
+i = o.Child()
 ```
 
 We followed the rules:
 
-* `Inner` inherits from object; since object isn't a bound inner class,
-  there are no special rules about inheritance `Inner` needs to obey.
-* `ChildOfInner` inherits from `Inner.cls`, not `Inner`.
-* Since `ChildOfInner` inherits from a
+* `Outer.Parent` inherits from object; since object isn't a bound inner class,
+  there are no special rules about inheritance `Outer.Parent` needs to obey.
+* Since `Outer.Child` inherits from a
   [`BoundInnerClass`](#boundinnerclasscls),
   it must be
   decorated with either [`BoundInnerClass`](#boundinnerclasscls)
   or [`UnboundInnerClass`](#unboundinnerclasscls).
   It doesn't want the outer object passed in, so it's decorated
   with [`UnboundInnerClass`](#unboundinnerclasscls).
-* `ChildOfInner.__init__` calls `super().__init__`.
+* `Child.__init__` calls `super().__init__`.
 
-Note that, because `ChildOfInner` is decorated with
+Note that, because `Child` is decorated with
 [`UnboundInnerClass`](#unboundinnerclasscls),
 it doesn't take an `outer` parameter.  Nor does it pass in an `outer`
 argument when it calls `super().__init__`.  But when the constructor for
-`Inner` is called, the correct `outer` parameter is passed in--like magic!
+`Parent` is called, the correct `outer` parameter is passed in--like magic!
 Thanks again, [`BoundInnerClass`](#boundinnerclasscls)!
 
-If you wanted `ChildOfInner` to also get the outer argument passed in to
+If you wanted `Child` to also get the outer argument passed in to
 its `__init__`, just decorate it with [`BoundInnerClass`](#boundinnerclasscls)
 instead of
 [`UnboundInnerClass`](#unboundinnerclasscls),
@@ -6360,21 +6353,21 @@ from big import BoundInnerClass
 class Outer(object):
 
     @BoundInnerClass
-    class Inner(object):
+    class Parent(object):
         def __init__(self, outer):
             self.outer = outer
 
     @BoundInnerClass
-    class ChildOfInner(Inner.cls):
+    class Child(Parent):
         def __init__(self, outer):
             super().__init__()
             assert self.outer == outer
 
 o = Outer()
-i = o.ChildOfInner()
+i = o.Child()
 ```
 
-Again, `ChildOfInner.__init__` doesn't need to explicitly
+Again, `Child.__init__` doesn't need to explicitly
 pass in `outer` when calling `super.__init__`.
 
 You can see more complex examples of using inheritance with
@@ -6385,38 +6378,32 @@ in the **big** test suite.
 #### Miscellaneous notes
 
 * If you refer to a bound inner class directly from the outer *class,*
-  rather than using the outer *instance,* you get the original class.
-  This ensures that references to `Outer.Inner` are consistent; this
-  class is also a base class of all the bound inner classes. Additionally,
-  if you attempt to construct an instance of an unbound `Outer.Inner`
-  class without referencing it via an instance, you must pass in the
-  outer parameter by hand--just like you'd have to pass in the `self`
-  parameter by hand when calling a method on the *class itself* rather
-  than on an *instance* of the class.
+  rather than using the outer *instance,* you get the original (unbound)
+  class. This ensures that references to `Outer.Inner` are consistent;
+  this class is also a base class of all the bound inner classes.
+  Additionally, if you attempt to construct an instance of an unbound
+  `Outer.Inner` class without referencing it via an instance, you must
+  pass in the outer parameter by hand--just like you'd have to pass in
+  the `self` parameter by hand when calling a method via the
+  *class itself* rather than via an *instance* of the class.
 
-* If you refer to a bound inner class from an outer instance,
-  you get a subclass of the original class.
+* A bound inner class is a *subclass* of the original (unbound) class.
 
-* Bound classes are cached in the outer object, which both provides
-  a small speedup and ensures that `isinstance` relationships are
-  consistent.
+* Bound inner classes are cached in the outer object, which both
+  provides a small speedup and ensures that `isinstance`
+  relationships are consistent.  This is an explicit feature, and
+  you're permitted to rely on it.
 
-* You must not rename inner classes decorated with either
-  [`BoundInnerClass`](#boundinnerclasscls)
-  or [`UnboundInnerClass`](#unboundinnerclasscls)!
-  The implementation of
-  [`BoundInnerClass`](#boundinnerclasscls)
-  looks up
-  the bound inner class in the outer object by name in several places.
-  Adding aliases to bound inner classes is harmless, but the original
-  attribute name must always work.
+   * If you use slots on your outer class, you must add a slot for
+     BoundInnerClass to store its cache.  Just add BOUNDINNERCLASS_OUTER_SLOTS
+     to your slots tuple, like so: `__slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS`
 
-* Bound inner classes from different objects are different classes.
-  This is symmetric with bound methods; if you have two objects
+* Bound inner classes bound to different outer instances are different
+  classes. This is symmetric with methods; if you have two objects
   `a` and `b` that are instances of the same class,
   `a.BoundInnerClass != b.BoundInnerClass`, just as `a.method != b.method`.
 
-* The binding only goes one level deep; if you had an inner class `C`
+* Binding only goes one level deep.  If you had an inner class `C`
   inside another inner class `B` inside a class `A`, the constructor
   for `C` would be called with the `B` object, not the `A` object.
 
@@ -6426,19 +6413,18 @@ in the **big** test suite.
   the `B` object but not the `A` object. When `D` calls `super().__init__`
   it'll have to fill in the `outer` parameter by hand.
 
-* There's a race condition in the implementation: if you access a
-  bound inner class through an outer instance from two separate threads,
-  and the bound inner class was not previously cached, the two threads
-  may get different (but equivalent) bound inner class objects, and only
-  one of those instances will get cached on the outer object.  This could
-  lead to confusion and possibly cause bugs. For example, you could have
-  two objects that would be considered equal if they were instances of
-  the same bound inner class, but would not be considered equal if
-  instantiated by different instances of that same bound inner class.
-  There's an easy workaround for this problem: access the bound inner
-  class from the `__init__` of the outer class, which should allow
-  the code to cache the bound inner class instance before a second
-  thread could ever get a reference to the outer object.
+* The rewrite of bound inner classes that shipped with big 0.13 removed
+  some old provisos:
+
+  * You may now rename your inner classes, even after
+    decorating them with `@BoundInnerClass` (or `@UnboundInnerClass`).
+    In previous versions this would break some internal mechanisms,
+    but renaming your classes is now explicitly supported behavior.
+  * The race condition around creating and caching the bound version
+    of an inner class from multiple threads has been prevented, by
+    adding just a little internal locking.  Bound inner classes doesn't
+    need to lock very often, so the performance cost is negligible.
+
 
 </dd></dl>
 
@@ -6474,6 +6460,11 @@ It's been a whole year... and I've been busy!
   (and it's a *massive* upgrade!).  `big.lines` will
   move to the `deprecated` module no sooner than
   November 2025, and will be removed no sooner than May 2026.
+* Added `strip_indents` and `strip_line_comments` to *big.text*.
+  These provide the same functionality as the old `lines_strip_indent`
+  and `lines_strip_line_comments` line modifier functions,
+  but now operate on iterables of strings instead of
+  "lines" iterators.
 * Added `parse_template_string` and `eval_template_string`
   to new module *big.template*.  `parse_template_string` parses a string
   containing Jinja-like interpolations, and returns an
@@ -6482,8 +6473,14 @@ It's been a whole year... and I've been busy!
   `eval_template_string` calls `parse_template_string` to
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
-* Rewrote `BoundInnerClass`.  You no longer need the `parent.cls`
-  hack!
+* Rewrote `BoundInnerClass`.  This removes some old concerns:
+    * You no longer need the `parent.cls` hack!
+    * `BoundInnerClass` now relies on comparison by identity
+      instead of by name, which means you may now rename
+      your inner classes to your hearts' content.
+   * `BoundInnerClass` now has some locking, to prevent
+     a race condition when caching the same bound inner class
+     created simultaneously in multiple threads.
 * Added new functions to the *big.boundinnerclass* module:
     * `bind` binds a child class to an outer instance.
     * `unbound` returns the unbound base class
@@ -6527,14 +6524,14 @@ It's been a whole year... and I've been busy!
   and supports a "threaded" mode where logging calls
   are 5x faster than calling `print`!
   * I added a backwards-compatible `OldLog` to *big.log*
-    in case anybody was using the old `Log` class.  This
+    in case anybody is using the old `Log` class.  This
     provides the API and functionality of the old `Log`
     class, but is reimplemented on top of the new `Log`.
     Hopefully the way I did it will ease your transition
     to the obviously-superior new `Log`.  The old `Log`
     is also available unchanged in the *big.deprecated*
     module.  `OldLog` and the old `Log`will both be
-    removed someday, no earlier than January 2027.
+    removed someday, no earlier than March 2027.
 * Added `ModuleManager` to *big.builtin*.
   `ModuleManager` helps you manage a module's namespace,
   making it easy to populate `__all__` and clean up

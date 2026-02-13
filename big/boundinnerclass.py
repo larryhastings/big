@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import inspect
 import sys
+import threading
 import weakref
 
 _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
@@ -227,12 +228,14 @@ class _BoundInnerClassCache:
     Cache for bound inner classes, stored on outer instances.
 
     Handles key management and stale entry detection internally.
+    Thread-safe: all operations are protected by an internal lock.
     """
 
-    __slots__ = ('_cache',)
+    __slots__ = ('_cache', '_lock')
 
     def __init__(self):
         self._cache = {}
+        self._lock = threading.Lock()
 
     def get(self, cls):
         """
@@ -241,39 +244,66 @@ class _BoundInnerClassCache:
         cls should be the unbound class being bound.
         """
         key = (id(cls), cls.__name__)
-        entry = self._cache.get(key)
-        if entry is None:
-            return None
-        bound_class, cls_ref = entry
-        if cls_ref() is not cls:
-            # Stale entry - cls was GC'd and id reused
-            del self._cache[key]
-            return None
-        return bound_class
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry is None:
+                return None
+            bound_class, cls_ref = entry
+            if cls_ref() is not cls:
+                # Stale entry - cls was GC'd and id reused
+                del self._cache[key]
+                return None
+            return bound_class
 
     def set(self, cls, bound_class):
         """
-        Cache bound_class for cls.
+        Cache bound_class for cls, or return existing cached value.
 
         cls should be the unbound class being bound.
+
+        If cls is already cached (and not stale), returns the existing
+        cached value instead of storing the new one. This ensures that
+        concurrent threads will all get the same bound class.
+
+        Returns the cached bound class (either the existing one or the
+        newly stored one).
         """
         key = (id(cls), cls.__name__)
-        self._cache[key] = (bound_class, weakref.ref(cls))
+        with self._lock:
+            # Check if already cached (double-check pattern for thread safety)
+            entry = self._cache.get(key)
+            if entry is not None:
+                existing_class, cls_ref = entry
+                if cls_ref() is cls:
+                    # Already cached and not stale - return existing
+                    return existing_class
+                # Stale entry - will be replaced below
 
+            self._cache[key] = (bound_class, weakref.ref(cls))
+            return bound_class
+
+
+_get_cache_lock = threading.Lock()
 
 def _get_cache(outer):
     """Get or create the bound inner classes cache on outer."""
     cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
-    if cache is None:
-        cache = _BoundInnerClassCache()
-        try:
-            object.__setattr__(outer, BOUNDINNERCLASS_OUTER_ATTR, cache)
-        except AttributeError:
-            raise TypeError(
-                f"Cannot cache bound inner class on {type(outer).__name__}. "
-                f"Add '{BOUNDINNERCLASS_OUTER_ATTR}' to __slots__ (or remove '__slots__')."
-            ) from None
-    return cache
+    if cache is not None:
+        return cache
+
+    with _get_cache_lock:
+        # Double-check after acquiring lock
+        cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
+        if cache is None:
+            cache = _BoundInnerClassCache()
+            try:
+                object.__setattr__(outer, BOUNDINNERCLASS_OUTER_ATTR, cache)
+            except AttributeError:
+                raise TypeError(
+                    f"Cannot cache bound inner class on {type(outer).__name__}. "
+                    f"Add '{BOUNDINNERCLASS_OUTER_ATTR}' to __slots__ (or remove '__slots__')."
+                ) from None
+        return cache
 
 
 def _make_bound_class(unbound_cls, outer, base, extra_base=None):
@@ -350,6 +380,19 @@ def _make_bound_class(unbound_cls, outer, base, extra_base=None):
     return Wrapper
 
 
+def _unbound(cls):
+    """
+    Internal version of unbound() that doesn't raise on non-bindable classes.
+    Returns None if cls is not bindable.
+    """
+    if not isinstance(cls, type):
+        return None
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
+    if info is not None:
+        return info[0]
+    return None
+
+
 class _BoundInnerClassBase(_ClassProxy):
     """
     Base descriptor for bound inner classes.
@@ -386,13 +429,19 @@ class _BoundInnerClassBase(_ClassProxy):
                 if base.__name__ == cls.__name__:
                     continue
 
+                # Fast path: look up by name, verify by identity
                 bound_inner_base = getattr(outer, base.__name__, None)
-                if bound_inner_base:
-                    bases = getattr(bound_inner_base, '__bases__', (None,))
-                    # The unbound class is always the first base of bound inner class
-                    if bases[0] == base:
-                        # Add bound version for MRO chaining
-                        wrapper_bases.append(bound_inner_base)
+                if bound_inner_base is not None and _unbound(bound_inner_base) is base:
+                    wrapper_bases.append(bound_inner_base)
+                    continue
+
+                # Slow path: search all descriptors by identity (for renamed BICs)
+                for descriptor in outer_class.__dict__.values():
+                    if isinstance(descriptor, _BoundInnerClassBase):
+                        if descriptor.__wrapped__ is base:
+                            bound_inner_base = descriptor.__get__(outer, outer_class)
+                            wrapper_bases.append(bound_inner_base)
+                            break
 
             # Create the wrapper - always use cls as base
             bound_class = self._wrap(outer, cls)
@@ -401,7 +450,7 @@ class _BoundInnerClassBase(_ClassProxy):
             if len(wrapper_bases) > 1:
                 bound_class.__bases__ = tuple(wrapper_bases)
 
-            cache.set(cls, bound_class)
+            bound_class = cache.set(cls, bound_class)
 
         return bound_class
 
@@ -728,7 +777,7 @@ def rebase(child, base):
 
     current_base = None
     for b in child.__bases__:
-        if unbound(b) is unbound_base:
+        if _unbound(b) is unbound_base:
             if current_base is not None:
                 raise ValueError(
                     f"{child.__name__} inherits from {unbound_base.__name__} multiple times"
@@ -772,7 +821,7 @@ def rebase(child, base):
     bound_class = cache.get(unbound_child)
     if bound_class is None:
         bound_class = _make_bound_class(unbound_child, outer, base, extra_base=unbound_child)
-        cache.set(unbound_child, bound_class)
+        bound_class = cache.set(unbound_child, bound_class)
     return bound_class
 
 
@@ -866,7 +915,7 @@ def bind(cls, outer):
     # Create bound class using cache
     # Include unbound_cls as extra_base for proper MRO so super() works
     bound_class = _make_bound_class(unbound_cls, outer, bound_base, extra_base=unbound_cls)
-    cache.set(unbound_cls, bound_class)
+    bound_class = cache.set(unbound_cls, bound_class)
     return bound_class
 
 

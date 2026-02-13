@@ -5754,7 +5754,7 @@ def strip_line_comments(lines, line_comment_markers, *,
 
     Line comments are substrings beginning with a special marker
     that mean the rest of the line should be ignored;
-    lines_strip_line_comments truncates the line at the
+    strip_line_comments truncates the line at the
     beginning of the leftmost line comment marker.
 
     line_comment_markers should be an iterable of line comment
@@ -5762,23 +5762,28 @@ def strip_line_comments(lines, line_comment_markers, *,
     which is to say, a comment that starts at that marker and
     extends to the end of the line.
 
+    lines should be an iterator of str (or big.string) objects
+    representing each line.  If the lines end with linebreak
+    characters, they will be preserved, even if a comment is
+    stripped from the line.
+
     By default, quotes and multiline_quotes are both false,
-    in which case lines_strip_line_comments will truncate each
+    in which case strip_line_comments will truncate each
     line, starting at the leftmost comment marker, and yield
-    the resulting line.  If the line doesn't contain any comment
-    markers, lines_strip_line_comments yields it unchanged.
+    the resulting line.  If the line doesn't contain any unquoted
+    comment markers, strip_line_comments yields it unchanged.
 
     However, the syntax of the text you're parsing might support
     quoted strings, and comment marks in those quoted strings
-    should be ignored.  lines_strip_quoted_strings supports this
+    should be ignored.  strip_quoted_strings supports this
     too, with its escape, quotes, and multiline_quotes parameters.
 
     If quotes is true, it must be an iterable of quote marker
-    strings, length 1 or more.  lines_strip_line_comments will
+    strings, length 1 or more.  strip_line_comments will
     parse the line using big's split_quoted_strings function
     and ignore comment characters inside quoted strings.  Quoted
     strings may not span lines; if a line ends with an unterminated
-    quoted string, lines_strip_line_comments will raise a SyntaxError.
+    quoted string, strip_line_comments will raise a SyntaxError.
 
     If multiline_quotes is true, it must be an iterable of
     quote marker strings, length 1 or more.  Quoted strings
@@ -5786,7 +5791,7 @@ def strip_line_comments(lines, line_comment_markers, *,
     quoted strings enclosed in (conventional) quotes are not
     permitted to.  If the last line yielded by the upstream
     iterator ends with an unterminated multiline string,
-    lines_strip_line_comments will raise a SyntaxError.
+    strip_line_comments will raise a SyntaxError.
 
     There must be no quote markers in common between quotes and
     multiline_quotes.
@@ -5796,18 +5801,10 @@ def strip_line_comments(lines, line_comment_markers, *,
     or non-multiline, as per backslash inside strings in Python.
     The default value for escape is "\\".
 
-    What's the difference between lines_strip_line_comments and
-    lines_filter_line_comment_lines?
-      * lines_filter_line_comment_lines is a lines modifier
-        function.  It only recognizes lines that
-        *start* with a comment separator (ignoring leading
-        whitespace).  Also, it filters out those lines
-        completely, rather than modifying the line.
-      * strip_line_comments is not a lines modifier function;
-        it iterates over lines, not (LineInfo, line) pairs.
-        It handles comment characters anywhere in the line,
-        although it can ignore comments inside quoted strings.
-        It truncates the line but still always yields the line.
+    strip_line_comments handles comment characters anywhere
+    in the line, although it can ignore comments inside quoted
+    strings.  It may truncate the line, but still always yields
+    the line.
     """
 
     # check line_comment_markers
