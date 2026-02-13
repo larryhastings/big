@@ -207,6 +207,23 @@ _re_tokenizer_splitlines = Pattern("((?:\r\n)|\r|\n)").split
 
 @export
 def generate_tokens(s):
+    """
+    Convenient wrapper around tokenize.generate_tokens.
+
+    big.tokens.generate_tokens is a wrapper around
+    Python's tokenize.generate_tokens function, adding
+    the following enhancements:
+
+    * This function simply takes a str (or big.string)
+      object, and handles simulating the "readline"
+      interface required by tokenize.generate_tokens.
+    * This function supports big.types.string objects;
+      if the argument is a big.string, the string values
+      stored in the TokenInfo values it yields will be
+      big.string objects sliced from that original string.
+      (This is true for both tokeninfo[1], aka tokeninfo.string,
+      and tokeninfo[4], aka tokeninfo.line.)
+    """
     line_number_to_line = {}
     lines_read = 0
     lines_tokenized = 0

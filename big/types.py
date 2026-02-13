@@ -32,6 +32,7 @@ from itertools import zip_longest
 import re
 import sys
 import threading
+import types
 try:
     from types import NoneType
 except ImportError: # pragma: nocover
@@ -99,10 +100,10 @@ _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3
 ##
 ## But we want to handle the other funny Unicode linebreaks too.
 ## big's "linebreaks" iterable contains all of 'em, and it
-## includes '\r\n'.  So: sort linebreaks by length, longest
-## first, and build the regular expression out of that.
+## includes '\r\n'.  So: we sort big.linebreaks by length,
+## longest first, and build the regular expression from that.
 ## (Python's re engine, like all good regular expression engines,
-## keeps the *first* match.  So, sort longest substring first.)
+## keeps the *first* match.  So we sort the longest substring first.)
 ##
 
 _re_linebreaks = "|".join(sorted(linebreaks, key=lambda s: -len(s)))
@@ -143,12 +144,6 @@ class Origin:
         # line 1 always starts at offset 0, we don't write it down
         # line 2 starts at self._linebreak_offsets[0]
         self.linebreak_offsets = linebreak_offsets = tuple(match.end() for match in _re_linebreaks_finditer(self.s))
-        if 0:
-            print()
-            print(repr(str(self)))
-            print(list(_re_linebreaks_finditer(str(self))))
-            print(linebreak_offsets)
-            print()
         return linebreak_offsets
 
     def compute_line_and_column(self, offset):
@@ -192,7 +187,7 @@ class Origin:
 class Range:
     """
     A Range is a reference to a range of characters in an Origin.
-    A big.string is mainly a sequence of Range objects.
+    A big.string is essentially a sequence of Range objects.
     """
     __slots__ = ('origin', 'start', 'stop')
 
@@ -219,7 +214,8 @@ class string(str):
 
     Additional features of string:
     * Every string knows its line number, column number, and offset from the
-      beginning of the original string.
+      beginning of the original string.  These default to 1, 1, and 0 respectively,
+      but you can pass explicit values in to the constructor.
     * You may also specify a "source" parameter to the constructor,
       which should indicate where the text came from (e.g. the filename).
     * If you add big.string objects together, the substrings remember their
@@ -232,7 +228,9 @@ class string(str):
     * line_number and column_number are the line and column numbers
       of the first character of the string.
     * first_column_number is what the column number is reset to when
-      big.string encounters a linebreak in the string.
+      big.string encounters a linebreak in the string.  After every
+      '\n', string will add 1 to the line number, and set column_number
+      to first_column_number.
     * tab_width is the distance between tab columns used for calculating
       column numbers.  It's the same as the "tabsize" parameter for
       str.expandtabs.
@@ -245,9 +243,9 @@ class string(str):
       came from in the s.offset string.  (s.origin[s.offset] == s[0])
     * s.where is a string designed for error messages.  If the original string
       was initialized with a source, this will be in the format
-          <source> line <line_number> column <column_number>
+          "<source> line <line_number> column <column_number>"
       If no source was supplied, this will be in the format
-          line <line_number> column <column_number>
+          "line <line_number> column <column_number>"
       This makes writing error messages easy.  Let's say you're parsing a file
       and you hit a syntax error.  token is a big.string containing the bad
       token.  Simply raise
@@ -830,6 +828,7 @@ class string(str):
         return self[start:end]
 
     def removeprefix(self, prefix):
+        "If string starts with prefix, returns a copy of the string with prefix removed, else returns string unchanged."
         # new in Python 3.11 (I think?)
         # but string will support it all the way back to 3.6.
         if not isinstance(prefix, str):
@@ -840,6 +839,7 @@ class string(str):
         return self[len(prefix):]
 
     def removesuffix(self, suffix):
+        "If string ends with suffix, returns a copy of the string with suffix removed, else returns string unchanged."
         # new in Python 3.11 (I think?)
         # but string will support it all the way back to 3.6.
         if not isinstance(suffix, str):
@@ -1023,6 +1023,7 @@ class string(str):
     ## (why do it this convoluted way? I wanted __name__ to be "isascii", not "_isascii".)
     ##
     def isascii(self):
+        "Returns True if all characters in str are representable in ASCII (orc(c) <= 127)."
         for c in self:
             if ord(c) > 127:
                 return False
@@ -1036,6 +1037,9 @@ class string(str):
     ##
 
     def bisect(self, index):
+        """
+        Splits string at index.  Returns a tuple of two strings: (string[:index], string[index:])
+        """
         if not hasattr(index, '__index__'):
             raise TypeError('index must be an integer (or index)')
         return self[:index], self[index:]
@@ -1096,7 +1100,7 @@ class string(str):
     @classmethod
     def cat(cls, *strings):
         """
-        Concatenates the str / big.string objects passed in.
+        Concatenates the string objects passed in.
         Roughly equivalent to big.string('').join().
         Always returns a big.string.
         """
@@ -1122,6 +1126,25 @@ class string(str):
 
     def compile(self, flags=0):
         return Pattern(self, flags)
+
+# borrow the docstrings from str methods
+dir_str = set(dir(str))
+for name in dir(string):
+    value = getattr(string, name)
+    if (
+        (name in dir_str)
+        and isinstance(value, types.FunctionType)
+        and ((name[0] in "abcdefghijklmnopqrstuvwxyz") or (name.startswith("__") and name.endswith("__")))
+        ):
+        value.__doc__ = getattr(str, name).__doc__
+del dir_str
+del name
+del value
+
+string.multisplit.__doc__ = multisplit.__doc__
+string.multipartition.__doc__ = multipartition.__doc__
+string.generate_tokens.__doc__ = generate_tokens.__doc__
+string.compile.__doc__ = re.compile.__doc__
 
 
 #####################################################################################################
@@ -1377,20 +1400,42 @@ class linked_list:
     """
     A Python linked list.
 
-    linked_list objects have an interface similar to
-    list or collections.deque.  You can
-    prepend() or append() nodes, or insert() at any index.
-    (You can also extend() or rextend() an iterable.)
+    linked_list objects have an interface that's a superset
+    of both list and collections.deque.  You can prepend()
+    or append() nodes, or insert() at any index.  You can
+    also extend() or rextend() an iterable.  You can slice
+    into a linked_list using extended slices.
 
-    You can also extract ranges of nodes using cut(),
-    and merge one linked list into another using splice().
+    linked_list also lets you extract ranges of nodes
+    using cut(), and merge one linked_list into another
+    using splice().
 
     In addition, an *iterator* over a linked list object
     is something like a database cursor.  It behaves like
-    a list object, relative to the node it's pointing to.
-    (When a linked_list iterator yields the value N, it
-    continues pointing to the node containing N
-    until you advance it.)
+    a list object, relative to the node it's pointing to,
+    and it provides most of the same interface as linked_list
+    itself.  (When a linked_list iterator yields the value N,
+    it continues pointing to the node containing N until you
+    advance it.)
+
+    linked_list objects have explicit "head" and "tail" nodes.
+    An iterator starts out pointing at "head", and is exhausted
+    once it points at "tail".  (The reverse is true for reverse
+    iterators.)  "head" and "tail" are refered to as "special"
+    nodes.
+
+    linked_list explicitly supports removing nodes while iterating
+    over the list.  If an iterator is pointing at a node which is
+    subsequently removed, the iterator now points at a "special"
+    node, representing the deleted value.  (The iterator will never
+    advance itself; you must advance it.)
+
+    By default linked_list objects are not thread-safe.  If you
+    want your linked_list to be thread-safe, pass in lock=True
+    to the linked_list constructor.  (You can also pass in
+    lock=<instance of Lock or RLock> to supply your own lock,
+    but linked_lists constructed with a user-supplied lock can't
+    be pickled.)
     """
 
     __slots__ = ('_head', '_tail', '_lock', '_lock_parameter', '_length')
@@ -1648,6 +1693,7 @@ class linked_list:
             return linked_list((node.value for node in self._internal_iter()), lock=self._lock_parameter)
 
     def copy(self, *, lock=None):
+        "Returns a shallow copy of the linked_list."
         with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
             t._lock_parameter = lock
@@ -1736,16 +1782,19 @@ class linked_list:
         return self
 
     def __iter__(self):
+        "Returns a forwards iterator pointing at the linked list's head."
         # no locking needed! self._head and self._lock never change.
         return _secret_iterator_fun_factory(linked_list_iterator, self._head)
 
     head = __iter__
 
     def tail(self):
+        "Returns a forwards iterator pointing at the linked list's tail."
         # no locking needed! self._tail and self._lock never change.
         return _secret_iterator_fun_factory(linked_list_iterator, self._tail)
 
     def __reversed__(self):
+        "Returns a reversed iterator pointing at the linked list's tail."
         # no locking needed! self._tail and self._lock never change.
         return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._tail)
 
@@ -2130,6 +2179,7 @@ class linked_list:
         cursor.insert_before(object)
 
     def insert(self, index, object):
+        "Insert object before index."
         if not self._lock:
             return self._insert(index, object)
         with self._lock:
@@ -2137,6 +2187,7 @@ class linked_list:
 
 
     def append(self, object):
+        "Append object to linked_list."
         if not self._lock:
             self._tail.insert_before(object)
             return
@@ -2144,6 +2195,7 @@ class linked_list:
             self._tail.insert_before(object)
 
     def prepend(self, object):
+        "Prepend object to linked_list."
         if not self._lock:
             self._head.next.insert_before(object)
             return
@@ -2159,6 +2211,7 @@ class linked_list:
             insert_before(value)
 
     def extend(self, iterable):
+        "Extend linked_list by appending elements from the iterable."
         if iterable is self:
             raise ValueError("can't extend self with self")
         if not self._lock:
@@ -2172,6 +2225,7 @@ class linked_list:
             insert_before(value)
 
     def rextend(self, iterable):
+        "Extend linked_list by prepending elements from the iterable, in forwards order."
         if iterable is self:
             raise ValueError("can't rextend self with self")
         if not self._lock:
@@ -2212,6 +2266,7 @@ class linked_list:
         self._length = 0
 
     def clear(self):
+        "Remove all values from the linked_list."
         if not self._lock:
             return self._clear()
         with self._lock:
@@ -2233,6 +2288,7 @@ class linked_list:
         return node.remove()
 
     def pop(self, index=-1):
+        "Remove and return the value at index (default last)."
         if not hasattr(index, '__index__'):
             raise TypeError("pop indices must be integers")
         index = index.__index__()
@@ -2256,6 +2312,7 @@ class linked_list:
         return node.remove()
 
     def rpop(self, index=0):
+        "Remove and return the value at index (default first)."
         if not hasattr(index, '__index__'):
             raise TypeError("pop indices must be integers")
         index = index.__index__()
@@ -2265,21 +2322,27 @@ class linked_list:
             return self._rpop(index)
 
     def count(self, value):
+        "Return the number of occurances of value in the linked_list."
         return self.head().count(value)
 
     def find(self, value):
+        "Returns an iterator pointing at the first instance of value in the linked_list, or None if value does not appear."
         return self.head().find(value)
 
     def rfind(self, value):
+        "Returns an iterator pointing at the last instance of value in the linked_list, or None if value does not appear."
         return self.tail().rfind(value)
 
     def match(self, predicate):
+        "Returns an iterator pointing at the first value for which predicate(value) returns a True value, or None if no such value exists."
         return self.head().match(predicate)
 
     def rmatch(self, predicate):
+        "Returns an iterator pointing at the last value for which predicate(value) returns a True value, or None if no such value exists."
         return self.tail().rmatch(predicate)
 
     def remove(self, value, default=_undefined):
+        "Removes and returns the first instance of value from the linked_list.  If value does not appear, returns default if specified, otherwise raises ValueError."
         with self._lock or _inert_context_manager:
             it = self.head()
             value = it._remove(value, default)
@@ -2287,6 +2350,7 @@ class linked_list:
             return value
 
     def rremove(self, value, default=_undefined):
+        "Removes and returns the last instance of value from the linked_list.  If value does not appear, returns default if specified, otherwise raises ValueError."
         with self._lock or _inert_context_manager:
             it = self.tail()
             value = it._rremove(value, default)
@@ -2294,6 +2358,7 @@ class linked_list:
             return value
 
     def reverse(self):
+        "Reverses all values in the linked_list."
         with self._lock or _inert_context_manager:
             if self._length < 2:
                 # reverse is a no-op for lists of length 0 or 1
@@ -2317,6 +2382,7 @@ class linked_list:
                 previous_r = r
 
     def sort(self, key=None, reverse=False):
+        "Sorts the list in ascending order.  Arguments are the same as list.sort."
         # copy to list, sort, then write back in-place
         # if the list has special nodes, this might be very exciting!
 
@@ -2521,35 +2587,39 @@ class linked_list:
     def cut(self, start=None, stop=None, *, lock=None):
         """
         Cuts a range of nodes from start to stop.
-        The range of nodes includes start but excludes
-        stop.
 
-        Returns a new linked_list containing the cut nodes.
-
-        After the cut, the start and stop iterators
-        will still point at the same nodes, however
-        they will have been moved to the new list.
+        If specified, start and stop must be iterators
+        over the current linked list.
 
         If start is None, it defaults to the first node
         after head.  (If the list is empty, this will be tail.)
-        If stop is None, it defaults to tail.
+        If stop is None, it defaults to tail.  start must not
+        point to a node after stop.
 
-        If specified, start and stop must be iterators
-        over the current linked list.  start must not
-        be after stop.
+        The sequence of nodes cut includes start but excludes stop.
 
-        This function won't cut head; it's an error
-        if start points to head.
+        Returns a new linked_list containing the cut nodes.
+        The lock parameter is passed to the constructor for the
+        new linked_list; if lock is None, the new linked_list
+        reuses the lock parameter passed in when this list was
+        constructed.
+
+        After the cut, the start and stop iterators
+        will still point at the same nodes, however
+        start will have been moved to the new list.
+
+        This function won't cut head.  If start points to head,
+        this function raises SpecialNodeError.
 
         start and stop may be reverse iterators, however the
         linked list resulting from a cut will have the elements
         in forward order.  If either start or stop is a reverse
         iterator, then:
 
-        * start defaults to the last node before tail,
-        * stop defaults to head,
-        * start must not be after stop, and
-        * start must not point to tail.
+          * start defaults to the last node before tail,
+          * stop defaults to head,
+          * start must not point to a node after stop, and
+          * start must not point to tail.
         """
         _lock = self._lock
         if _lock:
@@ -2557,6 +2627,17 @@ class linked_list:
         return self._cut(start, stop, lock, _lock, False)
 
     def rcut(self, start=None, stop=None, *, lock=None):
+        """
+        Cuts a range of nodes from start to stop.
+
+        rcut behaves like cut, except all directions are reversed:
+          * start must not point to a node before stop.
+          * The nodes cut start with "stop" and go forwards
+            to "start".
+          * The nodes in the new linked_list are still in forwards order.
+
+        See the documentation for linked_list.cut for more.
+        """
         _lock = self._lock
         if _lock:
             _lock.acquire()
@@ -2644,7 +2725,7 @@ class linked_list:
 
         where must be an iterator over self, or None.
         If where is an iterator, the nodes are inserted
-        *after* the node pointed to by where.  If where
+        after the node pointed to by where.  If where
         is None, the nodes are appended to the list (as if
         you had called extend).
         """
@@ -2658,6 +2739,15 @@ class linked_list:
             self._splice(other, where, False)
 
     def rsplice(self, other, *, where=None):
+        """
+        Moves nodes from other into self, at where.
+
+        Behaves identically to linked_list.splice, except:
+          * If where is None, the nodes are prepended to self
+            (as if you had called rextend).
+          * If where is not None, the nodes are inserted
+            before the node pointed to by where.
+        """
         self._splice_check_other(other)
 
         if not other:
@@ -2730,6 +2820,7 @@ class linked_list:
         self.rextend(reversed(iterable))
 
     def rotate(self, n):
+        "Rotate the linked_list n steps to the right.  If n is negative, rotate left."
         if not hasattr(n, '__index__'):
             raise TypeError(f'{type(n).__name__} object cannot be interpreted as integer')
 
@@ -2989,6 +3080,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def copy(self):
+        "Returns a copy of the iterator, pointing at the same node in the same linked_list."
         return self.__copy__()
 
     def __len__(self):
@@ -3049,6 +3141,12 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def next(self, default=_undefined, *, count=1):
+        """
+        Advances the iterator by count steps (default 1) and returns the value there.
+
+        If next hits the end of the list (the "tail" node) before count is exhausted,
+        returns default if specified, otherwise raises StopIteration.
+        """
         if not hasattr(count, '__index__'):
             raise TypeError(f'count must be an int, not {type(count).__name__}')
         count = count.__index__()
@@ -3110,6 +3208,12 @@ class linked_list_base_iterator:
         return cursor.value
 
     def previous(self, default=_undefined, *, count=1):
+        """
+        Advances the iterator backwards by count steps (default 1) and returns the value there.
+
+        If previous hits the end of the list (the "head" node) before count is exhausted,
+        returns default if specified, otherwise raises StopIteration.
+        """
         if not hasattr(count, '__index__'):
             raise TypeError(f'count must be an int, not {type(count).__name__}')
         count = count.__index__()
@@ -3143,6 +3247,12 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def before(self, count=1):
+        """
+        Returns an iterator pointing at the node count steps before this node.
+
+        If "head" is < count steps back, raises SpecialNodeError.
+        count must be >= 0.
+        """
         try:
             while True:
                 _lock = self._lock
@@ -3169,6 +3279,12 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def after(self, count=1):
+        """
+        Returns an iterator pointing at the node count steps after this node.
+
+        If "tail" is < count steps forward, raises SpecialNodeError.
+        count must be >= 0.
+        """
         try:
             while True:
                 _lock = self._lock
@@ -3195,6 +3311,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def reset(self):
+        "Resets the iterator to point to head."
         try:
             while True:
                 _lock = self._lock
@@ -3208,6 +3325,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def exhaust(self):
+        "Advances the iterator to point to tail."
         try:
             while True:
                 _lock = self._lock
@@ -3418,6 +3536,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def insert(self, index, object):
+        "Insert object after the index'th node."
         try:
             while True:
                 _lock = self._lock
@@ -3434,6 +3553,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def count(self, value):
+        "Returns the number of occurances of value between here and 'tail'."
         try:
             while True:
                 _lock = self._lock
@@ -3454,6 +3574,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def rcount(self, value):
+        "Returns the number of occurances of value between here and 'head'."
         try:
             while True:
                 _lock = self._lock
@@ -3488,6 +3609,7 @@ class linked_list_base_iterator:
         return value
 
     def pop(self, index=0):
+        "Removes and returns the value at index.  If index=0 (the default), advances backwards to the previous node."
         if not hasattr(index, '__index__'):
             raise TypeError(f'index must be an int, not {type(index).__name__}')
         index = index.__index__()
@@ -3517,9 +3639,11 @@ class linked_list_base_iterator:
 
     def rpop(self, index=0):
         """
+        Removes and returns the value at index (0 by default).
+
         The difference between pop and rpop is the direction the
-        iterator moves after popping.  pop retreats to the previous
-        node, rpop advances to the next node.
+        iterator moves after popping if index is 0.  pop retreats
+        to the previous node, rpop advances to the next node.
         """
         if not hasattr(index, '__index__'):
             raise TypeError(f'index must be an int, not {type(index).__name__}')
@@ -3559,6 +3683,7 @@ class linked_list_base_iterator:
         raise ValueError(f'value {value!r} not found')
 
     def remove(self, value, default=_undefined):
+        "Removes the nearest next occurance of value from the linked_list, or raises ValueError if not found."
         try:
             while True:
                 _lock = self._lock
@@ -3582,6 +3707,7 @@ class linked_list_base_iterator:
         raise ValueError(f'value {value!r} not found')
 
     def rremove(self, value, default=_undefined):
+        "Removes the nearest previous occurance of value from the linked_list, or raises ValueError if not found."
         try:
             while True:
                 _lock = self._lock
@@ -3595,6 +3721,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def append(self, value):
+        "Appends a value immediately after the current node."
         try:
             while True:
                 _lock = self._lock
@@ -3614,6 +3741,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def prepend(self, value):
+        "Inserts a value immediately before the current node."
         try:
             while True:
                 _lock = self._lock
@@ -3657,6 +3785,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def extend(self, iterable):
+        "Extends list by appending elements from iterable after the current node."
         return self._extend(iterable, iterable, "extend")
 
     def _rextend(self, other, iterable, verb):
@@ -3682,6 +3811,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def rextend(self, iterable):
+        "Extends list by prepending elements from iterable before the current node, preserving their order."
         return self._rextend(iterable, iterable, "rextend")
 
     def _find(self, value):
@@ -3696,6 +3826,7 @@ class linked_list_base_iterator:
             cursor = cursor.next
 
     def find(self, value):
+        "Returns an iterator pointing at the nearest next occurance of value in linked_list, or None if value is not found."
         try:
             while True:
                 _lock = self._lock
@@ -3724,6 +3855,7 @@ class linked_list_base_iterator:
 
 
     def rfind(self, value):
+        "Returns an iterator pointing at the nearest previous occurance of value in linked_list, or None if value is not found."
         try:
             while True:
                 _lock = self._lock
@@ -3740,6 +3872,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def match(self, predicate):
+        "Returns an iterator pointing at the nearest next occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         try:
             while True:
                 _lock = self._lock
@@ -3763,6 +3896,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def rmatch(self, predicate):
+        "Returns an iterator pointing at the nearest previous occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         try:
             while True:
                 _lock = self._lock
@@ -3787,10 +3921,9 @@ class linked_list_base_iterator:
 
     def truncate(self):
         """
-        Truncates the linked_list at the current node,
-        discarding the current node and all subsequent nodes.
+        Truncates the linked_list at the current node, discarding the current node and all subsequent nodes.
 
-        After this operation, the iterator will point to the linked list's tail.
+        After this operation, this iterator (self) will point to the linked_list 'tail'.
         """
         try:
             while True:
@@ -3838,10 +3971,9 @@ class linked_list_base_iterator:
 
     def rtruncate(self):
         """
-        Truncates the linked_list at the current node,
-        discarding the current node and all previous nodes.
+        Truncates the linked_list at the current node, discarding the current node and all previous nodes.
 
-        After this operation, the iterator will point to the linked list's head.
+        After this operation, this iterator (self) will point to the linked_list 'head'.
         """
         try:
             while True:
@@ -3894,6 +4026,11 @@ class linked_list_base_iterator:
         a new linked list, moves all cut nodes to this new linked_list,
         and returns this new linked list.
 
+        The lock parameter is passed to the constructor for the
+        new linked_list; if lock is None, the new linked_list
+        reuses the lock parameter passed in when this list was
+        constructed.
+
         If end is not None, it must be an iterator pointing to either
         the same node or a subsequent node in the same linked list;
         it's an error if end points to a preceding node, or to a node
@@ -3925,6 +4062,11 @@ class linked_list_base_iterator:
         Cuts nodes from the linked list being iterated over.  Creates
         a new linked list, moves all cut nodes to this new linked_list,
         and returns this new linked list.
+
+        The lock parameter is passed to the constructor for the
+        new linked_list; if lock is None, the new linked_list
+        reuses the lock parameter passed in when this list was
+        constructed.
 
         If end is not None, it must be an iterator pointing to either
         the same node or a preceding node in the same linked list;
@@ -4004,9 +4146,11 @@ class linked_list_base_iterator:
             clear_locks(locks)
 
     def splice(self, other):
+        "Removes all nodes from other, and inserts them immediately after the current node."
         return self._splice(other, False)
 
     def rsplice(self, other):
+        "Removes all nodes from other, and inserts them immediately before the current node."
         return self._splice(other, True)
 
 
@@ -4129,6 +4273,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         return super().__delitem__(self._reverse_index(index))
 
     def reset(self):
+        "Resets the reverse iterator to point to tail."
         try:
             while True:
                 _lock = self._lock
@@ -4142,6 +4287,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock.release()
 
     def exhaust(self):
+        "Resets the reverse iterator to point to head."
         try:
             while True:
                 _lock = self._lock
@@ -4155,9 +4301,23 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock.release()
 
     def before(self, count=1):
+        """
+        Returns a reverse iterator pointing at the node count steps after this node.
+        (This is a reverse iterator, so forwards and backwards are swapped.)
+
+        If "tail" is < count steps forward, raises SpecialNodeError.
+        count must be >= 0.
+        """
         return super().after(count)
 
     def after(self, count=1):
+        """
+        Returns a reverse iterator pointing at the node count steps before this node.
+        (This is a reverse iterator, so forwards and backwards are swapped.)
+
+        If "head" is < count steps backward, raises SpecialNodeError.
+        count must be >= 0.
+        """
         return super().before(count)
 
     def __bool__(self):
@@ -4181,45 +4341,74 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock.release()
 
     def count(self, value):
+        "Returns the number of occurances of value between here and 'head'."
         return super().rcount(value)
 
     def rcount(self, value):
+        "Returns the number of occurances of value between here and 'tail'."
         return super().count(value)
 
     def prepend(self, value):
+        "Inserts a value immediately after the current node."
         super().append(value)
 
     def append(self, value):
+        "Inserts a value immediately before the current node."
         super().prepend(value)
 
     def extend(self, iterable):
+        "Extends list by appending elements from iterable before the current node."
         return super()._rextend(iterable, reversed(iterable), "extend")
 
     def rextend(self, iterable):
+        "Extends list by appending elements from iterable after the current node."
         return super()._extend(iterable, reversed(iterable), "rextend")
 
     def pop(self, index=0):
+        "Removes and returns the value at index (0 by default).  If index=0, advances backwards to the previous node."
         return super().rpop(-index)
 
     def rpop(self, index=0):
+        """
+        Removes and returns the value at index (0 by default).
+
+        The difference between pop and rpop is the direction the
+        reverse iterator moves after popping if index is 0.
+        pop advances to the next node, rpop advances backwards
+        to the previous node.
+        """
         return super().pop(-index)
 
     def find(self, value):
+        "Returns an iterator pointing at the nearest previous occurance of value in linked_list, or None if value is not found."
         return super().rfind(value)
 
     def rfind(self, value):
+        "Returns an iterator pointing at the nearest next occurance of value in linked_list, or None if value is not found."
         return super().find(value)
 
     def match(self, predicate):
+        "Returns an iterator pointing at the nearest previous occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         return super().rmatch(predicate)
 
     def rmatch(self, predicate):
+        "Returns an iterator pointing at the nearest next occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         return super().match(predicate)
 
     def truncate(self):
+        """
+        Truncates the linked_list at the current node, discarding the current node and all previous nodes.
+
+        After this operation, this iterator (self) will point to the linked_list 'head'.
+        """
         super().rtruncate()
 
     def rtruncate(self):
+        """
+        Truncates the linked_list at the current node, discarding the current node and all subsequent nodes.
+
+        After this operation, this iterator (self) will point to the linked_list 'tail'.
+        """
         super().truncate()
 
     # cut/rcut logic is sufficiently complicated, we handle all the reverse-iterator
@@ -4227,9 +4416,11 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     # swap them here, linked_list.cut/rcut will handle it.
 
     def splice(self, other):
+        "Removes all nodes from other, and inserts them immediately before the current node."
         super().rsplice(other)
 
     def rsplice(self, other):
+        "Removes all nodes from other, and inserts them immediately after the current node."
         super().splice(other)
 
     def __len__(self):
