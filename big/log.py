@@ -317,25 +317,32 @@ class Log:
     """
     A lightweight text-based log suitable for debugging.
 
+    Log is a logging object, intended for debugging.
+    It's not a full-fledged application logger like
+    Python's "logging" module; instead, it's intended
+    for debug-print-style use.  It's high performance,
+    adding as little overhead to your program as possible,
+    and offers a great deal of flexibility in where the
+    log is written, and when.
+
     To use, simply create a Log instance, then call it:
         j = Log()
         j("Hello, world!")
+    By default, Log writes its log to stdout, using builtins.print.
 
-    With no positional arguments, Log writes its log
-    using builtins.print.
+    As shown in the above example, calling the Log instance as a
+    function logs a message to the log.  The signature of this
+    function is identical to Log.print; both have a signature
+    similar to builtins.print.
 
-    Calling the Log instance as a function logs a message to
-    the log.  The signature of this function is identical to
-    Log.print; both have a signature similar to builtins.print.
-
-    Log also supports these methods to write to the log:
+    Log supports these methods to write to the log:
 
         Log.print(*a, sep=' ', end='\n', flush=False, format='print')
             Identical to calling the Log object.
 
         Log.box(s)
-            Logs s to the log, with a three-sided box
-            around it to call attention to the value.
+            Logs s to the log, with a three-sided box around it to
+            call attention to this particular message.
 
         Log.enter(s)
         Log.exit()
@@ -361,7 +368,7 @@ class Log:
         Log.close()
             Close the log, which writes an "end" event to the log.
             When a log is closed, you can no longer write to it;
-            all writes are silently ignored.
+            all writes are silently ignored, and no error is reported.
 
         Log.reset()
             Resets the log to its initial state.  Log.reset() is the
@@ -403,7 +410,6 @@ class Log:
 
     If you don't pass in any explicit destinations, Log behaves
     as if you'd passed in "print".
-
 
     The following are all keyword-only parameters to the
     Log constructor, used to adjust the behavior of the log,
