@@ -158,7 +158,7 @@ class TestFile(unittest.TestCase):
             path = f.name
 
         try:
-            file_destination = big.Log.File(path, mode='wt')
+            file_destination = big.Log.File(path, initial_mode='wt')
             file_destination.write(0, None, "line1\n")
             file_destination.write(0, None, "line2\n")
             self.assertEqual(file_destination.array, ["line1\n", "line2\n"])
@@ -184,7 +184,7 @@ class TestFile(unittest.TestCase):
             path = f.name
 
         try:
-            fd = big.Log.File(path, mode='wt', flush=True)
+            fd = big.Log.File(path, initial_mode='wt', flush=True)
             log = big.Log(fd, threading=False)
 
             log.write("immediate\n")
@@ -204,7 +204,7 @@ class TestFile(unittest.TestCase):
             f.write("existing\n")
 
         try:
-            fd = big.Log.File(path, mode='at')
+            fd = big.Log.File(path, initial_mode='at')
             log = big.Log(fd, threading=False)
             log.write("appended\n")
             log.close()
@@ -381,6 +381,15 @@ class TestLogBasics(unittest.TestCase):
         self.assertTrue(log.closed)
         log.close()
         self.assertTrue(log.closed)
+
+    def test_log_dirty(self):
+        array = []
+        log = big.Log(array, threading=False)
+        self.assertFalse(log.dirty)
+        log.write("hello pigpen!\n")
+        self.assertTrue(log.dirty)
+        log.flush()
+        self.assertFalse(log.dirty)
 
     def test_log_atexit(self):
         # simulate atexit calls

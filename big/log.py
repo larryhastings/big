@@ -39,6 +39,12 @@ from . import time as big_time
 from . import file as big_file
 import time
 
+
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
+
+
 try:
     # 3.7+
     from time import monotonic_ns as default_clock
@@ -48,17 +54,14 @@ except ImportError: # pragma: no cover
     def default_clock():
         return int(monotonic() * 1_000_000_000.0)
 
-
-from . import builtin
-mm = builtin.ModuleManager()
-export = mm.export
-
-
 export('default_clock')
 
 
 @export
 class SinkEvent:
+    """
+    Base class for Log events stored by the Sink destination.
+    """
     __slots__ = (
         '_depth',
         '_duration',
@@ -293,7 +296,18 @@ _spaces = _sep * 1024
 
 @export
 def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12):
-    # 1 for the dot
+    """
+    Formats a "prefix" string for use with a Log object.
+
+    The format it returns is in the form:
+        "[{elapsed} {thread.name}] "
+    formatted with these widths:
+         "[{time_seconds_width}.{time_fractional_width} {thread_name_width}]"
+    For example, the default value for Log.prefix is prefix_format(3, 10, 12),
+    which looks like this in the final log:
+        "[003.0706368860   MainThread]"
+    """
+    # the +1 is for the dot between seconds and fractional seconds
     time_width = time_seconds_width + 1 + time_fractional_width
     return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}] '
 
@@ -303,60 +317,109 @@ class Log:
     """
     A lightweight text-based log suitable for debugging.
 
+    To use, simply create a Log instance, then call it:
+        j = Log()
+        j("Hello, world!")
+
+    With no positional arguments, Log writes its log
+    using builtins.print.
+
     Calling the Log instance as a function logs a message to
-    the log.  The signature of this function is identical
-    to builtins.print, except the Log instance doesn't support
-    the "file" keyword-only parameter.
+    the log.  The signature of this function is identical to
+    Log.print; both have a signature similar to builtins.print.
 
-    Log supports a box(s) method.  This logs a string
-    with a three-sided box drawn around it, which makes
-    it stand out in the log.
+    Log also supports these methods to write to the log:
 
-    Log supports enter(s) and exit() methods.
+        Log.print(*a, sep=' ', end='\n', flush=False, format='print')
+            Identical to calling the Log object.
 
-    If you pass positional arguments to the Log constructor,
-    these define "destinations" for log messages.  Destination
-    objects can be any of the following types / objects:
+        Log.box(s)
+            Logs s to the log, with a three-sided box
+            around it to call attention to the value.
+
+        Log.enter(s)
+        Log.exit()
+            Log.enter logs s to the log, formatted with a box around
+            it, and then indents the log.  exit outdents the log and
+            prints a trailing box marking the end of the indented
+            section.  Log.enter also returns a "context manager";
+            if you use this as the argument to a "with" statement,
+            exiting the "with" block will call Log.exit().
+
+        Log.write(formatted)
+            Writes "formatted" directly to the log with no
+            further formatting or modification.
+
+    Log also supports these method calls, which don't directly
+    log a message:
+
+        Log.flush()
+            Flush all internal buffers currently in use by the log,
+            if any formatted text has been written to the log since
+            the last time it was flushed (or since the start of the log).
+
+        Log.close()
+            Close the log, which writes an "end" event to the log.
+            When a log is closed, you can no longer write to it;
+            all writes are silently ignored.
+
+        Log.reset()
+            Resets the log to its initial state.  Log.reset() is the
+            only way to reopen a "closed" log, although you may reset
+            a log at any time.
+
+    If you pass one or more positional arguments to the Log
+    constructor, these define "destinations" for log messages.
+    The log will send logged messages to every destination
+    after every logging call.  Destination objects can be
+    any of the following types / objects:
 
         print (the Python builtin function)
             Log messages are printed using print(s, end='').
+            This is the default.  Equivalent to
+            big.log.Log.Print().
         str or pathlib.Path object
             Log messages are buffered locally,
             and dumped to the file named by the string.
-            Equivalent to big.log.File(pathlib.Path(argument)).
+            Equivalent to big.log.Log.File(pathlib.Path(destination)).
         list object
             Log messages are appended to the list.  Equivalent
-            to big.log.List(argument).
+            to big.log.Log.List(destination).
         io.TextIOBase object
             Log messages are written to the file-like object
             using its write method.  Equivalent to
-            big.log.FileHandle(argument).
+            big.log.Log.FileHandle(destination).
         callable object
             The callable object is called with every log message.
-            Equivalent to big.log.Callable(argument).
+            Equivalent to big.log.Log.Callable(destination).
+        big.log.TMPFILE
+            A special precreated sentinel value. Log messages will be
+            logged to a temporary file with a dynamically-computed path.
+            The file is created in your designated temporary directory;
+            it starts with the Log name, followed by the start time of
+            the log, then the PID of the process, and ends with ".txt".
         Destination object
-            Method calls to the Log are passed through to the
-            Destination object.  If the Destination doesn't define
-            a high-level logging function (log, header, enter, exit)
-            the message is formatted and logged to that Destination
-            using its write method.
+            Log messages are passed on to the Destination object.
 
     If you don't pass in any explicit destinations, Log behaves
     as if you'd passed in "print".
 
 
     The following are all keyword-only parameters to the
-    Log constructor, used to adjust the behavior of the log:
+    Log constructor, used to adjust the behavior of the log,
+    and they are all available as read-only properties of
+    the log:
 
     "name" is the desired name for this log (default 'Log').
 
     If "threading" is true (the default), log messages aren't logged
-    immediately; they're minimally processed then sent to a logging
-    thread maintained by the Log object which fully formats and logs
-    the message.  This reduces the overhead for logging a message,
-    resulting in faster logging performance.  If threading is false,
-    log messages are formatted and logged immediately in the Log call,
-    using a threading.Lock() object to ensure thread safety.
+    immediately; they're minimally processed, then sent to a logging
+    thread maintained internally by the Log object which fully formats
+    and logs the message.  This reduces the overhead for logging a
+    message resulting in faster logging performance.  If threading is
+    false, log messages are formatted and logged immediately in the
+    Log call, using a threading.Lock() object to ensure thread safety.
+    (Log is always thread-safe, whether or not "threading" is true.)
 
     "indent" should be an integer, the number of spaces to indent by
     when indenting the log (using Log.start).  Default is 4.
@@ -364,66 +427,96 @@ class Log:
     "width" should be an integer, default is 79.  This is only used
     to format separator lines (see "separator" and "banner_separator").
 
-    "clock" should be a function returning nanoseconds since some event.
-    The default value is time.monotonic_ns for Python 3.7, and a
-    locally-defined compatibility function for Python 3.6
-    (returning time.monotonic() * one billion).
+    "clock" should be a function returning nanoseconds since some
+    arbitrary past event. The default value is time.monotonic_ns
+    for Python 3.7, and a locally-defined compatibility function
+    for Python 3.6 (returning time.monotonic() * one billion).
 
-    "clock" should be a function returning seconds since the UNIX epoch,
-    as a floating-point number with fractional seconds. The default value
-    is time.time.
+    "timestamp_clock" should be a function returning seconds since the
+    UNIX epoch, as a floating-point number with fractional seconds.
+    The default value is time.time.
 
-    "timestamp" should be a function that formats
+    "timestamp_format" should be a function that formats
     float-seconds-since-epoch into a pleasant human-readable format.
     Default is big.time.timestamp_human.
 
-    "separator" is a string that will be repeated to create
-    "separator lines" in the log, setting off headers.
-
-    "banner_separator" is also a string, a special "separator"
-    string only used for the "initial" and "final" log messages.
-
     "prefix" should be a string used to format text inserted
     at the beginning of every log message.  Default is
-    "[{elapsed:014.10} :: {thread.name:8}] ".
+    big.Log.prefix_format(3, 10, 12).
 
-    "initial" should be a string used as an initial log message when the
-    log is started.  If initial is false, there is no automatic initial
-    log message. The default value is '{name} start at {timestamp}',
+    "formats" should be a dict mapping strings (for which s.isidentifier()
+    is True) to format dicts.  A "format dict" is itself a dict with two
+    supported values: "format", and optionally "line", both strings.
+    "format" specifies a string that will be used to format log messages;
+    if you call Log.print(foo, format="peanut"), this will use the format
+    dict specified by Log(format={"peanut": {...}}).
 
-    "final" should be a string used as a final log message when the log is
-    closed.  If final is false, there is no automatic final log message.
-    The default value is '{name} finish at {timestamp}\n'.
-
-    "initial", "final", and "prefix" are formatted using str.format()
-    with the following values defined:
+    The "format" string in the format dict is processed using the ".format"
+    method on a string, with the following values defined:
 
         elapsed
-            the elapsed time since log start, as float seconds
+            The elapsed time since the log was started,
+            as float-seconds.
+        line
+            The value of the "line" value from the format dict.
+            If this is the last thing on a line inside the format
+            (immediately before a '\n', or is the last character
+            in the format string), the "line" value will be repeated
+            until the line is >= Log.width, and the line will then
+            be truncated at Log.width characters.
+        message
+            The message that was logged.
         name
-            the name of the log
+            The "name" of the log passed in to the Log constructor.
+        prefix
+            A string pre-formatted using the "prefix" format
+            string passed in to the Log constructor.
         thread
-            a handle to the thread that logged this message
+            A handle to the thread that logged this message.
         time
-            the time of the log message, as float-seconds-since-epoch
-        timestamp - the time of the log message,
-            formatted with the Log timestamp argument
+            The time of the log message, as float-seconds-since-epoch.
+        timestamp
+            The "time" value, formatted using the "timestamp_format"
+            callable passed in to the Log constructor.
 
+    Log has six pre-defined formats:
+        print
+            the default format, used by log.print() and log()
+        box
+            used by log.box()
+        enter
+            used by log.enter()
+        exit
+            used by log.exit()
+        start
+            used for the initial log message when the log is opened
+        end
+            used for the final log message when the log is closed
+
+    You may also add your own user-defined formats; simply add these
+    to the dict you pass in as the format parameter.  The Log instance
+    will add a method with the name of format which logs using this
+    format; this is how log.box() is implemented.
+
+    To suppress the initial and/or final log messages, pass in a dict
+    to the format parameter with "start" or "end" respectively set to
+    None.  To suppress both:
+        Log(format={"start": None, "end": None})
     """
 
     def __init__(self, *destinations,
             name='Log',
             threading=True,
 
-            clock=default_clock,
-            timestamp_clock=time.time,
-
             indent=4,
             width=79,
 
-            formats = {},
-            prefix=prefix_format(3, 10, 12),
+            clock=default_clock,
+            timestamp_clock=time.time,
             timestamp_format=big_time.timestamp_human,
+
+            prefix=prefix_format(3, 10, 12),
+            formats = {},
             ):
 
         t1 = clock()
@@ -539,6 +632,7 @@ class Log:
                             raise TypeError('message must be str')
 
                         self._dispatch([(self._log, (time, thread, key, message))])
+                    method.__doc__ = f"Writes a message to the log using the {key!r} format."
                     return method
                 setattr(self, key, make_method(key))
 
@@ -550,7 +644,7 @@ class Log:
         append = self._destinations.append
 
         for destination in destinations:
-            destination = Log.destination(destination)
+            destination = Log.map_destination(destination)
 
             if destination is not None:
                 append(destination)
@@ -560,36 +654,49 @@ class Log:
 
 
     @classmethod
-    def base_destination_mapper(cls, destination):
-        if destination is None:
+    def base_destination_mapper(cls, o):
+        "Implements the default mapping of objects to Destination objects."
+
+        if o is None:
             return None
-        if isinstance(destination, cls.Destination):
-            return destination
-        if destination is print:
+        if isinstance(o, cls.Destination):
+            return o
+        if o is print:
             return cls.Print()
-        if isinstance(destination, str):
-            return cls.File(Path(destination))
-        if isinstance(destination, Path):
-            return cls.File(destination)
-        if isinstance(destination, list):
-            return cls.List(destination)
-        if isinstance(destination, TextIOBase):
-            return cls.FileHandle(destination)
-        if callable(destination):
-            return cls.Callable(destination)
-        raise TypeError(f"don't know how to log to destination {destination!r}")
+        if isinstance(o, str):
+            return cls.File(Path(o))
+        if isinstance(o, Path):
+            return cls.File(o)
+        if isinstance(o, list):
+            return cls.List(o)
+        if isinstance(o, TextIOBase):
+            return cls.FileHandle(o)
+        if callable(o):
+            return cls.Callable(o)
+        raise TypeError(f"don't know how to log to destination {o!r}")
 
     destination_mappers = []
 
     @classmethod
-    def destination(cls, destination):
+    def map_destination(cls, o):
+        """
+        Wraps objects of various supported types
+        with appropriate Destination objects.
+
+        This is extensible with the class attribute
+        Log.destination_mappers, a list.  Append your
+        own mapper function(s) to this list and they'll
+        be called by map_destination.  The function should
+        take a single object, the destination, and return
+        either the correct Destination object to handle
+        that object or None.
+        """
         for mapper in cls.destination_mappers:
-            result = mapper(destination)
+            result = mapper(o)
             if result is not None:
                 return result
 
-        return cls.base_destination_mapper(destination)
-
+        return cls.base_destination_mapper(o)
 
 
     @property
@@ -628,6 +735,10 @@ class Log:
     @property
     def width(self):
         return self._width
+
+    @property
+    def dirty(self):
+        return self._dirty
 
     @property
     def closed(self):
@@ -675,7 +786,6 @@ class Log:
         substitutions = {
             "elapsed": elapsed,
             "name": self._name,
-            "start_timestamp": self._start_timestamp,
             "thread": thread,
             "time": epoch,
             "timestamp": timestamp,
@@ -742,42 +852,6 @@ class Log:
         self._spaces = ''
 
 
-    ##
-    ## In Log, all logging methods are implemented using "work"
-    ## objects.  work is a list of jobs:
-    ##     [job, job2, ...]
-    ## The jobs are 2-tuples:
-    ##      (callable, args)
-    ## They're called simply as
-    ##      callable(*args)
-    ##
-    ## You call _dispatch(work) to get some work done.
-    ## If threaded is True, the work is sent to the worker
-    ## thread; if threaded is False the work is executed
-    ## immediately, in-thread.
-    ##
-    ## None is also a legal "job"; it must be the last "job"
-    ## in a work list.  If threaded is True, this causes the
-    ## worker thread to exit; if threaded is False it causes
-    ## the dispatch call to return immediately.
-    ##
-    ## Why send sequences of jobs--why not queue jobs
-    ## individually?  If you call into the log from
-    ## multiple threads, and one thread calls close(),
-    ## we want the [flush, close, None] work to run
-    ## atomically.  If we queued them separately,
-    ## we could have a race with another thread trying
-    ## to log something.  We guarantee to the destinations
-    ## that "close" will always be immediately preceded
-    ## by a "flush", and if they get a "close" they won't
-    ## get any more messages unless they first receive
-    ## a "reset".
-    ##
-    ## _dispatch also takes a notify argument.  If it's true,
-    ## it must be a callable; _dispatch will take care to
-    ## ensure that the callable is *always* called, and
-    ## is called *after* the work has been executed.
-
     def _execute(self, work):
         for job in work:
             if job is None:
@@ -821,10 +895,52 @@ class Log:
 
 
     def _dispatch(self, work, *, notify=None):
-        if not self._threading:
-            self._execute(work)
-            if notify:
-                notify()
+        """
+        Causes the log to execute "work", in threaded or non-threaded mode.
+
+        All methods on a Log object that interact with the log are
+        implemented using "work" objects.  A "work" object is a
+        list of jobs:
+            [job, job2, ...]
+        These "job" objects are 2-tuples:
+             (callable, args)
+
+        The work is executed like so:
+
+            for callable, args in work:
+                callable(*args)
+
+        If threaded is True, the work is sent to the worker
+        thread.  If threaded is False, the work is executed
+        immediately, in the current thread, while holding self._lock.
+
+        None is also a legal "job"; it must be the last "job"
+        in a work list.  If threaded is True, this causes the
+        worker thread to exit; if threaded is False, it causes
+        the dispatch call to return immediately.
+
+        Why send sequences of jobs?  Why not queue jobs
+        individually?  The sequence ensures that jobs from
+        multiple threads don't get interleaved.  For example,
+        Log.enter() logs the "enter" message and indents the log.
+        If we queued them separately, we could have a race with
+        another thread trying to log something; that other thread
+        could get its message logged after the "enter" message but
+        before the indent!  By sending both jobs in a list all at
+        once, we guarantee that no job from aother thread gets
+        queued between these two jobs.
+
+        _dispatch also takes a notify argument.  If it's true,
+        it must be a callable; barring catastrophe, _dispatch
+        guarantees the notify callable will be called at some
+        point after the work has been completed.
+        """
+        if not self._thread:
+            try:
+                self._execute(work)
+            finally:
+                if notify:
+                    notify()
             return
 
         lock = None
@@ -832,7 +948,18 @@ class Log:
             if notify:
                 lock = self._lock
                 lock.acquire()
-                if not self._thread: lock.release() ; lock = None ; self._execute(work); notify and notify() ; return
+
+                # what if there's a race between this dispatch call
+                # and _atexit closing the thread?  _atexit will only
+                # set self._thread to None while holding the lock.
+                # now that we hold the lock, we know for certain.
+                # if self._thread is now false, recursively call
+                # ourselves, which will now execute the work directly.
+                # (it's all on one line to make coverage happy; this
+                # situation is devilishly hard to reproduce.  if only
+                # there were some library that made it easy to reproduce
+                # race conditions...!)
+                if not self._thread: lock.release() ; lock = None ; self._dispatch(work, notify=notify); return
 
                 work.append( (notify, ()) )
 
@@ -852,15 +979,25 @@ class Log:
         Returns True if we're in state "state" when _ensure_state
         returns, False otherwise.
 
-        Only three states are supported:
-            initial
-            logging
-            closed
+        Only three states are supported; they exist in a loop:
+              +-------+
+              |       |
+              v       |
+            initial   |
+              |       |
+              v       |
+            logging   |
+              |       |
+              v       |
+            closed    |
+              |       |
+              +-------+
 
         You can always transition from any state to any other
-        state, with one exception: you can't transition from
-        "closed" to "logging".  (The only way to escape "closed"
-        state is to reset the log, which transitions to "initial".)
+        state, with one exception: you can't transition directly
+        from "closed" to "logging".  (The only way to escape
+        "closed" state is to reset the log, which transitions
+        to "initial".)
 
         This means you can in some circumstances make two state
         transitions at once:
@@ -871,19 +1008,25 @@ class Log:
         you'll enter and exit "logging" state on the way.)
 
         If you're in "initial" and transition to "logging",
-        you open the log (send a start event).
+        you open the log, which sends a "start" event.
 
         If you're in "logging" and transition to "closed",
-        you close the log (send end, flush, and close events).
+        you close the log, which sends "end", "flush", and
+        "close" events.
 
         If you're in "closed" and transition to "initial",
-        you'll reset the log (send a reset event).
+        you'll reset the log, which sends a "reset" event.
 
-        If ns and epoch are specified, those are used as start time
-        for the log (if we transition from "initial" to "logging"
-        and/or end time of the log (if we transition from "logging"
-        to "closed").  It's an error to transition from another state
-        to "closed" or "initial" without specifying ns and epoch.
+        If ns and epoch are specified, those are used as
+        the ns and epoch times for any events that send times.
+        If you transition from "initial" to "logging", the
+        start event will use ns and epoch as the start time
+        of the log.  If you transition from "logging" to "closed",
+        the end event will use ns as the end time of the log.
+
+        It's an error to transition from another state
+        to "closed" or "initial" without specifying
+        ns and epoch.
         """
         while True:
             if state == self._state:
@@ -958,16 +1101,26 @@ class Log:
                 self._state = 'initial'
                 continue
 
-
     def _reset(self, start_time_ns, start_time_epoch):
         self._start_time_ns = start_time_ns
         self._start_time_epoch = start_time_epoch
         self._end_time_ns = None
         self._end_time_epoch = None
-        self._start_timestamp = self._timestamp_format(start_time_epoch)
         self._dirty = False
 
     def reset(self):
+        """
+        Resets the log to 'initial' state.
+
+        If the log is currently in "initial" state,
+        this is a no-op.
+
+        If the log is currently in "closed" state,
+        resets it.
+
+        If the log is currently in "logging" state,
+        closes it, then resets it.
+        """
         clock = self._clock
         ns1 = clock()
         epoch = self._timestamp_clock()
@@ -985,39 +1138,77 @@ class Log:
             self._dirty = False
 
     def flush(self, block=True):
-        if not block:
-            notify = None
-        else:
-            blocker = Lock()
-            blocker.acquire()
-            notify = blocker.release
+        """
+        Flushes the log, if it's open and dirty.
 
-        self._dispatch([(self._flush, ())], notify=notify)
+        If the log is in "logging" state, and it's
+        "dirty" (any formatted text has been logged
+        to the log since either the log was started
+        or since the last flush), flushes the log.
 
-        if notify:
-            blocker.acquire()
+        If block=True (the default), flush won't
+        return until the log is flushed.  If block=False,
+        the log may be flushed asynchronously.
+        """
+        try:
+            if not block:
+                notify = None
+            else:
+                blocker = Lock()
+                blocker.acquire()
+                notify = blocker.release
+
+            self._dispatch([(self._flush, ())], notify=notify)
+
+        finally:
+            if notify:
+                blocker.acquire()
 
     def _close(self):
         for destination in self._destinations:
             destination.close()
 
     def close(self, block=True):
-        ns1 = self._clock()
-        epoch = self._timestamp_clock()
-        ns2 = self._clock()
-        ns = (ns1 + ns2) / 2
+        """
+        Closes the log, if it's logging.
 
-        if not block:
-            notify = None
-        else:
-            blocker = Lock()
-            blocker.acquire()
-            notify = blocker.release
+        This ensures the log is in "closed" state.
+        When the log is in "closed" state, it ignores
+        all writes to the log; if you want to write
+        to the log after it has been closed, you must
+        call the reset() method to reset the log.
 
-        self._dispatch([(self._ensure_state, ('closed', ns, epoch))], notify=notify)
+        If the log is currently in "closed" state,
+        this is a no-op.
 
-        if notify:
-            blocker.acquire()
+        If the log is currently in "logging" state,
+        closes the log.
+
+        If the log is currently in "initial" state,
+        opens then closes the log.
+
+        If block=True (the default), close won't
+        return until the log is closed.  If block=False,
+        the log may be closed asynchronously.
+        """
+        try:
+            ns1 = self._clock()
+            epoch = self._timestamp_clock()
+            ns2 = self._clock()
+            ns = (ns1 + ns2) / 2
+
+            if not block:
+                notify = None
+            else:
+                blocker = Lock()
+                blocker.acquire()
+                notify = blocker.release
+
+            self._dispatch([(self._ensure_state, ('closed', ns, epoch))], notify=notify)
+
+        finally:
+            if notify:
+                blocker.acquire()
 
 
     def _write(self, time, thread, formatted):
@@ -1032,6 +1223,13 @@ class Log:
         self._dirty = True
 
     def write(self, formatted):
+        """
+        Writes a pre-formatted message directly to the log.
+
+        The "formatted" string is written directly to the
+        log; it isn't formatted or modified in any way.
+        """
+
         time = self._clock()
         thread = current_thread()
 
@@ -1042,19 +1240,34 @@ class Log:
             self._dispatch( [(self._write, (time, thread, formatted)),] )
 
     def _log(self, time, thread, format, message):
-        ## If you call
-        ##     log("abc", "def\nghi", sep='\n')
-        ## then here's what happens at the destinations:
-        ##
-        ## If the destination is a Log, it calls
-        ##     destination.log("abc", "def\nghi", sep='\n')
-        ## If the destination is a Destination with log defined, it calls
-        ##     destination.log(elapsed, thread, "abc")
-        ##     destination.log(elapsed, thread, "def")
-        ##     destination.log(elapsed, thread, "ghi")
-        ## If the destination is a Destination without log defined,
-        ## assuming prefix='[prefix] ', it calls
-        ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
+        """
+        Reformats a message and writes it to the log.
+
+        If the user calls this:
+            log.print("abc", "def\nghi", sep='\n\n')
+
+        This is lightly pre-formatted (all *args arguments
+        are converted to str), then dispatched using _dispatch
+        to log._print.  log._print handles combining the args,
+        sep, and end, and calls _log with the resulting string:
+            _log(time, thread, format, "abc\n\ndef\nghi")
+
+        _log applies the format to the "message" (the fourth parameter).
+        It splits the "format" by lines, and also splits the message
+        by lines.  Every line of the "format" gets formatted using
+        _format_s.  If the line doesn't contain "{message}", it's logged
+        once; if the line contains "{message}", it is re-formatted
+        with each line of the message and each of these is logged.
+
+        Thus, if the format was "++ START\n// {message}\n-- END",
+        this would eventually call every destination D with:
+            D.log(elapsed, thread, "++ START")
+            D.log(elapsed, thread, "// abc")   # <-- the middle line of
+            D.log(elapsed, thread, "//")       # <-- "format", which contains
+            D.log(elapsed, thread, "// def")   # <-- "{message}", once for each
+            D.log(elapsed, thread, "// ghi")   # <-- line in the message string
+            D.log(elapsed, thread, "-- END")
+        """
 
         if not self._ensure_state('logging'):
             return
@@ -1070,20 +1283,6 @@ class Log:
 
 
     def _print(self, time, thread, args, sep, end, flush, format):
-        ## If you call
-        ##     log("abc", "def\nghi", sep='\n')
-        ## then here's what happens at the destinations:
-        ##
-        ## If the destination is a Log, it calls
-        ##     destination.log("abc", "def\nghi", sep='\n')
-        ## If the destination is a Destination with log defined, it calls
-        ##     destination.log(elapsed, thread, "abc")
-        ##     destination.log(elapsed, thread, "def")
-        ##     destination.log(elapsed, thread, "ghi")
-        ## If the destination is a Destination without log defined,
-        ## assuming prefix='[prefix] ', it calls
-        ##     destination.write(elapsed, thread, "[prefix] abc\n[prefix] def\n[prefix] ghi\n")
-
         joined = sep.join(args).rstrip()
         if end is _end:
             end = ''
@@ -1097,6 +1296,14 @@ class Log:
     def __call__(self, *args, sep=_sep, end=_end, flush=False, format='print'):
         """
         Logs a message, with the interface of builtins.print.
+
+        The arguments are formatted into a string as follows:
+            formatted = sep.join(str(a) for a in args) + end
+        This "formatted" string is then logged,
+        using the "format" specified.
+
+        If "flush" is a true value, the log is flushed after logging
+        this message.
         """
 
         time = self._clock()
@@ -1116,6 +1323,14 @@ class Log:
     def print(self, *args, end=_end, sep=_sep, flush=False, format='print'):
         """
         Logs a message, with the interface of builtins.print.
+
+        The arguments are formatted into a string as follows:
+            formatted = sep.join(str(a) for a in args) + end
+        This "formatted" string is then logged,
+        using the "format" specified.
+
+        If "flush" is a true value, the log is flushed after logging
+        this message.
         """
         return self(*args, end=end, sep=sep, flush=flush, format=format)
 
@@ -1127,7 +1342,10 @@ class Log:
     def __exit__(self, exc_type, exc_value, traceback):
         self.flush()
 
-    class SubsystemContextManager:
+    class LogEnterAndExitContextManager:
+        """
+        The context manage returned by Log.enter().  Calls Log.exit() on exit.
+        """
         def __init__(self, log):
             self.exit = log.exit
 
@@ -1150,6 +1368,9 @@ class Log:
         self._dirty = self._dirty or bool(formatted)
 
     def enter(self, message):
+        """
+        Logs a message, then indents the log.
+        """
         time = self._clock()
         thread = current_thread()
 
@@ -1157,7 +1378,7 @@ class Log:
             (self._enter_exit, ('enter', time, thread, message)),
             (self._append_nesting, (message,)),
             ])
-        return self.SubsystemContextManager(self)
+        return self.LogEnterAndExitContextManager(self)
 
     def _exit(self, time, thread):
         if not self._nesting:
@@ -1167,6 +1388,9 @@ class Log:
         self._enter_exit('exit', time, thread, message)
 
     def exit(self):
+        """
+        Outdents the log from the most recent Log.enter() indent.
+        """
         time = self._clock()
         thread = current_thread()
 
@@ -1176,14 +1400,16 @@ class Log:
 
     class Destination:
         """
-        Base class for objects that receive messages from a big.Log.
+        Base class for objects that do the actual logging for a big.Log.
 
-        All Destination objects must define:
+        A Destination object is "owned" by a Log, and the Log sends it
+        "events" by calling named methods.  All Destination objects *must*
+        support the "write" event, by implementing a write method:
 
             write(elapsed, thread, formatted)
 
         In addition, Destination subclasses may optionally override
-        the following methods:
+        the following events / methods:
 
             flush()
             close()
@@ -1195,10 +1421,14 @@ class Log:
             exit(elapsed, thread, message, formatted)
 
         For all these methods, Destination subclasses need not
-        call the base class method.  Note that the base class
-        method for the last five of these--the methods that take
-        "formatted"--all call self.write, like so:
+        call the base class method.  Note that the default
+        implementation for the last five--the methods that take
+        a "formatted" parameter--all call self.write, like so:
+
             self.write(elapsed, thread, formatted)
+
+        If you don't want this behavior, override the method and
+        don't call the base class method (via super).
 
         Finally, Destination subclasses may also override this method:
             register(owner)
@@ -1206,20 +1436,70 @@ class Log:
         to call the base class implementation
         ("super().register(owner)").
 
-        The meaning of each argument to a Destination methods:
+        The meaning of each argument to the above Destination methods:
 
         * elapsed is the elapsed time since the log was
           started/reset, in nanoseconds.
         * thread is the threading.Thread handle for the thread
-          that logged the message.  thread may be None if the
-          event isn't associated with any particular thread
-          (start and end events).
+          that logged the message.
         * formatted is the formatted log message.
-        * format is the name of the "format" (predefined or passed in to
-          the constructor) applied to "message" to produce "formatted".
+        * format is the name of the "format" applied to "message"
+          to produce "formatted".
         * message is the original message passed in to a Log method.
         * owner is the Log object that owns this Destination.
-          (A Destination cannot be shared between multiple Log objects.)
+          (A Destination can't be shared between multiple Log objects.)
+
+        Log guarantees that the following events will be called in this
+        order:
+
+            register
+              |
+              v
+            start
+              |
+              +----------------------------------+
+              |                                  |
+              v                                  |
+            write | log | enter | exit | flush   |
+              |                                  |
+              |                                  |
+              +----------------------------------+
+              |
+              v
+            end
+              |
+              v
+            [flush]
+              |
+              v
+            close
+
+        The "register" event is sent while the log is still in
+        its "initial" state; all other events are sent while the
+        log is in "logging" state.  (The log transitions to
+        "closed" state only *after* sending the "close" event.)
+        "register" will only ever be sent once, and it is always
+        the first event received by a Destination.
+
+        The log transitions from "initial" to "logging" only
+        after it's logged to for the first time.  It transitions
+        to its "logging" state, sends a "start" event, then
+        sends the actual logged message.  Once the log has been
+        started in this way, it can send any number of "write",
+        "log", "enter", "exit", or "flush" events, in any order.
+
+        "flush" is only sent if the log is "dirty".  If the log
+        is dirty after an "end" event, it will *always* be flushed
+        before the "close" event.
+
+        If the log is closed, the Log will always send "end",
+        followed by an optional "flush" (only if dirty),
+        followed by "close".
+
+        If the log is reset, if the log is not in "initial" state,
+        it will close the log (sending end / [flush] / close),
+        then send a "reset" event, at which time the log will be
+        back in "initial" state.
         """
         def __init__(self):
             self.owner = None
@@ -1238,14 +1518,14 @@ class Log:
         def close(self):
             pass
 
-        def write(self, elapsed, thread, formatted):
-            raise RuntimeError("pure virtual Destination.write called")
-
         def start(self, start_time_ns, start_time_epoch, formatted):
             self.write(0, None, formatted)
 
         def end(self, elapsed, formatted):
             self.write(elapsed, None, formatted)
+
+        def write(self, elapsed, thread, formatted):
+            raise RuntimeError("pure virtual Destination.write called")
 
         def log(self, elapsed, thread, format, message, formatted):
             self.write(elapsed, thread, formatted)
@@ -1259,7 +1539,11 @@ class Log:
 
 
     class Callable(Destination):
-        "A Destination wrapping a callable."
+        """
+        A Destination wrapping a callable.
+
+        Calls the callable for every formatted log message.
+        """
         def __init__(self, callable):
             super().__init__()
             self.callable = callable
@@ -1270,6 +1554,13 @@ class Log:
 
 
     class Print(Destination):
+        """
+        A Destination wrapping a callable.
+
+        Calls
+            builtins.print(formatted, end='', flush=True)
+        for every formatted log message.
+        """
         "A Destination wrapping builtins.print."
         def __init__(self):
             super().__init__()
@@ -1281,7 +1572,11 @@ class Log:
 
 
     class List(Destination):
-        "A Destination wrapping a Python list."
+        """
+        A Destination wrapping a Python list.
+
+        Appends every formatted log message to the list.
+        """
         def __init__(self, list):
             super().__init__()
             self.array = list
@@ -1300,11 +1595,29 @@ class Log:
 
 
     class Buffer(Destination):
-        "A Destination that buffers log messages, printing them with builtins.print when flushed."
+        """
+        A Destination that buffers log messages before sending them to another Destination.
+
+        This Destination wraps another arbitrary
+        Destination, referred to as the "underlying"
+        Destination.
+
+        Every time a formatted log message is logged,
+        it's stored in an internal buffer (a Python list).
+        When the log is flushed, Buffer will concatentate
+        all the log messages into one giant string, then
+        writes that string to the underlying Destination,
+        and also flushes the underlying Destination.
+
+        By default, Buffer wraps a Print destination,
+        but you may supply your own Destination as a
+        positional argument to the constructor.
+        """
+        ""
         def __init__(self, destination=None):
             super().__init__()
             self.array = []
-            self.destination = Log.destination(destination) or Log.Print()
+            self.destination = Log.map_destination(destination) if destination is not None else Log.Print()
             self.last_elapsed = self.last_thread = None
 
         def write(self, elapsed, thread, formatted):
@@ -1321,16 +1634,38 @@ class Log:
 
 
     class File(Destination):
-        "A Destination wrapping a file in the filesystem."
-        def __init__(self, path, mode="at", *, flush=False):
+        """
+        A Destination wrapping a file in the filesystem.
+
+        This Destination writes to a file in the filesystem,
+        using the path you specify (either a str or a pathlib.Path
+        object).
+
+        If flush=False (the default), when a formatted log message
+        is written to the destination, it's buffered internally.
+        Then, when the log is flushed, File concatenates all the
+        buffered messages, opens the file, writes to it with one
+        write call, and closes it.
+
+        If flush=True, the file is opened and kept open.  Every
+        time it receives a formatted log message, it writes the
+        message immediately and flushes the file handle.  If File
+        receives a "close" message, it closes the file; if it
+        receives a "reset" message, it reopens the file.
+
+        The first time the file is opened, it's opened using the
+        "initial_mode" passed in, by default "at".  After the first
+        time, File always uses mode "at".
+        """
+        def __init__(self, path, initial_mode="at", *, flush=False):
             super().__init__()
 
-            assert mode in ("at", "wt", "xt", "a", "w", "x")
+            assert initial_mode in ("at", "wt", "xt", "a", "w", "x")
 
             self.array = array = []
             self.path = Path(path)
-            self.mode = mode
-            self.always_flush = flush
+            self.mode = initial_mode
+            self._flush = flush
             self.f = None
 
         def register(self, owner):
@@ -1339,10 +1674,10 @@ class Log:
 
         def reset(self):
             super().reset()
-            self.f = self.path.open(self.mode) if self.always_flush else None
+            self.f = self.path.open(self.mode) if self._flush else None
 
         def write(self, elapsed, thread, formatted):
-            if self.always_flush:
+            if self._flush:
                 self.f.write(formatted)
                 self.f.flush()
             elif formatted:
@@ -1350,7 +1685,7 @@ class Log:
 
         def flush(self):
             if self.array:
-                assert not self.always_flush
+                assert not self._flush
                 assert not self.f
                 contents = "".join(self.array)
                 self.array.clear()
@@ -1369,14 +1704,30 @@ class Log:
 
 
     class TmpFile(File):
-        "A Destination that writes to a timestamped temporary file."
+        """
+        A Destination that writes to a timestamped temporary file.
+
+        This is a subclass of File that computes a temporary
+        filename.  The filename is approximately in this format:
+            tempfile.gettempdir() / "{Log.name}.{start timestamp}.{os.getpid()}.txt"
+        (If the computed filename contains illegal or inconvenient characters,
+        they may be replaced with other characters; for example ':' is replaced with '-'.)
+
+        The filename is recomputed whenever TmpFile receives a "register"
+        or "reset" event.  Thus, if the Log is reset, TmpFile will close
+        the old temporary log, and open a new one.
+        """
+
         def __init__(self, *, flush=False):
-            # use a fake path for now
+            # use a fake path for now,
+            # we'll compute a proper one when they call reset()
             path = Path(tempfile.gettempdir()) / f"{os.getpid()}.tmp"
-            super().__init__(path)
-            self.always_flush = flush
+            super().__init__(path, flush=flush)
 
         def reset(self):
+            # File() calls self.reset for register() or reset(),
+            # so this is the right place to dynamically (re-)compute
+            # the path to the temporary file.
             assert self.owner
             log_timestamp = self.owner.timestamp_format(self.owner.start_time_epoch)
             log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
@@ -1387,19 +1738,29 @@ class Log:
             super().reset()
 
 
-
     class FileHandle(Destination):
-        "A Destination wrapping a Python file handle."
+        """
+        A Destination wrapping an open Python file handle.
+
+        This Destination writes to an already-open file handle.
+        It will never close the file handle; it will only ever
+        write to it, and flush it.
+
+        Every time a formatted log message is received,
+        FileHandle writes it immediately to the file handle.
+        If flush=True, FileHandle will immediately flush the
+        file handle after writing; by default flush is False.
+        """
         def __init__(self, handle, *, flush=False):
             super().__init__()
             if not isinstance(handle, TextIOBase):
                 raise TypeError(f"invalid file handle {handle}")
             self.handle = handle
-            self.immediate = flush
+            self._flush = flush
 
         def write(self, elapsed, thread, formatted):
             self.handle.write(formatted)
-            if self.immediate:
+            if self._flush:
                 self.handle.flush()
 
         def flush(self):
@@ -1408,21 +1769,17 @@ class Log:
 
     class Sink(Destination):
         """
-        A Destination that accumulates log messages for later iteration or printing.
+        A Destination retaining all log messages, in order, using SinkEvents.
 
-        Events include thread information and raw timestamps.
+        Every time Sink receives a formatted log message,
+        it appends a SinkEvent object to an internal list of events.
+        See SinkEvent and its subclasses for more.
 
-        You may iterate over the Sink; this yields 6-tuples:
-            [type, thread, elapsed, duration, depth, message]
-        elapsed and duration are in nanoseconds.  thread is the
-        threading.Thread handle for the thread that logged the message.
-        depth is the current enter/exit depth, as an integer,
-        starting at 0. type is the thread type, one of
-        Sink.{WRITE, LOG, HEADER, FOOTER, HEADING, ENTER, EXIT}.
-        message is the string that was logged.
+        You may iterate over a Sink, which yields all events
+        logged so far.
 
-        You may also call print(), which formats the events
-        and prints them using builtins.print.
+        Sink.print() formats the events and prints them using
+        builtins.print.
         """
 
         def __init__(self):
@@ -1595,7 +1952,12 @@ class OldDestination(Log.Destination):
 class OldLog:
     """
     A drop-in replacement for the old big.log.Log class.
-    Creates a Log with an OldDestination and exposes the old interface.
+
+    This creates a Log, populates it with an OldDestination
+    and exposes the old big.log.Log interface.  Provided
+    for backwards compatibility, as a stepping-stone for
+    users of the old Log, to make it easier to transition
+    to the new Log.
     """
 
     def __init__(self, clock=None):
