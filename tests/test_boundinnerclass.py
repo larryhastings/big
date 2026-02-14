@@ -1824,6 +1824,227 @@ class TestRenamedBICSlowPaths(unittest.TestCase):
         self.assertTrue(instance.child_flag)
 
 
+class TestMissingBaseClassError(unittest.TestCase):
+    """Tests that BIC raises when a parent BIC is removed from the outer class."""
+
+    def test_deleted_parent_bic_raises(self):
+        """Accessing child BIC raises when parent BIC is deleted from outer class."""
+        @BoundInnerClass
+        class Parent:
+            def __init__(self, outer):  # pragma: nocover
+                self.outer = outer
+
+        parent_cls = Parent.__wrapped__
+
+        @BoundInnerClass
+        class Child(parent_cls):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        child_cls = Child.__wrapped__
+
+        class Outer:
+            pass
+
+        Outer.Parent = BoundInnerClass(parent_cls)
+        Outer.Child = BoundInnerClass(child_cls)
+
+        # Delete the parent -- now child can't bind
+        del Outer.Parent
+
+        o = Outer()
+        with self.assertRaises(RuntimeError) as cm:
+            o.Child
+        self.assertIn("Parent", str(cm.exception))
+        self.assertIn("removed from the outer class", str(cm.exception))
+
+    def test_deleted_all_aliases_of_parent_bic_raises(self):
+        """Accessing child BIC raises when all aliases of parent BIC are deleted."""
+        @BoundInnerClass
+        class Parent:
+            def __init__(self, outer):  # pragma: nocover
+                self.outer = outer
+
+        parent_cls = Parent.__wrapped__
+
+        @BoundInnerClass
+        class Child(parent_cls):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        child_cls = Child.__wrapped__
+
+        class Outer:
+            pass
+
+        Outer.Parent = BoundInnerClass(parent_cls)
+        Outer.Alias = Outer.Parent
+        Outer.Child = BoundInnerClass(child_cls)
+
+        # Delete both references to the parent
+        del Outer.Parent
+        del Outer.Alias
+
+        o = Outer()
+        with self.assertRaises(RuntimeError) as cm:
+            o.Child
+        self.assertIn("Parent", str(cm.exception))
+
+    def test_non_bindable_base_is_not_an_error(self):
+        """Bases that aren't bindable are silently skipped (not an error)."""
+        class RegularBase:
+            pass
+
+        class Outer:
+            @BoundInnerClass
+            class Inner(RegularBase):
+                def __init__(self, outer):
+                    self.outer = outer
+
+        o = Outer()
+        # RegularBase isn't a BIC, so it's silently skipped -- no error
+        i = o.Inner()
+        self.assertIs(i.outer, o)
+        self.assertIsInstance(i, RegularBase)
+
+
+class TestMediumPathAliasCache(unittest.TestCase):
+    """Tests for the medium path alias cache in _BoundInnerClassBase."""
+
+    def setUp(self):
+        # Clear the alias cache before each test so tests are independent
+        _BoundInnerClassBase._alias_cache.clear()
+
+    def test_medium_path_caches_alias(self):
+        """After slow path finds a renamed BIC, the medium path is used next time."""
+        @BoundInnerClass
+        class Parent:
+            def __init__(self, outer):
+                self.outer = outer
+                self.parent_flag = True
+
+        parent_cls = Parent.__wrapped__
+
+        @BoundInnerClass
+        class Child(parent_cls):
+            def __init__(self, outer):
+                super().__init__()
+                self.child_flag = True
+
+        child_cls = Child.__wrapped__
+
+        class Outer:
+            pass
+
+        Outer.RenamedParent = BoundInnerClass(parent_cls)
+        Outer.Child = BoundInnerClass(child_cls)
+
+        # First bind: slow path discovers "RenamedParent"
+        o1 = Outer()
+        c1 = o1.Child()
+        self.assertIs(c1.outer, o1)
+        self.assertTrue(c1.parent_flag)
+        self.assertTrue(c1.child_flag)
+
+        # Verify alias was cached
+        alias_key = (id(parent_cls), id(Outer))
+        self.assertIn(alias_key, _BoundInnerClassBase._alias_cache)
+        self.assertEqual(_BoundInnerClassBase._alias_cache[alias_key], 'RenamedParent')
+
+        # Second bind on a different instance: medium path should find it
+        o2 = Outer()
+        c2 = o2.Child()
+        self.assertIs(c2.outer, o2)
+        self.assertTrue(c2.parent_flag)
+        self.assertTrue(c2.child_flag)
+
+    def test_medium_path_stale_alias_falls_to_slow_path(self):
+        """When cached alias becomes stale, slow path re-discovers the new name."""
+        @BoundInnerClass
+        class Parent:
+            def __init__(self, outer):
+                self.outer = outer
+                self.parent_flag = True
+
+        parent_cls = Parent.__wrapped__
+
+        @BoundInnerClass
+        class Child(parent_cls):
+            def __init__(self, outer):
+                super().__init__()
+                self.child_flag = True
+
+        child_cls = Child.__wrapped__
+
+        class Outer:
+            pass
+
+        Outer.FirstName = BoundInnerClass(parent_cls)
+        Outer.Child = BoundInnerClass(child_cls)
+
+        # First bind: slow path discovers "FirstName"
+        o1 = Outer()
+        c1 = o1.Child()
+        self.assertIs(c1.outer, o1)
+
+        alias_key = (id(parent_cls), id(Outer))
+        self.assertEqual(_BoundInnerClassBase._alias_cache[alias_key], 'FirstName')
+
+        # Rename: delete FirstName, add SecondName
+        del Outer.FirstName
+        Outer.SecondName = BoundInnerClass(parent_cls)
+
+        # Second bind on new instance: medium path finds "FirstName" is stale,
+        # falls through to slow path which discovers "SecondName"
+        o2 = Outer()
+        c2 = o2.Child()
+        self.assertIs(c2.outer, o2)
+        self.assertTrue(c2.parent_flag)
+        self.assertTrue(c2.child_flag)
+
+        # Verify alias cache was updated
+        self.assertEqual(_BoundInnerClassBase._alias_cache[alias_key], 'SecondName')
+
+    def test_medium_path_stale_alias_and_no_replacement_raises(self):
+        """When cached alias becomes stale and no replacement exists, raises error."""
+        @BoundInnerClass
+        class Parent:
+            def __init__(self, outer):  # pragma: nocover
+                self.outer = outer
+
+        parent_cls = Parent.__wrapped__
+
+        @BoundInnerClass
+        class Child(parent_cls):
+            def __init__(self, outer):  # pragma: nocover
+                super().__init__()
+
+        child_cls = Child.__wrapped__
+
+        class Outer:
+            pass
+
+        Outer.AliasedParent = BoundInnerClass(parent_cls)
+        Outer.Child = BoundInnerClass(child_cls)
+
+        # First bind: slow path discovers "AliasedParent"
+        o1 = Outer()
+        _ = o1.Child
+
+        alias_key = (id(parent_cls), id(Outer))
+        self.assertEqual(_BoundInnerClassBase._alias_cache[alias_key], 'AliasedParent')
+
+        # Delete the alias entirely
+        del Outer.AliasedParent
+
+        # Now try again: medium path finds stale alias, slow path finds nothing, error
+        o2 = Outer()
+        with self.assertRaises(RuntimeError) as cm:
+            o2.Child
+        self.assertIn("Parent", str(cm.exception))
+        self.assertIn("removed from the outer class", str(cm.exception))
+
+
 class TestRebaseMultipleMatchingBases(unittest.TestCase):
     """Tests for rebase() with multiple matching bases."""
 
