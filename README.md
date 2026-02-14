@@ -1328,27 +1328,34 @@ passed in supporting `__len__`.
 
 <dl><dd>
 
-Wraps any iterator, allowing you to push items back on the iterator.
-This allows you to "peek" at the next item (or items); you can get the
-next item, examine it, and then push it back.  If any objects have
-been pushed onto the iterator, they are yielded first, before attempting
-to yield from the wrapped iterator.
+Wraps any iterator, letting you push items to be yielded first.
 
-The constructor accepts one argument, an `iterable`, with a default of `None`.
-If `iterable` is `None`, the `PushbackIterator` is created in an exhausted state.
+The `PushbackIterator` constructor accepts one argument, an iterable.
+When you iterate over the `PushbackIterator` instance, it yields values
+from that iterable.  You may also pass in `None`, in which case the
+`PushbackIterator` is created in an *"exhausted"* state.
 
-When the wrapped `iterable` is exhausted (or if you passed in `None`
-to the constructor) you can still call the `push` method to add items,
-at which point the `PushBackIterator` can be iterated over again.
+`PushbackIterator` also supports a `push(o)`` method, which "pushes"
+that object onto the iterator.  If any objects have been pushed onto
+the iterator, they're yielded first, before attempting to yield
+from the wrapped iterator.  Pushed values are yielded in
+first-in-first-out order, like a stack.
 
-In addition to the following methods, `PushbackIterator` supports
-the iterator protocol and testing for truth.  A `PushbackIterator`
-is true if iterating over it will yield at least one value.
+Example: you have a pushback iterator `J`, and you call `J.push(3)`
+followed by `J.push('x')`.  The next two times you iterate over
+`J`, it will yield `'x'`, followed by `3`.
 
+When the wrapped iterable is exhausted, you can still call push
+to add new items, at which point the `PushbackIterator` can be
+iterated over again.
 
-It's supported to push values that were never yielded by the wrapped
-iterator.  If you create `x = PushbackIterator(range(1, 20))`, you may
-call `x.push(33)`, or `x.push('xyz')`, or `x.push(None)`, etc.
+PushbackIterator also supports a `next(default=None)` method,
+like Python's builtin `next` function, as well as a `__bool__`
+method returning true if the iterator is exhausted.
+
+It's explicitly supported to push values that were never yielded by
+the wrapped iterator.  If you create `J = PushbackIterator(range(1, 20))`,
+you may still call `J.push(33)`, or `J.push('xyz')`, or `J.push(None)`, etc.
 </dd></dl>
 
 #### `PushbackIterator.next(default=None)`
@@ -6531,11 +6538,14 @@ It's been a whole year... and I've been busy!
   and `lines_strip_line_comments` line modifier functions,
   but now operate on iterables of strings instead of
   "lines" iterators.
+* Added `Pattern` to *big.text*.  This is a wrapper around
+  `re.Pattern` that preserves slices of str subclasses.
 * Added `parse_template_string` and `eval_template_string`
-  to new module *big.template*.  `parse_template_string` parses a string
-  containing Jinja-like interpolations, and returns an
-  iterator that yields strings and `Interpolation` objects.
-  (This is similar to "t-strings" in Python 3.14+.)
+  to new module *big.template*.  `parse_template_string`
+  parses a string containing Jinja-like interpolations,
+  and returns an iterator that yields strings and
+  `Interpolation` objects.  (This is similar to
+  "t-strings" in Python 3.14+.)
   `eval_template_string` calls `parse_template_string` to
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
@@ -6563,14 +6573,17 @@ It's been a whole year... and I've been busy!
     * `type_bound_to(o)` returns the instance that `type(o)` has
       been bound to, if `type(o)` is a bound inner class bound
       to an instance.
+    * `bound_inner_base(cls)` is only needed to use BoundInnerClas
+      with Python 3.6.  It's unnecessary in Python 3.7+.
 * Added `generate_tokens` to new module *big.tokens*.
   `generate_tokens` is a convenience wrapper around
   Python's `tokenize.generate_tokens`, which has an
   abstruse "readline"-based interface.  `tokens.generate_tokens`
   lets you simply pass in a string object, and returns a
-  generator yielding tokens.  (And--if you pass in a
-  big `String` object, the `string` values it yields
-  will be slices from that original `String`!)
+  generator yielding tokens.  It also preserves slices
+  of str subclasses--if the string you pass in is a
+  `big.string` object, the `string` values it yields
+  will be slices from that original `big.string`!
 * The *big.tokens* module also contains definitions
   for every token defined by any version
   of Python supported by big (3.6+).  big's version
@@ -6589,10 +6602,10 @@ It's been a whole year... and I've been busy!
   You pass in an iterator, and rules for what values you
   want to see / don't want to see, and it returns
   an iterator that only yields the values you want.
-* Rewrote the entire *big.log* module.  I never actually
-  used the old `Log` class, yet on a couple recent projects
+* Rewrote the entire *big.log* module.  I stopped using
+  the old `Log` class, yet on a couple recent projects
   I coded up a quick-and-dirty log... clearly the old `Log`
-  wasn't solving my problem.  The new `Log` is designed
+  wasn't solving my problem anymore.  The new `Log` is designed
   explicitly for lightweight logging, mostly for debugging
   purposes.  It's easy to use, feature-rich, high-performance,
   and by default runs in "threaded" mode where logging calls
@@ -6603,9 +6616,9 @@ It's been a whole year... and I've been busy!
     class, but is reimplemented on top of the new `Log`.
     Hopefully the way I did it will ease your transition
     to the obviously-superior new `Log`.  The old `Log`
-    is also available unchanged in the *big.deprecated*
-    module.  `OldLog` and the old `Log`will both be
-    removed someday, no earlier than March 2027.
+    has been relocated to the *big.deprecated*
+    module. Both `OldLog` and the old `Log` are deprecated,
+    and will be removed someday, no earlier than March 2027.
 * Added `ModuleManager` to *big.builtin*.
   `ModuleManager` helps you manage a module's namespace,
   making it easy to populate `__all__` and clean up
@@ -6634,7 +6647,10 @@ It's been a whole year... and I've been busy!
   is also faster, but that optimization only saved 0.0000014 seconds.
   Hat tip to Eric V. Smith for his suggestions on how to make
   Big's test suite so much faster!
-* Removed some old deprecated stuff:
+* `split_quoted_strings` in *big.text* now obeys
+  subclasses of str better.  (It now works well with
+  `big.string` for example.)
+* Removed a bunch of old deprecated stuff:
   * Old names for sets of characters:
     * `whitespace_without_dos`
     * `ascii_whitespace_without_dos`

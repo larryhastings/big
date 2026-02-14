@@ -37,13 +37,13 @@ class PushbackIterator:
     """
     Wraps any iterator, letting you push items to be yielded first.
 
-    The PushbackIterator constructor accepts one argument, any iterable.
+    The PushbackIterator constructor accepts one argument, an iterable.
     When you iterate over the PushbackIterator instance, it yields values
     from that iterable.  You may also pass in None, in which case the
     PushbackIterator is created in an "exhausted" state.
 
     PushbackIterator also supports a push(o) method, which "pushes"
-    values onto the iterator.  If any objects have been pushed onto
+    that object onto the iterator.  If any objects have been pushed onto
     the iterator, they're yielded first, before attempting to yield
     from the wrapped iterator.  Pushed values are yielded in
     first-in-first-out order, like a stack.
@@ -57,8 +57,8 @@ class PushbackIterator:
     point the PushbackIterator can be iterated over again.
 
     PushbackIterator also supports a next(default=None) method,
-    like Python's builtin next function.  It also supports __bool__,
-    returning True if it's exhausted.
+    like Python's builtin next function, as well as a __bool__ method
+    returning true if the iterator is exhausted.
 
     It's explicitly supported to push values that were never yielded by
     the wrapped iterator.  If you create J = PushbackIterator(range(1, 20)),

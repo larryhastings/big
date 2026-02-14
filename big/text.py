@@ -3463,7 +3463,7 @@ class LineInfo:
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, source='', **kwargs):
         is_str = isinstance(line, str)
@@ -3687,7 +3687,7 @@ class lines:
 
         Note: lines, LineInfo, and all the lines modifier
         functions are now deprecated, and will be removed
-        no sooner than February 2027.
+        no sooner than March 2027.
         """
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
@@ -3793,7 +3793,7 @@ def lines_rstrip(li, separators=None):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     if separators is None:
         for info, line in li:
@@ -3828,7 +3828,7 @@ def lines_strip(li, separators=None):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     if separators is not None:
 
@@ -3912,7 +3912,7 @@ def lines_filter_line_comment_lines(li, comment_markers):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     if not comment_markers:
         raise ValueError("illegal comment_markers")
@@ -3954,7 +3954,7 @@ def lines_containing(li, s, *, invert=False):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     if invert:
         for t in li:
@@ -4013,7 +4013,7 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     if not match.isidentifier():
         raise ValueError('match must be a valid identifier')
@@ -4041,7 +4041,7 @@ def lines_sort(li, *, key=None, reverse=False):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     lines = list(li)
     if key == None:
@@ -4187,7 +4187,7 @@ def lines_strip_line_comments(li, line_comment_markers, *,
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
 
     # check line_comment_markers
@@ -4243,7 +4243,7 @@ def lines_convert_tabs_to_spaces(li):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     for info, line in li:
         yield (info, info.detab(line))
@@ -4277,7 +4277,7 @@ def lines_strip_indent(li):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     indent = 0
     leadings = []
@@ -4391,7 +4391,7 @@ def lines_filter_empty_lines(li):
 
     Note: lines, LineInfo, and all the lines modifier
     functions are now deprecated, and will be removed
-    no sooner than February 2027.
+    no sooner than March 2027.
     """
     for t in li:
         if not t[1]:
