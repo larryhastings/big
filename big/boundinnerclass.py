@@ -402,13 +402,15 @@ class _BoundInnerClassBase(_ClassProxy):
 
     __slots__ = ()
 
-    # Class-level cache mapping unbound class id to the attribute name
-    # the slow path discovered on the outer class.  Shared across all
-    # instances, since renaming is a property of the outer *class*,
-    # not any particular outer instance.
+    # Class-level cache mapping an (unbound_class, outer_class) pair to
+    # the attribute name the slow path discovered on the outer class.
+    # Shared across all instances, since renaming is a property of the
+    # outer *class*, not any particular outer instance.
     #
-    # Keyed on (id(unbound_base_class), outer_class_id) to avoid
-    # cross-outer-class collisions.
+    # Keyed on (id(target_class), id(outer_class)).  If a class is GC'd
+    # and its id reused, we might get a stale hit, but the medium path
+    # always verifies via identity check before using the cached value,
+    # so a stale hit is harmless -- it just falls through to the slow path.
     _alias_cache = {}
     _alias_cache_lock = threading.Lock()
 
@@ -419,50 +421,56 @@ class _BoundInnerClassBase(_ClassProxy):
         setattr(wrapped, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, None))
 
     @staticmethod
-    def _find_descriptor_by_identity(outer_class, base):
+    def _find_descriptor_by_identity(outer_class, target):
         """
-        Search outer_class.__dict__ for a _BoundInnerClassBase descriptor
-        wrapping base.  Returns (attr_name, descriptor) or (None, None).
+        Search outer_class's MRO for a _BoundInnerClassBase descriptor
+        wrapping target.  Returns (attr_name, descriptor) or (None, None).
         """
-        for attr_name, descriptor in outer_class.__dict__.items():
-            if isinstance(descriptor, _BoundInnerClassBase):
-                if descriptor.__wrapped__ is base:
-                    return (attr_name, descriptor)
+        for klass in outer_class.__mro__:
+            for attr_name, descriptor in klass.__dict__.items():
+                if isinstance(descriptor, _BoundInnerClassBase):
+                    if descriptor.__wrapped__ is target:
+                        return (attr_name, descriptor)
         return (None, None)
 
     @classmethod
-    def _resolve_bound_base(cls, outer, outer_class, base):
+    def _resolve_descriptor(cls, outer, outer_class, target):
         """
-        Resolve the bound version of base on outer.
+        Resolve the bound version of target on outer.
+
+        target is an unbound class that may be registered as a
+        BoundInnerClass on outer_class (either as a base class
+        being looked up during __get__, or a child class being
+        looked up during bind()/rebase()).
 
         Uses a three-tier lookup:
-          1. Fast path: getattr(outer, base.__name__), verify identity.
+          1. Fast path: getattr(outer, target.__name__), verify identity.
           2. Medium path: check _alias_cache for a previously-discovered
              alias name, verify it still points to the right descriptor.
-          3. Slow path: iterate outer_class.__dict__ by identity.
+          3. Slow path: iterate outer_class.__mro__ by identity.
              On success, updates _alias_cache for future medium-path hits.
 
-        Returns the bound base class, or None if base is not a
-        BoundInnerClass on outer_class.
+        Returns the bound class, or None if target is not a
+        BoundInnerClass anywhere in outer_class's MRO.
         """
         # Fast path: look up by name, verify by identity
-        bound_inner_base = getattr(outer, base.__name__, None)
-        if bound_inner_base is not None and _unbound(bound_inner_base) is base:
-            return bound_inner_base
+        bound_result = getattr(outer, target.__name__, None)
+        if bound_result is not None and _unbound(bound_result) is target:
+            return bound_result
 
-        alias_key = (id(base), id(outer_class))
+        alias_key = (id(target), id(outer_class))
 
         # Medium path: check alias cache
         with cls._alias_cache_lock:
             cached_alias = cls._alias_cache.get(alias_key)
         if cached_alias is not None:
-            descriptor = outer_class.__dict__.get(cached_alias)
-            if isinstance(descriptor, _BoundInnerClassBase) and descriptor.__wrapped__ is base:
-                return descriptor.__get__(outer, outer_class)
+            bound_result = getattr(outer, cached_alias, None)
+            if bound_result is not None and _unbound(bound_result) is target:
+                return bound_result
             # Cached alias is stale; fall through to slow path
 
-        # Slow path: search all descriptors by identity (for renamed BICs)
-        attr_name, descriptor = cls._find_descriptor_by_identity(outer_class, base)
+        # Slow path: search all descriptors in MRO by identity (for renamed BICs)
+        attr_name, descriptor = cls._find_descriptor_by_identity(outer_class, target)
         if descriptor is not None:
             # Cache the discovered alias for future lookups
             with cls._alias_cache_lock:
@@ -492,15 +500,14 @@ class _BoundInnerClassBase(_ClassProxy):
                 if base.__name__ == cls.__name__:
                     continue
 
-                resolved = self._resolve_bound_base(outer, outer_class, base)
+                resolved = self._resolve_descriptor(outer, outer_class, base)
                 if resolved is not None:
                     wrapper_bases.append(resolved)
                 elif _BOUNDINNERCLASS_INNER_ATTR in getattr(base, '__dict__', {}):
                     raise RuntimeError(
                         f"Cannot find bound inner class {base.__name__!r} "
-                        f"on {outer_class.__name__}. "
-                        f"All references to this class have been removed "
-                        f"from the outer class."
+                        f"on {outer_class.__name__} or any of its bases. "
+                        f"The descriptor for this class may have been removed."
                     )
 
             # Create the wrapper - always use cls as base
@@ -863,17 +870,9 @@ def rebase(child, base):
 
     # Check if child is a BoundInnerClass in outer's class
     # If so, return the bound version directly (e.g., o2.Child)
-    # Fast path: look up by name, verify by identity
-    descriptor = outer_class.__dict__.get(unbound_child.__name__)
-    if isinstance(descriptor, _BoundInnerClassBase):
-        if descriptor.__wrapped__ is unbound_child:
-            return descriptor.__get__(outer, outer_class)
-
-    # Slow path: search all descriptors by identity
-    for descriptor in outer_class.__dict__.values():
-        if isinstance(descriptor, _BoundInnerClassBase):
-            if descriptor.__wrapped__ is unbound_child:
-                return descriptor.__get__(outer, outer_class)
+    resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, unbound_child)
+    if resolved is not None:
+        return resolved
 
     # Not a BIC in outer_class - create bound class using cache
     # This is a @Bindable class, so include unbound_child as extra_base for proper MRO
@@ -933,17 +932,10 @@ def bind(cls, outer):
     if bound_class is not None:
         return bound_class
 
-    # Fast path: cls itself is a BoundInnerClass, look up by name, verify by identity
-    descriptor = outer_class.__dict__.get(unbound_cls.__name__)
-    if isinstance(descriptor, _BoundInnerClassBase):
-        if descriptor.__wrapped__ is unbound_cls:
-            return descriptor.__get__(outer, outer_class)
-
-    # Slow path: cls itself might be renamed, search all descriptors
-    for descriptor in outer_class.__dict__.values():
-        if isinstance(descriptor, _BoundInnerClassBase):
-            if descriptor.__wrapped__ is unbound_cls:
-                return descriptor.__get__(outer, outer_class)
+    # Try to find cls itself as a BoundInnerClass on outer_class
+    resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, unbound_cls)
+    if resolved is not None:
+        return resolved
 
     # cls is a @Bindable class - search its bases for a BoundInnerClass
     bound_base = None
@@ -951,20 +943,9 @@ def bind(cls, outer):
         if not is_bindable(base):
             continue
 
-        # Fast path: look up by name, verify by identity
-        descriptor = outer_class.__dict__.get(base.__name__)
-        if isinstance(descriptor, _BoundInnerClassBase):
-            if descriptor.__wrapped__ is base:
-                bound_base = descriptor.__get__(outer, outer_class)
-                break
-
-        # Slow path: search all descriptors
-        for descriptor in outer_class.__dict__.values():
-            if isinstance(descriptor, _BoundInnerClassBase):
-                if descriptor.__wrapped__ is base:
-                    bound_base = descriptor.__get__(outer, outer_class)
-                    break
-        if bound_base is not None:
+        resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, base)
+        if resolved is not None:
+            bound_base = resolved
             break
 
     if bound_base is None:

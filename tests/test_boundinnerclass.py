@@ -1824,6 +1824,64 @@ class TestRenamedBICSlowPaths(unittest.TestCase):
         self.assertTrue(instance.child_flag)
 
 
+class TestMROInheritance(unittest.TestCase):
+    """Tests that BIC finds descriptors on parent classes via MRO."""
+
+    def test_bic_on_parent_class_found_via_mro(self):
+        """Child outer class inherits a BIC from parent outer class."""
+        class ParentOuter:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer):
+                    self.outer = outer
+
+        class ChildOuter(ParentOuter):
+            @BoundInnerClass
+            class ChildInner(ParentOuter.Inner):
+                def __init__(self, outer):
+                    super().__init__()
+                    self.child_flag = True
+
+        o = ChildOuter()
+        c = o.ChildInner()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child_flag)
+        self.assertIsInstance(c, ParentOuter.Inner)
+
+    def test_renamed_bic_on_parent_class_found_via_mro(self):
+        """Slow path finds a renamed BIC on a parent outer class via MRO."""
+        @BoundInnerClass
+        class Inner:
+            def __init__(self, outer):
+                self.outer = outer
+
+        inner_cls = Inner.__wrapped__
+
+        class ParentOuter:
+            pass
+
+        # Store under a different name on the parent
+        ParentOuter.RenamedInner = BoundInnerClass(inner_cls)
+
+        @BoundInnerClass
+        class Child(inner_cls):
+            def __init__(self, outer):
+                super().__init__()
+                self.child_flag = True
+
+        child_cls = Child.__wrapped__
+
+        class ChildOuter(ParentOuter):
+            pass
+
+        ChildOuter.Child = BoundInnerClass(child_cls)
+
+        o = ChildOuter()
+        c = o.Child()
+        self.assertIs(c.outer, o)
+        self.assertTrue(c.child_flag)
+
+
 class TestMissingBaseClassError(unittest.TestCase):
     """Tests that BIC raises when a parent BIC is removed from the outer class."""
 
@@ -1856,7 +1914,7 @@ class TestMissingBaseClassError(unittest.TestCase):
         with self.assertRaises(RuntimeError) as cm:
             o.Child
         self.assertIn("Parent", str(cm.exception))
-        self.assertIn("removed from the outer class", str(cm.exception))
+        self.assertIn("may have been removed", str(cm.exception))
 
     def test_deleted_all_aliases_of_parent_bic_raises(self):
         """Accessing child BIC raises when all aliases of parent BIC are deleted."""
@@ -2042,7 +2100,7 @@ class TestMediumPathAliasCache(unittest.TestCase):
         with self.assertRaises(RuntimeError) as cm:
             o2.Child
         self.assertIn("Parent", str(cm.exception))
-        self.assertIn("removed from the outer class", str(cm.exception))
+        self.assertIn("may have been removed", str(cm.exception))
 
 
 class TestRebaseMultipleMatchingBases(unittest.TestCase):
