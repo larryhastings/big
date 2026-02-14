@@ -24,6 +24,41 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+##
+## If you have a class with an inner class inside,
+## decorate the inner class with the BoundInnerClass
+## decorator defined below and it'll automatically
+## get the parent instance passed in as a *second*
+## positional parameter!
+## _______________________________________
+##
+## class Outer:
+##   @BoundInnerClass
+##   class Inner:
+##       def __init__(self, outer):
+##           global o
+##           print(outer = o)
+## o = Outer()
+## i = o.Inner()
+## _______________________________________
+##
+## This program prints True.  The "outer" parameter
+## to Inner.__init__ was filled in automatically by
+## the BoundInnerClass decorator.
+##
+## Thanks, BoundInnerClass, you've saved the day!
+##
+## -----
+##
+## Infinite extra-special thanks to Alex Martelli for
+## showing me how this could be done in the first place--
+## all the way back in 2010!
+##
+## https://stackoverflow.com/questions/2278426/inner-classes-how-can-i-get-the-outer-class-object-at-construction-time
+##
+## Thanks, Alex, you've saved the day!
+##
+
 
 import inspect
 import sys
