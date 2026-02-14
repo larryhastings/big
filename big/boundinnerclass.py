@@ -346,7 +346,7 @@ def _make_bound_class(unbound_cls, outer, base):
         Wrapper.__annotations__ = unbound_cls.__annotations__
 
     # Mark as a bound inner class with info about its binding
-    setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (unbound_cls, outer_weakref))
+    setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (unbound_cls, outer_weakref, True))
 
     # Set proper signature (without 'outer' param since it's injected)
     bound_signature = _make_bound_signature(unbound_cls.__init__)
@@ -391,11 +391,13 @@ class _BoundInnerClassBase(_ClassProxy):
     _alias_cache = {}
     _alias_cache_lock = threading.Lock()
 
-    def __init__(self, wrapped):
+    def __init__(self, wrapped, is_boundinnerclass):
         super().__init__(wrapped)
-        # Mark the wrapped class as a bindable inner class
-        # (unbound_class, outer_weakref) - outer_weakref is None for unbound
-        setattr(wrapped, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, None))
+        # Mark the wrapped class as participating in the bound inner class system.
+        # Tuple: (unbound_class, outer_weakref, is_boundinnerclass)
+        # outer_weakref is None for unbound classes.
+        # is_boundinnerclass is True for @BoundInnerClass, False for @UnboundInnerClass.
+        setattr(wrapped, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, None, is_boundinnerclass))
 
     @staticmethod
     def _find_descriptor_by_identity(outer_class, target):
@@ -594,6 +596,9 @@ class BoundInnerClass(_BoundInnerClassBase):
 
     __slots__ = ()
 
+    def __init__(self, wrapped):
+        super().__init__(wrapped, True)
+
     def _wrap(self, outer, base):
         return _make_bound_class(self.__wrapped__, outer, base)
 
@@ -618,6 +623,9 @@ class UnboundInnerClass(_BoundInnerClassBase):
 
     __slots__ = ()
 
+    def __init__(self, wrapped):
+        super().__init__(wrapped, False)
+
     def _wrap(self, outer, base):
         outer_weakref = weakref.ref(outer)
         cls = self.__wrapped__
@@ -632,8 +640,8 @@ class UnboundInnerClass(_BoundInnerClassBase):
         if hasattr(cls, '__annotations__'):
             Wrapper.__annotations__ = cls.__annotations__
 
-        # Mark as a bound inner class with info about its binding
-        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (cls, outer_weakref))
+        # Mark as an unbound inner class with info about its binding
+        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (cls, outer_weakref, False))
 
         return Wrapper
 
@@ -727,18 +735,37 @@ def _get_outer_weakref(cls):
 
 
 @export
-def is_bindable(cls):
+def is_boundinnerclass(cls):
     """
-    Return True if cls participates in the bound inner class system.
+    Return True if cls was decorated with @BoundInnerClass,
+    or is a bound wrapper class created from one.
 
-    A class is bindable if it was decorated with @BoundInnerClass
-    (or @UnboundInnerClass), or if it was created by bind() or rebase().
-
-    This returns True for both bound and unbound bindable classes.
+    Returns False for @UnboundInnerClass classes and regular classes.
+    Raises TypeError for non-class arguments.
     """
     if not isinstance(cls, type):
+        raise TypeError(f"is_boundinnerclass() argument must be a class, not {type(cls).__name__}")
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
+    if info is None:
         return False
-    return _BOUNDINNERCLASS_INNER_ATTR in cls.__dict__
+    return info[2]
+
+
+@export
+def is_unboundinnerclass(cls):
+    """
+    Return True if cls was decorated with @UnboundInnerClass,
+    or is a wrapper class created from one.
+
+    Returns False for @BoundInnerClass classes and regular classes.
+    Raises TypeError for non-class arguments.
+    """
+    if not isinstance(cls, type):
+        raise TypeError(f"is_unboundinnerclass() argument must be a class, not {type(cls).__name__}")
+    info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
+    if info is None:
+        return False
+    return not info[2]
 
 
 @export

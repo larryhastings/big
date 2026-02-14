@@ -735,7 +735,7 @@ class TestEdgeCases(unittest.TestCase):
         class Inner:
             pass
 
-        base = _BoundInnerClassBase(Inner)
+        base = _BoundInnerClassBase(Inner, True)
         o = object()
 
         with self.assertRaises(NotImplementedError):
@@ -970,31 +970,88 @@ class TestMisuseDetection(unittest.TestCase):
         self.assertIn("nested inside another class", str(cm.exception))
 
 
-class TestIsBindable(unittest.TestCase):
-    """Tests for is_bindable() function."""
+class TestIsBoundInnerClass(unittest.TestCase):
+    """Tests for is_boundinnerclass() function."""
 
-    def test_is_bindable_with_boundinnerclass(self):
-        """is_bindable returns True for @BoundInnerClass decorated classes."""
+    def test_is_boundinnerclass_with_boundinnerclass(self):
+        """is_boundinnerclass returns True for @BoundInnerClass decorated classes."""
         class Outer:
             @BoundInnerClass
             class Inner:
                 pass
 
-        self.assertTrue(is_bindable(Outer.Inner))
+        self.assertTrue(is_boundinnerclass(Outer.Inner))
 
+    def test_is_boundinnerclass_with_unboundinnerclass(self):
+        """is_boundinnerclass returns False for @UnboundInnerClass decorated classes."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                pass
 
-    def test_is_bindable_with_regular_class(self):
-        """is_bindable returns False for regular classes."""
+            @UnboundInnerClass
+            class Child(Parent):
+                pass
+
+        self.assertFalse(is_boundinnerclass(Outer.Child))
+
+    def test_is_boundinnerclass_with_regular_class(self):
+        """is_boundinnerclass returns False for regular classes."""
         class Regular:
             pass
 
-        self.assertFalse(is_bindable(Regular))
+        self.assertFalse(is_boundinnerclass(Regular))
 
-    def test_is_bindable_with_non_class(self):
-        """is_bindable returns False for non-class arguments."""
-        self.assertFalse(is_bindable(42))
-        self.assertFalse(is_bindable("string"))
-        self.assertFalse(is_bindable(None))
+    def test_is_boundinnerclass_with_non_class(self):
+        """is_boundinnerclass raises TypeError for non-class arguments."""
+        with self.assertRaises(TypeError):
+            is_boundinnerclass(42)
+        with self.assertRaises(TypeError):
+            is_boundinnerclass("string")
+        with self.assertRaises(TypeError):
+            is_boundinnerclass(None)
+
+
+class TestIsUnboundInnerClass(unittest.TestCase):
+    """Tests for is_unboundinnerclass() function."""
+
+    def test_is_unboundinnerclass_with_unboundinnerclass(self):
+        """is_unboundinnerclass returns True for @UnboundInnerClass decorated classes."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                pass
+
+            @UnboundInnerClass
+            class Child(Parent):
+                pass
+
+        self.assertTrue(is_unboundinnerclass(Outer.Child))
+
+    def test_is_unboundinnerclass_with_boundinnerclass(self):
+        """is_unboundinnerclass returns False for @BoundInnerClass decorated classes."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                pass
+
+        self.assertFalse(is_unboundinnerclass(Outer.Inner))
+
+    def test_is_unboundinnerclass_with_regular_class(self):
+        """is_unboundinnerclass returns False for regular classes."""
+        class Regular:
+            pass
+
+        self.assertFalse(is_unboundinnerclass(Regular))
+
+    def test_is_unboundinnerclass_with_non_class(self):
+        """is_unboundinnerclass raises TypeError for non-class arguments."""
+        with self.assertRaises(TypeError):
+            is_unboundinnerclass(42)
+        with self.assertRaises(TypeError):
+            is_unboundinnerclass("string")
+        with self.assertRaises(TypeError):
+            is_unboundinnerclass(None)
 
 
 class TestIsBound(unittest.TestCase):
