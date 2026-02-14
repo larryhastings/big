@@ -306,60 +306,37 @@ def _get_cache(outer):
         return cache
 
 
-def _make_bound_class(unbound_cls, outer, base, extra_base=None):
+def _make_bound_class(unbound_cls, outer, base):
     """
     Create a bound wrapper class.
 
     unbound_cls: the original unbound class being bound
     outer: the outer instance to bind to
     base: the primary base class for the wrapper
-    extra_base: optional second base class (for @Bindable classes, this is unbound_cls)
 
-    Returns a new class that inherits from base (and extra_base if provided)
+    Returns a new class that inherits from base
     and injects outer into __init__.
     """
     outer_weakref = weakref.ref(outer)
 
-    if extra_base is not None:
-        # For @Bindable classes: inherit from (extra_base, base) so that
-        # super() from extra_base goes to base (the bound parent)
-        class Wrapper(extra_base, base):
-            def __init__(self, *args, **kwargs):
-                unbound_cls.__init__(self, outer_weakref(), *args, **kwargs)
+    class Wrapper(base):
+        def __init__(self, *args, **kwargs):
+            unbound_cls.__init__(self, outer_weakref(), *args, **kwargs)
 
-            # Custom repr if the wrapped class doesn't have one
-            if unbound_cls.__repr__ is object.__repr__:
-                def __repr__(self):
-                    return "".join([
-                        "<",
-                        unbound_cls.__module__,
-                        ".",
-                        self.__class__.__name__,
-                        " object bound to ",
-                        repr(outer_weakref()),
-                        " at ",
-                        hex(id(self)),
-                        ">",
-                    ])
-    else:
-        class Wrapper(base):
-            def __init__(self, *args, **kwargs):
-                unbound_cls.__init__(self, outer_weakref(), *args, **kwargs)
-
-            # Custom repr if the wrapped class doesn't have one
-            if unbound_cls.__repr__ is object.__repr__:
-                def __repr__(self):
-                    return "".join([
-                        "<",
-                        unbound_cls.__module__,
-                        ".",
-                        self.__class__.__name__,
-                        " object bound to ",
-                        repr(outer_weakref()),
-                        " at ",
-                        hex(id(self)),
-                        ">",
-                    ])
+        # Custom repr if the wrapped class doesn't have one
+        if unbound_cls.__repr__ is object.__repr__:
+            def __repr__(self):
+                return "".join([
+                    "<",
+                    unbound_cls.__module__,
+                    ".",
+                    self.__class__.__name__,
+                    " object bound to ",
+                    repr(outer_weakref()),
+                    " at ",
+                    hex(id(self)),
+                    ">",
+                ])
 
     Wrapper.__name__ = unbound_cls.__name__
     Wrapper.__module__ = unbound_cls.__module__
@@ -505,9 +482,11 @@ class _BoundInnerClassBase(_ClassProxy):
                     wrapper_bases.append(resolved)
                 elif _BOUNDINNERCLASS_INNER_ATTR in getattr(base, '__dict__', {}):
                     raise RuntimeError(
-                        f"Cannot find bound inner class {base.__name__!r} "
-                        f"on {outer_class.__name__} or any of its bases. "
-                        f"The descriptor for this class may have been removed."
+                        f"Can't find a BoundInnerClass descriptor for "
+                        f"{base.__qualname__!r} on {outer_class.__qualname__!r} "
+                        f"or any of its bases.  "
+                        f"Every BoundInnerClass base must be an inner class "
+                        f"of the outer class or one of its ancestors."
                     )
 
             # Create the wrapper - always use cls as base
@@ -659,39 +638,39 @@ class UnboundInnerClass(_BoundInnerClassBase):
         return Wrapper
 
 
-@export
-def Bindable(cls):
-    """
-    Mark a class as participating in the bound inner class system.
-
-    Use this decorator for classes defined outside a class body that
-    inherit from a @BoundInnerClass class.  Unlike @BoundInnerClass,
-    this doesn't create a descriptor--the class remains a normal class.
-
-    To bind a @Bindable class to an outer instance, use the bind() function.
-
-    Example:
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):
-                    self.outer = outer
-
-        @Bindable
-        class Child(Outer.Inner):
-            def __init__(self, outer):
-                super().__init__()
-                assert self.outer is outer
-
-        o = Outer()
-        BoundChild = bind(Child, o)
-        instance = BoundChild()
-        assert instance.outer is o
-    """
-    # Mark the class as participating in the bound inner class system
-    # (unbound_class, outer_weakref) - outer_weakref is None for unbound
-    setattr(cls, _BOUNDINNERCLASS_INNER_ATTR, (cls, None))
-    return cls
+# @export
+# def Bindable(cls):
+#     """
+#     Mark a class as participating in the bound inner class system.
+#
+#     Use this decorator for classes defined outside a class body that
+#     inherit from a @BoundInnerClass class.  Unlike @BoundInnerClass,
+#     this doesn't create a descriptor--the class remains a normal class.
+#
+#     To bind a @Bindable class to an outer instance, use the bind() function.
+#
+#     Example:
+#         class Outer:
+#             @BoundInnerClass
+#             class Inner:
+#                 def __init__(self, outer):
+#                     self.outer = outer
+#
+#         @Bindable
+#         class Child(Outer.Inner):
+#             def __init__(self, outer):
+#                 super().__init__()
+#                 assert self.outer is outer
+#
+#         o = Outer()
+#         BoundChild = bind(Child, o)
+#         instance = BoundChild()
+#         assert instance.outer is o
+#     """
+#     # Mark the class as participating in the bound inner class system
+#     # (unbound_class, outer_weakref) - outer_weakref is None for unbound
+#     setattr(cls, _BOUNDINNERCLASS_INNER_ATTR, (cls, None))
+#     return cls
 
 
 @export
@@ -783,181 +762,181 @@ def is_bound(cls):
     return outer_weakref is not None
 
 
-@export
-def rebase(child, base):
-    """
-    Rebases a child class so it inherits from a particular base class.
+# @export
+# def rebase(child, base):
+#     """
+#     Rebases a child class so it inherits from a particular base class.
+#
+#     base must be a bindable inner class, either bound or unbound.
+#     unbound(child) must directly inherit from unbound(base).  Returns a
+#     variant of child that's been "rebased" so it inherits from base.
+#
+#     If base is bound, returns a new variant of child that inherits
+#     from base.  When the returned class is instantiated, base.__init__
+#     will be called with the outer instance that base is bound to.
+#
+#     If base is unbound, returns the unbound version of child.
+#
+#     If child already inherits from base, returns child unchanged.
+#
+#     Example:
+#         class Outer:
+#             @BoundInnerClass
+#             class Parent:
+#                 def __init__(self, outer):
+#                     self.outer = outer
+#
+#             @BoundInnerClass
+#             class Child(Parent):
+#                 def __init__(self, outer):
+#                     super().__init__()
+#
+#         o1 = Outer()
+#         o2 = Outer()
+#
+#         # Rebase o1.Child to inherit from o2.Parent
+#         RebasedChild = rebase(o1.Child, o2.Parent)
+#         instance = RebasedChild()
+#         assert instance.outer is o2
+#         assert RebasedChild is o2.Child
+#
+#         # Rebasing to unbound returns the unbound child
+#         assert rebase(o1.Child, Outer.Parent) is Outer.Child
+#     """
+#     if not isinstance(base, type):
+#         raise TypeError(
+#             f"base must be a class, not {type(base).__name__}"
+#         )
+#
+#     # Both child and base must participate in the binding system
+#     if not is_bindable(child):
+#         raise ValueError(
+#             f"{child.__name__} is not a bindable inner class"
+#         )
+#     if not is_bindable(base):
+#         raise ValueError(
+#             f"{base.__name__} is not a bindable inner class"
+#         )
+#
+#     unbound_base = unbound(base)
+#     unbound_child = unbound(child)
+#
+#     current_base = None
+#     for b in child.__bases__:
+#         if _unbound(b) is unbound_base:
+#             if current_base is not None:
+#                 raise ValueError(
+#                     f"{child.__name__} inherits from {unbound_base.__name__} multiple times"
+#                 )
+#             current_base = b
+#     if current_base is None:
+#         raise ValueError(
+#             f"{unbound_base.__name__} is not a base of {child.__name__}"
+#         )
+#
+#     if not is_bound(base):
+#         # If both base and current_base are unbound, no-op
+#         if not is_bound(current_base):
+#             return child
+#
+#         # base is unbound, current_base is bound
+#         return unbound_child
+#
+#     # base is bound - get the outer instance
+#     outer_weakref = _get_outer_weakref(base)
+#     outer = outer_weakref()
+#     outer_class = type(outer)
+#
+#     # Check if child is a BoundInnerClass in outer's class
+#     # If so, return the bound version directly (e.g., o2.Child)
+#     resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, unbound_child)
+#     if resolved is not None:
+#         return resolved
+#
+#     # Not a BIC in outer_class - create bound class using cache
+#     # This is a @Bindable class, so include unbound_child as extra_base for proper MRO
+#     cache = _get_cache(outer)
+#     bound_class = cache.get(unbound_child)
+#     if bound_class is None:
+#         bound_class = _make_bound_class(unbound_child, outer, base, extra_base=unbound_child)
+#         bound_class = cache.set(unbound_child, bound_class)
+#     return bound_class
 
-    base must be a bindable inner class, either bound or unbound.
-    unbound(child) must directly inherit from unbound(base).  Returns a
-    variant of child that's been "rebased" so it inherits from base.
 
-    If base is bound, returns a new variant of child that inherits
-    from base.  When the returned class is instantiated, base.__init__
-    will be called with the outer instance that base is bound to.
-
-    If base is unbound, returns the unbound version of child.
-
-    If child already inherits from base, returns child unchanged.
-
-    Example:
-        class Outer:
-            @BoundInnerClass
-            class Parent:
-                def __init__(self, outer):
-                    self.outer = outer
-
-            @BoundInnerClass
-            class Child(Parent):
-                def __init__(self, outer):
-                    super().__init__()
-
-        o1 = Outer()
-        o2 = Outer()
-
-        # Rebase o1.Child to inherit from o2.Parent
-        RebasedChild = rebase(o1.Child, o2.Parent)
-        instance = RebasedChild()
-        assert instance.outer is o2
-        assert RebasedChild is o2.Child
-
-        # Rebasing to unbound returns the unbound child
-        assert rebase(o1.Child, Outer.Parent) is Outer.Child
-    """
-    if not isinstance(base, type):
-        raise TypeError(
-            f"base must be a class, not {type(base).__name__}"
-        )
-
-    # Both child and base must participate in the binding system
-    if not is_bindable(child):
-        raise ValueError(
-            f"{child.__name__} is not a bindable inner class"
-        )
-    if not is_bindable(base):
-        raise ValueError(
-            f"{base.__name__} is not a bindable inner class"
-        )
-
-    unbound_base = unbound(base)
-    unbound_child = unbound(child)
-
-    current_base = None
-    for b in child.__bases__:
-        if _unbound(b) is unbound_base:
-            if current_base is not None:
-                raise ValueError(
-                    f"{child.__name__} inherits from {unbound_base.__name__} multiple times"
-                )
-            current_base = b
-    if current_base is None:
-        raise ValueError(
-            f"{unbound_base.__name__} is not a base of {child.__name__}"
-        )
-
-    if not is_bound(base):
-        # If both base and current_base are unbound, no-op
-        if not is_bound(current_base):
-            return child
-
-        # base is unbound, current_base is bound
-        return unbound_child
-
-    # base is bound - get the outer instance
-    outer_weakref = _get_outer_weakref(base)
-    outer = outer_weakref()
-    outer_class = type(outer)
-
-    # Check if child is a BoundInnerClass in outer's class
-    # If so, return the bound version directly (e.g., o2.Child)
-    resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, unbound_child)
-    if resolved is not None:
-        return resolved
-
-    # Not a BIC in outer_class - create bound class using cache
-    # This is a @Bindable class, so include unbound_child as extra_base for proper MRO
-    cache = _get_cache(outer)
-    bound_class = cache.get(unbound_child)
-    if bound_class is None:
-        bound_class = _make_bound_class(unbound_child, outer, base, extra_base=unbound_child)
-        bound_class = cache.set(unbound_child, bound_class)
-    return bound_class
-
-
-@export
-def bind(cls, outer):
-    """
-    Bind a class to an outer instance.
-
-    cls must be a bindable inner class--a class decorated with
-    @BoundInnerClass, @UnboundInnerClass, or @Bindable.
-    outer should be an instance of the outer class, or None.
-
-    If outer is an instance, returns the bound version
-    of cls for that instance.
-
-    If outer is None, returns the unbound version of cls.
-
-    Example:
-        class Outer:
-            @BoundInnerClass
-            class Inner:
-                def __init__(self, outer):
-                    self.outer = outer
-
-        o = Outer()
-        BoundInner = bind(Outer.Inner, o)
-
-        instance = BoundInner()  # o is passed in automatically
-        assert instance.outer is o
-
-        # Unbind by passing in None
-        assert bind(BoundInner, None) is Outer.Inner
-        assert bind(BoundInner, None) is unbound(BoundInner)
-    """
-    if outer is None:
-        return unbound(cls)
-
-    if not is_bindable(cls):
-        raise ValueError(
-            f"{cls.__name__} is not a bindable inner class"
-        )
-
-    unbound_cls = unbound(cls)
-    outer_class = type(outer)
-    cache = _get_cache(outer)
-
-    # Check cache first
-    bound_class = cache.get(unbound_cls)
-    if bound_class is not None:
-        return bound_class
-
-    # Try to find cls itself as a BoundInnerClass on outer_class
-    resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, unbound_cls)
-    if resolved is not None:
-        return resolved
-
-    # cls is a @Bindable class - search its bases for a BoundInnerClass
-    bound_base = None
-    for base in unbound_cls.__bases__:
-        if not is_bindable(base):
-            continue
-
-        resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, base)
-        if resolved is not None:
-            bound_base = resolved
-            break
-
-    if bound_base is None:
-        raise ValueError(
-            f"{cls.__name__} doesn't inherit from any BoundInnerClass of {outer_class.__name__}"
-        )
-
-    # Create bound class using cache
-    # Include unbound_cls as extra_base for proper MRO so super() works
-    bound_class = _make_bound_class(unbound_cls, outer, bound_base, extra_base=unbound_cls)
-    bound_class = cache.set(unbound_cls, bound_class)
-    return bound_class
+# @export
+# def bind(cls, outer):
+#     """
+#     Bind a class to an outer instance.
+#
+#     cls must be a bindable inner class--a class decorated with
+#     @BoundInnerClass, @UnboundInnerClass, or @Bindable.
+#     outer should be an instance of the outer class, or None.
+#
+#     If outer is an instance, returns the bound version
+#     of cls for that instance.
+#
+#     If outer is None, returns the unbound version of cls.
+#
+#     Example:
+#         class Outer:
+#             @BoundInnerClass
+#             class Inner:
+#                 def __init__(self, outer):
+#                     self.outer = outer
+#
+#         o = Outer()
+#         BoundInner = bind(Outer.Inner, o)
+#
+#         instance = BoundInner()  # o is passed in automatically
+#         assert instance.outer is o
+#
+#         # Unbind by passing in None
+#         assert bind(BoundInner, None) is Outer.Inner
+#         assert bind(BoundInner, None) is unbound(BoundInner)
+#     """
+#     if outer is None:
+#         return unbound(cls)
+#
+#     if not is_bindable(cls):
+#         raise ValueError(
+#             f"{cls.__name__} is not a bindable inner class"
+#         )
+#
+#     unbound_cls = unbound(cls)
+#     outer_class = type(outer)
+#     cache = _get_cache(outer)
+#
+#     # Check cache first
+#     bound_class = cache.get(unbound_cls)
+#     if bound_class is not None:
+#         return bound_class
+#
+#     # Try to find cls itself as a BoundInnerClass on outer_class
+#     resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, unbound_cls)
+#     if resolved is not None:
+#         return resolved
+#
+#     # cls is a @Bindable class - search its bases for a BoundInnerClass
+#     bound_base = None
+#     for base in unbound_cls.__bases__:
+#         if not is_bindable(base):
+#             continue
+#
+#         resolved = _BoundInnerClassBase._resolve_descriptor(outer, outer_class, base)
+#         if resolved is not None:
+#             bound_base = resolved
+#             break
+#
+#     if bound_base is None:
+#         raise ValueError(
+#             f"{cls.__name__} doesn't inherit from any BoundInnerClass of {outer_class.__name__}"
+#         )
+#
+#     # Create bound class using cache
+#     # Include unbound_cls as extra_base for proper MRO so super() works
+#     bound_class = _make_bound_class(unbound_cls, outer, bound_base, extra_base=unbound_cls)
+#     bound_class = cache.set(unbound_cls, bound_class)
+#     return bound_class
 
 
 @export

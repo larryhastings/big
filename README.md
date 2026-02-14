@@ -6272,21 +6272,29 @@ It's not all that difficult, you merely need to obey the following rules:
 
 1. *A bound inner class can inherit normally from any unbound class.*
 
-2. *All classes that inherit from a bound inner class must always call the
-superclass's `__init__`. You don't need to pass in the `outer` parameter;
-it'll be automatically passed in to the superclass's `__init__` as before.*
+2. *If your bound inner class calls `super().__init__`, and its
+parent class is also a bound inner class, don't pass in `outer` manually.*
+`outer` will be automatically passed in to all `__init__` methods of every
+bound inner parent class.
 
-3. **Directly** *inheriting from a* **bound** *inner class is unsupported.*
+3. *All bound inner class bases of a bound inner class must be inner classes
+of related classes.*  If Child inherits from Parent, and both classes are
+decorated with `@BoundInnerClass` (or `@UnboundInnerClass`), both classes
+must be defined in the same outer class or one of its base classes.  This is
+a type relation constraint; we guarantee that "outer" is an instance of the
+outer class.
+
+4. **Directly** *inheriting from a* **bound** *inner class is unsupported.*
 If `o` is an instance of `Outer`, and `Outer.Inner` is an inner class
 decorated with `@BoundInnerClass`, don't write a class that directly inherits
 from `o.Inner` (e.g. `class Mistake(o.Inner)`).  You should always inherit
 from the unbound version (e.g. `class GotItRight(Outer.Inner)`).
 
-4. *An inner class that inherits from a bound inner class, and which also
+5. *An inner class that inherits from a bound inner class, and which also
 wants to be bound to the outer object, should be decorated with
 [`BoundInnerClass`](#boundinnerclasscls).*
 
-5. *An inner class that inherits from a bound inner class, but doesn't
+6. *An inner class that inherits from a bound inner class, but doesn't
 want to be bound to the outer object, should be decorated with
 [`UnboundInnerClass`](#unboundinnerclasscls).*
 
