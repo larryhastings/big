@@ -4222,24 +4222,27 @@ returns the string `'1.3'`.
 <dl><dd>
 
 Python's `tokenize` and `re` (regular expression) modules both had to
-solve an API problem.  In both cases, you provide a large string of text
-to them, and they return little substrings, tiny little slices of the
-big string.  Often, the user wants to know *where* those little slices
-came from.  How do you communicate that?
+solve an API problem.  In both cases, you submit a large string to them,
+and they split it up and return little substrings--tiny little slices
+of the big string.  Often, the user needs to know *where* those little
+slices came from.  How do you communicate that?
 
 In both cases, they added extra information accompanying the string.
-`tokenize.tokenize` returns a `TokenInfo` object
-[https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](containing
-the line and column numbers of the string it contains).  And the regular
-expression engine returns
-[https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](a `Match` object)
-which tells you the index where the string started in the original string.
+But they took different, and incompatible, approaches, and they both
+represent "where" the little bitty strings came from differently:
 
-This is sufficient--barely--but it's fragile.  What if you further
-subdivide the string?  What if you join the text with its antecedent
+* `tokenize.tokenize` returns a `TokenInfo` object
+  [https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](containing
+  the line and column numbers of the string it contains).
+* The regular expression engine returns
+  [https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](a `Match` object)
+  which tells you the index where the string started in the original string.
+
+This is sufficient--barely.  It's also fragile.  What if you further
+subdivide the string?   What if you join the text with the antecedent
 or subsequent text from the original?  Now you have to clumsily
 track these offsets yourself.  And if you want line and column
-information the re module's `Match` object is of no help.
+information, the re module's `Match` object is of no help.
 
 And what if you're parsing your text yourself, rather than using
 `tokenize` or `re`?  If you split up a string into lines using the
@@ -4249,29 +4252,29 @@ the string, you have to mate your offset tracking with the `re.Match`
 object's tracking.  What a pain!
 
 big's `String` object solves all that.  It's a drop-in replacement for
-Python's `str` object, and in fact is a subclass of `str`.  The functionality
-it adds: any time you extract a substring of a `String` object, the substring
-knows its *own* offset, line number, and column number relative to the original
-string!  You don't need to figure it out yourself, and you don't need to store
-the information separately in a fragile external object.  Any time you have a
-`String` object, you *automatically* know where it came from.
-(You can also specify a "source" for the text--a filename or what
-have you--and the `String` object will retain that too.)
+Python's `str` object, and in fact is a subclass of `str`.  What it gives you:
+any time you extract a substring of a `String` object, the substring knows
+its *own* offset, line number, and column number relative to the original
+string.  You *don't* need to figure it out yourself, and you *don't* need to
+store the information separately using some fragile external representation.
+Any time you have a `String` object, you *automatically* know where it came
+from.  (You can even specify a "source" for the text--the original filename
+or what have you--and the `String` object will retain that too.)
 
 This makes producing syntax error messages effortless.  If `s` is a `String`
-object, and represents a syntax error because it was an unexpected token,
-you can simply write this:
+object, and represents a syntax error because it was an unexpected token
+in the middle of a text you're parsing, you can simply write this:
 
 ```Python
 raise SyntaxError(f'{s.where}: unexpected token {s}')
 ```
 
-The `where` property is a pre-formatted string containing the line and
-column information for the string; if you specified a "source",
-it contains that too.  If you initialized the `String` with "source"
-set to `/home/larry/myscript.py`, and `s` was the token `whule` (whoops!
-mistyped `while`!), from line number 12 and column number 15, the text
-of the exception would read:
+`where` is a property, an automatically-formatted string containing
+the line and column information for the string.  And if you specified
+a "source", it contains that too.  For example, if you initialized the
+`String` with "source" set to `/home/larry/myscript.py`, and `s` was
+the token `whule` (whoops! mistyped `while`!), from line number 12,
+column number 15, the text of the exception would read:
 
 ```
 "/home/larry/myscript.py" line 12 column 15: unexpected token 'whule'
@@ -4280,8 +4283,8 @@ of the exception would read:
 #### Tomorrow's methods, today
 
 big supports older versions of Python; as of this writing it supports all
-the way back to 3.6, which has been unsupported by Python itself for several
-years now.
+the way back to 3.6.  (The Python core development team dropped support for
+3.6 several years ago!)
 
 The `String` object supports *all* the methods of the `str` object.  At the
 moment there's a new `str` method as of version 3.7, `isascii`.  Rather than
@@ -4316,129 +4319,291 @@ called `generate_tokens` that produces the same output as `tokenize.generate_tok
 except (of course!) all the strings returned in its `TokenInfo` objects
 are `String` objects.
 
-Unfortunately, there's one more wrinkle.  For reasons I cannot imagine,
-the objects in CPython's `re` module neither let you instantitate them,
-nor subclass them.  This means it's *impossible* for `String.compile` to
-return objects that pass `isinstance` tests.  `String.compile` returns
-a `Pattern` object, but it's *not* an instance of `re.Pattern`, and
-`isinstance` tests will fail.  **big** was forced to reimplement these
-objects, and we ensure they behave identically to the originals, but
-CPython makes this facet of incompatibility unfixable.
+Unfortunately, there's one more wrinkle.  The objects returned by CPython's
+`re` module don't let you instantitate them, nor subclass them.
+They deliberately set an internal flag that means "Python code is not
+permitted to subclass this class".  This means it's *impossible* for
+`String.compile` to return objects that pass `isinstance` tests.
+`String.compile` returns a `Pattern` object, but it's *not* an instance
+of `re.Pattern`, and `isinstance` tests will fail.  **big** was forced
+to reimplement these objects, and we ensure they behave identically
+to the originals, but CPython makes this facet of incompatibility unfixable.
 
 
 </dd></dl>
 
-## The big `LinkedList`
+## The big `linked_list`
 
 <dl><dd>
 
-big's `LinkedList` behaves like a list or deque: you add values to it,
-and it maintains them in order and manages the storage.  Internally it's a
-traditional doubly-linked-list structure; it creates nodes, which contain
-the forwards and backwards links and a reference to your value.
+### Background
+
+A [linked list](https://en.wikipedia.org/wiki/Linked_list) is a
+*fundamental* data structure in computer science, second only perhaps
+to the array and the record.  And yet Python has never officially
+shipped with a linked list!
+
+There *is* a linked list hidden in the standard library of CPython;
+[`collections.deque`](https://docs.python.org/3/library/collections.html#collections.deque)
+is *implemented* internally using a linked list.  So it's possible to
+use a `deque` where you'd want a real linked list--like, a use case
+where you frequently insert and remove values in the middle of the list.
+This would have better performance than doing it with, say, the classic
+Python `list`, where inserts and removals from the middle of the list
+are an O(n) operation.  However, the `deque` API makes it inconvenient
+to use as a linked list.
+
+In 2025, I wanted a linked list for a project.  I surveyed the linked
+lists available for Python at the time, decided I didn't want to use
+*any* of them--so I wrote my own.  Now you get to use it too!
+
+### Overview
+
+big's `linked_list` itself behaves externally like a `list` or a
+`deque`; you insert/append/prepend values to the list, and it stores
+them in order and manages the storage.
+
+Where big's `linked_list` shines is in its iterators.  `linked_list`
+iterators are more like "database cursors"; they act like a moveable
+virtual head of the list, centered on any value you like.
+
+Also, unlike Python's other data structures, `linked_list` *explicitly*
+supports modifying the list during iteration.  You can have as many
+iterators iterating over a list as you like, and you can add or remove
+nodes anywhere to your heart's content.
+
+In addition, `linked_list` supports thread-safety through automatic
+internal locking.
+
+### Implementation details
+
+Internally a big `linked_list` is a traditional doubly-linked-list.
+It stores your value in nodes, which contain forwards and backwards
+references to the next and previous nodes, as well as a reference to
+your value. This makes its performance predictable: inserting and
+removing elements anywhere in the list is O(1), whereas accessing
+elements by index is O(n).
+
+There are acutally two types of node in a big `linked_list`: "data"
+nodes, which store a value, and "special" nodes, which don't store a
+value. Why are these "special" nodes needed?  Well, for example,
+`linked_list` makes a design choice that's uncommon but not exactly
+rare for linked lists: the "head" and "tail" nodes are explicit nodes
+in the linked list.  When you create a new `linked_list` object,
+it contains *two* nodes, not *zero:* the newly-created list already
+contains "head" and "tail" nodes. (This makes for a nice implementation;
+for example, *every* insert and delete simply updates four references,
+rather than needing lots of "if we're pointed at the head" special
+cases all over the place.)
+
+There's a third type of "special" node: a *deleted* node.
+If an iterator is pointing at a data node containing a value X,
+and X is removed from the linked list, the *data* is removed but
+the *node* stays in place.  That node is demoted to a "special"
+node.  This change is harmless; the iterator can continue pointing
+to it indefinitely, or can iterate forward without difficulty.
+The fact that the node was demoted is invisible to the user of
+the iterator if all they're doing is conventional iteration.
+However, this implementation choice will have ramifications for
+the "iterators as database cursors" APIs, as we'll see shortly.
 
 
-#### `LinkedList` methods
+#### `linked_list` methods
 
-append
-prepend / appendleft
+`linked_list` provides a superset of the union of the APIs of
+`list` and
+[`collections.deque`.](https://docs.python.org/3/library/collections.html#collections.deque)
+Every method call supported by both `list` and `deque` is supported
+by `linked_list`, and you can read the documentation for those types
+to see the basics.
 
-extend
-extendleft
+However, there are also some important changes.  First and
+foremost, for `list` and `deque` methods that return an *index*
+into the list, the `linked_list` equivalent returns an *iterator*.
+This is a superior API, due to the "database cursor" features of
+`linked_list` iterators.  It's also better for performance, as
+this reduces accessing values by index, which is O[n] on
+`linked_list`.
 
-pop
-popleft
-remove
-clear
-
-find
-rfind
-
-match
-rmatch
-
-copy
-
-magic methods:
-
-* `bool(t)` returns `True` if `t` contains any values, or `False` if `t` is empty.
-* `len(t)` returns the number of items in `t`.  If `t` is empty, this is 0.
-* `t == t2` is true if and only if `t` and `t2` are of the same type and contain the
-  same values in the same order.
-* `iter(t)` returns a forward iterator over `t`.
-* `reversed(t)` returns a reverse iterator over `t`.
+In addition, `linked_list` contains many "reversed" versions of
+methods.  These are named by taking the original method name and
+prepending it with `r`.  For example:
+* `extend` is complemented with `rextend`, which inserts
+  the values from the iterable in front of the head of the list
+  in forwards order.
+* `find` is complemented by `rfind`, which searches for a value
+  starting at the end of the list and searching backwards.
 
 
-The `LinkedList` object supports a subset of the methods on list (or deque):
-it has `append`, and `prepend` (also known as `appendleft`), and `pop` and `popleft`.
-But most of the time you won't use those--you'll be modifying the list via an *iterator.*
+`linked_list` also supports many of Python's "magic methods":
 
-With a doubly-linked list, conceptually you want to operate on the list *locally*,
-not *globally*.  You're going to be navigating around somewhere in the middle of the
-list--who knows where!--and you're examining values, and maybe adding and removing nodes
-relative to where you're doing your work.  And there's a specific Python object that
-helps you navigate through an iterable--the *iterator.*
+* `__add__`: `t + x` returns a new list containing the contents of `t` appended with `x`;
+  `x` must be an iterable.
+* `__bool__`: `bool(t)` returns `True` if `t` contains any values, or `False` if `t` is empty.
+* `__contains__`: `v in t` evaluates to `True` if the value `v` is in `t`.
+* `__copy__`: `copy.copy(t)` returns a shallow copy of the list.
+* `__delitem__`: `del t[3]` will remove the fourth value in `t`.  Also supports slices.
+* `__deepcopy__`: `copy.deepcopy(t)` returns a deep copy of the list.
+* `__eq__` and the other five "rich comparison" methods: `t == t2` is true if and only if
+  `t` and `t2` are of the same type and contain the same values in the same order.
+* `__getitem__`: `t[3]` evaluates to the fourth value in `t`.  Also supports slices.
+* `__iadd__`: `t += x` appends the contents of iterable `x` to `t`.
+* `__imul__`: `t *= n` results in `t` containing `n` copies of its own contents.
+* `__iter__`: `iter(t)` returns a forward iterator over `t`.
+* `__len__`: `len(t)` returns the number of items in `t`.  If `t` is empty, this is 0.
+* `__mul__`: `t * n` return a new list containing `n` copies of the contents of `t`.
+* `__reversed__`: `reversed(t)` returns a reverse iterator over `t`.
+* `__repr__`: `repr(t)` produces a custom repr showing the current contents of the list.
+* `__setitem__`: `t[3] = v` will overwrite the fourth value in `t` with `v`.  Also supports slices.
 
 
-#### `LinkedList` iterators
+Finally, `linked_list` supports methods that lets you move
+nodes directly from one list to another, rather than inserting
+new nodes.  If you're moving lots of nodes, this can be a huge
+performance win.  The relevant methods:
 
-`LinkedList` iterators are more like *database cursors.*  As they move through the
-linked list, they point at successive nodes.  At all times the iterator "points to"
-a node in the linked list; you can see which node the iterator is pointing to by
-accessing its `value` property:
+* `cut` lets you specify a range of nodes to remove from a
+  `linked_list`.  You can specify the start and stop for the
+  range of nodes to cut, as iterators.  The nodes are removed
+  from the linked list, and returned in their own new linked list.
+* `splice` lets you move *all* the nodes of one `linked_list`
+  into another.  After splicing linked list A into linked list B,
+  A will be empty, and B will contain all of A's nodes, in order.
+* `rcut` and `rsplice` are "reversed" versions of `cut` and `splice`.
 
-```Python
-t = LinkedList((1, 2, 3))
-it = iter(t)
-for value in it:
-   print(value, end=' ')
-   print(it.value, end=' ')
-print()
+
+### `linked_list` iterators
+
+While developing `linked_list`, it occured to me: the usual use
+case for a linked list involves an arbitrarily-long sequence of
+data, which you iterate over and process.  For example, compilers
+generally represent the program being compiled as a linked list
+of "basic blocks".
+
+When using a linked list for these sorts of use cases, you
+generally operate on a pointer to the linked list node under
+current consideration.  In Python parlance, you iterate over the
+list, getting a reference to each node in the list in turn.
+You perform your computation on that node, then iterate to the
+next one.
+
+However, you often want to *modify* the list while you're doing
+this.  You may want to remove the node, or insert new nodes,
+or both--replace the node with something else.  But idiomatic
+Python iterators don't let you do anything like that.  All they
+know how to do is "advance to the next value and yield it".
+This was a genius design choice for Python, but for our linked
+list it's simply not enough.
+
+`linked_list` solves this by making its iterators far more
+powerful.  One way of describing this is like a *database cursors:*
+a `linked_list` iterator points at a value (or "row"), and
+lets you modify the list (or "table") relative to that value.
+I think of it more like a moveable virtual list "head";
+the iterator points at a value, and provides APIs that let
+it behave like a `linked_list` pointed at that value.
+`linked_list` iterators provide nearly the *entire* API
+that `linked_list` itself provides, though modified to
+make sense given the context of pointing at any arbitrary
+node in the list.
+
+#### Indexing
+
+Iterators support all operations you can perform by indexing
+into a linked list; you can get, set, and delete values.
+
+However, the meaning of the index is slightly different for
+an iterator.  Negative indices don't start at the end and
+work backwards; instead, they start at the *current node*
+and work backwards.  If `t` is a linked list containing
+`range(5)`, and `it` is an iterator pointing at value `2`,
+indexing would look like this:
+
+```
+                            it
+                            |
+                            v
+[head] <-> [0] <-> [1] <-> [2] <-> [3] <-> [4] <-> [tail]
+        it[-2]  it[-1]   it[0]   it[1]   it[2]
 ```
 
-This prints `1 1 2 2 3 3`.
+If you advanced `it` once, so it pointed to the value `3`,
+indexing would now look like this:
 
-`LinkedList` iterators support a lot of different method calls.  For example,
-you can call `before` and `after` on an iterator; these return new iterators,
-pointing at the previous and next nodes respectively.
+```
+                                    it
+                                    |
+                                    v
+[head] <-> [0] <-> [1] <-> [2] <-> [3] <-> [4] <-> [tail]
+        it[-3]  it[-2]  it[-1]   it[0]   it[1]
+```
 
-`LinkedList` iterators also support `find` (like `list` and `deque`), and `rfind`,
-but instead of returning an *index* where the value was found, they return an *iterator*
-pointing at the node where the value was found.  There's also `match` and `rmatch`,
-where you pass in a callable called `predicate` that *tests* the value;
-if the predicate returns a true value, we return an iterator pointing at that node.
-These four methods return `None` if no matching value was found in the list.
+Indexing into or past the "head" and "tail" nodes raises an
+`IndexError`.
+
+You can also use slices, e.g. `it[-3:5:2]`.  There are two
+important differences from slicing into `list` or `deque` objects:
+
+* First, negative indices in slices work like negative
+  indices normally, retreating backwards into the list.
+* Second, slices into `linked_list` iterators don't
+  clamp for you.  Indexing into or past the "head" and "tail"
+  nodes raises an `IndexError`, rather than silently
+  clamping the indices to a legal range.
 
 
-Not only can you iterate over the
-values of a `LinkedList` using one, you can also modify the list!  `LinkedListIterator`
-objects have methods like `insert` (also known as `prepend`), `append`, `pop`, `popleft`...
-These all operate relative to the linked list node the iterator is currently pointing to.
+#### Method calls
 
+You can also make method calls on the iterator, to operate
+on the list starting at the current node.  These operations
+always operate relative to the *current node,* rather than
+relative to the beginning (or end) of the list.  Also, as
+a rule, methods that operate on one or more nodes always
+operate on the *current* node.
 
+Here are some examples.  In these examples, `it` is always
+a forwards iterator:
 
+* `it.pop` pops and returns the value the iterator currently
+  points at, then moves the iterator *back* one node.
+* `it.rpop` pops and returns the value the iterator currently
+  points at, then moves the iterator *forward* one node.
+* `it.append` inserts a value *after* the current node.
+* `it.prepend` inserts a value *before* the current node.
+* `it.find` searches for a value, starting at the current
+  node and continuing forwards.
+* `it.rfind` searches for a value, starting at the current
+  node and continuing backwards.
+* `it.truncate` deletes all values at or after the current
+  node.  When `it.truncate` is done, `it` will be pointing
+  at "tail", and `it[-1]` will be unchanged.
 
+#### Magic methods
 
+`linked_list` iterators also implements many of the magic methods
+supported by `linked_list`.  For example, if `it` is a forward
+iterator pointing at an arbitrary node:
 
-If you create a linked list with two nodes (t = LinkedList((1, 2))), and you create an iterator over it (it = iter(t)), when you call next() it advances to the first data node and yields its value.  Now your iterator is "pointing at" the value 1.  You can insert or append new values, relative to 1 in the linked list!  All the iterator methods are performed relative to its current position--find, rfind, match, rmatch, before, after.  replace() lets you replace the value stored at that node.
-
-You can even pop() the current node.  When you pop(), the iterator cursor rewinds by one node and returns the value of the old node.  (popleft() does exactly the same thing, but advances one node forward.  These are reversed for reversed iterators.)  That's right, adding and removing nodes from a linked list while you're iterating over it is expressly supported.
-
+* `__bool__`: `bool(it)` returns `True` if `it` is not pointed at "tail".
+* `__contains__`: `v in it` evaluates to `True` if the value `v` is found at or after `it` in the list.
+* `__eq__`: `it == it2` is true if and only if
+  `it` and `it2` point to the same node.  Iterators don't support relative comparison (less-than, etc).
+* `__iter__`: `iter(it)` returns a copy of `it`.
+* `__len__`: `len(t)` returns the number of items at or after `it` in the list.  If `it` points to "tail", this returns 0.
+* `__reversed__`: `reversed(t)` returns a reverse iterator pointing at the same node as `it`.
 
 
 #### Special nodes
 
-Now it's time to talk about "special nodes".  Every linked list has the concept of
-its "head" and its "tail".  With `LinkedList`, "head" and "tail" are special nodes
-in the linked list--an "empty" `LinkedList` actually contains two special nodes,
-"head" and "tail".
-
-The two rules about special nodes are:
+There are two rules that apply to iterators when interacting
+with special nodes:
 
 * Special nodes never have a value.
 * When an iterator navigates through a `LinkedList`, it automatically skips over special nodes.
 
-For example, let's say you create a new empty linked list, and you create an iterator
+
+Let's see specifically how iterators interact with special nodes.
+say you create a new empty linked list, and you create an iterator
 over that linked list, and you call `next` on it:
 
 ```Python
@@ -4453,66 +4618,63 @@ first time, it advances to `1` and returns it.  The iterator is now pointing at 
 the value `1`.  Calling `next(it, None)` the second time advances to the "tail" node;
 this would normally raise `StopIteration`, but the second argument to `next` is a
 "default value" it will return instead of raising.  So this second call to `next(it, None)`
-just returns `None`.
+just returns `None`.  After this second `next` call, `it` points to the "tail" node.
 
-Any time you're pointed at a special node, you can do almost anything you can do when
-pointed at a normal node.  You can:
+#### Deleted nodes
+
+If an iterator is pointing at a value, and that value is deleted, the node is demoted
+from a "data" node to a "special" node.  The iterator continues to point to it.  Consider
+this example:
+
+```Python
+t = linked_list([1, 2, 3, 4, 5])
+it = t.find(3)
+del t[2]
+```
+
+The internal layout of the list and iterator now looks like this:
+
+```
+                               it
+                               |
+                               v
+[head] <-> [1] <-> [2] <-> [special] <-> [4] <-> [5] <-> [tail]
+```
+
+Here `it` points to a "special" node, where the value `2` used to be.
+
+If you now iterated over the linked list:
+
+```Python
+for i in t:
+   print(i)
+```
+
+you'd see 1, 2, 4, and 5, like you'd expect.  The special node is
+still there, but remember the rule: linked list iterators automatically
+skip over special nodes.
+
+
+When you have an iterator pointed at a special node, you can do almost anything
+you can do with an iterator pointed at a normal node.  You can:
 
 * navigate, using `next` or `previous` or `find` or `rfind` or `match` or `rmatch`
 * create new iterators using `before` or `after`
 * insert new values using `append` or `prepend` or `extend` or `extendleft`
 * attempt to remove values using `remove` or `rremove`
 
-What can't you do when pointing at a special node?  Anything involving a value will
-raise `SpecialNodeError` (a subclass of `LookupError`).  Here are the operations
-that raise `SpecialNodeError` if you attempt them while pointing at a special node:
+What can't you do when pointing at a special node?  Any operation that attempts
+to interact with the *value* of the *current* node will raise `SpecialNodeError`
+(a subclass of `LookupError`).  For example:
 
-* Calling the `replace` method.
-* Evaluating the `value` property.
-* Popping the current value using `pop` or `popleft`.
+* Evaluating `it[0]`.
+* Evaluating `it[-1:1]`.
+* Popping the current value using `it.pop()` or `it.rpop()`.
 
 If you're worried about whether your iterator is pointing at a special node,
 you can check the `special` property.  That returns `None` for a normal node,
-or `"head"` for the head node, or `"tail"` for the tail node.
-
-> [!NOTE]
-> You're explicitly permitted to prepend to "head" with a value,
-> or append to "tail" with a value.  This is called "sloppy" prepend
-> and append.  The "head" and "tail" nodes will always be the
-> *first* and *last* nodes of the linked list, respectively.
-
-#### Deleted nodes
-
-Now consider this complicated scenario:
-
-```Python
-t = LinkedList((1, 2, 3))
-it = t.find(2)
-copy = it.copy()
-copy.pop()
-```
-
-What does `it` point to now?  This is the third type of special node: a "deleted" node.
-
-Internally, nodes contain a reference count for how many iterators currently point at them,
-called `iterator_refcount`.
-If someone attempts to remove a node from the linked list and its "iterator reference count"
-is greater than 0,, the node doesn't *actually* get removed.
-Instead, that node forgets its value, and it's demoted to a
-"deleted" special node by setting its `special` value to `"deleted"`.
-(And, once the node's "iterator reference count" drops to zero, it finally *does* get removed
-from the linked list.)
-
-What are the rules about "deleted" special nodes?  Exactly the same as for any other
-"special" node.  If you have an iterator pointing at a special node, you can't interact
-with its value, but you can still call all the other iterator methods.
-
-And--as already mentioned--`LinkedList` iterators ignore special nodes.  If you call `next(some_iterator)`,
-and the next node is a deleted node, `next` will skip past it to the node after that.
-(And if that ones is deleted, it'll keep going until it either finds a normal node
-or it gets to the "tail".)
-
-
+`"head"` for the head node, `"tail"` for the tail node, and `"special"` for
+any other special node.
 
 
 #### Reverse iterators
@@ -4522,37 +4684,51 @@ reverse iterator by calling `reversed` on the list.  You can also create
 a reverse iterator by calling `reversed` on a forwards iterator; this
 returns a reverse iterator pointing at the same node.
 
-With reverse iterators, the directionality of every method is reversed:
+Conceptually, a reverse iterator behaves identically to a forwards
+iterator, except the reverse iterator "sees" the list backwards.
+If you have a linked list that looks like this:
 
-* A new reversed iterator points at "tail", not "head".
-* `next` goes to the *previous* node, `previous` goes to the *next* node.
-* A reversed iterator becomes "exhausted" when it reaches "head", not "tail".
-* `pop` goes to the *next* node, `popleft` goes to the *previous* node.
-* `append` inserts *before* the current node, `prepend` inserts *after* the current node.
-* `extend` inserts the new values *before* the current node, `extendleft` inserts the
-  new values *after* the current node.  However, the values are still inserted into the
-  list in forwards order.  (`extend((1, 2, 3))` and `extendleft((1, 2, 3))` always insert
-  the nodes `1`, `2`, and `3` in that order; they *never* insert them reversed, like
-  `3`, `2`, `1`.)
-* `before` returns a *reverse* iterator pointing at the *next* node,
-  `after` returns a *reverse* iterator pointing at the *previous* node.
-* `find` returns a *reverse* iterator at the *previous* instance of value,
-  `rfind` returns a *reverse* iterator at the *next* instance of value.
-* `match` returns a *reverse* iterator at the *previous* value accepted by the predicate,
-  `rmatch` returns a *reverse* iterator at the *next* value accepted by the predicate.
-* Calling `reversed` on a reverse iterator returns a *forward* iterator
-  pointing at the same node.
+```
+[head] <-> [1] <-> [2] <-> [special] <-> [3] <-> [4] <-> [5] <-> [tail]
+```
 
+a *reverse* iterator would see the list like this:
+
+```
+[tail] <-> [5] <-> [4] <-> [3] <-> [special] <-> [2] <-> [1] <-> [head]
+```
+
+Apart from this behavioral change, reverse iterators behave identically
+to forwards iterators.  They support the exact same APIs with the same
+arguments.
+
+This makes the behavior of a reverse iterator easy to predict.  For example,
+if `fi` is a forwards iterator, and `ri` is a reverse iterator on the same list:
+
+* A newly-created reverse iterator points to the "tail" node, and `ri.reset()`
+  moves the reverse iterator back to the "tail" node.
+* A reverse iterator becomes exhausted once it reaches the "head" node.
+  `ri.exhaust()` moves `ri` so it points at the "head" node.
+* `ri.append()` inserts *before* the current node, `ri.prepend()`
+  inserts *after* the current node.
+* `ri[1]` evaluates to the *previous* value in the list, and `ri[-1]`
+  evaluates to the *next* value in the list.
+
+One thing that *doesn't* change: when inserting multiple nodes (`splice`, `extend`,
+`rextend`), the nodes are always inserted in forwards order.  Effectively, if `fi` and
+`ri` point to the same node, `fi.extend(X)` and `ri.rextend(X)` would do the same thing,
+and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
 
 #### Invariants
 
-The
-
 * An iterator pointing at a node will continue to point at that node until it takes action to move to a new node.
-* If you use an iterator to append a new value, and nobody deletes that value, and then you advance that iterator with `next()` the iterator will (eventually) yield that value.
-    * If you use an iterator to prepend a new value, and nobody deletes that value, and then you advance that iterator with `previous()` the iterator will (eventually) yield that value.
-* By default, actions on iterators that act on multiple nodes include the node they're pointing at.
-* iterator[0] always refers to the node the iterator is pointing at, even if it's a special node.
+* If you use an iterator to append a new value, and nobody deletes that value, and you subsequently advance that
+  iterator with `next()` enough times, the iterator will yield that value.
+    * If you use an iterator to prepend a new value, and nobody deletes that value, and you subsequently advance
+      that iterator with `previous()` enough times, the iterator will yield that value.
+* As a rule, actions on iterators that act on multiple nodes include the node they're pointing at.
+* iterator[0] *always* refers to the node the iterator is currently pointing at, even if it's a special
+  node.  If the index is non-zero, it skips over special nodes.
 
 
 </dd></dl>
@@ -6550,13 +6726,29 @@ It's been a whole year... and I've been busy!
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
 * Rewrote `BoundInnerClass`.  This removes some old concerns:
-    * You no longer need the `parent.cls` hack!
-    * `BoundInnerClass` now relies on comparison by identity
-      instead of by name, which means you may now rename
-      your inner classes to your hearts' content.
-   * `BoundInnerClass` now has some locking, to prevent
-     a race condition when caching the same bound inner class
-     created simultaneously in multiple threads.
+    * You no longer need the `parent.cls` hack!  (Well, you
+      do if you support Python 3.6, but it's no longer needed
+      in Python 3.7+.  Bound inner class adds a new function,
+      `bound_inner_base`, to help with the transition.)
+    * The bound inner class implementation now relies on
+      comparison by identity instead of by name, which means
+      you may now add aliases and/or rename your inner classes
+      to your hearts' content.
+    * Bound inner classes no longer keep a strong reference to
+      the outer instance; they use weakrefs.  This reduces
+      reference cycles, making it easier to reclaim abandoned
+      bound inner class objects, albeit at the cost of adding
+      a weakref "get ref" call every time a bound inner class
+      is instantiated.
+    * Bound inner classes now have explicit support for slots!
+    * Bound inner classes now have accurate sigantures,
+      preserving the signature of the original class's `__init__`
+      but with the `outer` parameter removed.
+    * Bound inner classes
+    * `BoundInnerClass` adds locking, to prevent a race condition
+      when caching the same bound inner class created
+      simultaneously in multiple threads.  It's rarely used
+      and should have no real impact on performance.
 * Added new functions to the *big.boundinnerclass* module:
     * `unbound(cls)` returns the unbound base class
       of `cls` if `cls` is a bound inner class.
