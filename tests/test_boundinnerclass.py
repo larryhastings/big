@@ -990,7 +990,7 @@ class TestIsBoundInnerClass(unittest.TestCase):
                 pass
 
             @UnboundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 pass
 
         self.assertFalse(is_boundinnerclass(Outer.Child))
@@ -1023,7 +1023,7 @@ class TestIsUnboundInnerClass(unittest.TestCase):
                 pass
 
             @UnboundInnerClass
-            class Child(Parent):
+            class Child(bound_inner_base(Parent)):
                 pass
 
         self.assertTrue(is_unboundinnerclass(Outer.Child))

@@ -64,6 +64,7 @@ class SinkEvent:
     Base class for Log events stored by the Sink destination.
     """
     __slots__ = (
+        '_configuration',
         '_depth',
         '_duration',
         '_elapsed',
@@ -77,6 +78,7 @@ class SinkEvent:
         '_type',
         )
 
+    _DEFAULT_CONFIGURATION = None
     _DEFAULT_DEPTH = 0
     _DEFAULT_DURATION = 0
     _DEFAULT_ELAPSED = 0
@@ -100,6 +102,7 @@ class SinkEvent:
     TYPE_EXIT  = 'exit'
 
     def __init__(self, *,
+        configuration=_DEFAULT_CONFIGURATION,
         depth=_DEFAULT_DEPTH,
         duration=_DEFAULT_DURATION,
         elapsed=_DEFAULT_ELAPSED,
@@ -112,6 +115,7 @@ class SinkEvent:
         thread=_DEFAULT_THREAD,
         type=_DEFAULT_TYPE,
         ):
+        self._configuration = configuration
         self._depth = depth
         self._duration = duration
         self._elapsed = elapsed
@@ -123,6 +127,10 @@ class SinkEvent:
         self._number = number
         self._thread = thread
         self._type = type
+
+    @property
+    def configuration(self):
+        return self._configuration
 
     @property
     def depth(self):
@@ -173,6 +181,7 @@ class SinkEvent:
         buffer = []
         append = buffer.append
         for name in (
+            "configuration",
             "depth",
             "duration",
             "elapsed",
@@ -201,6 +210,7 @@ class SinkEvent:
             and (self._thread == other._thread)
             and (self._epoch == other._epoch)
             and (self._depth == other._depth)
+            and (self._configuration == other._configuration)
             )
 
     def __lt__(self, other):
@@ -214,13 +224,14 @@ class SinkEvent:
 
 @export
 class SinkStartEvent(SinkEvent):
-    def __init__(self, number, start_time_ns, start_time_epoch, formatted):
+    def __init__(self, number, start_time_ns, start_time_epoch, formatted, configuration):
         super().__init__(
             type=self.TYPE_START,
             number=number,
             ns=start_time_ns,
             epoch=start_time_epoch,
             formatted=formatted,
+            configuration=configuration,
             )
 
 @export
@@ -544,6 +555,8 @@ class Log:
         self._spaces = ''
         self._timestamp_format = timestamp_format
 
+        self._formats_parameter = formats
+
         self._reset(start_time_ns, start_time_epoch)
 
         self._nesting = []
@@ -643,6 +656,10 @@ class Log:
     @property
     def prefix(self):
         return self._prefix
+
+    @property
+    def formats(self):
+        return self._formats_parameter
 
     @property
     def threading(self):
@@ -1884,7 +1901,18 @@ class Log:
             self._reset()
 
         def start(self, start_time_ns, start_time_epoch, formatted):
-            self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch, formatted))
+            configuration = {
+                "name" : self.owner.name,
+                "threading" : self.owner.threading,
+                "indent" : self.owner.indent,
+                "width" : self.owner.width,
+                "clock" : self.owner.clock,
+                "timestamp_clock" : self.owner.timestamp_clock,
+                "timestamp_format" : self.owner.timestamp_format,
+                "prefix" : self.owner.prefix,
+                "formats " : dict(self.owner.formats),
+            }
+            self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch, formatted, configuration))
 
         def end(self, elapsed, formatted):
             self._event(SinkEndEvent(self.number, elapsed, formatted))

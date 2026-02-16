@@ -883,8 +883,8 @@ class TestSink(unittest.TestCase):
         with self.assertRaises(TypeError):
             e < 3.1415
 
-        sse = big.SinkStartEvent(0, 5, 10, '')
-        self.assertEqual(repr(sse), "SinkStartEvent(epoch=10, formatted='', ns=5)")
+        sse = big.SinkStartEvent(0, 5, 10, '', {})
+        self.assertEqual(repr(sse), "SinkStartEvent(configuration={}, epoch=10, formatted='', ns=5)")
 
     def test_sink_event_types(self):
         sink = big.Log.Sink()
