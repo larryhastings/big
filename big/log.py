@@ -714,11 +714,11 @@ class Log:
                 "line": '=',
             },
             "enter": {
-                "format": '{prefix}+-----+{line}\n{prefix}|start| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
+                "format": '{prefix}+-----+{line}\n{prefix}|enter| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
                 "line": '-',
             },
             "exit": {
-                "format": '{prefix}+-----+{line}\n{prefix}| end | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
+                "format": '{prefix}+-----+{line}\n{prefix}|exit | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
                 "line": '-',
             },
             "print": {
@@ -759,18 +759,18 @@ class Log:
                 yield self.body
                 yield self.epilogue
 
-            def __repr__(self):
+            def __repr__(self): # pragma: nocover
                 return f"<Format line={self.line!r} prologue={self.prologue} body={self.body} epilogue={self.epilogue}>"
-
 
         for key, value in base_formats.items():
             if not isinstance(key, str):
                 raise TypeError(f"format keys must be str, not {type(key)}")
             if not key.isidentifier():
                 raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
-            assert isinstance(value, dict)
-            if not (isinstance(value.get('format', None), str) and isinstance(value.get('line', None), str)):
-                raise ValueError(f"format dicts must contain 'format' and 'line' keys with value str, not {value!r}")
+            if not isinstance(value.get('format', None), str):
+                raise TypeError(f"format dicts must contain 'format' key with value str, not {type(value)!r}")
+            if not isinstance(value.get('line', ''), str):
+                raise TypeError(f"format dicts 'line' value, if specified, must be str, not {type(value)!r}")
 
             attribute_exists = hasattr(self, key)
             predefined_key = key in ("enter", "exit", "start", "end", "print")
@@ -778,7 +778,7 @@ class Log:
                 raise ValueError(f'format {key} attribute is already in use')
 
             format = value['format']
-            line = value['line']
+            line = value.get('line', '')
             if line:
                 repeated_line = line * ((self._width // len(line)) + 1)
             else:
@@ -1490,7 +1490,7 @@ class Log:
             reset()
             start(start_time_ns, start_time_epoch, formatted)
             end(elapsed, formatted)
-            write(elapsed, thread, message, format, formatted)
+            log(self, elapsed, thread, format, message, formatted)
             enter(elapsed, thread, message, formatted)
             exit(elapsed, thread, message, formatted)
 
@@ -1508,7 +1508,8 @@ class Log:
             register(owner)
         For this method, Destination subclasses are *required*
         to call the base class implementation
-        ("super().register(owner)").
+        ("super().register(owner)").  Destination subclasses must
+        also call the base class __init__, without arguments.
 
         The meaning of each argument to the above Destination methods:
 
@@ -1531,7 +1532,7 @@ class Log:
               v
             start
               |
-              +----------------------------------+
+              +<---------------------------------+
               |                                  |
               v                                  |
             write | log | enter | exit | flush   |

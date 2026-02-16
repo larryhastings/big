@@ -4763,133 +4763,12 @@ it's hardly a drop-in replacement.
 
 ### Getting started
 
-To use, simply instantiate a `Log` object:
+Let's start by showing you a whole Python script that exercises
+many of the big `Log` features.  We'll show you the script, then
+its output, and then we'll go over it line by line and discuss
+each of the features independently.
 
-```Python
-j = big.Log()
-```
-
-With all default parameters, your `Log` will print the log
-using `builtins.print`.  However, it will use a separate thread
-for actually printing to the screen.  Logging a message will
-lightly pre-format the message, then send it to the `Log` object's
-internal thread, which finishes the formatting and sends it to
-`print`.
-
-The classic method to log a message is with the `print` method:
-
-```Python
-j.print("Hello, world!  2 + 2 =", 2 + 2)
-```
-
-`Log.print` has a similar signature to `builtins.print`, although it
-doesn't support the `file` parameter.
-
-Calling the `Log` instance itself behaves identically to calling the
-`print` method:
-
-```Python
-j("Hello, world, round 2!  4 + 4 =", 4 + 4)
-```
-
-If you put those three statements into a Python script, and imported
-big (via the usual `import big.all as big`), it would print something
-like this to the screen:
-
-```
-===============================================================================
-Log start at 2026/02/15 13:14:13.648816 PST
-===============================================================================
-[000.0004797210   MainThread] Hello, world!  2 + 2 = 4
-[000.0005004200   MainThread] Hello, world, round 2!  4 + 4 = 8
-===============================================================================
-Log finish at 2026/02/15 13:14:13.649339 PST
-===============================================================================
-```
-
-As you can see in the output above, the log automatically adds "start" and "end"
-banners showing the current local time that the log was opened and closed.  Also,
-every printed log message gets a "prefix" showing the elapsed time so far (since
-the start of the log), as well as the thread that logged the message.
-
-(Obviously, if you run this script, *your* times will be different.  Probably
-in the future... unless you've borrowed Guido's time machine.)
-
-Let's explore the other `Log` methods that append messages to the log.
-The simplest one is `write`, which only takes one `str` argument, and writes that
-string to the log without any further formatting whatsoever:
-
-```Python
-j.write("This was written without formatting!\nLine breaks work too!\n")
-```
-
-This is useful in case you've carefully formatted some text by hand and
-you want to dump it straight into the log.  (Or you simply want to suppress
-the per-line prefix.)
-
-Appending that to our script means our script now produces:
-
-```
-===============================================================================
-Log start at 2026/02/15 13:17:52.588335 PST
-===============================================================================
-[000.0004998900   MainThread] Hello, world!  2 + 2 = 4
-[000.0005214310   MainThread] Hello, world, round 2!  4 + 4 = 8
-This was written without formatting!
-Line breaks work too!
-===============================================================================
-Log finish at 2026/02/15 13:17:52.588881 PST
-===============================================================================
-```
-
-`Log` also supports a method called `box` that writes a message with a three-sided
-box drawn around it.  If you want to call attention to a logged message, log it
-using `box` instead of `print`.  Note that the `box` method also only takes a single
-`str` object.  (But that's no problem, just use an f-string!)
-
-Adding this to our script:
-
-```Python
-j.box(f"Today's important number is {6 * 7}!")
-```
-
-now produces this output:
-
-```
-===============================================================================
-Log start at 2026/02/15 13:21:25.982117 PST
-===============================================================================
-[000.0004931820   MainThread] Hello, world!  2 + 2 = 4
-[000.0005139620   MainThread] Hello, world, round 2!  4 + 4 = 8
-This was written without formatting!
-Line breaks work too!
-[000.0005261250   MainThread] +------------------------------------------------
-[000.0005261250   MainThread] | Today's important number is 42!
-[000.0005261250   MainThread] +------------------------------------------------
-===============================================================================
-Log finish at 2026/02/15 13:21:25.982663 PST
-===============================================================================
-```
-
-Finally, `log` supports two conjoined methods, `enter` and `exit`.  `enter`
-logs a message in a box, then adds an indent used for subsequent messages.
-`exit` outdents, then re-logs the message from the most recent `enter` in
-another box.  This is a great way to add some structure to your log, showing
-visually how your program enters and exits conceptual subsystems (modules,
-functions, classes, algorithms, whatever).
-
-For convenience, `Log.enter` also returns a "context manager".  If you use
-a call to `Log.enter` as the argument to a `with` statement, it will automatically
-call `Log.exit` when you exit the `with` statement.   Let's try it that way.
-
-We're going to demonstrate one more feature with this last bit of sample
-logging.  All `Log` methods that write to the log support newline characters; it's
-not just `Log.write`.  But when you log a message using the other methods--methods
-that write the "prefix"--the lines are split up before they're formatted for the
-log, and they each get the prefix.  It looks really good.
-
-Let's add a `with enter` block, and demonstrate logging a message with newlines
-just calling the `Log` object.  Here's the entire final script:
+Here's the script:
 
 ```Python
 import big.all as big
@@ -4903,7 +4782,8 @@ with j.enter("Newline subsystem"):
     j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
 ```
 
-The above script produces this output:
+If you copy that to a new file, and run it (with big installed), you'll see
+this on the output:
 
 ```
 ===============================================================================
@@ -4930,6 +4810,147 @@ Line breaks work too!
 Log finish at 2026/02/15 13:46:51.411292 PST
 ===============================================================================
 ```
+
+Let's break it down, line by line.
+
+To use `Log`, simply instantiate a `Log` object:
+
+```Python
+j = big.Log()
+```
+
+With all default parameters, your `Log` will send the log
+to stdout via `builtins.print`.  However, it'll use a separate
+thread to do the actual printing.  Logging a message will lightly
+pre-format the message, then send it to the `Log` object's
+internal thread; that thread finishes the formatting and sends
+it to `print`.
+
+The usual method call to log a message is the `Log.print` method:
+
+```Python
+j.print("Hello, world!  2 + 2 =", 2 + 2)
+```
+
+`Log.print` has a similar signature to `builtins.print`, although it
+doesn't support the `file` parameter.
+
+This is so common, there's a shortcut: calling the `Log` instance
+itself behaves identically to calling the `print` method:
+
+```Python
+j("Hello, world, round 2!  4 + 4 =", 4 + 4)
+```
+
+These three lines so far produce the first five lines of the output:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:14:13.648816 PST
+===============================================================================
+[000.0004797210   MainThread] Hello, world!  2 + 2 = 4
+[000.0005004200   MainThread] Hello, world, round 2!  4 + 4 = 8
+```
+
+As you can see, `Log` automatically adds a "start" banner showing the current
+local time that the log was started.  (There's a symmetric "end" banner for
+when the log is closed.)
+
+Also, every printed log message gets a "prefix", showing the elapsed time
+so far (since the start of the log) and the thread that logged the message.
+
+(Obviously, if you run this script, *your* times will be different.  Probably
+in the future... unless you've borrowed Guido's time machine.)
+
+Let's explore the other `Log` methods that append messages to the log.
+The simplest one is `write`, which only takes one `str` argument, and writes that
+string to the log without any further formatting whatsoever:
+
+```Python
+j.write("This was written without formatting!\nLine breaks work too!\n")
+```
+
+This is useful in case you've carefully formatted some text by hand and
+you want to dump it straight into the log.  (Or you simply want to suppress
+the per-line prefix.)
+
+`Log` also supports a method called `box` that writes a message with a three-sided
+box drawn around it:
+
+```Python
+j.box(f"Today's important number is {6 * 7}!")
+```
+
+If you want to call attention to a logged message, log it
+using `box` instead of `print`.  Note that the `box` method also only takes a single
+`str` object.  (But that's no problem, just use an f-string!)
+
+The above two lines in the script produce these five lines in the output:
+
+```
+This was written without formatting!
+Line breaks work too!
+[000.0005261250   MainThread] +------------------------------------------------
+[000.0005261250   MainThread] | Today's important number is 42!
+[000.0005261250   MainThread] +------------------------------------------------
+```
+
+You can see, the message logged with `Log.write` doesn't get the "prefix".
+And it's easy to pick out the "boxed" message due to the lines `Log` draws
+around it.
+
+Let's finish up, examining the final two lines of the script.
+
+`Log` supports two intertwined methods, `enter` and `exit`.  `enter`
+logs a message in a box, then adds an indent that applies to subsequent
+messages. `exit` outdents, then re-logs the message from the most recent
+`enter` in another box.  This is a great way to add some structure to
+your log, showing visually how your program enters and exits conceptual
+subsystems (modules, functions, classes, algorithms, what have you).
+
+For convenience, `Log.enter` also returns a "context manager".  If you use
+a call to `Log.enter` as the argument to a `with` statement, it'll automatically
+call `Log.exit` when you exit the `with` statement.   We use that feature in
+the example script.
+
+The last line demonstrates one more feature of `Log`.  All `Log` methods
+that write to the log support newline characters, not just `Log.write`.
+But when you log a message using the other methods--methods that write
+the "prefix"--the lines are split up before they're formatted for the
+log, and each line gets the prefix.
+
+Here are the last two lines of the script:
+
+```Python
+with j.enter("Newline subsystem"):
+    j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
+```
+
+Those two lines produce these *thirteen* lines in the output:
+
+```
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005117220   MainThread] |enter| Newline subsystem
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005174830   MainThread]     Line one!
+[000.0005174830   MainThread]     And here's line two.
+[000.0005174830   MainThread]       Leading spaces are preserved too!
+[000.0005174830   MainThread]     And here's the final line
+[000.0005208190   MainThread] +-----+------------------------------------------
+[000.0005208190   MainThread] |exit | Newline subsystem
+[000.0005208190   MainThread] +-----+------------------------------------------
+===============================================================================
+Log finish at 2026/02/15 13:46:51.411292 PST
+===============================================================================
+```
+
+Notice how the logged message inside the "enter" / "exit" section are indented by
+four spaces.  If you nested another `with j.enter` inside the first one, text
+logged inside that would be indented by eight spaces.
+
+Once the script exited, `Log` automatically closed the log for you, including
+writing the "end" banner with the end time of the log.
+
 
 ### Other methods
 
@@ -4962,10 +4983,14 @@ All our logging so far has just gone to `builtins.print`, which means it
 shows up on `stdout`.  But what if you want to send the log somewhere else?
 
 All *positional* arguments to the `Log` constructor specify *destinations.*
-A *destination* is a place that the log gets sent to.  As we've already seen,
-if you don't specify any destinations when you construct the `Log`, it logs
-to `builtins.print`.  You can make that explicit by passing in `print` as
-a positional argument:
+A *destination* is simply an object that the log sends messages to.  You
+can specify as many destinations as you like when creating your `Log`
+instance; however you can't add or remove destinations later.
+
+As we've already seen, if you don't specify any destinations when you
+construct the `Log`, the default is to log to `builtins.print`.  You
+can explicitly configure your log to to this by passing in `print`
+as a positional argument:
 
 ```Python
 j = Log(print)
@@ -4979,57 +5004,66 @@ a = []
 j = Log(a)
 ```
 
-If you specify a string, `Log` will use that string as a filename,
-and append the log to that file:
+If you specify a string, `Log` will assume that string represents a
+filename, and append the log to that file:
 
 ```Python
 j = Log('/tmp/log.txt')
 ```
 
-By default this will buffer up messages until the log is flushed,
-then open the file, flush *all* messages with one big write,
-and close the file.
-
 (You can also specify a `pathlib.Path` object--that works the same.)
+
+When writing to a file, `Log` will buffer up messages until the log
+is flushed, then open the file, flush *all* messages with one big
+write, and close the file.
 
 Some more options:
 
 * If you pass in an open file handle (like the result of calling `open`),
   `Log` will write log messages to the file handle.
 * If you pass in a callable, `Log` will call the callable once for every
-  formatted message.
-* There's a special value, `big.log.TMPFILE`, that logs to a temporary
-  file in your configured temporary directory.  The filename starts
-  with the name of the log, followed by the start time, then the process ID,
-  and ends with `.txt`.  Every time the log resets it switches to
-  a new filename.
+  formatted message, with just one argument, the formatted log message.
+* There's a special sentinel value in the `big.log` module: `big.log.TMPFILE`.
+  If you specify that as a destination, `Log` will send the log to a
+  file with a dynamically generated name in your configured temporary
+  directory.  The filename starts with the name of the log; this is
+  followed by the start time, then the process ID, and finally ends with
+  `.txt`.  Every time the log resets it switches to a new filename.
 * A destination of `None` doesn't log anywhere.  If you want to
   create a `Log` object that doesn't actually write the log anywhere,
   construct it as `big.Log(None)`.
 
-Note that if you pass in multiple destinations, `Log` will send all the
-log messages to *all* of them.
+If you pass in multiple destinations, `Log` will send all the
+log messages to *all* of them.  You could log to `TMPFILE`, `print`,
+and an array, all at the same time!
 
-Finally, if you like the buffer-until-flush behavior of files,
-but want to apply it to a different destination, wrap that
-destination with a call to `Log.Buffer()`.  Without an argument,
-`Log.Buffer()` buffers all messages until flush, then writes them
-all to `builtins.print`.  If you specify a destination (as a
-positional parameter), *that* destination is where the log messages
-are sent when the log is flushed.
-See the *Custom Destinations* section below for more information on
-this and similar advanced techniques.
+Finally, if you like the "buffer-until-flush" behavior of files,
+but want to use that with another destination, wrap that destination
+with a call to `Log.Buffer()`.  Without an argument, `Log.Buffer()`
+buffers all messages until flush, then writes them all to
+`builtins.print`.  If you specify a destination (as a positional
+parameter), *that* destination is where the log messages are sent
+when the log is flushed.  See the *Custom Destinations* section
+below for more information on this and similar advanced techniques.
 
 
-### Configuration, via keyword-only parameters
+### Configuration via keyword-only parameters
 
-The most important setting is probably the `threading`
-parameter.  By default it's true, which means the log
-uses an external thread to format and write the log
-messages.  Log messages and other operations are sent
-to that thread via a `queue.Queue`, which ensures log
-messages are sent to the log in a high-performance
-and thread-safe way.
+You configure your `Log` instance by supplying keyword
+arguments to the `Log` constructor.  Note that, like
+the list of destinations, these can only be specified
+as arguments to the constructor; you can't change any
+of these settings once the `Log` instance is initialized.
+
+The most important setting is the `threading`
+parameter.  This configures whether or not the `Log`
+instance uses a worker thread to do all the actual
+logging.  By default `threading` is true, which means
+the log uses an external thread to format and write
+the log messages.  Log messages and other operations
+are sent to that thread via a `queue.Queue`, which
+ensures log messages are sent to the log in a
+high-performance and thread-safe way.
 
 If you pass in `threading=False` to the `Log` constructor,
 the log won't use an external thread.  Instead, every
@@ -5069,12 +5103,17 @@ section below for documentation on that.
 
 ### Line formatting
 
-Some format text from the configuration gets formatted with
-live values on every log call.  For example, the `prefix`
-is freshly reformatted for every log message.
+Several configuration settings for `Log` use what's called
+"line formatting".  This formatting method lets you substitute
+in dynamic values at runtime when writing to the log; the values
+are recomputed and substituted every time `Log` formats a message
+for the log.  For example, the `prefix` is freshly reformatted
+for every log message.
 
 The formatting is done using the `format` method on the
-string itself.  Here are the values you can substitute:
+string.
+
+Here are the values you can substitute when formatting the `prefix`:
 
   * `elapsed`:
             The elapsed time since the log was started,
@@ -5083,13 +5122,8 @@ string itself.  Here are the values you can substitute:
             The format being applied to this log message.
   * `line`:
             The string used for repeating horizontal lines.  See next section, *Formats*.
-  * `message`:
-            The message that was logged.  See next section, *Formats*.
   * `name`:
             The "name" of the log passed in to the Log constructor.
-  * `prefix`:
-            A string pre-formatted using the "prefix" format
-            string passed in to the Log constructor.
   * `thread`:
             A handle to the thread that logged this message.
   * `time`:
@@ -5098,24 +5132,250 @@ string itself.  Here are the values you can substitute:
             The `time` value, formatted using the "timestamp_format"
             callable passed in to the Log constructor.
 
+There are three more (`line`, `message`, and `prefix`) you can use when
+formatting a "format", see next section.
 
+### Formats and format dicts
 
-### Formats
+The formatting of the various formatted log messages
+is specified using a "format".  `Log` supports those six formats,
+and has default values for each of those formats; you can change
+how those messages are formatted, or add your own.
 
+The `formats` parameter to the `Log` constructor should specify a
+dict.  A key in this dict is the name of a format; a custom format name
+must be a valid Python identifier, and can't collide with an existing
+`Log` method name.  The matching value should be a "format dict",
+which specifies the formatting to use for this message.
 
-  * `line` -
+A "format dict" in turn supports only two fields, and one is optional
+The required one is `"format"`, which should be a string; this string
+is formatted with the "line formatting" rules specified in the
+previous section, with some additional values.  The optional one
+is `"line"`, and you'll see what that's used for in a moment.
+
+The string value of `"format"` is allowed to be a multi-line string.
+Each line will be split up and formatted independently, using the
+"line formatting" approach above.  But a format supports three additional
+values:
+
+  * `line`:
             The value of the "line" value from the format dict.
-            If this is the last thing on a line inside the format
-            (immediately before a '\n', or is the last character
-            in the format string), the "line" value will be repeated
-            until the line is >= Log.width, and the line will then
-            be truncated at Log.width characters.
+            If `{line}` is the last thing on a format line
+            (either immediately before a '\n', or immediately
+            before the end of the format string), the "line" value
+            will be repeatedly appended to the formatted string
+            until the line is >= `Log.width`, and then the line
+            will then be truncated at `Log.width` characters.
+            This is how `box` and the other methods draw those
+            horizontal lines.
+  * `message`:
+            The message that was logged.  You can specify multiple
+            lines containing `{message}`, however, all lines
+            containing `{message}` must be contiguous.  The message
+            will be split by lines, and then the format lines
+            containing `{message}` will be "zipped" together with
+            the lines of the message. For example, the first format
+            line containing `{message}` will get the first line of
+            the message, the second format line containing `{message}`
+            will get the second line of the message, etc.  If there
+            are more format lines than lines in the message, it skips
+            the subsequent format lines; if there are more lines in the
+            message than format lines, the last format line is repeated.
+  * `prefix`:
+            A string pre-formatted using the `prefix` format
+            string passed in to the `Log` constructor.
 
+### Predefined and user-defined formats
+
+`Log` comes with six pre-defined formats:
+
+  * `print`: used (by default) by `Log.print` and `Log.__call__`
+  * `box`: used by `Log.box`
+  * `enter`: used by `Log.enter`
+  * `exit`: used by `Log.exit`
+  * `start`: used to produce the "start banner" whenever the log is started
+  * `end`: used to produce the "end banner" whenever the log is closed
+
+You can override the default formatting for these by passing in a new format
+dict for that value to the `formats` parameter to the `Log` constructor.
+For example, to remove the prefix for lines printed by `Log.print`
+and `Log.__call__`, construct your `Log` as follows:
+
+```Python
+j = big.Log(..., formats={"print": {"format": "{message}"}})
+```
+
+You can also suppress the "start banner" and "end banner", by setting those
+to `None` in the `formats` dict you pass in.  This log won't print the
+start and end banners:
+
+```Python
+j = big.Log(..., formats={"start": None, "end": None})
+```
+
+You can also add your own formats!  Here's some sample code that defines
+a new format called "peanut":
+
+```Python
+j = big.Log(formats={"peanut": {"format": "{prefix} =peanut=start{line}\n{prefix} == {message}\n{prefix} =peanut=end{line}", "line": "=-"}})
+```
+
+You'll notice, the format contains several newline characters, but
+doesn't *end* with a newline.  `Log` automatically adds a trailing newline
+character for you.
+
+How do you use it?  `Log.print` and `Log.__call__` both take a
+`format` keyword-only parameter, which specifies the format to apply
+to the message.  So you can use it like this:
+
+```Python
+j("Hello peanut!", format="peanut")
+```
+
+However, `Log` also adds a method to the log instance for every user-defined
+format.  You can just call `j.peanut` directly:
+
+```Python
+j.peanut("Thanks, George Washington Carver!")
+```
+
+This line, using the `"peanut"` format specified above, produces the
+following output in the log:
+
+```
+[000.0002390010   MainThread]  =peanut=start=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+[000.0002390010   MainThread]  == Thanks, George Washington Carver!
+[000.0002390010   MainThread]  =peanut=end=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+```
 
 
 ### Custom Destinations
 
-### Final notes
+`Log` supports sending the log to lots of different kinds of
+objects, called "destinations".  The actual implementation
+wraps each of these diverse object types in a wrapper object
+that handles logging to that "destination" object.  These wrapper
+objects are all subclasses of a base class called `Log.Destination`.
+You can write your own `Destination` subclasses, and `Log` will
+happily send the log to those too!
+
+First, declare your subclass.  You probably need to write an
+`__init__`; that's fine, but you *must* call the base class init.
+
+```Python
+class MyDestination(Log.Destination):
+    def __init__(self, o):
+        super().__init__()
+        ...
+```
+
+The methods on `Destination` subclasses called by the `Log` object
+are referred to as "events".  They generally map to method calls
+on the `Log` object, and represent the user calling that method on
+the `Log`.
+
+Second, all `Destination` subclasses *must* implement a `write`
+method, like so:
+
+```Python
+    def write(elapsed, thread, formatted):
+        ...
+```
+
+The `elapsed` parameter is the elapsed time since the log was
+started / reset, in nanoseconds.  The `thread` parameter is the
+`threading.Thread` handle for the thread that wrote this message,
+or `None` if the message isn't associated with a particular thread
+(like the "start banner" and "end banner" messages).  Finally,
+`formatted` is the formatted string to be written to the log.
+`Destination.write` is called directly to implement `Log.write`.
+
+Next there are five optional `Destination` methods
+representing high-level method calls on the `Log` object:
+
+```Python
+    def start(self, start_time_ns, start_time_epoch, formatted):
+        ...
+
+    def end(self, elapsed, formatted):
+        ...
+
+    def log(self, elapsed, thread, format, message, formatted):
+        ...
+
+    def enter(self, elapsed, thread, message, formatted):
+        ...
+
+    def exit(self, elapsed, thread, message, formatted):
+        ...
+```
+
+These map respectively to the "start banner", the "end banner",
+`Log.print` (and `Log.__call__`), `Log.enter`, and `Log.exit`.
+If you implement one of these, it'll be called when the user
+calls that method on the `Log`.  If you don't bother, you'll
+get the base class implementation, which calls
+`self.write(elapsed, thread, message)`.
+
+`Destination` also supports optional methods handling the
+three `Log` methods that don't send a log message:
+
+```Python
+    def reset(self):
+        ...
+
+    def flush(self):
+        ...
+
+    def close(self):
+        ...
+```
+
+Finally, `Destination` objects support a `register` method,
+which is called when they're passed in to the `Log` constructor.
+If you override this method, you *must* call the base class
+method, passing in the `owner` parameter, like so:
+
+```Python
+    def register(self, owner):
+        super().register(owner)
+        ...
+```
+
+`Log` objects obey a certain lifecycle, and guarantee that
+the `Destination` methods will be called in this order:
+
+```
+register
+  |
+  v
+start
+  |
+  +<---------------------------------+
+  |                                  |
+  v                                  |
+write | log | enter | exit | flush   |
+  |                                  |
+  |                                  |
+  +----------------------------------+
+  |
+  v
+end
+  |
+  v
+[flush]
+  |
+  v
+close
+```
+
+The final `flush`, before `close`, is optional; it's only called
+if the `Log` is "dirty".  (If the `Log` has sent formatted text to
+its destinations since the log was started, or the last time the
+log was flushed.)
+
+### Final notes on `Log`
 
 There's no guarantee that log messages will be logged in strict
 chronological order.  It *usually* happens that way, but it's

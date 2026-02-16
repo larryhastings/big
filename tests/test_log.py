@@ -275,6 +275,12 @@ class TestLogBasics(unittest.TestCase):
         self.assertGreater(log.start_time_epoch, epoch)
         self.assertEqual(log.end_time_epoch, None)
         self.assertEqual(log.nesting, ())
+        self.assertEqual(log.depth, 0)
+
+        log.enter("xyz")
+        log.flush()
+        self.assertEqual(log.nesting, ('xyz',))
+        self.assertEqual(log.depth, 1)
 
     def test_log_default_destination(self):
         # With no destinations specified, should use print
@@ -353,8 +359,6 @@ class TestLogBasics(unittest.TestCase):
         finally:
             big.Log.destination_mappers.clear()
 
-'''
-
 
     def test_log_after_closed(self):
         array = []
@@ -403,6 +407,9 @@ class TestLogBasics(unittest.TestCase):
         log = big.Log([], threading=True)
         self.assertFalse(log.closed)
         log._atexit()
+        self.assertTrue(log.closed)
+        # log ignores reset after atexit
+        log.reset()
         self.assertTrue(log.closed)
 
 
@@ -501,12 +508,12 @@ class TestLogMethods(unittest.TestCase):
         self.assertEqual(buffer.getvalue(),
 """
 [_] +-----+--------------------------------------------------------------------
-[_] |start| Multi-line enter!
+[_] |enter| Multi-line enter!
 [_] |     | What will happen?
 [_] +-----+--------------------------------------------------------------------
 [_]     zzz...
 [_] +-----+--------------------------------------------------------------------
-[_] | end | Multi-line enter!
+[_] |exit | Multi-line enter!
 [_] |     | What will happen?
 [_] +-----+--------------------------------------------------------------------
 """.lstrip())
@@ -589,10 +596,16 @@ class TestLogMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.Log(formats={"not an id": {"format": "abc", "line": "-"}})
         with self.assertRaises(TypeError):
+            # formats value must be dict
             big.Log(formats={"splunk": 55})
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
+            # format dict format value must be str
             big.Log(formats={"splunk": {"format": 33}})
+        with self.assertRaises(TypeError):
+            # format dict line value is optional, but if specified must be str
+            big.Log(formats={"splunk": {"format": "abc", "line": 77}})
         with self.assertRaises(ValueError):
+            # can't name a format "reset", Log already has a "reset" method
             big.Log(formats={"reset": {"format": "abc", "line": "-"}})
 
         l = big.Log(formats={"start": None, "end": None})
@@ -655,11 +668,11 @@ END
         expected = """
 START
 [PREFIX] +-----+----
-[PREFIX] |start| howdy!
+[PREFIX] |enter| howdy!
 [PREFIX] +-----+----
 [PREFIX]     woah!
 [PREFIX] +-----+----
-[PREFIX] | end | howdy!
+[PREFIX] |exit | howdy!
 [PREFIX] +-----+----
 END
         """.strip()
@@ -794,11 +807,31 @@ class TestLogFormatting(unittest.TestCase):
         self.assertIn("START", output)
         self.assertIn("END", output)
 
-    def test_log_no_start_final_or_prefix(self):
-        array = []
-        log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
-        log("test")
+    def test_custom_format(self):
+        s = io.StringIO()
+        # peanut has multiple lines after the {message} lines
+        # to exercise some specific code in Log
+        log = big.Log(s,
+            threading=False,
+            formats={"start": None, "end": None, "peanut": {"format": "{prefix}{line}\n{prefix}=peanut=start{line}\n{prefix}== {message}\n{prefix}-- {message}\n{prefix}=peanut=end{line}\n{prefix}{line}", "line": "=-"}},
+            prefix='[PFX] ')
+        log.peanut("test\ntest2\ntest3")
         log.close()
+        self.assertEqual(s.getvalue(), 
+"""
+[PFX] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+[PFX] =peanut=start=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+[PFX] == test
+[PFX] -- test2
+[PFX] -- test3
+[PFX] =peanut=end=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+[PFX] =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+""".lstrip())
+
+        # non-contiguous {message} lines
+        with self.assertRaises(ValueError):
+            big.Log(formats={"peanut": {"format": "foo\n{message}\nbar\n{message}"}})
+
 
 
 
@@ -961,7 +994,6 @@ class TestSink(unittest.TestCase):
         self.assertIsInstance(events[2], big.SinkEndEvent)
         self.assertGreater(events[2].elapsed, 0)
 
-'''
 
 class EventSink(big.Log.Destination):
     """
