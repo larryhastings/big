@@ -4807,11 +4807,13 @@ Log finish at 2026/02/15 13:14:13.649339 PST
 ===============================================================================
 ```
 
-The log automatically gets "start" and "end" banners showing the current local
-time.  Also, every printed log message gets a "prefix" showing the elapsed time
-so far, since the start of the log, as well as the thread that logged the message.
-(Obviously, if you run this script, your times will be different.  Probably
-further in the future... unless you've borrowed Guido's time machine.)
+As you can see in the output above, the log automatically adds "start" and "end"
+banners showing the current local time that the log was opened and closed.  Also,
+every printed log message gets a "prefix" showing the elapsed time so far (since
+the start of the log), as well as the thread that logged the message.
+
+(Obviously, if you run this script, *your* times will be different.  Probably
+in the future... unless you've borrowed Guido's time machine.)
 
 Let's explore the other `Log` methods that append messages to the log.
 The simplest one is `write`, which only takes one `str` argument, and writes that
@@ -4820,6 +4822,10 @@ string to the log without any further formatting whatsoever:
 ```Python
 j.write("This was written without formatting!\nLine breaks work too!\n")
 ```
+
+This is useful in case you've carefully formatted some text by hand and
+you want to dump it straight into the log.  (Or you simply want to suppress
+the per-line prefix.)
 
 Appending that to our script means our script now produces:
 
@@ -4946,8 +4952,8 @@ the same as it does for `flush`.
 it will print the "start" banner.  Resetting the log is the only way
 to re-open a closed log.
 
-Every `Log` also registers an "atexit" handler.  The "atexit" handler closes
-the `Log` if it hasn't been closed already.
+Every `Log` also registers an "atexit" handler.  The "atexit" handler
+closes the `Log` if it hasn't been closed already.
 
 
 ### Destinations
@@ -4992,18 +4998,131 @@ Some more options:
   `Log` will write log messages to the file handle.
 * If you pass in a callable, `Log` will call the callable once for every
   formatted message.
-* If you pass in `None`, that doesn't log anywhere.  If you want to
+* There's a special value, `big.log.TMPFILE`, that logs to a temporary
+  file in your configured temporary directory.  The filename starts
+  with the name of the log, followed by the start time, then the process ID,
+  and ends with `.txt`.  Every time the log resets it switches to
+  a new filename.
+* A destination of `None` doesn't log anywhere.  If you want to
   create a `Log` object that doesn't actually write the log anywhere,
-  just pass in `None`.
+  construct it as `big.Log(None)`.
 
 Note that if you pass in multiple destinations, `Log` will send all the
 log messages to *all* of them.
 
-### Keyword-only parameters
+Finally, if you like the buffer-until-flush behavior of files,
+but want to apply it to a different destination, wrap that
+destination with a call to `Log.Buffer()`.  Without an argument,
+`Log.Buffer()` buffers all messages until flush, then writes them
+all to `builtins.print`.  If you specify a destination (as a
+positional parameter), *that* destination is where the log messages
+are sent when the log is flushed.
+See the *Custom Destinations* section below for more information on
+this and similar advanced techniques.
+
+
+### Configuration, via keyword-only parameters
+
+The most important setting is probably the `threading`
+parameter.  By default it's true, which means the log
+uses an external thread to format and write the log
+messages.  Log messages and other operations are sent
+to that thread via a `queue.Queue`, which ensures log
+messages are sent to the log in a high-performance
+and thread-safe way.
+
+If you pass in `threading=False` to the `Log` constructor,
+the log won't use an external thread.  Instead, every
+logging call will write to the log immediately; it
+uses a `threading.Lock` to guarantee atomicity.
+
+You can set the name of the log with the `name`
+parameter.  This is shown in the start and end banners.
+
+`indent` defaults to 4; this is how many spaces `enter`
+indents the log.  `width` defaults to 79; this is the
+column that "line" formats are truncated at.
+
+`clock` is the clock used to compute the time at which
+log messages were logged.  It should return an integer,
+which is the number of nanoseconds since some previous
+event.  By default it uses `time.monotonic_ns`.  (Well,
+on Python 3.7+ anyway.  On Python 3.6 it simulates
+`time.monotonic_ns` by calling `time.monotonic` and
+multiplying it by a billion.)
+
+`timestamp_clock` is the clock used to produce timestamps
+used in the log.  It should return a float, which is the
+number of seconds since the UNIX epoch.  The default value
+is `time.time`.  `timestamp_format` is a callable that should
+convert a `timestamp_clock` value into a pleasing human-readable
+format; the default value is `big.time.timestamp_human`.
+
+`prefix` is the string that will be inserted in front
+of every line of a logged message (except `Log.write`).
+It's formatted using the *Line formatting* rules as
+described in the next section.  The `formats` parameter
+establishes the formatting applied to log messages of
+various types; this is quite involved, so see the *Formats*
+section below for documentation on that.
+
+
+### Line formatting
+
+Some format text from the configuration gets formatted with
+live values on every log call.  For example, the `prefix`
+is freshly reformatted for every log message.
+
+The formatting is done using the `format` method on the
+string itself.  Here are the values you can substitute:
+
+  * `elapsed`:
+            The elapsed time since the log was started,
+            as float-seconds.
+  * `format`:
+            The format being applied to this log message.
+  * `line`:
+            The string used for repeating horizontal lines.  See next section, *Formats*.
+  * `message`:
+            The message that was logged.  See next section, *Formats*.
+  * `name`:
+            The "name" of the log passed in to the Log constructor.
+  * `prefix`:
+            A string pre-formatted using the "prefix" format
+            string passed in to the Log constructor.
+  * `thread`:
+            A handle to the thread that logged this message.
+  * `time`:
+            The time of the log message, as float-seconds-since-epoch.
+  * `timestamp`:
+            The `time` value, formatted using the "timestamp_format"
+            callable passed in to the Log constructor.
+
+
 
 ### Formats
 
+
+  * `line` -
+            The value of the "line" value from the format dict.
+            If this is the last thing on a line inside the format
+            (immediately before a '\n', or is the last character
+            in the format string), the "line" value will be repeated
+            until the line is >= Log.width, and the line will then
+            be truncated at Log.width characters.
+
+
+
 ### Custom Destinations
+
+### Final notes
+
+There's no guarantee that log messages will be logged in strict
+chronological order.  It *usually* happens that way, but it's
+not guaranteed.  If two threads both send a message at the same
+time, they might arrive in any order--and it's possible the
+later of the two arrives first.  This is a known behavior,
+and is unlikely to change in future versions.
 
 </dd></dl>
 
