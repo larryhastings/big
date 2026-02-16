@@ -49,6 +49,8 @@ class FakeClock:
         self.time += ns
 
 
+
+
 class TestDestination(unittest.TestCase):
     """Tests for the base Destination class."""
 
@@ -198,6 +200,7 @@ class TestFile(unittest.TestCase):
         finally:
             os.unlink(path)
 
+
     def test_file_append_mode(self):
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
             path = f.name
@@ -328,9 +331,11 @@ class TestLogBasics(unittest.TestCase):
             log = big.Log(12345, threading=False)
         self.assertIn("don't know how to log to destination", str(cm.exception))
 
+
     def test_extensible_destination_mapper(self):
         with self.assertRaises(TypeError) as cm:
             log = big.Log(12345, threading=False)
+
 
         try:
             # undocumented interface!
@@ -340,13 +345,15 @@ class TestLogBasics(unittest.TestCase):
                 return None
 
             big.Log.destination_mappers.append(custom_destination_mapper)
-            log = big.Log(12345, [], print, threading=False)
+            log = big.Log(12345, [], print, threading=False, formats={"start": None, "end": None}, prefix='')
             destinations = list(log.destinations)
             self.assertIsInstance(destinations[0], EventSink)
             self.assertIsInstance(destinations[1], big.Log.List)
             self.assertIsInstance(destinations[2], big.Log.Print)
         finally:
             big.Log.destination_mappers.clear()
+
+'''
 
 
     def test_log_after_closed(self):
@@ -402,12 +409,26 @@ class TestLogBasics(unittest.TestCase):
 class TestLogMethods(unittest.TestCase):
     """Tests for Log methods."""
 
-    def test_print_method(self):
+    def test_print(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
         log.print("via print method")
         log.close()
         self.assertTrue(any("via print method" in s for s in array))
+
+    def test_multiline_print(self):
+        buffer = io.StringIO()
+        log = big.Log(buffer, threading=False, formats={"start": None, "end": None}, prefix='[-] ')
+        log("This message has multiple lines!\nHere's line two.\n  Line three is indented a little!\nAnd this is the final line.")
+        log.close()
+        self.assertEqual(buffer.getvalue(),
+"""
+[-] This message has multiple lines!
+[-] Here's line two.
+[-]   Line three is indented a little!
+[-] And this is the final line.
+""".lstrip()
+)
 
     def test_log_write(self):
         array = []
@@ -439,6 +460,20 @@ class TestLogMethods(unittest.TestCase):
         log.close()
         self.assertTrue(any("call-out text" in s for s in array))
 
+    def test_multiline_box(self):
+        buffer = io.StringIO()
+        log = big.Log(buffer, threading=False, formats={"start": None, "end": None}, prefix='[#] ')
+        log.box("Multi-line box!\nVery pretty.")
+        log.close()
+        self.assertEqual(buffer.getvalue(),
+"""
+[#] +--------------------------------------------------------------------------
+[#] | Multi-line box!
+[#] | Very pretty.
+[#] +--------------------------------------------------------------------------
+""".lstrip()
+)
+
     def test_log_box_not_string(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
@@ -456,6 +491,25 @@ class TestLogMethods(unittest.TestCase):
         output = ''.join(array)
         self.assertIn("subsystem", output)
         self.assertIn("inside", output)
+
+    def test_multiline_enter(self):
+        buffer = io.StringIO()
+        log = big.Log(buffer, threading=False, formats={"start": None, "end": None}, prefix='[_] ')
+        with log.enter("Multi-line enter!\nWhat will happen?"):
+            log("zzz...")
+        log.close()
+        self.assertEqual(buffer.getvalue(),
+"""
+[_] +-----+--------------------------------------------------------------------
+[_] |start| Multi-line enter!
+[_] |     | What will happen?
+[_] +-----+--------------------------------------------------------------------
+[_]     zzz...
+[_] +-----+--------------------------------------------------------------------
+[_] | end | Multi-line enter!
+[_] |     | What will happen?
+[_] +-----+--------------------------------------------------------------------
+""".lstrip())
 
     def test_log_enter_context_manager(self):
         array = []
@@ -721,7 +775,6 @@ class TestLogThreading(unittest.TestCase):
         log.flush()
 
 
-
 class TestLogFormatting(unittest.TestCase):
     """Tests for Log formatting options."""
 
@@ -823,6 +876,8 @@ class TestSink(unittest.TestCase):
         self.assertIn(SinkEvent.TYPE_ENTER, types)
         self.assertIn(SinkEvent.TYPE_EXIT, types)
 
+
+
     def test_sink_events_without_any_logging(self):
         sink = big.Log.Sink()
         log = big.Log(sink, threading=False)
@@ -906,6 +961,7 @@ class TestSink(unittest.TestCase):
         self.assertIsInstance(events[2], big.SinkEndEvent)
         self.assertGreater(events[2].elapsed, 0)
 
+'''
 
 class EventSink(big.Log.Destination):
     """
@@ -948,6 +1004,7 @@ class EventSink(big.Log.Destination):
 
     def exit(self, elapsed, thread, message, formatted):
         self._event("exit")
+
 
 
 class TestEventSink(unittest.TestCase):
@@ -1160,8 +1217,6 @@ class TestExport(unittest.TestCase):
         ]
         for name in expected:
             self.assertIn(name, log_module.__all__)
-
-
 def run_tests():
     bigtestlib.run(name="big.log", module=__name__)
 

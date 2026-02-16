@@ -4217,7 +4217,7 @@ returns the string `'1.3'`.
 
 # Topic deep-dives
 
-## The big `String`
+## The big `string`
 
 <dl><dd>
 
@@ -4251,17 +4251,17 @@ yourself.  Worse yet, if you split by lines, then use `re` to subdivide
 the string, you have to mate your offset tracking with the `re.Match`
 object's tracking.  What a pain!
 
-big's `String` object solves all that.  It's a drop-in replacement for
+big's `string` object solves all that.  It's a drop-in replacement for
 Python's `str` object, and in fact is a subclass of `str`.  What it gives you:
-any time you extract a substring of a `String` object, the substring knows
+any time you extract a substring of a `string` object, the substring knows
 its *own* offset, line number, and column number relative to the original
 string.  You *don't* need to figure it out yourself, and you *don't* need to
 store the information separately using some fragile external representation.
-Any time you have a `String` object, you *automatically* know where it came
+Any time you have a `string` object, you *automatically* know where it came
 from.  (You can even specify a "source" for the text--the original filename
-or what have you--and the `String` object will retain that too.)
+or what have you--and the `string` object will retain that too.)
 
-This makes producing syntax error messages effortless.  If `s` is a `String`
+This makes producing syntax error messages effortless.  If `s` is a `string`
 object, and represents a syntax error because it was an unexpected token
 in the middle of a text you're parsing, you can simply write this:
 
@@ -4272,7 +4272,7 @@ raise SyntaxError(f'{s.where}: unexpected token {s}')
 `where` is a property, an automatically-formatted string containing
 the line and column information for the string.  And if you specified
 a "source", it contains that too.  For example, if you initialized the
-`String` with "source" set to `/home/larry/myscript.py`, and `s` was
+`string` with "source" set to `/home/larry/myscript.py`, and `s` was
 the token `whule` (whoops! mistyped `while`!), from line number 12,
 column number 15, the text of the exception would read:
 
@@ -4286,38 +4286,38 @@ big supports older versions of Python; as of this writing it supports all
 the way back to 3.6.  (The Python core development team dropped support for
 3.6 several years ago!)
 
-The `String` object supports *all* the methods of the `str` object.  At the
+The `string` object supports *all* the methods of the `str` object.  At the
 moment there's a new `str` method as of version 3.7, `isascii`.  Rather than
-only provide that in 3.7+, `String` makes that available in 3.6 too.
+only provide that in 3.7+, `string` makes that available in 3.6 too.
 
 #### Naughty modules not honoring the subclass
 
-It was important that `String` not only be a drop-in replacement for `str`.
+It was important that `string` not only be a drop-in replacement for `str`.
 The only way for that to work: it had to literally *be* a subclass of `str`.
 There's a lot of code that says
 ```Python
 if isinstance(obj, str):
 ```
-and if `String` objects failed that test they'd break code.
+and if `string` objects failed that test they'd break code.
 
 This has an unfortunate side-effect.  CPython ships with modules in its
 standard library written in C that check to see "is this object a `str` object?"
 And if the object passes that test, they use low-level C API calls on the `str`
 object to interact with it.  The problem is, these low-level C API calls ignore
 the fact that this is a *subclass* of `str`, and they sidestep the overloaded
-behaviors of the `String` object.  This means that, for example, when they
-extract a substring from the object, they don't get a `String` object preserving
+behaviors of the `string` object.  This means that, for example, when they
+extract a substring from the object, they don't get a `string` object preserving
 the offsets, they just get a plain old `str` object.
 
 Fixing this in CPython would be worthwhile, but it'd be a lot of work and it
 would only benefit the future.  We want to solve our problem today.  So big
 provides workarounds for the two worst offenders: `re` and `tokenize`.
-big's `String` object has a `compile` method that is a drop-in replacement
-for `re.compile`, and all the methods you call on it will return `String`
-objects instead of `str` objects.  The `String` object also has a method
+big's `string` object has a `compile` method that is a drop-in replacement
+for `re.compile`, and all the methods you call on it will return `string`
+objects instead of `str` objects.  The `string` object also has a method
 called `generate_tokens` that produces the same output as `tokenize.generate_tokens`,
 except (of course!) all the strings returned in its `TokenInfo` objects
-are `String` objects.
+are `string` objects.
 
 Unfortunately, there's one more wrinkle.  The objects returned by CPython's
 `re` module don't let you instantitate them, nor subclass them.
@@ -4378,34 +4378,40 @@ internal locking.
 ### Implementation details
 
 Internally a big `linked_list` is a traditional doubly-linked-list.
-It stores your value in nodes, which contain forwards and backwards
-references to the next and previous nodes, as well as a reference to
-your value. This makes its performance predictable: inserting and
-removing elements anywhere in the list is O(1), whereas accessing
-elements by index is O(n).
+The list is stored in a series of nodes; each node contains forwards
+and backwards references, to the next and previous nodes respectively,
+as well as a reference to your value. This classic design makes its
+performance predictable: inserting and removing elements anywhere in
+the list is O(1), whereas accessing elements by index is O(n).
 
 There are acutally two types of node in a big `linked_list`: "data"
 nodes, which store a value, and "special" nodes, which don't store a
-value. Why are these "special" nodes needed?  Well, for example,
-`linked_list` makes a design choice that's uncommon but not exactly
-rare for linked lists: the "head" and "tail" nodes are explicit nodes
-in the linked list.  When you create a new `linked_list` object,
-it contains *two* nodes, not *zero:* the newly-created list already
-contains "head" and "tail" nodes. (This makes for a nice implementation;
-for example, *every* insert and delete simply updates four references,
-rather than needing lots of "if we're pointed at the head" special
-cases all over the place.)
+value.  Why are these "special" nodes needed?  Several reasons.
+First, `linked_list` makes a design choice that's uncommon
+but not exactly rare for linked lists: the "head" and "tail" nodes
+are "special" nodes in the linked list.  When you create a new
+`linked_list` object, it contains *two* nodes, not *zero:* the
+newly-created list already contains "head" and "tail" nodes.
+This makes for a nice implementation; *every* insert and delete
+simply updates four references, rather than needing lots of
+"if we're pointed at the head" special cases all over the place.
 
 There's a third type of "special" node: a *deleted* node.
 If an iterator is pointing at a data node containing a value X,
-and X is removed from the linked list, the *data* is removed but
+and you remove X from the linked list, the *data* is removed but
 the *node* stays in place.  That node is demoted to a "special"
-node.  This change is harmless; the iterator can continue pointing
-to it indefinitely, or can iterate forward without difficulty.
-The fact that the node was demoted is invisible to the user of
-the iterator if all they're doing is conventional iteration.
-However, this implementation choice will have ramifications for
-the "iterators as database cursors" APIs, as we'll see shortly.
+node--again, "data" nodes store a reference to a value, "special"
+nodes don't.  This change is harmless; the iterator can continue
+pointing to it indefinitely, or can iterate forward or backwards
+without difficulty. The fact that the node was demoted is invisible
+to the user of the iterator if all they're doing is conventional
+iteration. However, this implementation choice will have
+ramifications for the "iterators as database cursors" APIs,
+as we'll see shortly.
+
+(In case you're wondering: once the last iterator departs a
+"special" node resulting from a deleted value, `linked_list`
+removes the node.)
 
 
 #### `linked_list` methods
@@ -4599,7 +4605,7 @@ There are two rules that apply to iterators when interacting
 with special nodes:
 
 * Special nodes never have a value.
-* When an iterator navigates through a `LinkedList`, it automatically skips over special nodes.
+* When an iterator navigates through a `linked_list`, it automatically skips over special nodes.
 
 
 Let's see specifically how iterators interact with special nodes.
@@ -4679,7 +4685,7 @@ any other special node.
 
 #### Reverse iterators
 
-`LinkedList` objects also support reverse iteration.  You create a
+`linked_list` objects also support reverse iteration.  You create a
 reverse iterator by calling `reversed` on the list.  You can also create
 a reverse iterator by calling `reversed` on a forwards iterator; this
 returns a reverse iterator pointing at the same node.
@@ -4733,7 +4739,276 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
 
 </dd></dl>
 
+
+## The big `Log`
+
+<dl><dd>
+
+### Overview
+
+big's `Log` object is a high-performance logging mechanism, suitable
+for debugging.  It has a very convenient interface, and it's easy to get
+up and logging with very little configuration.  It's thread-safe,
+ensuring logged messages are rendered atomically (unlike calling `print`
+from multiple threads, which can interleave messages.)  And with default
+parameters, logging a message is very quick--perhaps 5x faster than
+calling `print`.
+
+Although it's really designed for "print-style" debugging--where you
+print out all the state in your program that you need to diagnose a
+problem--it's usable for classic application logging, like Python's
+`logging` module.  That said, it has a very different interface, and
+is missing a lot of features as compared to the `logging` module, so
+it's hardly a drop-in replacement.
+
+### Getting started
+
+To use, simply instantiate a `Log` object:
+
+```Python
+j = big.Log()
+```
+
+With all default parameters, your `Log` will print the log
+using `builtins.print`.  However, it will use a separate thread
+for actually printing to the screen.  Logging a message will
+lightly pre-format the message, then send it to the `Log` object's
+internal thread, which finishes the formatting and sends it to
+`print`.
+
+The classic method to log a message is with the `print` method:
+
+```Python
+j.print("Hello, world!  2 + 2 =", 2 + 2)
+```
+
+`Log.print` has a similar signature to `builtins.print`, although it
+doesn't support the `file` parameter.
+
+Calling the `Log` instance itself behaves identically to calling the
+`print` method:
+
+```Python
+j("Hello, world, round 2!  4 + 4 =", 4 + 4)
+```
+
+If you put those three statements into a Python script, and imported
+big (via the usual `import big.all as big`), it would print something
+like this to the screen:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:14:13.648816 PST
+===============================================================================
+[000.0004797210   MainThread] Hello, world!  2 + 2 = 4
+[000.0005004200   MainThread] Hello, world, round 2!  4 + 4 = 8
+===============================================================================
+Log finish at 2026/02/15 13:14:13.649339 PST
+===============================================================================
+```
+
+The log automatically gets "start" and "end" banners showing the current local
+time.  Also, every printed log message gets a "prefix" showing the elapsed time
+so far, since the start of the log, as well as the thread that logged the message.
+(Obviously, if you run this script, your times will be different.  Probably
+further in the future... unless you've borrowed Guido's time machine.)
+
+Let's explore the other `Log` methods that append messages to the log.
+The simplest one is `write`, which only takes one `str` argument, and writes that
+string to the log without any further formatting whatsoever:
+
+```Python
+j.write("This was written without formatting!\nLine breaks work too!\n")
+```
+
+Appending that to our script means our script now produces:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:17:52.588335 PST
+===============================================================================
+[000.0004998900   MainThread] Hello, world!  2 + 2 = 4
+[000.0005214310   MainThread] Hello, world, round 2!  4 + 4 = 8
+This was written without formatting!
+Line breaks work too!
+===============================================================================
+Log finish at 2026/02/15 13:17:52.588881 PST
+===============================================================================
+```
+
+`Log` also supports a method called `box` that writes a message with a three-sided
+box drawn around it.  If you want to call attention to a logged message, log it
+using `box` instead of `print`.  Note that the `box` method also only takes a single
+`str` object.  (But that's no problem, just use an f-string!)
+
+Adding this to our script:
+
+```Python
+j.box(f"Today's important number is {6 * 7}!")
+```
+
+now produces this output:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:21:25.982117 PST
+===============================================================================
+[000.0004931820   MainThread] Hello, world!  2 + 2 = 4
+[000.0005139620   MainThread] Hello, world, round 2!  4 + 4 = 8
+This was written without formatting!
+Line breaks work too!
+[000.0005261250   MainThread] +------------------------------------------------
+[000.0005261250   MainThread] | Today's important number is 42!
+[000.0005261250   MainThread] +------------------------------------------------
+===============================================================================
+Log finish at 2026/02/15 13:21:25.982663 PST
+===============================================================================
+```
+
+Finally, `log` supports two conjoined methods, `enter` and `exit`.  `enter`
+logs a message in a box, then adds an indent used for subsequent messages.
+`exit` outdents, then re-logs the message from the most recent `enter` in
+another box.  This is a great way to add some structure to your log, showing
+visually how your program enters and exits conceptual subsystems (modules,
+functions, classes, algorithms, whatever).
+
+For convenience, `Log.enter` also returns a "context manager".  If you use
+a call to `Log.enter` as the argument to a `with` statement, it will automatically
+call `Log.exit` when you exit the `with` statement.   Let's try it that way.
+
+We're going to demonstrate one more feature with this last bit of sample
+logging.  All `Log` methods that write to the log support newline characters; it's
+not just `Log.write`.  But when you log a message using the other methods--methods
+that write the "prefix"--the lines are split up before they're formatted for the
+log, and they each get the prefix.  It looks really good.
+
+Let's add a `with enter` block, and demonstrate logging a message with newlines
+just calling the `Log` object.  Here's the entire final script:
+
+```Python
+import big.all as big
+
+j = big.Log()
+j.print("Hello, world!  2 + 2 =", 2 + 2)
+j("Hello, world, round 2!  4 + 4 =", 4 + 4)
+j.write("This was written without formatting!\nLine breaks work too!\n")
+j.box(f"Today's important number is {6 * 7}!")
+with j.enter("Newline subsystem"):
+    j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
+```
+
+The above script produces this output:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:46:51.410751 PST
+===============================================================================
+[000.0004777570   MainThread] Hello, world!  2 + 2 = 4
+[000.0004971740   MainThread] Hello, world, round 2!  4 + 4 = 8
+This was written without formatting!
+Line breaks work too!
+[000.0005088170   MainThread] +------------------------------------------------
+[000.0005088170   MainThread] | Today's important number is 42!
+[000.0005088170   MainThread] +------------------------------------------------
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005117220   MainThread] |start| Newline subsystem
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005174830   MainThread]     Line one!
+[000.0005174830   MainThread]     And here's line two.
+[000.0005174830   MainThread]       Leading spaces are preserved too!
+[000.0005174830   MainThread]     And here's the final line
+[000.0005208190   MainThread] +-----+------------------------------------------
+[000.0005208190   MainThread] | end | Newline subsystem
+[000.0005208190   MainThread] +-----+------------------------------------------
+===============================================================================
+Log finish at 2026/02/15 13:46:51.411292 PST
+===============================================================================
+```
+
+### Other methods
+
+Log has three more methods; none of these write messages to the log.
+
+`Log.flush(block=True)` flushes the log.  In some configurations, the log will
+buffer up messages, instead of sending them right away.  A `flush` call
+will flush all buffered messages.  If `block` is true (the default), the
+`flush` call won't exit until all messages have been flushed.  If `block`
+is false, `flush` may start the flushing process but won't necessarily
+wait until it's complete.
+
+`Log.close(block=True)` flushes then closes the log.  When a log is closed,
+it *ignores* all attempts to write log messages to the log.  No error is
+reported--the messages are simply ignored.  The only way to re-open a
+closed log is to call its `reset` method.  The `block` parameter works
+the same as it does for `flush`.
+
+`Log.reset()` resets a log to its initial state.  After a log is reset,
+it will print the "start" banner.  Resetting the log is the only way
+to re-open a closed log.
+
+Every `Log` also registers an "atexit" handler.  The "atexit" handler closes
+the `Log` if it hasn't been closed already.
+
+
+### Destinations
+
+All our logging so far has just gone to `builtins.print`, which means it
+shows up on `stdout`.  But what if you want to send the log somewhere else?
+
+All *positional* arguments to the `Log` constructor specify *destinations.*
+A *destination* is a place that the log gets sent to.  As we've already seen,
+if you don't specify any destinations when you construct the `Log`, it logs
+to `builtins.print`.  You can make that explicit by passing in `print` as
+a positional argument:
+
+```Python
+j = Log(print)
+```
+
+But there are lots of other options!  If you specify an list, `Log` will
+append all the logged message strings to that list:
+
+```Python
+a = []
+j = Log(a)
+```
+
+If you specify a string, `Log` will use that string as a filename,
+and append the log to that file:
+
+```Python
+j = Log('/tmp/log.txt')
+```
+
+By default this will buffer up messages until the log is flushed,
+then open the file, flush *all* messages with one big write,
+and close the file.
+
+(You can also specify a `pathlib.Path` object--that works the same.)
+
+Some more options:
+
+* If you pass in an open file handle (like the result of calling `open`),
+  `Log` will write log messages to the file handle.
+* If you pass in a callable, `Log` will call the callable once for every
+  formatted message.
+* If you pass in `None`, that doesn't log anywhere.  If you want to
+  create a `Log` object that doesn't actually write the log anywhere,
+  just pass in `None`.
+
+Note that if you pass in multiple destinations, `Log` will send all the
+log messages to *all* of them.
+
+### Keyword-only parameters
+
+### Formats
+
+### Custom Destinations
+
+</dd></dl>
+
 ## The `multi-` family of string functions
+
 
 <dl><dd>
 
@@ -4748,8 +5023,8 @@ string in *exactly* one of those two modes, you probably can't use
 
 So what *can* you use?  There's
 [`re.split`,](https://docs.python.org/3/library/re.html#re.split)
-but that can be  hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
-Regular expressions can be so hard to get right, and the
+but that can be hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
+Regular expressions can be difficult to get right, and the
 semantics of `re.split` are subtly different from the usual
 string splitting functions.  Not to mention, it doesn't support
 reverse!
@@ -6692,20 +6967,20 @@ It's been a whole year... and I've been busy!
     when working with Python's tokenizer, and
   * *big.template*, functions that parse strings
     containing a simple template syntax.
-* Added `LinkedList` to new module *big.types*.  `LinkedList` is a
+* Added `linked_list` to new module *big.types*.  `linked_list` is a
   thoughtful implementation of a standard linked list data
   structure, with an API and UX modeled on Python's `list`
   and `collections.deque` objects.  Unlike Python's builtins,
-  you're permitted to add and remove values to a `LinkedList`
-  while iterating.  `LinkedList` also supports locking.
-* Added `String` to new module *big.types*.  `String` is a subclass
+  you're permitted to add and remove values to a `linked_list`
+  while iterating.  `linked_list` also supports locking.
+* Added `string` to new module *big.types*.  `string` is a subclass
   of `str` that tracks line number and column number offsets
-  for you.  Just initialize one big `String` containing an
+  for you.  Just initialize one big `string` containing an
   entire file, and every substring of that string will know
   its line number, column number, and offset in characters
   from the beginning.
 * `big.lines` and all the "lines modifier" functions
-  are now deprecated; `String` replaces all of it
+  are now deprecated; `string` replaces all of it
   (and it's a *massive* upgrade!).  `big.lines` will
   move to the `deprecated` module no sooner than
   November 2025, and will be removed no sooner than May 2026.

@@ -29,6 +29,7 @@ import atexit
 import builtins
 from functools import partial
 from io import TextIOBase
+from itertools import zip_longest
 import os
 from pathlib import Path
 from queue import Queue
@@ -554,93 +555,7 @@ class Log:
         self._blocker = blocker = Lock()
         blocker.acquire()
 
-
-        base_formats = {
-            "box" : {
-                "format": '{prefix}+{line}\n{prefix}| {message}\n{prefix}+{line}',
-                "line": '-',
-            },
-            "end" : {
-                "format": '{line}\n{name} finish at {timestamp}\n{line}',
-                "line": '=',
-            },
-            "enter": {
-                "format": '{prefix}+-----+{line}\n{prefix}|start| {message}\n{prefix}+-----+{line}',
-                "line": '-',
-            },
-            "exit": {
-                "format": '{prefix}+-----+{line}\n{prefix}| end | {message}\n{prefix}+-----+{line}',
-                "line": '-',
-            },
-            "print": {
-                "format": '{prefix}{message}',
-                "line": '',
-            },
-            "start": {
-                "format": '{line}\n{name} start at {timestamp}\n{line}',
-                "line": '=',
-            },
-        }
-
-        for key, value in formats.items():
-            if value is None:
-                if key not in ("start", "end"):
-                    raise ValueError("None is only a valid value for keys 'start' and 'end'")
-                base_formats.pop(key, None)
-            else:
-                if not isinstance(value, dict):
-                    raise TypeError(f"format values must be dict or None, not {type(value)}")
-                d = base_formats.setdefault(key, {})
-                d.update(value)
-
-        self._formats = {}
-
-        for key, value in base_formats.items():
-            if not isinstance(key, str):
-                raise TypeError(f"format keys must be str, not {type(key)}")
-            if not key.isidentifier():
-                raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
-            assert isinstance(value, dict)
-            if not (isinstance(value.get('format', None), str) and isinstance(value.get('line', None), str)):
-                raise ValueError(f"format dicts must contain 'format' and 'line' keys with value str, not {value!r}")
-
-            attribute_exists = hasattr(self, key)
-            predefined_key = key in ("enter", "exit", "start", "end", "print")
-            if (not predefined_key) and attribute_exists:
-                raise ValueError(f'format {key} attribute is already in use')
-
-            format = value['format']
-            line = value['line']
-            if line:
-                repeated_line = line * ((width // len(line)) + 1)
-            else:
-                repeated_line = ''
-
-            format_lines = []
-            for format_line in format.split('\n'):
-                s = format_line.replace("{{", "")
-                contains_message = "{message}" in s
-                append_repeated_line = s.endswith("{line}")
-                if append_repeated_line:
-                    assert line
-                    format_line = format_line[:-6]
-                    append_repeated_line = repeated_line
-                format_lines.append((format_line, line, contains_message, append_repeated_line))
-            self._formats[key] = format_lines
-
-            if not attribute_exists:
-                def make_method(key):
-                    def method(message):
-                        time = self._clock()
-                        thread = current_thread()
-
-                        if not isinstance(message, str):
-                            raise TypeError('message must be str')
-
-                        self._dispatch([(self._log, (time, thread, key, message))])
-                    method.__doc__ = f"Writes a message to the log using the {key!r} format."
-                    return method
-                setattr(self, key, make_method(key))
+        self._parse_formats(formats)
 
         print = builtins.print
         if not destinations:
@@ -657,6 +572,9 @@ class Log:
                 destination.register(self)
 
         self._manage_thread()
+
+        self._atexited = False
+        atexit.register(self._atexit)
 
 
     @classmethod
@@ -771,6 +689,11 @@ class Log:
         with self._lock:
             return tuple(self._nesting)
 
+    @property
+    def depth(self):
+        with self._lock:
+            return len(self._nesting)
+
     def _elapsed(self, t):
         # t should be a value returned by _clock.
         # returns t converted to elapsed time
@@ -780,30 +703,129 @@ class Log:
     def _ns_to_float(self, ns):
         return ns / 1_000_000_000.0
 
+    def _parse_formats(self, formats):
+        base_formats = {
+            "box" : {
+                "format": '{prefix}+{line}\n{prefix}| {message}\n{prefix}+{line}',
+                "line": '-',
+            },
+            "end" : {
+                "format": '{line}\n{name} finish at {timestamp}\n{line}',
+                "line": '=',
+            },
+            "enter": {
+                "format": '{prefix}+-----+{line}\n{prefix}|start| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
+                "line": '-',
+            },
+            "exit": {
+                "format": '{prefix}+-----+{line}\n{prefix}| end | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
+                "line": '-',
+            },
+            "print": {
+                "format": '{prefix}{message}',
+                "line": '',
+            },
+            "start": {
+                "format": '{line}\n{name} start at {timestamp}\n{line}',
+                "line": '=',
+            },
+        }
 
-    def _format_s(self, elapsed, thread, format, *, message=None, line=None, prefix=None):
-        if not format:
-            return ''
+        for key, value in formats.items():
+            if value is None:
+                if key not in ("start", "end"):
+                    raise ValueError("None is only a valid value for keys 'start' and 'end'")
+                base_formats.pop(key, None)
+            else:
+                if not isinstance(value, dict):
+                    raise TypeError(f"format values must be dict or None, not {type(value)}")
+                d = base_formats.setdefault(key, {})
+                d.update(value)
 
-        elapsed = self._ns_to_float(elapsed)
-        epoch = elapsed + self._start_time_epoch
-        timestamp = self._timestamp_format(epoch)
+        result = {}
 
-        substitutions = {
-            "elapsed": elapsed,
-            "name": self._name,
-            "thread": thread,
-            "time": epoch,
-            "timestamp": timestamp,
-            }
-        if message is not None:
-            substitutions['message'] = message
-        if line is not None:
-            substitutions['line'] = line
-        if prefix is not None:
-            substitutions['prefix'] = prefix
 
-        return format.format_map(substitutions)
+        class Format:
+            def __init__(self, line):
+                self.line = line
+                self.prologue = []
+                # body lines contain {message}
+                self.body = []
+                self.epilogue = []
+
+            def __iter__(self):
+                yield self.line
+                yield self.prologue
+                yield self.body
+                yield self.epilogue
+
+            def __repr__(self):
+                return f"<Format line={self.line!r} prologue={self.prologue} body={self.body} epilogue={self.epilogue}>"
+
+
+        for key, value in base_formats.items():
+            if not isinstance(key, str):
+                raise TypeError(f"format keys must be str, not {type(key)}")
+            if not key.isidentifier():
+                raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
+            assert isinstance(value, dict)
+            if not (isinstance(value.get('format', None), str) and isinstance(value.get('line', None), str)):
+                raise ValueError(f"format dicts must contain 'format' and 'line' keys with value str, not {value!r}")
+
+            attribute_exists = hasattr(self, key)
+            predefined_key = key in ("enter", "exit", "start", "end", "print")
+            if (not predefined_key) and attribute_exists:
+                raise ValueError(f'format {key} attribute is already in use')
+
+            format = value['format']
+            line = value['line']
+            if line:
+                repeated_line = line * ((self._width // len(line)) + 1)
+            else:
+                repeated_line = ''
+
+            f = Format(line)
+            _, prologue, body, epilogue = f
+            state = prologue
+
+            for format_line in format.split('\n'):
+                s = format_line.replace("{{", "")
+                contains_message = "{message}" in s
+                if state is prologue:
+                    if contains_message:
+                        state = body
+                elif state is body:
+                    if not contains_message:
+                        state = epilogue
+                else:
+                    assert state is epilogue
+                    if contains_message:
+                        raise ValueError(f"invalid 'format' for {key!r} format, all {{message}} lines must be contiguous")
+                if s.endswith("{line}"):
+                    assert line
+                    format_line = format_line[:-6]
+                    append_repeated_line = repeated_line
+                else:
+                    append_repeated_line = ''
+                state.append((format_line, append_repeated_line))
+            result[key] = f
+
+            if not attribute_exists:
+                def make_method(key):
+                    def method(message):
+                        time = self._clock()
+                        thread = current_thread()
+
+                        if not isinstance(message, str):
+                            raise TypeError('message must be str')
+
+                        self._dispatch([(self._log, (time, thread, key, message))])
+                    method.__doc__ = f"Writes a message to the log using the {key!r} format."
+                    return method
+                setattr(self, key, make_method(key))
+
+        self._formats = result
+
 
     def _format_message(self, time, thread, format, message):
         elapsed = self._elapsed(time)
@@ -821,15 +843,26 @@ class Log:
         append = buffer.append
         line_buffer = []
         line_append = line_buffer.append
-        for t in self._formats[format]:
-            line_buffer.clear()
-            f, l, contains_message, append_repeated_line = t
-            if contains_message:
-                iterable = message_lines
+        line_clear = line_buffer.clear
+
+        line, prologue, body, epilogue = self._formats[format]
+        for state in (prologue, body, epilogue):
+            if not state:
+                continue
+            in_body = state is body
+            if in_body:
+                # if we have more body lines than message lines, zip
+                if len(body) > len(message_lines):
+                    iterator = zip(body, message_lines)
+                else:
+                    iterator = zip_longest(body, message_lines, fillvalue=body[-1])
             else:
-                iterable = [None]
-            for ml in iterable:
-                formatted = self._format_s(elapsed, thread, f, message=ml, line=l, prefix=prefix)
+                iterator = ((format_entry, None) for format_entry in state)
+
+            for format_entry, message in iterator:
+                line_buffer.clear()
+                format_line, append_repeated_line = format_entry
+                formatted = self._format_s(elapsed, thread, format_line, message=message, line=line, prefix=prefix)
                 line_append(formatted)
                 if append_repeated_line:
                     length = len(formatted)
@@ -837,6 +870,7 @@ class Log:
                     if delta > 0:
                         line_append(append_repeated_line[:delta])
                 line = "".join(line_buffer).rstrip()
+                line_clear()
                 append(line)
                 append("\n")
         return "".join(buffer)
@@ -856,6 +890,33 @@ class Log:
     def _clear_nesting(self):
         self._nesting.clear()
         self._spaces = ''
+
+
+    def _format_s(self, elapsed, thread, format, *, message=None, line=None, prefix=None):
+        if not format:
+            return ''
+
+        elapsed = self._ns_to_float(elapsed)
+        epoch = elapsed + self._start_time_epoch
+        timestamp = self._timestamp_format(epoch)
+
+        substitutions = {
+            "elapsed": elapsed,
+            "format": format,
+            "name": self._name,
+            "thread": thread,
+            "time": epoch,
+            "timestamp": timestamp,
+            }
+        if message is not None:
+            substitutions['message'] = message
+        if line is not None:
+            substitutions['line'] = line
+        if prefix is not None:
+            substitutions['prefix'] = prefix
+
+        return format.format_map(substitutions)
+
 
 
     def _execute(self, work):
@@ -882,7 +943,6 @@ class Log:
         self._queue = Queue()
         self._thread = Thread(target=self._worker_thread, args=(self._queue,), daemon=True)
         self._thread.start()
-        atexit.register(self._atexit)
 
     def _stop_thread(self):
         if self._threading:
@@ -896,6 +956,8 @@ class Log:
                         thread.join()
 
     def _atexit(self):
+        with self._lock:
+            self._atexited = True
         self.close()
         self._stop_thread()
 
@@ -1033,6 +1095,9 @@ class Log:
         It's an error to transition from another state
         to "closed" or "initial" without specifying
         ns and epoch.
+
+        If the Log's atexit handler has been called,
+        it won't advance past "closed".
         """
         while True:
             if state == self._state:
@@ -1093,6 +1158,9 @@ class Log:
 
             if self._state == 'closed':
                 if state != 'initial':
+                    return False
+
+                if self._atexited:
                     return False
 
                 assert ns is not None
