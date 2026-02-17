@@ -5216,7 +5216,7 @@ New types for **big**.  Currently contains
 
 </dd></dl>
 
-### The big `string`
+### `string`
 
 <dl><dd>
 
@@ -5332,7 +5332,7 @@ Equivalent to calling
 string.
 </dd></dl>
 
-### The big `linked_list`
+### `linked_list`
 
 <dl><dd>
 
