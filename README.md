@@ -7395,10 +7395,9 @@ It's been a whole year... and I've been busy!
       a weakref "get ref" call every time a bound inner class
       is instantiated.
     * Bound inner classes now have explicit support for slots!
-    * Bound inner classes now have accurate sigantures,
+    * Bound inner classes now have accurate signatures,
       preserving the signature of the original class's `__init__`
       but with the `outer` parameter removed.
-    * Bound inner classes
     * `BoundInnerClass` adds locking, to prevent a race condition
       when caching the same bound inner class created
       simultaneously in multiple threads.  It's rarely used
@@ -7419,7 +7418,7 @@ It's been a whole year... and I've been busy!
     * `type_bound_to(o)` returns the instance that `type(o)` has
       been bound to, if `type(o)` is a bound inner class bound
       to an instance.
-    * `bound_inner_base(cls)` is only needed to use BoundInnerClas
+    * `bound_inner_base(cls)` is only needed to use BoundInnerClass
       with Python 3.6.  It's unnecessary in Python 3.7+.
 * Added `generate_tokens` to new module *big.tokens*.
   `generate_tokens` is a convenience wrapper around
@@ -7520,6 +7519,7 @@ It's been a whole year... and I've been busy!
       * `delimiter_single_quote`
       * `delimiter_double_quotes`
       * `parse_delimiters_default_delimiters`
+      * `parse_delimiters_default_delimiters_bytes`
     * The old alias `lines_filter_comment_lines`
 * Updated copyright notices to 2026.
 
