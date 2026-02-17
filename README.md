@@ -9514,14 +9514,16 @@ It's been more than a year... and I've been busy!
 * Added [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape)
   and
   [`eval_template_string`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
-  to new module *big.template*.  `parse_template_string`
-  parses a string containing Jinja-like interpolations,
-  and returns an iterator that yields strings and
-  `Interpolation` objects.  (This is similar to
-  "t-strings" in Python 3.14+.)
-  `eval_template_string` calls `parse_template_string` to
-  parse a string, but then evaluates the expressions (and
-  filters) using `eval`, returning the rendered string.
+  to new module *big.template*.
+    * `parse_template_string`
+      parses a string containing Jinja-like interpolations,
+      and returns an iterator that yields strings and
+      `Interpolation` objects.  (This is similar to
+      "t-strings" in Python 3.14+.)
+    * `eval_template_string` calls `parse_template_string`
+      to parse a string, then evaluates the expressions
+      (and filters) using `eval`.  It returns the resulting
+      string with all substitutions rendered.
 * Rewrote [`BoundInnerClass`](#BoundInnerClass), and it's a
   huge improvement. The rewrite removes some old concerns:
     * You no longer need the `parent.cls` hack!  (Well, you
@@ -9532,7 +9534,7 @@ It's been more than a year... and I've been busy!
     * The bound inner class implementation now relies on
       comparison by identity instead of by name, which means
       you may now add aliases and/or rename your inner classes
-      to your hearts' content.
+      to your heart's content.
     * Bound inner classes no longer keep a strong reference to
       the outer instance; they use weakrefs.  This reduces
       reference cycles, making it easier to reclaim abandoned
@@ -9568,7 +9570,8 @@ It's been more than a year... and I've been busy!
 * Added [`generate_tokens`](#generate_tokenss) to new module *big.tokens*.
   `generate_tokens` is a convenience wrapper around
   Python's `tokenize.generate_tokens`, which has an
-  abstruse "readline"-based interface.  `tokens.generate_tokens`
+  abstruse "readline"-based interface.
+  `tokens.generate_tokens` instead
   lets you simply pass in a string object, and returns a
   generator yielding tokens.  It also preserves slices
   of str subclasses--if the string you pass in is a
