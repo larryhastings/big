@@ -592,21 +592,21 @@ class TestLogMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.Log(formats={"enter": None})
         with self.assertRaises(TypeError):
-            big.Log(formats={83: {"format": "abc", "line": "-"}})
+            big.Log(formats={83: {"template": "abc", "line": "-"}})
         with self.assertRaises(ValueError):
-            big.Log(formats={"not an id": {"format": "abc", "line": "-"}})
+            big.Log(formats={"not an id": {"template": "abc", "line": "-"}})
         with self.assertRaises(TypeError):
             # formats value must be dict
             big.Log(formats={"splunk": 55})
         with self.assertRaises(TypeError):
             # format dict format value must be str
-            big.Log(formats={"splunk": {"format": 33}})
+            big.Log(formats={"splunk": {"template": 33}})
         with self.assertRaises(TypeError):
             # format dict line value is optional, but if specified must be str
-            big.Log(formats={"splunk": {"format": "abc", "line": 77}})
+            big.Log(formats={"splunk": {"template": "abc", "line": 77}})
         with self.assertRaises(ValueError):
             # can't name a format "reset", Log already has a "reset" method
-            big.Log(formats={"reset": {"format": "abc", "line": "-"}})
+            big.Log(formats={"reset": {"template": "abc", "line": "-"}})
 
         l = big.Log(formats={"start": None, "end": None})
         with self.assertRaises(ValueError):
@@ -619,7 +619,7 @@ class TestLogLazyStartAndEnd(unittest.TestCase):
 
     def test_lazy_start_from_log(self):
         s = io.StringIO()
-        log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
+        log = big.Log(s, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='[PREFIX] ', width=20)
         log("howdy!")
         log.close()
 
@@ -632,7 +632,7 @@ END
 
     def test_lazy_start_from_write(self):
         s = io.StringIO()
-        log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
+        log = big.Log(s, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='[PREFIX] ', width=20)
         log.write("howdy!\n")
         log.close()
 
@@ -645,7 +645,7 @@ END
 
     def test_lazy_start_from_heading(self):
         s = io.StringIO()
-        log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
+        log = big.Log(s, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='[PREFIX] ', width=20)
         log.box("howdy!")
         log.close()
 
@@ -660,7 +660,7 @@ END
 
     def test_lazy_start_from_enter(self):
         s = io.StringIO()
-        log = big.Log(s, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='[PREFIX] ', width=20)
+        log = big.Log(s, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='[PREFIX] ', width=20)
         with log.enter("howdy!"):
             log("woah!")
         log.close()
@@ -800,7 +800,7 @@ class TestLogFormatting(unittest.TestCase):
 
     def test_log_with_initial_and_final(self):
         array = []
-        log = big.Log(array, threading=False, formats={"start": {"format": "START"}, "end": {"format": "END"}}, prefix='')
+        log = big.Log(array, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='')
         log("middle")
         log.close()
         output = ''.join(array)
@@ -813,7 +813,7 @@ class TestLogFormatting(unittest.TestCase):
         # to exercise some specific code in Log
         log = big.Log(s,
             threading=False,
-            formats={"start": None, "end": None, "peanut": {"format": "{prefix}{line}\n{prefix}=peanut=start{line}\n{prefix}== {message}\n{prefix}-- {message}\n{prefix}=peanut=end{line}\n{prefix}{line}", "line": "=-"}},
+            formats={"start": None, "end": None, "peanut": {"template": "{prefix}{line}\n{prefix}=peanut=start{line}\n{prefix}== {message}\n{prefix}-- {message}\n{prefix}=peanut=end{line}\n{prefix}{line}", "line": "=-"}},
             prefix='[PFX] ')
         log.peanut("test\ntest2\ntest3")
         log.close()
@@ -830,7 +830,7 @@ class TestLogFormatting(unittest.TestCase):
 
         # non-contiguous {message} lines
         with self.assertRaises(ValueError):
-            big.Log(formats={"peanut": {"format": "foo\n{message}\nbar\n{message}"}})
+            big.Log(formats={"peanut": {"template": "foo\n{message}\nbar\n{message}"}})
 
 
 
@@ -976,7 +976,7 @@ class TestSink(unittest.TestCase):
 
     def test_sink_with_banners(self):
         sink = big.Log.Sink()
-        log = big.Log(sink, threading=False, name='Sink', formats={"start": {"format": "{name} START\n"}, "end": {"format": "{name} END\n"}}, prefix='[PREFIX] ')
+        log = big.Log(sink, threading=False, name='Sink', formats={"start": {"template": "{name} START\n"}, "end": {"template": "{name} END\n"}}, prefix='[PREFIX] ')
         log("message")
         log.close()
         events = list(sink)

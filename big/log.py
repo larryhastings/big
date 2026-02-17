@@ -723,27 +723,27 @@ class Log:
     def _parse_formats(self, formats):
         base_formats = {
             "box" : {
-                "format": '{prefix}+{line}\n{prefix}| {message}\n{prefix}+{line}',
+                "template": '{prefix}+{line}\n{prefix}| {message}\n{prefix}+{line}',
                 "line": '-',
             },
             "end" : {
-                "format": '{line}\n{name} finish at {timestamp}\n{line}',
+                "template": '{line}\n{name} finish at {timestamp}\n{line}',
                 "line": '=',
             },
             "enter": {
-                "format": '{prefix}+-----+{line}\n{prefix}|enter| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
+                "template": '{prefix}+-----+{line}\n{prefix}|enter| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
                 "line": '-',
             },
             "exit": {
-                "format": '{prefix}+-----+{line}\n{prefix}|exit | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
+                "template": '{prefix}+-----+{line}\n{prefix}|exit | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
                 "line": '-',
             },
             "print": {
-                "format": '{prefix}{message}',
+                "template": '{prefix}{message}',
                 "line": '',
             },
             "start": {
-                "format": '{line}\n{name} start at {timestamp}\n{line}',
+                "template": '{line}\n{name} start at {timestamp}\n{line}',
                 "line": '=',
             },
         }
@@ -784,8 +784,8 @@ class Log:
                 raise TypeError(f"format keys must be str, not {type(key)}")
             if not key.isidentifier():
                 raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
-            if not isinstance(value.get('format', None), str):
-                raise TypeError(f"format dicts must contain 'format' key with value str, not {type(value)!r}")
+            if not isinstance(value.get('template', None), str):
+                raise TypeError(f"format dicts must contain 'template' key with value str, not {type(value)!r}")
             if not isinstance(value.get('line', ''), str):
                 raise TypeError(f"format dicts 'line' value, if specified, must be str, not {type(value)!r}")
 
@@ -794,7 +794,7 @@ class Log:
             if (not predefined_key) and attribute_exists:
                 raise ValueError(f'format {key} attribute is already in use')
 
-            format = value['format']
+            template = value['template']
             line = value.get('line', '')
             if line:
                 repeated_line = line * ((self._width // len(line)) + 1)
@@ -805,8 +805,8 @@ class Log:
             _, prologue, body, epilogue = f
             state = prologue
 
-            for format_line in format.split('\n'):
-                s = format_line.replace("{{", "")
+            for template_line in template.split('\n'):
+                s = template_line.replace("{{", "")
                 contains_message = "{message}" in s
                 if state is prologue:
                     if contains_message:
@@ -820,11 +820,11 @@ class Log:
                         raise ValueError(f"invalid 'format' for {key!r} format, all {{message}} lines must be contiguous")
                 if s.endswith("{line}"):
                     assert line
-                    format_line = format_line[:-6]
+                    template_line = template_line[:-6]
                     append_repeated_line = repeated_line
                 else:
                     append_repeated_line = ''
-                state.append((format_line, append_repeated_line))
+                state.append((template_line, append_repeated_line))
             result[key] = f
 
             if not attribute_exists:
@@ -874,12 +874,12 @@ class Log:
                 else:
                     iterator = zip_longest(body, message_lines, fillvalue=body[-1])
             else:
-                iterator = ((format_entry, None) for format_entry in state)
+                iterator = ((template, None) for template in state)
 
-            for format_entry, message in iterator:
+            for template_entry, message in iterator:
                 line_buffer.clear()
-                format_line, append_repeated_line = format_entry
-                formatted = self._format_s(elapsed, thread, format_line, message=message, line=line, prefix=prefix)
+                template, append_repeated_line = template_entry
+                formatted = self._format_s(elapsed, thread, template, message=message, line=line, prefix=prefix)
                 line_append(formatted)
                 if append_repeated_line:
                     length = len(formatted)
@@ -2066,7 +2066,7 @@ class OldLog:
     def __init__(self, clock=None):
         self._destination = OldDestination()
         clock=clock or default_clock
-        self._log = Log(self._destination, threading=False, formats={"start": {"format": "log start"}, "end": None}, prefix='', clock=clock)
+        self._log = Log(self._destination, threading=False, formats={"start": {"template": "log start"}, "end": None}, prefix='', clock=clock)
 
     def reset(self):
         self._log.reset()
