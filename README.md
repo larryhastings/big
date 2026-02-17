@@ -6368,7 +6368,7 @@ both represent "where" the little bitty strings came from differently:
 * [`tokenize.tokenize`](https://docs.python.org/3/library/tokenize.html#tokenize.tokenize)
   returns a `TokenInfo` object containing the line and column numbers of the string it contains).
 * `search` and `match` methods on a compiled regular expression return
-  [a `Match` object](https://docs.python.org/3/library/re.html#re.Match)
+  a [`Match`](https://docs.python.org/3/library/re.html#re.Match) object
   which tells you the index where the string started in the original string.
 
 This is sufficient--barely.  It's also fragile.  What if you further
@@ -6550,7 +6550,8 @@ removes the node.)
 #### `linked_list` methods
 
 `linked_list` provides a superset of the union of the APIs of
-`list` and
+[`list`](https://docs.python.org/3/library/stdtypes.html#list)
+and
 [`collections.deque`.](https://docs.python.org/3/library/collections.html#collections.deque)
 Every method call supported by both `list` and `deque` is supported
 by `linked_list`, and you can read the documentation for those types
@@ -6742,8 +6743,8 @@ with special nodes:
 
 
 Let's see specifically how iterators interact with special nodes.
-say you create a new empty linked list, and you create an iterator
-over that linked list, and you call `next` on it:
+We'll create a new empty linked list, then create an iterator
+over that linked list, and call `next` on it twice:
 
 ```Python
 t = LinkedList((1,))
@@ -6751,6 +6752,9 @@ it = iter(t)
 value_a = next(it, None)
 value_b = next(it, None)
 ```
+
+When this is done, `value_a` will be `1`, and `value_b` will be `None`.
+How does this work internally?
 
 Our iterator `it` started out pointing at the "head" node.  When you call `next(it, None)` the
 first time, it advances to `1` and returns it.  The iterator is now pointing at the node for
@@ -6781,6 +6785,9 @@ The internal layout of the list and iterator now looks like this:
 ```
 
 Here `it` points to a "special" node, where the value `2` used to be.
+(To be clear: the *value* of the node isn't the string `"special"`.
+As mentioned before, special nodes *have* no value.  We just put
+the word "special" there to annotate that as a special node.)
 
 If you now iterated over the linked list:
 
@@ -6790,9 +6797,8 @@ for i in t:
 ```
 
 you'd see 1, 2, 4, and 5, like you'd expect.  The special node is
-still there, but remember the rule: linked list iterators automatically
-skip over special nodes.
-
+still there, but remember the rule: *linked list iterators automatically
+skip over special nodes.*
 
 When you have an iterator pointed at a special node, you can do almost anything
 you can do with an iterator pointed at a normal node.  You can:
@@ -6845,11 +6851,12 @@ This makes the behavior of a reverse iterator easy to predict.  For example,
 if `fi` is a forwards iterator, and `ri` is a reverse iterator on the same list:
 
 * A newly-created reverse iterator points to the "tail" node, and `ri.reset()`
-  moves the reverse iterator back to the "tail" node.
+  resets `ri` so it points at the "tail" node again.
 * A reverse iterator becomes exhausted once it reaches the "head" node.
   `ri.exhaust()` moves `ri` so it points at the "head" node.
 * `ri.append()` inserts *before* the current node, `ri.prepend()`
-  inserts *after* the current node.
+  inserts *after* the current node.  Remember, from the perspective
+  of `ri`, it's inserting those nodes in the correct places!
 * `ri[1]` evaluates to the *previous* value in the list, and `ri[-1]`
   evaluates to the *next* value in the list.
 
@@ -6893,6 +6900,17 @@ problem--it's usable for classic application logging, like Python's
 `logging` module.  That said, it has a very different interface, and
 is missing a lot of features as compared to the `logging` module, so
 it's hardly a drop-in replacement.
+
+### tl;dr
+
+The downside of feature-rich classes and functions is that it can be
+hard to remember how to use them.  So here's all you need to remember
+to be productive with `Log`:
+
+> Create your Log object, and pass in the objects where you want
+> the log to go--`print`, a file path, an open file handle, a `list`,
+> whatever.  Then call the Log object to log messages--it behaves
+> like `print`.
 
 ### Getting started
 
@@ -6975,7 +6993,7 @@ itself behaves identically to calling the `print` method:
 j("Hello, world, round 2!  4 + 4 =", 4 + 4)
 ```
 
-These three lines so far produce the first five lines of the output:
+The three lines we've examined so far produce the first five lines of the output:
 
 ```
 ===============================================================================
@@ -7014,9 +7032,9 @@ box drawn around it:
 j.box(f"Today's important number is {6 * 7}!")
 ```
 
-If you want to call attention to a logged message, log it
-using `box` instead of `print`.  Note that the `box` method also only takes a single
-`str` object.  (But that's no problem, just use an f-string!)
+If you want to call attention to a logged message,  use `box` instead of `print`.
+Note that the `box` method also only takes a single `str` object.  (But that's no
+problem--just use an f-string!)
 
 The above two lines in the script produce these five lines in the output:
 
