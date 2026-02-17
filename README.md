@@ -6361,15 +6361,14 @@ and they split it up and return little substrings--tiny little slices
 of the big string.  Often, the user needs to know *where* those little
 slices came from.  How do you communicate that?
 
-In both cases, they added extra information accompanying the string.
-But they took different, and incompatible, approaches, and they both
-represent "where" the little bitty strings came from differently:
+What `tokenize` and `re` did was add extra information accompanying the
+string.  But they took different--and incompatible--approaches.  They
+both represent "where" the little bitty strings came from differently:
 
-* `tokenize.tokenize` returns a `TokenInfo` object
-  [https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](containing
-  the line and column numbers of the string it contains).
-* The regular expression engine returns
-  [https://docs.python.org/3/library/tokenize.html#tokenize.tokenize](a `Match` object)
+* [`tokenize.tokenize`](https://docs.python.org/3/library/tokenize.html#tokenize.tokenize)
+  returns a `TokenInfo` object containing the line and column numbers of the string it contains).
+* `search` and `match` methods on a compiled regular expression return
+  [a `Match` object](https://docs.python.org/3/library/re.html#re.Match)
   which tells you the index where the string started in the original string.
 
 This is sufficient--barely.  It's also fragile.  What if you further
