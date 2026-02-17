@@ -9472,9 +9472,9 @@ others.  Views are completely independent from each other.
 
 #### 0.13
 
-*under development*
+*2026/02/17*
 
-It's been a whole year... and I've been busy!
+It's been more than a year... and I've been busy!
 
 * Added three new modules:
   * [*big.types*](#bigtypes), which contains core types,
@@ -9594,14 +9594,14 @@ It's been a whole year... and I've been busy!
   You pass in an iterator, and rules for what values you
   want to see / don't want to see, and it returns
   an iterator that only yields the values you want.
-* Rewrote the entire [*big.log*](#biglog) module.  I stopped
+* Rewrote the entire [*big.log*](#biglog) module.  I'd stopped
   using the old `Log` class, yet on a couple recent projects
-  I coded up a quick-and-dirty log... clearly the old `Log`
+  I hacked up a quick-and-dirty log... clearly the old `Log`
   wasn't solving my problem anymore.  The new `Log` is designed
-  explicitly for lightweight logging, mostly for debugging
-  purposes.  It's easy to use, feature-rich, high-performance,
-  and by default runs in "threaded" mode where logging calls
-  are 5x faster than calling `print`!
+  explicitly for lightweight logging, mostly for debugging.
+  It's simple to use, feature-rich, high-performance, and by
+  default runs in "threaded" mode where logging calls are 5x
+  faster than calling `print`!
   * I added a backwards-compatible [`OldLog`](#oldlogclocknone) to *big.log*
     in case anybody is using the old `Log` class.  This
     provides the API and functionality of the old `Log`
