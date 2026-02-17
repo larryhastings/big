@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -28,7 +28,7 @@ import bigtestlib
 bigtestlib.preload_local_big()
 
 import big.all as big
-from big.all import lines, python_delimiters, read_python_file, split_delimiters
+from big.all import lines, Pattern, python_delimiters, read_python_file, split_delimiters, string
 import copy
 import itertools
 import math
@@ -534,14 +534,23 @@ class BigTextTests(unittest.TestCase):
         # skip over the surrogate pair code points, they don't represent glyphs.
         for i in itertools.chain(range(0, 0xd7ff), range(0xdfff, 2**16 + 2**20)):
             c = chr(i)
-            s = f"a{c}b"
-            if len(s.split()) == 2:
+            if c.isspace():
                 observed_str_whitespace_without_crlf.add(c)
                 # all line-breaking characters are whitespace.
                 # therefore, don't bother with the linebreaks test
                 # unless this character passes the whitespace text.
-                if len(s.splitlines()) == 2:
+                #
+                # if c is a linebreak, then splitlines returns a list
+                # containing only an empty string.  otherwise it returns
+                # a list containing c.
+                if not c.splitlines()[0]:
                     observed_str_linebreaks_without_crlf.add(c)
+
+        self.assertIn('\r', observed_str_whitespace_without_crlf)
+        self.assertIn('\n', observed_str_whitespace_without_crlf)
+
+        self.assertIn('\r', observed_str_linebreaks_without_crlf)
+        self.assertIn('\n', observed_str_linebreaks_without_crlf)
 
         crlf = set(('\r\n',))
         observed_str_whitespace = observed_str_whitespace_without_crlf | crlf
@@ -580,10 +589,9 @@ class BigTextTests(unittest.TestCase):
         observed_bytes_linebreaks_without_crlf = set()
         for i in range(128):
             c = chr(i).encode('ascii')
-            s = b'a' + c + b'b'
-            if len(s.split()) == 2:
+            if c.isspace():
                 observed_bytes_whitespace_without_crlf.add(c)
-                if len(s.splitlines()) == 2:
+                if not c.splitlines()[0]:
                     observed_bytes_linebreaks_without_crlf.add(c)
 
         bytes_crlf = set((b'\r\n',))
@@ -604,13 +612,13 @@ class BigTextTests(unittest.TestCase):
 
     def test_reversed_re_finditer(self):
         # Cribbed off the test suite from the 'regex' package
-        def test(pattern, string, expected):
+        def test(pattern, string, expected, check_regex=True):
             pattern = c(pattern)
             string = c(string)
             expected = c(expected)
             got = finditer_group0(big.reversed_re_finditer(pattern, string))
 
-            if have_regex:
+            if check_regex and have_regex:
                 # confirm first that we match regex's output
                 if isinstance(pattern, re_Pattern):
                     p = pattern.pattern
@@ -658,10 +666,12 @@ class BigTextTests(unittest.TestCase):
             if (sys.version_info.major == 3) and (sys.version_info.minor <= 6):  # pragma: no cover
                 # wrong, but consistent
                 result = ('bar', 'oo', '')
+                check_regex = False
             else:
                 # correct
                 result = ('bar', 'foo', '')
-            test(r'^|\w+', 'foo bar', result)
+                check_regex = True
+            test(r'^|\w+', 'foo bar', result, check_regex=False)
 
             # regression test: the initial implementation of multisplit got this wrong.
             # it never truncated
@@ -4542,6 +4552,178 @@ class BigTextTests(unittest.TestCase):
         test_clip_leading('         \n')
 
 
+    def test_strip_indent(self):
+        self.maxDiff = 2**32
+
+        def test(li, expected):
+            got = list(li)
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+        def L(indent, line, line_number, column_number, offset, origin):
+            if isinstance(line, str):
+            # origin=origin, 
+                return (indent, string(line, source=origin, line_number=line_number, column_number=column_number))
+            return (indent, line)
+
+        #                                                                                                                     11111111111111111111111 111111111111 11111111 1111111111111 111111111 1
+        #                   111 111111 122222222 223333 3333334444 444444555555555566666 666667777777777888888 88889999999999 00000000001111111111222 222222233333 33333444 4444444555555 555566666 6
+        #        0 123456789012 345678 901234567 890123 4567890123 456789012345678901234 567890123456789012345 67890123456789 01234567890123456789012 345678901234 56789012 3456789012345 678901234 5
+        lines = "\nleft margin\nif 3:\n    text\nelse:\n    if 1:\n          other text\n          other text\n    more text\n      different indent\n    outdent\noutdent\n  new indent\nqoutdent\n"
+
+        s = string(lines)
+        i = string(lines).split('\n')
+        i = big.text.strip_indents(i)
+
+        expected = [
+            (0, s[0:0]),
+            (0, s[1:12]),
+            (0, s[13:18]),
+            (1, s[23:27]),
+            (0, s[28:33]),
+            (1, s[38:43]),
+            (2, s[54:64]),
+            (2, s[75:85]),
+            (1, s[90:99]),
+            (2, s[106:122]),
+            (1, s[127:134]),
+            (0, s[135:142]),
+            (1, s[145:155]),
+            (0, s[156:164]),
+            (0, s[165:165]),
+            ]
+        test(i, expected)
+
+
+        ##
+        ## test tab to spaces
+        ##
+
+        lines = (
+            "left margin\n"
+            "\teight\n"
+            "  \t    twelve\n"
+            "        eight is enough\n"
+            "    \n"
+            )
+        s = string(lines)
+        i = s.split('\n')
+        i = big.strip_indents(i, linebreaks=None)
+
+        expected = [
+            L(0, 'left margin',     1,  1,  0, s),
+            L(1, 'eight',           2,  9, 11, s),
+            L(2, 'twelve',          3, 13, 11, s),
+            L(1, 'eight is enough', 4,  9, 11, s),
+            L(0, '',                5,  1, 11, s),
+            L(0, '',                6,  1, 11, s),
+            ]
+
+        test(i, expected)
+
+        lines = (
+            b"left margin\n"
+            b"\tfour\n"
+            b"  \t    eight\n"
+            b"  \t\tfigure eight is double four\n"
+            b"    figure four is half of eight\n"
+            )
+
+        s = lines
+        i = s.split(b'\n')
+        i = big.strip_indents(i, tab_width=4)
+
+        expected = [
+            L(0, b'left margin',                  1, 1, 1, s),
+            L(1, b'four',                         2, 5, 1, s),
+            L(2, b'eight',                        3, 9, 1, s),
+            L(2, b'figure eight is double four',  4, 9, 1, s),
+            L(1, b'figure four is half of eight', 5, 5, 1, s),
+            L(0, b'',                             6, 1, 1, s),
+            ]
+
+        test(i, expected)
+
+        ##
+        ## test preserving linebreak characters
+        ##
+
+        lines = (
+            "left margin\n"
+            " \n"
+            "   \n"
+            "        eight is enough\n"
+            "    \n"
+            "  "
+            )
+        s = string(lines)
+        i = s.splitlines(True)
+        i = big.strip_indents(i)
+
+        expected = [
+            L(0, 'left margin\n',     1,  1,  0, s),
+            L(1, '\n',                2,  2, 13, s),
+            L(1, '\n',                3,  4, 17, s),
+            L(1, 'eight is enough\n', 4,  9, 26, s),
+            L(0, '\n',                5,  5, 46, s),
+            L(0, '',                  6,  1, 47, s),
+            ]
+
+        test(i, expected)
+
+        ##
+        ## test raising for illegal outdents
+        ##
+
+        # when it's between two existing indents
+        s = string(
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "      six?!\n"
+            "left margin again\n")
+        i = s.splitlines()
+        i = big.strip_indents(i, tab_width=4)
+
+        with self.assertRaises(IndentationError):
+            test(i, [])
+
+
+        # when it's less than the first indent
+        s = string(
+            "left margin\n"
+            "\tfour\n"
+            "  \t    eight\n"
+            "  two?!\n"
+            "left margin again\n")
+        i = s.splitlines()
+        i = big.strip_indents(i, tab_width=4)
+
+        with self.assertRaises(IndentationError):
+            test(i, [])
+
+        # ensure that lines_strip_indent is an iterator
+        s = string("a\nb\nc\nd")
+        i = s.splitlines()
+        i = big.strip_indents(i, tab_width=4)
+        try:
+            info, line = next(i)
+        except TypeError: # pragma: nocover
+            self.assertTrue(False, "strip_indent did not return an iterator")
+
+
+
 
     def test_int_to_words(self):
         # confirm that flowery has a default of True
@@ -5431,6 +5613,424 @@ class BigTextTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             big.decode_python_script(script, newline='x')
+
+
+    def test_strip_line_comments(self):
+
+        def test(origin, line_comment_markers, *segments, keepends=False, **kwargs):
+            is_bytes = isinstance(origin, bytes)
+            if is_bytes:
+                linebreak = b'\n'
+            else:
+                linebreak = '\n'
+
+            origin = original = dedent(origin).lstrip(linebreak)
+
+            if not is_bytes:
+                origin = string(origin)
+            i = li = origin.splitlines(keepends)
+            got = list(big.strip_line_comments(i, line_comment_markers, **kwargs))
+
+
+            expected = []
+            offset = 0
+            for s in segments:
+                append_linebreak = keepends and linebreak in s
+                substring = s.rstrip(linebreak)
+                offset = origin.find(substring, offset)
+                assert offset != -1, f"couldn't find substring={substring!r} in origin={origin!r}"
+                slice = origin[offset:offset+len(substring)]
+                if append_linebreak:
+                    slice += '\n'
+                offset += len(substring)
+                expected.append(slice)
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("expected:")
+                pprint.pprint(expected)
+                print("\n\n")
+                print("got:")
+                pprint.pprint(got)
+                print("\n\n")
+                for e, g in zip(expected, got):
+                    print(e==g)
+                print("\n\n")
+
+            self.assertEqual(expected, got)
+
+            if is_bytes:
+                return
+
+            origin = original.encode('utf-8')
+            line_comment_markers = big.encode_strings(line_comment_markers, 'utf-8')
+            bytes_kwargs = {}
+            for k, v in kwargs.items():
+                v = big.encode_strings(v, 'utf-8')
+                bytes_kwargs[k] = v
+            bytes_expected = big.encode_strings(expected, 'utf-8')
+            i = li = origin.splitlines(keepends)
+            bytes_got = list(big.strip_line_comments(i, line_comment_markers, **bytes_kwargs))
+
+            if 0:
+                import pprint
+                print("\n\n")
+                print("-"*72)
+                print("bytes input:")
+                pprint.pprint(li)
+                print("bytes expected:")
+                pprint.pprint(bytes_expected)
+                print("\n\n")
+                print("bytes got:")
+                pprint.pprint(bytes_got)
+                print("\n\n")
+                for e, g in zip(bytes_expected, bytes_got):
+                    print(e==g)
+                print("\n\n")
+
+            self.assertEqual(bytes_expected, bytes_got)
+
+        # no quote marks defined (the default)
+        test("""
+            for x in range(5): # this is a comment
+                print("# this is quoted", x)
+                print("") # this "comment" is useless
+                print(no_comments_or_quotes_on_this_line)
+                both//on this line#dawg
+                and#also on this//line
+              torture////1
+             tort-ture######2
+            zzzz""",
+            ("#", "//"),
+
+            'for x in range(5): ',
+            '    print("',
+            '    print("") ',
+            '    print(no_comments_or_quotes_on_this_line)',
+            '    both',
+            '    and',
+            '  torture',
+            ' tort-ture',
+            'zzzz',
+            )
+
+        # test specifying quotes as a string
+        test("""
+            for x in range(5): # this is my exciting comment
+                print("# this is quoted", x)
+                print("") # this "comment" is useless
+                print(no_comments_or_quotes_on_this_line)
+            qqq""",
+            ("#", "//"),
+
+            'for x in range(5): ',
+            '    print("# this is quoted", x)',
+            '    print("") ',
+            '    print(no_comments_or_quotes_on_this_line)',
+            'qqq',
+
+            quotes='"\'')
+
+        test("""
+            for x in range(5): # this is my exciting comment
+                print("# this is quoted", x)
+                print("") # this "comment" is useless
+                print(no_comments_or_quotes_on_this_line)
+                print("#which is the comment?", w #z )
+                print("//which is the comment?", x // 4Q2 )
+                print("test without whitespace, and extra comment chars 1", y####artie deco )
+                print("test without whitespace, and extra comment chars 2", z///////chinchilla the wookie monster )
+            zucker""",
+            ("#", "//"),
+
+            'for x in range(5): ',
+            '    print("# this is quoted", x)',
+            '    print("") ',
+            '    print(no_comments_or_quotes_on_this_line)',
+            '    print("#which is the comment?", w ',
+            '    print("//which is the comment?", x ',
+            '    print("test without whitespace, and extra comment chars 1", y',
+            '    print("test without whitespace, and extra comment chars 2", z',
+            'zucker',
+
+            quotes=('"', "'"))
+
+        # test multiline
+        # test specifying line comment markers as a string, and only one quote mark
+        test("""
+            for x in range(5): # this is my exciting comment
+                print('''
+                this is a multiline string
+                does this line have a comment? # no!
+                ''') > but here's a comment
+                print("just checking, # here too") # here is another comment
+            pizzapaperpantry""",
+            "#>",
+
+            'for x in range(5): ',
+            "    print('''",
+            "    this is a multiline string",
+            "    does this line have a comment? # no!",
+            "    ''') ",
+            '    print("just checking, # here too") ',
+            'pizzapaperpantry',
+
+            quotes='"', multiline_quotes=("'''",))
+
+        # invalid comment characters
+        with self.assertRaises(ValueError):
+            list(big.strip_line_comments("a\nb\n".splitlines(), None))
+
+        # unterminated single-quotes across lines
+        with self.assertRaises(SyntaxError):
+            list(big.strip_line_comments(("foo 'bar", "' bat 'zzz'"), ("#", '//',), quotes="'"))
+
+        # unterminated single-quotes at the end
+        with self.assertRaises(SyntaxError):
+            list(big.strip_line_comments(("foo 'bar' bat 'zzz",), ("#", '//',), quotes=("'",)))
+
+        # unterminated triple-quotes at the end
+        with self.assertRaises(SyntaxError):
+            list(big.strip_line_comments(("foo 'bar' bat '''zzz", 'more lines here', "wait what's happening?"), ("#", '//',), multiline_quotes=("'''",)))
+
+        test(b"a\nb# clipped\n c", b'#',
+            b'a',
+            b'b',
+            b' c',
+            )
+
+        test(b'a\nb"# ignored"\n c', (b'#',),
+            b'a',
+            b'b"# ignored"',
+            b' c',
+            quotes=(b'"',),
+            )
+
+        test(b'a\nb"# ignored"\n c#lipped', b'#',
+             b'a',
+             b'b"# ignored"',
+             b' c',
+            quotes=b'"',
+            )
+
+        test(b'a\nb"# ignored\n" c#lipped', b'#',
+            b'a',
+            b'b"# ignored',
+            b'" c',
+            multiline_quotes=b'"',
+            )
+
+        # test preserving linebreaks at the end
+        s = test("""
+            for x in range(5): # this is a comment
+                # blank line with comment
+            x
+            zzzz""",
+            "#",
+
+            'for x in range(5): \n',
+            '    \n',
+            'x\n',
+            'zzzz',
+
+            keepends=True,
+            )
+
+class BigPatternTests(unittest.TestCase):
+
+    def assertTypedEqual(self, actual, expect, msg=None):
+        self.assertEqual(actual, expect, msg)
+        def recurse(actual, expect):
+            if isinstance(expect, (tuple, list)):
+                for x, y in zip(actual, expect):
+                    recurse(x, y)
+            else:
+                self.assertIs(type(actual), type(expect), msg)
+        recurse(actual, expect)
+
+    def test_match_group(self):
+        pattern = string("a(:+)b").compile()
+        m = pattern.search(string("xxa:::byy"))
+        self.assertTrue(m)
+        self.assertEqual(m.group(), "a:::b")
+        self.assertIsInstance(m.group(), string)
+        self.assertEqual(m[1], ":::")
+        self.assertIsInstance(m.group(1), string)
+        groups = m.group(0, 1)
+        self.assertEqual(groups, ("a:::b", ":::"))
+        self.assertIsInstance(groups[0], string)
+        self.assertIsInstance(groups[1], string)
+
+        pattern = string(r"(a+)(b+)?(c+)?").compile()
+        m = pattern.search(string("xxaaabbyy"))
+        groups = m.groups()
+        self.assertEqual(groups, ('aaa', 'bb', None))
+        self.assertIsInstance(groups[0], string)
+        self.assertIsInstance(groups[1], string)
+        groups = m.group(1, 2, 3)
+        self.assertEqual(groups, ('aaa', 'bb', None))
+        self.assertIsInstance(groups[0], string)
+        self.assertIsInstance(groups[1], string)
+
+    def test_match_groupdict(self):
+        pattern = string(r'(?P<aye>a+)|(?P<bee>b+)').compile()
+        text = string("xxxaxxxbbx")
+        l = list(pattern.finditer(text))
+        for m, expected in zip(l, [
+            {'aye': text[3:4], 'bee': None},
+            {'aye': None, 'bee': text[7:9]},
+            ]):
+            with self.subTest(expected):
+                got = m.groupdict()
+                self.assertEqual(got, expected)
+
+    def test_passthroughs(self):
+        # These Pattern methods are just one-line pass-throughs for
+        # re.Pattern methods.  Smoke testing seems sufficient.
+
+        pattern = string(":+").compile()
+        m = pattern.search(string("a b ::: c"))
+        self.assertTrue(m)
+        self.assertEqual(m.group(), ":::")
+        self.assertIsInstance(m.group(), string)
+
+        m = pattern.match(string(":::: xyz"))
+        self.assertTrue(m)
+        self.assertEqual(m.group(), "::::")
+        self.assertIsInstance(m.group(), string)
+
+        s = string(":::::")
+        m = pattern.fullmatch(s)
+        self.assertTrue(m)
+        self.assertEqual(m.group(), s)
+        self.assertIsInstance(m.group(), string)
+
+        self.assertEqual(repr(pattern), repr(pattern.pattern))
+        self.assertEqual(repr(m), repr(m.match))
+
+        s = string("a ::: b :: c :::: d")
+        result = pattern.sub("X", s)
+        self.assertEqual(result, "a X b X c X d")
+        self.assertIsInstance(result, str)
+
+        result = pattern.subn("X", s)
+        self.assertEqual(result[0], "a X b X c X d")
+        self.assertIsInstance(result[0], str)
+        self.assertEqual(result[1], 3)
+        self.assertIsInstance(result[1], int)
+
+        pattern = string(r'(a+)|(b+)').compile()
+        m = pattern.search("xxaaayyyy")
+        result = m.expand(r"__\1--")
+        self.assertEqual(result, "__aaa--")
+
+    def test_pattern(self):
+        with self.assertRaises(TypeError):
+            Pattern(3.5)
+        with self.assertRaises(TypeError):
+            Pattern('x', 3.5)
+
+    def test_pattern_findall(self):
+        pattern = string(":+").compile()
+        l = pattern.findall(string("a :: b ::: c"))
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l, ["::", ":::"])
+        self.assertIsInstance(l[0], string)
+        self.assertIsInstance(l[1], string)
+
+        pattern = string(r'\bf[a-z]*').compile()
+        l = pattern.findall(string('which foot or hand fell fastest'))
+        self.assertEqual(l, ['foot', 'fell', 'fastest'])
+        self.assertTrue(all(isinstance(o, string) for o in l))
+
+        pattern = string(r'(\w+)=(\d+)').compile()
+        l = pattern.findall(string('set width=20 and height=10'))
+        self.assertEqual(l, [('width', '20'), ('height', '10')])
+        self.assertTrue(all(isinstance(o, tuple) for o in l))
+        self.assertTrue(all(isinstance(q, string)  for o in l  for q in o ))
+
+        pattern = string(r'(a+)|(b+)').compile()
+        l = pattern.findall(string("xxxaxxxbbxxaabb"))
+        self.assertEqual(l, [('a', None), (None, 'bb'), ('aa', None), (None, 'bb')])
+        self.assertTrue(all((isinstance(q, string) or (q is None))  for o in l  for q in o ))
+
+        pattern = string(r'a(x+)b').compile()
+        l = pattern.findall(string("___aaxxxbb___axxb__"))
+        self.assertEqual(l, ['xxx', 'xx'])
+        self.assertTrue(all(isinstance(o, string) for o in l))
+
+    def test_pattern_split(self):
+
+        def re_split(pattern, string):
+            p = Pattern(pattern)
+            return p.split(string)
+
+        pattern = string(":+").compile()
+        s = string("a :: b ::: c")
+        l = pattern.split(s, 1)
+        self.assertEqual(len(l), 2)
+        self.assertEqual(l[0], "a ")
+        self.assertIsInstance(l[0], string)
+        self.assertEqual(l[1], " b ::: c")
+        self.assertIsInstance(l[1], string)
+
+        for s in ":a:b::c", string(":a:b::c"):
+            self.assertTypedEqual(re_split(":", s),
+                                  [s[0:0], s[1], s[3], s[5:5], s[6]])
+            self.assertTypedEqual(re_split(":+", s),
+                                  [s[0:0], s[1], s[3], s[6]])
+            self.assertTypedEqual(re_split("(:+)", s),
+                                  [s[0:0], s[0], s[1], s[2], s[3], s[4:6], s[6]])
+        for s in (b":a:b::c",):
+                       #memoryview(b":a:b::c")):
+            self.assertTypedEqual(re_split(b":", s),
+                                  [b'', b'a', b'b', b'', b'c'])
+            self.assertTypedEqual(re_split(b":+", s),
+                                  [b'', b'a', b'b', b'c'])
+            self.assertTypedEqual(re_split(b"(:+)", s),
+                                  [b'', b':', b'a', b':', b'b', b'::', b'c'])
+        for a, b, c in (
+                ("\xe0", "\xdf", "\xe7"),
+                ("\u0430", "\u0431", "\u0432"),
+                ("\U0001d49c", "\U0001d49e", "\U0001d4b5"),
+            ):
+            s = f":{a}:{b}::{c}"
+            self.assertEqual(re_split(":", s), ['', a, b, '', c])
+            self.assertEqual(re_split(":+", s), ['', a, b, c])
+            self.assertEqual(re_split("(:+)", s),
+                             ['', ':', a, ':', b, '::', c])
+
+        self.assertEqual(re_split("(?::+)", ":a:b::c"), ['', 'a', 'b', 'c'])
+        self.assertEqual(re_split("(:)+", ":a:b::c"),
+                         ['', ':', 'a', ':', 'b', ':', 'c'])
+        self.assertEqual(re_split("([b:]+)", ":a:b::c"),
+                         ['', ':', 'a', ':b::', 'c'])
+        self.assertEqual(re_split("(b)|(:+)", ":a:b::c"),
+                         ['', None, ':', 'a', None, ':', '', 'b', None, '',
+                          None, '::', 'c'])
+        self.assertEqual(re_split("(?:b)|(?::+)", ":a:b::c"),
+                         ['', 'a', '', '', 'c'])
+
+        for sep, expected in [
+            (':*',     ['', '', 'a', '', 'b', '', 'c', '']),
+            ('(?::*)', ['', '', 'a', '', 'b', '', 'c', '']),
+            ('(:*)',   ['', ':', '', '', 'a', ':', '', '', 'b', '::', '', '', 'c', '', '']),
+            ('(:)*',   ['', ':', '', None, 'a', ':', '', None, 'b', ':', '', None, 'c', None, '']),
+        ]:
+            with self.subTest(sep=sep):
+                self.assertTypedEqual(re_split(sep, ':a:b::c'), expected)
+
+        for sep, expected in [
+            ('',        ['', ':', 'a', ':', 'b', ':', ':', 'c', '']),
+            (r'\b',     [':', 'a', ':', 'b', '::', 'c', '']),
+            (r'(?=:)',  ['', ':a', ':b', ':', ':c']),
+            (r'(?<=:)', [':', 'a:', 'b:', ':', 'c']),
+        ]:
+            with self.subTest(sep=sep):
+                self.assertTypedEqual(re_split(sep, ':a:b::c'), expected)
+
 
 
 def run_tests():

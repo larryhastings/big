@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,6 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from .boundinnerclass import BoundInnerClass
 import enum
 import functools
 import heapq
@@ -53,15 +54,9 @@ except ImportError: # pragma: no cover
     def isinstance_re_pattern(o):
         return isinstance(o, re_Pattern)
 
-
-__all__ = []
-
-def export_name(s):
-    __all__.append(s)
-
-def export(o):
-    export_name(o.__name__)
-    return o
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
 
 
 def _iterate_over_bytes(b):
@@ -126,15 +121,20 @@ def encode_strings(o, encoding='ascii'):
 # represent, please see the "Whitespace and line-breaking
 # characters in Python and big" deep-dive in big's README.
 
-export_name('str_whitespace')
+export('str_whitespace')
 str_whitespace = (
-    # char    decimal   hex      identity
-    ##########################################
-    '\t'    , #     9 - 0x0009 - tab
-    '\n'    , #    10 - 0x000a - linebreak
-    '\v'    , #    11 - 0x000b - vertical tab
-    '\f'    , #    12 - 0x000c - form feed
-    '\r'    , #    13 - 0x000d - carriage return
+    # character string
+    # |       ordinal number
+    # |        |    c in decimal
+    # |        |     |    c in hex
+    # |        |     |      |      name
+    # |        |     |      |        |
+    #vvvv-----vvv---vvv---vvvvvv---vvvvvvvvvvv
+    '\t'    , #01     9 - 0x0009 - tab
+    '\n'    , #02    10 - 0x000a - linebreak
+    '\v'    , #03    11 - 0x000b - vertical tab
+    '\f'    , #04    12 - 0x000c - form feed
+    '\r'    , #05    13 - 0x000d - carriage return
     '\r\n'  , # bonus! the classic DOS linebreak sequence!
 
     ###################################################
@@ -142,64 +142,64 @@ str_whitespace = (
     ## ASCII "separator" characters to be whitespace!
     ## (I agree, I think this is a Python bug.)
     ###################################################
-    '\x1c'  , #    28 - 0x001c - file separator
-    '\x1d'  , #    29 - 0x001d - group separator
-    '\x1e'  , #    30 - 0x001e - record separator
-    '\x1f'  , #    31 - 0x001f - unit separator
+    '\x1c'  , #06    28 - 0x001c - file separator
+    '\x1d'  , #07    29 - 0x001d - group separator
+    '\x1e'  , #08    30 - 0x001e - record separator
+    '\x1f'  , #09    31 - 0x001f - unit separator
 
-    ' '     , #    32 - 0x0020 - space
-    '\x85'  , #   133 - 0x0085 - next line
-    '\xa0'  , #   160 - 0x00a0 - non-breaking space
-    '\u1680', #  5760 - 0x1680 - ogham space mark
-    '\u2000', #  8192 - 0x2000 - en quad
-    '\u2001', #  8193 - 0x2001 - em quad
-    '\u2002', #  8194 - 0x2002 - en space
-    '\u2003', #  8195 - 0x2003 - em space
-    '\u2004', #  8196 - 0x2004 - three-per-em space
-    '\u2005', #  8197 - 0x2005 - four-per-em space
-    '\u2006', #  8198 - 0x2006 - six-per-em space
-    '\u2007', #  8199 - 0x2007 - figure space
-    '\u2008', #  8200 - 0x2008 - punctuation space
-    '\u2009', #  8201 - 0x2009 - thin space
-    '\u200a', #  8202 - 0x200a - hair space
-    '\u2028', #  8232 - 0x2028 - line separator
-    '\u2029', #  8233 - 0x2029 - paragraph separator
-    '\u202f', #  8239 - 0x202f - narrow no-break space
-    '\u205f', #  8287 - 0x205f - medium mathematical space
-    '\u3000', # 12288 - 0x3000 - ideographic space
+    ' '     , #10    32 - 0x0020 - space
+    '\x85'  , #11   133 - 0x0085 - next line
+    '\xa0'  , #12   160 - 0x00a0 - non-breaking space
+    '\u1680', #13  5760 - 0x1680 - ogham space mark
+    '\u2000', #14  8192 - 0x2000 - en quad
+    '\u2001', #15  8193 - 0x2001 - em quad
+    '\u2002', #16  8194 - 0x2002 - en space
+    '\u2003', #17  8195 - 0x2003 - em space
+    '\u2004', #18  8196 - 0x2004 - three-per-em space
+    '\u2005', #19  8197 - 0x2005 - four-per-em space
+    '\u2006', #20  8198 - 0x2006 - six-per-em space
+    '\u2007', #21  8199 - 0x2007 - figure space
+    '\u2008', #22  8200 - 0x2008 - punctuation space
+    '\u2009', #23  8201 - 0x2009 - thin space
+    '\u200a', #24  8202 - 0x200a - hair space
+    '\u2028', #25  8232 - 0x2028 - line separator
+    '\u2029', #26  8233 - 0x2029 - paragraph separator
+    '\u202f', #27  8239 - 0x202f - narrow no-break space
+    '\u205f', #28  8287 - 0x205f - medium mathematical space
+    '\u3000', #29 12288 - 0x3000 - ideographic space
     )
-export_name('str_whitespace_without_crlf')
+export('str_whitespace_without_crlf')
 str_whitespace_without_crlf = tuple(s for s in str_whitespace if s != '\r\n')
 
-export_name('whitespace')
+export('whitespace')
 whitespace = str_whitespace
-export_name('whitespace_without_crlf')
+export('whitespace_without_crlf')
 whitespace_without_crlf = str_whitespace_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we remove the four ASCII separator characters.
-export_name('unicode_whitespace')
+export('unicode_whitespace')
 unicode_whitespace = tuple(s for s in str_whitespace if not ('\x1c' <= s <= '\x1f'))
-export_name('unicode_whitespace_without_crlf')
+export('unicode_whitespace_without_crlf')
 unicode_whitespace_without_crlf = tuple(s for s in unicode_whitespace if s != '\r\n')
 
 # Whitespace as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-export_name('ascii_whitespace')
+export('ascii_whitespace')
 ascii_whitespace = tuple(s for s in unicode_whitespace if (s < '\x80'))
-export_name('ascii_whitespace_without_crlf')
+export('ascii_whitespace_without_crlf')
 ascii_whitespace_without_crlf = tuple(s for s in ascii_whitespace if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
 # Bytes objects, using the ASCII encoding.
-export_name('bytes_whitespace')
+export('bytes_whitespace')
 bytes_whitespace = encode_strings(ascii_whitespace)
-export_name('bytes_whitespace_without_crlf')
+export('bytes_whitespace_without_crlf')
 bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
 
 
-export_name('str_linebreaks')
+export('str_linebreaks')
 str_linebreaks = (
     # char    decimal   hex      identity
     ##########################################
@@ -220,30 +220,30 @@ str_linebreaks = (
     # I'm worried it would cause bugs with a malformed DOS string,
     # or maybe when operating in reverse mode.
     #
-    # Also: welcome, Acorn and RISC OS users!
+    # Also: welcome to big, Acorn and RISC OS users!
     # What are you doing here?  You can't run Python 3.6+!
     )
-export_name('str_linebreaks_without_crlf')
+export('str_linebreaks_without_crlf')
 str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
 
-export_name('linebreaks')
+export('linebreaks')
 linebreaks = str_linebreaks
-export_name('linebreaks_without_crlf')
+export('linebreaks_without_crlf')
 linebreaks_without_crlf = str_linebreaks_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we again remove the four ASCII separator characters.
-export_name('unicode_linebreaks')
+export('unicode_linebreaks')
 unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
-export_name('unicode_linebreaks_without_crlf')
+export('unicode_linebreaks_without_crlf')
 unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
 
 # Linebreaks as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-export_name('ascii_linebreaks')
+export('ascii_linebreaks')
 ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
-export_name('ascii_linebreaks_without_crlf')
+export('ascii_linebreaks_without_crlf')
 ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
@@ -280,7 +280,7 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 # linebreak character, because str.splitlines (and bytes.splitlines)
 # rstrips the string of linebreak characters before it splits lines, sigh.
 
-export_name('bytes_linebreaks')
+export('bytes_linebreaks')
 bytes_linebreaks = (
     b'\n'    , #   10 0x000a - linebreak
     )
@@ -300,7 +300,7 @@ bytes_linebreaks += (
     b'\r\n'  , # bonus! the classic DOS linebreak sequence!
     )
 
-export_name('bytes_linebreaks_without_crlf')
+export('bytes_linebreaks_without_crlf')
 bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
 
 
@@ -951,17 +951,17 @@ def multistrip(s, separators, left=True, right=True):
 
 # for keep
 AS_PAIRS="AS_PAIRS"
-export_name(AS_PAIRS)
+export(AS_PAIRS)
 ALTERNATING="ALTERNATING"
-export_name(ALTERNATING)
+export(ALTERNATING)
 
 # for strip
 LEFT = "LEFT"
-export_name(LEFT)
+export(LEFT)
 RIGHT = "RIGHT"
-export_name(RIGHT)
+export(RIGHT)
 PROGRESSIVE = "PROGRESSIVE"
-export_name(PROGRESSIVE)
+export(PROGRESSIVE)
 
 def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators):
     if maxsplit == None:
@@ -1360,31 +1360,6 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
-
-# I declare that, for our purposes,
-#     ` (the "back-tick" character U+0060)
-# is *not* an apostrophe.  it's a diacritical
-# used to modify a letter, rather than a
-# separator used to separate letters.
-# It's been (ab)used as an apostrophe historically,
-# but that's because ASCII had a limited number of
-# punctuation characters.
-apostrophes = unicode_apostrophes = "'‘’‚‛"
-export_name('apostrophes')
-double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
-export_name('double_quotes')
-
-ascii_apostrophes = b"'"
-export_name('ascii_apostrophes')
-ascii_double_quotes = b'"'
-export_name('ascii_double_quotes')
-
-utf8_apostrophes = apostrophes.encode('utf-8')
-export_name('utf8_apostrophes')
-utf8_double_quotes = double_quotes.encode('utf-8')
-export_name('utf8_double_quotes')
-
-
 @export
 def format_map(s, mapping):
     """
@@ -1461,6 +1436,32 @@ def format_map(s, mapping):
                 saw_backslash = True
 
     return ''.join(words)
+
+
+
+# I declare that, for our purposes,
+#     `
+# (the "back-tick" character, U+0060)
+# is *not* an apostrophe.  it's a diacritical
+# used to modify a letter, rather than a
+# separator used to separate letters.
+# It's been (ab)used as an apostrophe historically,
+# but that's because ASCII had a limited number of
+# punctuation characters.
+apostrophes = unicode_apostrophes = "'‘’‚‛"
+export('apostrophes')
+double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
+export('double_quotes')
+
+ascii_apostrophes = b"'"
+export('ascii_apostrophes')
+ascii_double_quotes = b'"'
+export('ascii_double_quotes')
+
+utf8_apostrophes = apostrophes.encode('utf-8')
+export('utf8_apostrophes')
+utf8_double_quotes = double_quotes.encode('utf-8')
+export('utf8_double_quotes')
 
 
 
@@ -1964,7 +1965,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
     If the inputs are valid, it calls this generator and returns the
     resulting iterator.
     """
-    buffer = []
+    text = s[0:0]
 
     quote = state
     # print(f"    >> {state=}")
@@ -1973,23 +1974,34 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
         literal, separator = pair
 
         if literal:
-            buffer.append(literal)
+            if text:
+                text += literal
+            else:
+                text = literal
         if not quote:
             # not currently quoted
             if separator not in all_quotes_set:
-                buffer.append(separator)
+                if text:
+                    text += separator
+                else:
+                    text = separator
                 continue
-            if buffer:
-                yield (empty, empty.join(buffer), empty)
-                buffer.clear()
+            if text:
+                length = len(text)
+                leading_empty = text[0:0]
+                trailing_empty = text[length:length]
+                yield (leading_empty, text, trailing_empty)
+                text = trailing_empty
             quote = separator
             continue
         # in quote
         if separator != quote:
-            buffer.append(separator)
+            if text:
+                text += separator
+            else:
+                text = separator
             continue
         # separator == quote
-        text = empty.join(buffer)
         if quote or text:
             if quote and text and (quote not in multiline_quotes):
                 # see treatise above
@@ -1998,25 +2010,25 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
             if state:
                 state = None
                 # print(f"    <<1 empty, {text=}, {quote=}")
-                yield (empty, text, quote)
+                yield (text[0:0], text, separator)
             else:
                 # print(f"    <<2 {quote=}, {text=}, {quote=}")
-                yield (quote, text, quote)
-        buffer.clear()
-        quote = empty
+                yield (quote, text, separator)
+        length = len(text)
+        text = text[length:length]
+        quote = text
 
-    if buffer:
-        text = empty.join(buffer)
-        if text or quote:
-            if quote and text and (quote not in multiline_quotes):
-                # see treatise above
-                if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
-                    raise SyntaxError("unterminated quoted string, {s!r}")
-            if state:
-                state = None
-                quote = empty
-            # print(f"    <<3 {quote=}, {text=}, empty")
-            yield (quote, text, empty)
+    if text or quote:
+        if quote and text and (quote not in multiline_quotes):
+            # see treatise above
+            if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
+                raise SyntaxError(f"unterminated quoted string, {s!r}")
+        if state:
+            # state = None
+            quote = text[0:0]
+        # print(f"    <<3 {quote=}, {text=}, empty")
+        length = len(text)
+        yield (quote, text, text[length:length])
 
 _split_quoted_strings = split_quoted_strings
 
@@ -2166,7 +2178,7 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
         raise ValueError("either quotes or multiline_quotes must be non-empty")
 
     if state in (None, '', b''):
-        state = empty
+        state = s[0:0]
     else:
         if not isinstance(state, s_type):
             raise TypeError("state must match s (str or bytes), not {state!r}")
@@ -2312,22 +2324,22 @@ class Delimiter:
 
 
 delimiter_parentheses = Delimiter(")")
-export_name('delimiter_parentheses')
+export('delimiter_parentheses')
 
 delimiter_square_brackets = Delimiter("]")
-export_name('delimiter_square_brackets')
+export('delimiter_square_brackets')
 
 delimiter_curly_braces = Delimiter("}")
-export_name('delimiter_curly_braces')
+export('delimiter_curly_braces')
 
 delimiter_angle_brackets = Delimiter(">")
-export_name('delimiter_angle_brackets')
+export('delimiter_angle_brackets')
 
 delimiter_single_quote = Delimiter("'", escape='\\', multiline=False, quoting=True)
-export_name('delimiter_single_quote')
+export('delimiter_single_quote')
 
 delimiter_double_quotes = Delimiter('"', escape='\\', multiline=False, quoting=True)
-export_name('delimiter_double_quotes')
+export('delimiter_double_quotes')
 
 split_delimiters_default_delimiters = {
     '(': delimiter_parentheses,
@@ -2336,7 +2348,7 @@ split_delimiters_default_delimiters = {
     "'": delimiter_single_quote,
     '"': delimiter_double_quotes,
     }
-export_name('split_delimiters_default_delimiters')
+export('split_delimiters_default_delimiters')
 
 
 split_delimiters_default_delimiters_bytes = {
@@ -2346,9 +2358,10 @@ split_delimiters_default_delimiters_bytes = {
     b"'": Delimiter(b"'", escape=b'\\', multiline=False, quoting=True),
     b'"': Delimiter(b'"', escape=b'\\', multiline=False, quoting=True),
     }
-export_name('split_delimiters_default_delimiters_bytes')
+export('split_delimiters_default_delimiters_bytes')
 
 _ACTION_POP = "<action: pop>"
+# _ACTION_2POP = "<action: pop twice>"
 _ACTION_ESCAPE = "<action: escape>"
 _ACTION_ILLEGAL = "<action: illegal>"
 _ACTION_ILLEGAL_LINEBREAK = "<action: illegal linebreak>"
@@ -2608,25 +2621,97 @@ tells you which ones are valid:
 
 ----------------------------------------------------------------------------
 
-all_prefixes = "bfru"
+alphabet = "abcdefghijklmnopqrstuvwxyz"
+alphabet = alphabet + alphabet.upper()
 
-import itertools
+worked1 = []
+worked2 = []
+worked3 = []
+worked4 = []
+worked5 = []
 
-print("prefixes = ['']")
-
-for r in range(1, len(all_prefixes) + 1):
-    for p in itertools.permutations(all_prefixes, r):
-        p = ''.join(p)
-        expr = (f"{p}'abc'")
+for prefix in alphabet:
+    for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
         try:
-            value = eval(expr)
-            print(f"prefixes.append({p!r})")
+            eval(s)
         except SyntaxError:
-            print(f"# invalid: {p}")
+            break
+    else:
+        worked1.append(prefix)
+
+
+# could use itertools here,
+# but level 3 we have to do by hand,
+# so let's just do it all by hand and copy&paste
+for c1 in worked1:
+    for c2 in worked1:
+        if c1.lower() == c2.lower():
+            continue
+        prefix = f'{c1}{c2}'
+        for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+            try:
+                eval(s)
+            except SyntaxError:
+                break
+        else:
+            worked2.append(prefix)
+
+assert worked2
+
+for c1 in worked1:
+    for c2 in worked2:
+        if c1.lower() in c2.lower():
+            continue
+        prefix = f'{c1}{c2}'
+        for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+            try:
+                eval(s)
+            except SyntaxError:
+                break
+        else:
+            worked3.append(prefix)
+
+if worked3:
+    for c1 in worked1:
+        for c2 in worked3:
+            if c1.lower() in c2.lower():
+                continue
+            prefix = f'{c1}{c2}'
+            for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+                try:
+                    eval(s)
+                except SyntaxError:
+                    break
+            else:
+                worked4.append(prefix)
+
+
+if worked4:
+    for c1 in worked1:
+        for c2 in worked4:
+            if c1.lower() in c2.lower():
+                continue
+            prefix = f'{c1}{c2}'
+            for s in (f'{prefix}"foo"', f"{prefix}'bar'"):
+                try:
+                    eval(s)
+                except SyntaxError:
+                    break
+            else:
+                worked5.append(prefix)
+
+all_prefixes = ['']
+all_prefixes.extend(worked1)
+all_prefixes.extend(worked2)
+all_prefixes.extend(worked3)
+all_prefixes.extend(worked4)
+all_prefixes.extend(worked5)
+
+print(f"{all_prefixes=}")
 
 ----------------------------------------------------------------------------
 
-The list is short, here it is:
+The list is short, here it is, for Python 3.6 - 3.13 anyway:
 
 prefixes = [
     '',
@@ -2641,7 +2726,11 @@ prefixes = [
     ]
 
 However, Python allows you to use the upper-case version of
-any letter, in any combination.  So here's the *actual* list.
+any letter, in any combination.  So the actual list is longer,
+as you can uppercase any letter and get a new prefix.
+
+Also, Python 3.14 adds the 't' prefix for t-strings.
+Big supports all the new prefixes that adds, too.
 
 """
 
@@ -2655,20 +2744,18 @@ class Workspace:
         '',
         'b',
         'B',
-        'f',
-        'F',
-        'r',
-        'R',
-        'u',
-        'U',
         'br',
         'bR',
         'Br',
         'BR',
+        'f',
+        'F',
         'fr',
         'fR',
         'Fr',
         'FR',
+        'r',
+        'R',
         'rb',
         'rB',
         'Rb',
@@ -2677,9 +2764,28 @@ class Workspace:
         'rF',
         'Rf',
         'RF',
+        'u',
+        'U',
         ]
 
+
     assert sys.version_info.major >= 3
+
+    if (sys.version_info.major > 3) or (sys.version_info.minor >= 14): # pragma: nocover
+        all_string_prefixes.extend((
+            'rt',
+            'rT',
+            'Rt',
+            'RT',
+            't',
+            'T',
+            'tr',
+            'tR',
+            'Tr',
+            'TR',
+            ))
+        all_string_prefixes.sort()
+
     pep_701_f_strings_in_the_grammar = (sys.version_info.major > 3) or (sys.version_info.minor >= 12)
 
     python_delimiters = split_delimiters_default_delimiters.copy()
@@ -2690,8 +2796,7 @@ class Workspace:
     # it quotes the closing quote mark, and it does.  The same is true for triple-quoted strings;
     # even in a raw triple-quoted string, you can escape single-quote marks.
 
-    all_four_quotes = ("'", '"', "'''", '"""')
-    all_quote_delimiters = [Delimiter(quotes, escape='\\', multiline=len(quotes) == 3, quoting=True) for quotes in all_four_quotes]
+    all_quote_delimiters = [Delimiter(quotes, escape='\\', multiline=len(quotes) == 3, quoting=True) for quotes in ("'", '"', "'''", '"""')]
 
     for prefix in all_string_prefixes:
         for d in all_quote_delimiters:
@@ -2853,10 +2958,10 @@ _delimiters_cache.append(
     (python_delimiters, _python_delimiters_cache, 4)
     )
 
-export_name('python_delimiters')
+export('python_delimiters')
 
 python_delimiters_version = { f"3.{minor}": python_delimiters for minor in range(6, 14) }
-export_name('python_delimiters_version')
+export('python_delimiters_version')
 
 @export
 class SplitDelimitersValue:
@@ -2912,6 +3017,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
 
     The _ACTION_* constants above dictate:
         * _ACTION_POP means pop the current state.
+        * _ACTION_2POP means pop two states.
         * _ACTION_ESCAPE means escape the next character yielded
           by multisplit.
         * _ACTION_ILLEGAL_LINEBREAK means the token is an illegal
@@ -3093,6 +3199,19 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 consumed += len(delimiter)
                 # and pop
                 current, _ = pop()
+            # elif action is _ACTION_2POP:
+            #     # flush close delimiter
+            #     s = join(buffer)
+            #     clear()
+            #     s_length = len(s)
+            #     s_empty = s[s_length:]
+            #     delimiter_length = len(delimiter)
+            #     delimiter_empty = delimiter[delimiter_length:]
+            #     yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
+            #     consumed += len(delimiter)
+            #     # and pop twice
+            #     current, _ = pop()
+            #     current, _ = pop()
             elif action is _ACTION_ESCAPE:
                 # escape
                 append(delimiter)
@@ -3341,6 +3460,10 @@ class LineInfo:
     via `**kwargs`; you can also add new attributes
     or modify existing attributes as needed from
     inside a "lines modifier" function.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     def __init__(self, lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, source='', **kwargs):
         is_str = isinstance(line, str)
@@ -3561,6 +3684,10 @@ class lines:
         only yield str or bytes objects for line.
 
         Composable with all the lines_ modifier functions in the big.text module.
+
+        Note: lines, LineInfo, and all the lines modifier
+        functions are now deprecated, and will be removed
+        no sooner than March 2027.
         """
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
@@ -3663,6 +3790,10 @@ def lines_rstrip(li, separators=None):
     empty after stripping, the entire line is clipped to info.trailing.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     if separators is None:
         for info, line in li:
@@ -3694,6 +3825,10 @@ def lines_strip(li, separators=None):
     empty after stripping, the entire line is clipped to info.trailing.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     if separators is not None:
 
@@ -3774,6 +3909,10 @@ def lines_filter_line_comment_lines(li, comment_markers):
         line but still always yields the line.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     if not comment_markers:
         raise ValueError("illegal comment_markers")
@@ -3812,6 +3951,10 @@ def lines_containing(li, s, *, invert=False):
     filters out lines that contain s.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     if invert:
         for t in li:
@@ -3863,10 +4006,14 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     any valid identifier, and it will instead write the re.Match
     object (or None) to the identifier you specify.
 
-    Composable with all the lines_ functions from the big.text module.
-
     (In older versions of Python, re.Pattern was a private type called
     re._pattern_type.)
+
+    Composable with all the lines_ functions from the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     if not match.isidentifier():
         raise ValueError('match must be a valid identifier')
@@ -3891,6 +4038,10 @@ def lines_sort(li, *, key=None, reverse=False):
     If reverse is true, lines are sorted from highest to lowest.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     lines = list(li)
     if key == None:
@@ -4033,6 +4184,10 @@ def lines_strip_line_comments(li, line_comment_markers, *,
         line but still always yields the line.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
 
     # check line_comment_markers
@@ -4085,6 +4240,10 @@ def lines_convert_tabs_to_spaces(li):
     of a "lines iterator", using the tab_width passed in to lines.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     for info, line in li:
         yield (info, info.detab(line))
@@ -4115,6 +4274,10 @@ def lines_strip_indent(li):
     non-blank lines.
 
     Composable with all the lines_ functions from the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     indent = 0
     leadings = []
@@ -4225,6 +4388,10 @@ def lines_filter_empty_lines(li):
     of lines modifiers before lines_filter_empty_lines.
 
     Composable with all the lines_ modifier functions in the big.text module.
+
+    Note: lines, LineInfo, and all the lines modifier
+    functions are now deprecated, and will be removed
+    no sooner than March 2027.
     """
     for t in li:
         if not t[1]:
@@ -4861,7 +5028,7 @@ def int_to_words(i, flowery=True, ordinal=False):
     competition.  int_to_words(1) returns the string 'one',
     but int_to_words(1, ordinal=True) returns the string 'first'.
 
-    Numbers >= 10*75 (one quadrillion vigintillion)
+    Numbers >= 10**75 (one quadrillion vigintillion)
     are only converted using str(i).  Sorry!
     """
     if not isinstance(i, int):
@@ -5176,5 +5343,508 @@ def decode_python_script(script, *,
 
     return s
 
-del export
-del export_name
+
+@export
+class Pattern:
+    def __init__(self, s, flags=0):
+        if not isinstance(s, (str, bytes)):
+            raise TypeError(f's must be str, not {type(s).__name__}')
+        if not isinstance(flags, int):
+            raise TypeError(f'flags must be an int, not {type(flags).__name__}')
+        self.s = s
+        self.flags = flags
+
+        self.pattern = re.compile(s, flags)
+
+    def search(self, string, pos=0, endpos=sys.maxsize):
+        m = self.pattern.search(string, pos, endpos)
+        return m and self.Match(m, string)
+
+    def match(self, string, pos=0, endpos=sys.maxsize):
+        m = self.pattern.match(string, pos, endpos)
+        return m and self.Match(m, string)
+
+    def fullmatch(self, string, pos=0, endpos=sys.maxsize):
+        m = self.pattern.fullmatch(string, pos, endpos)
+        return m and self.Match(m, string)
+
+    def split(self, string, maxsplit=sys.maxsize):
+        result = []
+        start = 0
+        for count, m in enumerate(self.finditer(string), 1):
+            end = m.start()
+            result.append(string[start:end])
+
+            # if the group doesn't exist, we get IndexError.
+            # if the group exists but didn't match anything, m.group returns None.
+            # if the group exists and matched something, we can get a span and
+            #    fill from the original string object.
+            try:
+                i = 1
+                while True:
+                    group = m.group(i)
+                    if group is None:
+                        result.append(None)
+                    else:
+                        group_start, group_end = m.span(i)
+                        result.append(string[group_start:group_end])
+                    i += 1
+            except IndexError:
+                pass
+
+            start = m.end()
+
+            if count == maxsplit:
+                break
+
+        end = len(string)
+        result.append(string[start:end])
+
+        return result
+
+    def finditer(self, string, pos=0, endpos=sys.maxsize):
+        for m in self.pattern.finditer(string, pos, endpos):
+            yield self.Match(m, string)
+
+    def findall(self, string, pos=0, endpos=sys.maxsize):
+        results = []
+        for m in self.finditer(string, pos=pos, endpos=endpos):
+            groups = []
+            try:
+                i = 1
+                while True:
+                    group = m.group(i)
+                    if group is None:
+                        groups.append(None)
+                    else:
+                        group_start, group_end = m.span(i)
+                        groups.append(string[group_start:group_end])
+                    i += 1
+            except IndexError:
+                pass
+            if len(groups) == 0:
+                groups = m.group(0)
+            elif len(groups) == 1:
+                groups = groups[0]
+            else:
+                groups = tuple(groups)
+            results.append(groups)
+        return results
+
+    def sub(self, repl, string, count=0):
+        # sorry, we can't honor the substring here
+        return self.pattern.sub(repl, string, count)
+
+    def subn(self, repl, string, count=0):
+        # sorry, we can't honor the substring here
+        return self.pattern.subn(repl, string, count)
+
+    def __repr__(self):
+        return self.pattern.__repr__()
+
+
+    @BoundInnerClass
+    class Match:
+        def __init__(self, pattern, match, string):
+            self.pattern = self.re = pattern
+            self.match = match
+            self.string = string
+
+            self.pos = match.pos
+            self.endpos = match.endpos
+            self.lastindex = match.lastindex
+            self.lastgroup = match.lastgroup
+
+        def __bool__(self):
+            return True
+
+        def expand(self, template):
+            # sorry, can't honor the subclass here
+            return self.match.expand(template)
+
+        def group(self, *groups):
+            if not groups:
+                groups = (0,)
+
+            results = self.match.group(*groups)
+            if results is None:
+                return results
+            if len(groups) == 1:
+                start, end = self.match.span(groups[0])
+                return self.string[start:end]
+
+            results2 = []
+            for group, result in zip(groups, results):
+                if result is None:
+                    results2.append(None)
+                    continue
+                start, end = self.match.span(group)
+                results2.append(self.string[start:end])
+
+            return tuple(results2)
+
+        def __getitem__(self, item):
+            return self.group(item)
+
+        def groups(self, default=None):
+            results = []
+            try:
+                i = 1
+                while True:
+                    value = self.group(i)
+                    if value is None:
+                        value = default
+                    results.append(value)
+                    i += 1
+            except IndexError:
+                pass
+            return tuple(results)
+
+        def groupdict(self, default=None):
+            result = {}
+            for name, value in self.match.groupdict().items():
+                if value is None:
+                    value = default
+                else:
+                    value = self.group(name)
+                result[name] = value
+            return result
+
+        def start(self, group=0):
+            return self.match.start(group)
+
+        def end(self, group=0):
+            return self.match.end(group)
+
+        def span(self, group=0):
+            return self.match.span(group)
+
+        def __repr__(self):
+            return self.match.__repr__()
+
+
+@export
+def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
+    """
+    Takes an iterable of lines, with or without linebreaks; strips
+    the leading whitespace from each line and tracks the indent level.
+    Yields 2-tuples of (depth, lstripped_line).
+
+    depth is an integer, the ordinal number of times the lines
+    were indented to reach the current indent.  Text at the leftmost
+    column is at depth 0; if the line was indented three times,
+    depth will be 3.
+
+    Uses an intentionally simple algorithm.  Only understands tab and
+    space characters as indent characters.  Internally detabs to spaces
+    for consistency, using the tab_width passed in.
+
+    Text can only dedent out to a previous indent.
+    Raises IndentationError if there's an illegal dedent.
+
+    Blank lines and empty lines have the indent level of the
+    *next* non-blank line, or 0 if there are no subsequent
+    non-blank lines.  If the line contains only whitespace,
+    any trailing string of characters found in "linebreaks"
+    will be preserved.  (If you don't want linebreak characters
+    preserved, pass in None or an empty sequence for "linebreaks".)
+    """
+    depth = 0
+    leadings = []
+
+    # a "blank line" is either empty or only has whitespace.
+    # blank lines get the indent of the *next* non-blank line,
+    # or 0 if there are no following non-blank lines... which
+    # means we need to buffer blank lines until we learn which
+    # of those two cases this is.
+    blank_lines = []
+
+    if linebreaks:
+        linebreaks = frozenset(linebreaks)
+
+    first_line = True
+
+    for line in lines:
+        if first_line:
+            first_line = False
+            if isinstance(line, bytes):
+                tab = b'\t'
+            else:
+                tab = '\t'
+        lstripped = line.lstrip()
+        if not lstripped:
+            if not linebreaks:
+                line = line[0:0]
+            else:
+                # count the linebreak characters at the end of line,
+                # and preserve them if any.  otherwise use line[0:0]
+                # to represent the empty line.
+                trailing_linebreaks = []
+                trailing_linebreaks_append = trailing_linebreaks.append
+                count = 0
+                for count, c in enumerate(reversed(line)):
+                    if c not in linebreaks:
+                        break
+                if not count:
+                    line = line[0:0]
+                else:
+                    length = len(line)
+                    line = line[len(line) - count:]
+
+            blank_lines.append(line)
+            continue
+
+        # if we reach here, lstripped is not empty.
+        if tab in line:
+            line = line.expandtabs(tab_width)
+        column_number = line.index(lstripped[0])
+
+        if not column_number:
+            # this line doesn't start with whitespace; text is at column 0.
+            # outdent to zero.
+            depth = 0
+            leadings.clear()
+            new_indent = False
+        # in all the remaining else cases, the line starts with whitespace.   and...
+        elif not leadings:
+            # this is the first indent.
+            new_indent = True
+        elif leadings[-1] == column_number:
+            # indent is unchanged.
+            new_indent = False
+        elif column_number > leadings[-1]:
+            # we are indented further than the previously observed indent.
+            new_indent = True
+        else:
+            # we're outdenting.
+            # ensure that this line's indent is one we've seen before.
+            assert leadings
+            leadings.pop()
+            depth -= 1
+            while leadings:
+                l = leadings[-1]
+                if l >= column_number:
+                    if l > column_number:
+                        leadings.clear()
+                    break
+                leadings.pop()
+                depth -= 1
+            if not leadings:
+                raise IndentationError(f"unindent doesn't match any outer indentation level")
+            new_indent = False
+
+        # print(f"  >> {leadings=} {new_indent=}")
+        if new_indent:
+            leadings.append(column_number)
+            depth += 1
+
+        if blank_lines:
+            # print(f"BL+ {blank_lines=}")
+            for line in blank_lines:
+                yield (depth, line)
+            blank_lines.clear()
+
+        yield (depth, lstripped)
+
+    # flush trailing blank lines
+    if blank_lines:
+        for line in blank_lines:
+            yield 0, line
+
+
+##
+## TODO
+## * support linebreaks
+## * rescan generator function
+## * fixup non-generator function that returns the generator
+##
+
+def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes):
+    "The generator function returned by the public strip_line_comments function."
+    state = None
+
+    if is_bytes:
+        def line_reverser(line):
+            l = list(_iterate_over_bytes(line))
+            l.reverse()
+            return l
+        empty = b''
+    else:
+        line_reverser = reversed
+        empty = ''
+
+    for line in lines:
+        # print(f"\n[!!!] {line=}\n[!!!] {quotes=} {escape=} {multiline_quotes=} {state=}")
+
+        if quotes or multiline_quotes:
+            i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
+        else:
+            i = iter( ((empty, line, empty),) )
+
+        # initialize these in case i never yields anything
+        leading_quote = segment = trailing_quote = ''
+
+        previous_lengths = 0
+        offset = 0
+
+        for leading_quote, segment, trailing_quote in i:
+            # print(f">>> {leading_quote=} {segment=} {trailing_quote=}")
+            offset += previous_lengths
+
+            previous_lengths = len(leading_quote) + len(segment) + len(trailing_quote)
+
+            if leading_quote:
+                # this can be only one of two cases:
+                # * quotes are balanced, in which case trailing_quote is true, and we might loop again
+                # * quotes aren't balanced, in which case this is the last iteration and we handle it
+                continue
+
+            if state:
+                # we're still in a quote from a previous line.
+                # assert not leading_quote
+                if trailing_quote:
+                    state = None
+                else:
+                    # we didn't find the ending quote from the previous line,
+                    # so this should be the entire line
+                    assert segment == line
+                continue
+
+            fields = line_comment_splitter(segment, maxsplit=1)
+            if len(fields) == 1:
+                continue
+
+            # found a comment marker in an unquoted segment!
+            leading = fields[0]
+            offset += len(leading)
+            segment = line[:offset]
+
+            if linebreaks:
+                # count the linebreak characters at the end of line,
+                # and preserve them if any.  otherwise use line[0:0]
+                # to represent the empty line.
+                trailing_linebreaks = []
+                trailing_linebreaks_append = trailing_linebreaks.append
+                for count, c in enumerate(line_reverser(line)):
+                    if c not in linebreaks:
+                        break
+                if count:
+                    segment += line[len(line) - count:]
+
+            line = segment
+            break
+        else:
+            # we exhausted the loop.
+            if leading_quote and not trailing_quote:
+                if leading_quote not in multiline_quotes:
+                    raise SyntaxError(f"unterminated quote marker {leading_quote}")
+                state = leading_quote
+
+        yield line
+
+    if state:
+        raise SyntaxError(f"unterminated quote marker {state}")
+
+_strip_line_comments = strip_line_comments
+
+@export
+def strip_line_comments(lines, line_comment_markers, *,
+    escape='\\', quotes=(), multiline_quotes=(), linebreaks=linebreaks):
+    """
+    Strips line comments from a sequence of lines.
+
+    Line comments are substrings beginning with a special marker
+    that mean the rest of the line should be ignored;
+    strip_line_comments truncates the line at the
+    beginning of the leftmost line comment marker.
+
+    line_comment_markers should be an iterable of line comment
+    marker strings.  These are strings that denote a "line comment",
+    which is to say, a comment that starts at that marker and
+    extends to the end of the line.
+
+    lines should be an iterator of str (or big.string) objects
+    representing each line.  If the lines end with linebreak
+    characters, they will be preserved, even if a comment is
+    stripped from the line.
+
+    By default, quotes and multiline_quotes are both false,
+    in which case strip_line_comments will truncate each
+    line, starting at the leftmost comment marker, and yield
+    the resulting line.  If the line doesn't contain any unquoted
+    comment markers, strip_line_comments yields it unchanged.
+
+    However, the syntax of the text you're parsing might support
+    quoted strings, and comment marks in those quoted strings
+    should be ignored.  strip_quoted_strings supports this
+    too, with its escape, quotes, and multiline_quotes parameters.
+
+    If quotes is true, it must be an iterable of quote marker
+    strings, length 1 or more.  strip_line_comments will
+    parse the line using big's split_quoted_strings function
+    and ignore comment characters inside quoted strings.  Quoted
+    strings may not span lines; if a line ends with an unterminated
+    quoted string, strip_line_comments will raise a SyntaxError.
+
+    If multiline_quotes is true, it must be an iterable of
+    quote marker strings, length 1 or more.  Quoted strings
+    enclosed in multiline quotes may span multiple lines;
+    quoted strings enclosed in (conventional) quotes are not
+    permitted to.  If the last line yielded by the upstream
+    iterator ends with an unterminated multiline string,
+    strip_line_comments will raise a SyntaxError.
+
+    There must be no quote markers in common between quotes and
+    multiline_quotes.
+
+    If escape is true, it must be a string.  This string
+    will "escape" (quote) quote markers, either multiline
+    or non-multiline, as per backslash inside strings in Python.
+    The default value for escape is "\\".
+
+    strip_line_comments handles comment characters anywhere
+    in the line, although it can ignore comments inside quoted
+    strings.  It may truncate the line, but still always yields
+    the line.
+    """
+
+    # check line_comment_markers
+    if not line_comment_markers:
+        bad_value = True
+    elif isinstance(line_comment_markers, bytes):
+        bad_value = False
+        line_comment_markers = _iterate_over_bytes(line_comment_markers)
+        is_bytes = True
+    else:
+        is_bytes = isinstance(line_comment_markers[0], bytes)
+        bad_value = not (is_bytes or isinstance(line_comment_markers[0], str))
+    if bad_value:
+        raise ValueError(f"line comment markers must be str, bytes, or an non-empty iterable of str or bytes, not {line_comment_markers!r}")
+
+    # call split_quoted_string to validate quotes, multiline_quotes, and escape, if specified.
+    not_empty = quotes or multiline_quotes
+    if not_empty:
+        # if not_empty is not bytes, it's safe to index into
+        if isinstance(not_empty, bytes) or isinstance(not_empty[0], bytes):
+            test_text = b'x'
+        else:
+            test_text = 'x'
+
+        # don't iterate! just throw the iterator away.
+        # split_quoted_strings validates the inputs immediately,
+        # and there's no point in calling the iterator.
+        split_quoted_strings(test_text, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
+
+    # we occluded the global "linebreaks", so we test here
+    # to see if we have the default value by comparing to "str_linebreaks"
+    # which is the same object.
+    if is_bytes and (linebreaks is str_linebreaks):
+        linebreaks = bytes_linebreaks
+
+    line_comment_pattern = __separators_to_re(tuple(line_comment_markers), separators_is_bytes=is_bytes, separate=True, keep=True)
+    line_comment_splitter = re.compile(line_comment_pattern).split
+
+    return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes)
+
+
+mm()

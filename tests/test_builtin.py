@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -27,11 +27,12 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
-import big.all as big
+import big.builtin as big
+from big.builtin import ClassRegistry
 import unittest
 
 
-class BigTests(unittest.TestCase):
+class BigBuiltinTests(unittest.TestCase):
 
     def test_try_int(self):
         self.assertTrue(big.try_int(0))
@@ -162,6 +163,125 @@ class BigTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             uncallable('a')
 
+    def test_ModuleManager(self):
+        ##
+        ## ModuleManager.clean only works properly
+        ## at module scope and class scope.
+        ## (Maybe it works in function scope in 3.13+?)
+        ##
+        ## So, let's test it inside class scope.
+        class PointlessClass:
+            mm = big.ModuleManager()
+
+            export = mm.export
+            delete = mm.delete
+
+            with self.assertRaises(TypeError):
+                export(35)
+            with self.assertRaises(TypeError):
+                delete(35)
+
+            def foo(): pass
+            result = export(foo)
+            self.assertIs(result, foo)
+            result = delete(foo)
+            self.assertIs(result, foo)
+
+            mm.export("bar", "bat", "zip")
+            mm.delete("bar", "bat", "zoo")
+
+            self.assertEqual(mm.all, ['foo', 'bar', 'bat', 'zip'])
+            self.assertIs(mm.all, __all__)
+            self.assertEqual(mm.deletions, ['foo', 'bar', 'bat', 'zoo'])
+
+            bar = bat = zoo = 3
+            mm()
+
+        self.assertFalse(hasattr(PointlessClass, 'mm'))
+        self.assertFalse(hasattr(PointlessClass, 'foo'))
+        self.assertFalse(hasattr(PointlessClass, 'bar'))
+        self.assertFalse(hasattr(PointlessClass, 'bat'))
+        self.assertFalse(hasattr(PointlessClass, 'zoo'))
+        self.assertFalse(hasattr(PointlessClass, 'export'))
+        self.assertFalse(hasattr(PointlessClass, 'delete'))
+
+    def test_ModuleManager_use_existing_all(self):
+        class PointlessClass:
+            __all__ = ['abc']
+            mm = big.ModuleManager()
+
+            self.assertIs(mm.all, __all__)
+
+
+class TestClassRegistry(unittest.TestCase):
+    """Tests for ClassRegistry."""
+
+    def test_register_and_access_by_attribute(self):
+        """Classes can be registered and accessed as attributes."""
+
+
+        registry = ClassRegistry()
+
+        @registry()
+        class Foo:
+            pass
+
+        self.assertIs(registry.Foo, Foo)
+
+    def test_register_with_custom_name(self):
+        """Classes can be registered with a custom name."""
+
+
+        registry = ClassRegistry()
+
+        @registry('CustomName')
+        class Foo:
+            pass
+
+        self.assertIs(registry.CustomName, Foo)
+        self.assertNotIn('Foo', registry)
+
+    def test_attribute_error_for_missing(self):
+        """Accessing missing attribute raises AttributeError."""
+
+
+        registry = ClassRegistry()
+
+        with self.assertRaises(AttributeError) as cm:
+            registry.NonExistent
+        self.assertEqual(str(cm.exception), 'NonExistent')
+
+    def test_use_for_inheritance(self):
+        """Registry can be used for cross-scope inheritance."""
+
+
+        base = ClassRegistry()
+
+        @base()
+        class Parent:
+            x = 1
+
+        class Child(base.Parent):
+            y = 2
+
+        self.assertTrue(issubclass(Child, Parent))
+        self.assertEqual(Child.x, 1)
+        self.assertEqual(Child.y, 2)
+
+    def test_dict_operations_still_work(self):
+        """Registry still works as a dict."""
+
+
+        registry = ClassRegistry()
+
+        @registry()
+        class Foo:
+            pass
+
+        self.assertIn('Foo', registry)
+        self.assertEqual(len(registry), 1)
+        self.assertEqual(list(registry.keys()), ['Foo'])
+        self.assertEqual(list(registry.values()), [Foo])
 
 
 def run_tests():

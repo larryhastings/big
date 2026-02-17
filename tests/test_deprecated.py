@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,243 +30,233 @@ bigtestlib.preload_local_big()
 import big.all as big
 import unittest
 
+import builtins
+import big.all as big
+import unittest
+import time
+
+def fake_clock():
+    def fake_clock():
+        time = 0
+        while True:
+            yield time
+            time += 12_000_000 # add twelve milliseconds
+    return fake_clock().__next__
+
 class BigDeprecatedTests(unittest.TestCase):
 
-    def test_old_separators(self):
-        # now test the deprecated utf-8 variants!
-        # they should match... python str, sigh.
-        # (principle of least surprise.)
-        utf8_whitespace = big.encode_strings(big.str_whitespace, 'utf-8')
-        self.assertEqual(set(big.deprecated.utf8_whitespace), set(utf8_whitespace))
-        utf8_whitespace_without_dos = big.encode_strings(big.str_whitespace_without_crlf, 'utf-8')
-        self.assertEqual(set(big.deprecated.utf8_whitespace_without_dos), set(utf8_whitespace_without_dos))
-        utf8_newlines = big.encode_strings(big.str_linebreaks, 'utf-8')
-        self.assertEqual(set(big.deprecated.utf8_newlines), set(utf8_newlines))
-        utf8_newlines_without_dos = big.encode_strings(big.str_linebreaks_without_crlf, 'utf-8')
-        self.assertEqual(set(big.deprecated.utf8_newlines_without_dos), set(utf8_newlines_without_dos))
 
-        # test that the compatibility layer for the old "newlines" names is correct
-        self.assertEqual(big.deprecated.newlines, big.str_linebreaks)
-        self.assertEqual(big.deprecated.newlines_without_dos, big.str_linebreaks_without_crlf)
-        self.assertEqual(big.deprecated.ascii_newlines, big.bytes_linebreaks)
-        self.assertEqual(big.deprecated.ascii_newlines_without_dos, big.bytes_linebreaks_without_crlf)
-        self.assertEqual(big.deprecated.utf8_newlines, big.encode_strings(big.linebreaks, 'utf-8'))
-        self.assertEqual(big.deprecated.utf8_newlines_without_dos, big.encode_strings(big.linebreaks_without_crlf, 'utf-8'))
+    maxDiff=None
 
+    def test_smoke_test_log(self):
+        clock = fake_clock()
+        log = big.deprecated.Log(clock=clock)
 
-    def test_split_quoted_strings(self):
-        def test(s, expected, **kwargs):
-            got = list(big.deprecated.split_quoted_strings(s, **kwargs))
-            self.assertEqual(got, expected)
+        log.reset()
+        log.enter("subsystem")
+        log('event 1')
+        clock()
+        log('event 2')
+        log.exit()
+        got = []
+        log.print(print=got.append, fractional_width=3)
 
-            got = list(big.deprecated.split_quoted_strings(s.encode('ascii'), **kwargs))
-            self.assertEqual(got, [(b, s.encode('ascii')) for b, s in expected])
+        expected = """
+[event log]
+  start   elapsed  event
+  ------  ------  ---------------
+  00.000  00.012  log start
+  00.012  00.012  subsystem start
+  00.024  00.024    event 1
+  00.048  00.012    event 2
+  00.060  00.000  subsystem end
+        """.strip().split('\n')
 
-        test("""hey there "this is quoted" an empty quote: '' this is not quoted 'this is more quoted' "here's quoting a quote mark: \\" wow!" this is working!""",
-            [
-                (False, 'hey there '),
-                (True, '"this is quoted"'),
-                (False, ' an empty quote: '),
-                (True, "''"),
-                (False, ' this is not quoted '),
-                (True, "'this is more quoted'"),
-                (False, ' '),
-                (True, '"here\'s quoting a quote mark: \\" wow!"'),
-                (False, ' this is working!'),
-            ])
+        self.assertEqual(expected, got)
 
-        test('''here is triple quoted: """i am triple quoted.""" wow!  again: """triple quoted here. "quotes in quotes" empty: "" done.""" phew!''',
-            [
-                (False, 'here is triple quoted: '),
-                (True, '"""i am triple quoted."""'),
-                (False, ' wow!  again: '),
-                (True, '"""triple quoted here. "quotes in quotes" empty: "" done."""'),
-                (False, ' phew!'),
-            ])
+        i_got = iter(got)
+        i_expected = iter(expected)
 
-        test('''test turning off quoted strings.  """howdy doodles""" it kinda works anyway!''',
-            [
-                (False, 'test turning off quoted strings.  '),
-                (True, '""'),
-                (True, '"howdy doodles"'),
-                (True, '""'),
-                (False, ' it kinda works anyway!'),
-            ],
-            triple_quotes=False)
-
-    def test_parse_delimiters(self):
-
-        self.maxDiff = 2**32
-
-        def test(s, expected, *, delimiters=None):
-            empty = ''
-            for i in range(2):
-                got = tuple(big.deprecated.parse_delimiters(s, delimiters=delimiters))
-
-                flattened = []
-                for t in got:
-                    flattened.extend(t)
-                s2 = empty.join(flattened)
-                self.assertEqual(s, s2)
-
-                self.assertEqual(expected, got)
-
-                if not i:
-                    s = big.encode_strings(s)
-                    expected = big.encode_strings(expected)
-                    empty = b''
-
-        test('a[x] = foo("howdy (folks)\\n", {1:2, 3:4})',
-            (
-                ('a',                '[',  ''),
-                ('x',                 '', ']'),
-                (' = foo',           '(',  ''),
-                ('',                 '"',  ''),
-                ('howdy (folks)\\n',  '', '"'),
-                (', ',               '{',  ''),
-                ('1:2, 3:4',          '', '}'),
-                ('',                  '', ')'),
-            ),
-            )
-
-        test('a[[[z]]]{{{{q}}}}[{[{[{[{z}]}]}]}]!',
-            (
-                ('a', '[',  ''),
-                ('',  '[',  ''),
-                ('',  '[',  ''),
-                ('z',  '', ']'),
-                ('',   '', ']'),
-                ('',   '', ']'),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('',  '{',  ''),
-                ('q',  '', '}'),
-                ('',   '', '}'),
-                ('',   '', '}'),
-                ('',   '', '}'),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('',  '[',  ''),
-                ('',  '{',  ''),
-                ('z',  '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('',   '', '}'),
-                ('',   '', ']'),
-                ('!',  '',  ''),
-            ),
-            )
-
-        with self.assertRaises(ValueError):
-            test('a[3)', None)
-        with self.assertRaises(ValueError):
-            test('a{3]', None)
-        with self.assertRaises(ValueError):
-            test('a(3}', None)
-
-        with self.assertRaises(ValueError):
-            test('delimiters is empty', None, delimiters=[])
-        with self.assertRaises(ValueError):
-            test('delimiter is abc (huh!)', None, delimiters=['()', 'abc'])
-        with self.assertRaises(TypeError):
-            test('delimiters contains 3', None, delimiters=['{}', 3])
-        with self.assertRaises(ValueError):
-            test('delimiters contains a <backslash>', None, delimiters=['<>', '\\/'])
-        with self.assertRaises(ValueError):
-            test('delimiters contains <angle> <brackets> <twice>', None, delimiters=['<>', '<>'])
-
-        with self.assertRaises(ValueError):
-            test('unclosed_paren(a[3]', None)
-        with self.assertRaises(ValueError):
-            test('x[3] = unclosed_curly{', None)
-        with self.assertRaises(ValueError):
-            test('foo(a[1], {a[2]: 33}) = unclosed_square[55', None)
-        with self.assertRaises(ValueError):
-            test('"unterminated string\\', None)
-        with self.assertRaises(ValueError):
-            test('open_everything( { a[35 "foo', None)
-
-        D = big.deprecated.Delimiter
-        with self.assertRaises(TypeError):
-            D('(', b')')
-        with self.assertRaises(TypeError):
-            D(b'(', ')')
-
-
-    def test_lines_strip_comments(self):
-        self.maxDiff = 2**32
-        def test(i, expected):
-            # print("I", i)
-            got = list(i)
-            # print("GOT", got)
-            # print(f"{i == got=}")
-            # print(f"{got == expected=}")
-            # import pprint
-            # print("\n\n")
-            # pprint.pprint(got)
-            # print("\n\n")
-            # pprint.pprint(expected)
-            # print("\n\n")
-            self.assertEqual(got, expected)
-
-        def L(line, line_number, column_number=1, end='\n', final=None, **kwargs):
-            if final is None:
-                final = line
-            if isinstance(end, str) and isinstance(line, bytes):
-                end = end.encode('ascii')
-            info = big.LineInfo(lines, line + end, line_number, column_number, end=end, **kwargs)
-            return (info, final)
-
-        lines = big.lines("""
-for x in range(5): # this is a comment
-    print("# this is quoted", x)
-    print("") # this "comment" is useless
-    print(no_comments_or_quotes_on_this_line)
-"""[1:])
-        test(big.deprecated.lines_strip_comments(lines, ("#", "//")),
-            [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, trailing=' # this is a comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
-                L(line='', line_number=5, column_number=1, end=''),
-            ])
-
-        # don't get alarmed!  we intentionally break quote characters in this test.
-        lines = big.lines("""
-for x in range(5): # this is a comment
-    print("# this is quoted", x)
-    print("") # this "comment" is useless
-    print(no_comments_or_quotes_on_this_line)
-"""[1:])
-        test(big.deprecated.lines_strip_comments(lines, ("#", "//"), quotes=None),
-            [
-                L(line='for x in range(5): # this is a comment', line_number=1, column_number=1, trailing=' # this is a comment', final='for x in range(5):'),
-                L(line='    print("# this is quoted", x)', line_number=2, column_number=1, trailing='# this is quoted", x)', final='    print("'),
-                L(line='    print("") # this "comment" is useless', line_number=3, column_number=1, trailing=' # this "comment" is useless', final='    print("")'),
-                L(line='    print(no_comments_or_quotes_on_this_line)', line_number=4, column_number=1),
-                L(line='', line_number=5, column_number=1, end=''),
-            ])
-
-        with self.assertRaises(ValueError):
-            test(big.deprecated.lines_strip_comments(big.lines("a\nb\n"), None), [])
-
-        lines = big.lines(b"a\nb# ignored\n c")
-        test(big.deprecated.lines_strip_comments(lines, b'#'),
-            [
-            L(b'a', 1, ),
-            L(b'b# ignored', 2, 1, trailing=b'# ignored', final=b'b'),
-            L(b' c', 3, end=b''),
+        per_line_elapsed = [
+            0.012,
+            0.012,
+            0.024,
+            0.012,
+            0.0
             ]
-            )
+
+        def split_line(s):
+            s = s.strip()
+            start_time, _, s = s.partition("  ")
+            assert _
+            elapsed_time, _, s = s.partition("  ")
+            assert _
+            return (float(start_time), float(elapsed_time), s)
+
+        expected_start_time = 0
+        for line_number, (expected, got, expected_elapsed_time) in enumerate(zip(i_expected, i_got, per_line_elapsed)):
+            if line_number < 3:
+                self.assertEqual(expected, got)
+                continue
+            _, _, expected_event = split_line(expected)
+            got_start_time, got_elapsed_time, got_event = split_line(got)
+            self.assertEqual(got_start_time, expected_start_time, f"error on log line {line_number}: start time didn't match! expected {expected_start_time}, got {got_start_time}")
+            self.assertGreaterEqual(got_elapsed_time, expected_elapsed_time, f"error on log line {line_number}: elapsed time didn't match! expected {expected_elapsed_time}, got {got_elapsed_time}")
+            self.assertEqual(got_event, expected_event, f"error on log line {line_number}: event didn't match! expected {expected_event!r}, got {got_event!r}")
+            expected_start_time += got_elapsed_time
+
+    def test_default_settings(self):
+        log = big.deprecated.Log()
+        log('event 1')
+        buffer = []
+        real_print = builtins.print
+        builtins.print = buffer.append
+        log.print()
+        builtins.print = real_print
+        got = "\n".join(buffer)
+        self.assertIn("event 1", got)
+
+
+
+class TestOldDestination(unittest.TestCase):
+    """Tests for OldDestination."""
+
+    def test_old_logger_basic(self):
+        old = big.OldDestination()
+        log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
+        log("event")
+        log.close()
+
+        events = list(old)
+        # Should have "log start" and "event"
+        self.assertTrue(len(events) >= 2)
+
+    def test_old_logger_enter_exit(self):
+        old = big.OldDestination()
+        log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
+        log.enter("subsystem")
+        log("inside")
+        log.exit()
+        log.close()
+
+        events = list(old)
+        event_strs = [e[2] for e in events]
+        self.assertIn("subsystem start", event_strs)
+        self.assertIn("subsystem end", event_strs)
+
+    def test_old_logger_print(self):
+        old = big.OldDestination()
+        log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
+        log("test")
+        log.close()
+
+        output = []
+        old.print(print=output.append)
+        self.assertTrue(len(output) > 0)
+
+    def test_old_logger_print_no_title(self):
+        old = big.OldDestination()
+        log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
+        log("test")
+        log.close()
+
+        output = []
+        old.print(print=output.append, title=None)
+        # First line should not be "[event log]"
+        self.assertFalse(output[0].startswith("[event log]"))
+
+    def test_old_logger_print_no_headings(self):
+        old = big.OldDestination()
+        log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
+        log("test")
+        log.close()
+
+        output = []
+        old.print(print=output.append, headings=False)
+
+    def test_old_logger_write(self):
+        old = big.OldDestination()
+        log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
+        log.write("raw write content\n")
+        log.close()
+
+        events = list(old)
+        event_strs = [e[2] for e in events]
+        self.assertIn("raw write content", event_strs)
+
+
+class FakeClock:
+    def __init__(self):
+        self.time = 0
+
+    def __call__(self):
+        return self.time
+
+    def advance(self, ns=12_000_000):
+        self.time += ns
+
+
+class TestOldLog(unittest.TestCase):
+    """Tests for OldLog backwards compatibility class."""
+
+    maxDiff = None
+
+    def test_smoke_test_log(self):
+        clock = FakeClock()
+        log = big.OldLog(clock=clock)
+
+        log.reset()
+        clock.advance()
+        log.enter("subsystem")
+        clock.advance()
+        log('event 1')
+        clock.advance()
+        clock.advance()
+        log('event 2')
+        clock.advance()
+        log.exit()
+        got = []
+        log.print(print=got.append, fractional_width=3)
+
+        expected = """
+[event log]
+  start   elapsed  event
+  ------  ------  ---------------
+  00.000  00.012  log start
+  00.012  00.012  subsystem start
+  00.024  00.024    event 1
+  00.048  00.012    event 2
+  00.060  00.000  subsystem end
+        """.strip().split('\n')
+
+        self.assertEqual(expected, got)
+
+    def test_default_settings(self):
+        log = big.OldLog()
+        log('event 1')
+        buffer = []
+        real_print = builtins.print
+        builtins.print = buffer.append
+        log.print()
+        builtins.print = real_print
+        got = "\n".join(buffer)
+        self.assertIn("event 1", got)
+
+    def test_old_log_iter(self):
+        log = big.OldLog()
+        log("test event")
+        events = list(log)
+        self.assertTrue(len(events) >= 2)  # log start + test event
+
+    def test_old_log_reset(self):
+        log = big.OldLog()
+        log("before")
+        log.reset()
+        log("after")
+        events = list(log)
+        event_strs = [e[2] for e in events]
+        self.assertIn("after", event_strs)
+
 
 
 

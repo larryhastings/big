@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,6 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+
 __all__ = ['Regulator', 'SingleThreadedRegulator', 'ThreadSafeRegulator', 'Scheduler']
 
 
@@ -33,6 +34,10 @@ from .heap import Heap
 import sys
 import time
 
+
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
 
 
 class InertContextManager:
@@ -44,6 +49,7 @@ class InertContextManager:
 
 inert_context_manager = InertContextManager()
 
+@export
 class Regulator:
     """
     An abstract base class for Scheduler regulators.
@@ -130,6 +136,7 @@ class Regulator:
         pass
 
 
+@export
 class SingleThreadedRegulator(Regulator):
     """
     An implementation of Regulator designed for
@@ -154,6 +161,7 @@ class SingleThreadedRegulator(Regulator):
 default_regulator = SingleThreadedRegulator()
 
 
+@export
 class ThreadSafeRegulator(Regulator):
     """
     A thread-safe Regulator object designed
@@ -181,7 +189,9 @@ class ThreadSafeRegulator(Regulator):
 
 
 DEFAULT_PRIORITY = 100
+export('DEFAULT_PRIORITY')
 
+@export
 class Event:
     """
     Wraps event objects in a Scheduler's queue.
@@ -220,6 +230,7 @@ class Event:
         self.scheduler.cancel(self)
 
 
+@export
 class Scheduler:
     """
     A replacement for Python's sched.scheduler object,
@@ -389,3 +400,5 @@ class Scheduler:
         that are currently ready, then stops iteration.
         """
         return self.NonBlockingSchedulerIterator(self)
+
+mm()

@@ -1,6 +1,6 @@
 ![# big](https://raw.githubusercontent.com/larryhastings/big/master/resources/images/big.header.png)
 
-##### Copyright 2022-2024 by Larry Hastings
+##### Copyright 2022-2026 by Larry Hastings
 
 [![# test badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/test.yml?branch=master&label=test)](https://github.com/larryhastings/big/actions/workflows/test.yml) [![# coverage badge](https://img.shields.io/github/actions/workflow/status/larryhastings/big/coverage.yml?branch=master&label=coverage)](https://github.com/larryhastings/big/actions/workflows/coverage.yml) [![# python versions badge](https://img.shields.io/pypi/pyversions/big.svg?logo=python&logoColor=FBE072)](https://pypi.org/project/big/)
 
@@ -25,12 +25,18 @@ functionality.
 **big** is chock full of the sort of little functions and classes
 we've all hacked together a million times--only with all the
 API gotchas fixed, and thoroughly tested with 100% coverage.
+It's the missing batteries Python never shippet.
 It's the code you *would* have written... if only you had the time.
-It's a real pleasure to use!
+And every API is a pleasure to use!
 
 **big** requires Python 3.6 or newer.  It has no
-required dependencies (unless you want to run the test suite).
-The current version is [0.12.8.](#0128)
+required dependencies to run.  (**big**'s test suite
+havs a few external dependencies, but **big** itself will
+run fine without them.)
+**big** is 100% pure Python code--no C extension
+needed, no compilation step.
+
+The current version is [0.13.](#013)
 
 *Think big!*
 
@@ -48,23 +54,12 @@ in **big** because:
    considered and designed.
 
 For example, consider
-[`StateManager`.](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
-If you remove the comments and documentation, it's actually pretty
-short--easily less than a hundred lines.  I myself have written
-state machines from scratch using a similar approach many times.
-They're easy to write.  So why bother using `StateManager`?
-Why not roll your own each time?
-
-Because `StateManager` not only supports all the features you need--consider
-[`accessor`](#accessorattributestate-state_managerstate_manager)
-and
-[`dispatch`](#dispatchstate_managerstate_manager--prefix-suffix)--its
-API is carefully designed to help prevent bugs and logical errors.
-In considering the predecessor of `StateManager` for inclusion in **big**,
-I realized that if an "observer" initiated a state transition, it would produce
-a blurry mess of observer callbacks and entered and exited states,
-executed in a confusing order.  So `StateManager` in **big** simply
-prevents you from executing state transitions in observers.
+[`Log(*destinations, **options)`](#logdestinations-options).
+It's easy to write a quick little disposable log function.
+I should know; I've done it myself, many times.
+But big's `Log` class is feature-rich, thoroughly debugged,
+and lightning fast.  Rather than waste your time hacking
+together something cheap, just use big!
 
 
 ## Using big
@@ -103,7 +98,7 @@ You can also use **big.all** with `import *`:
 from big.all import *
 ```
 
-but that's up to you.
+but that's up to you.  Me, I generally use `import big.all as big` .
 
 **big** is licensed using the
 [MIT license.](https://opensource.org/licenses/MIT)
@@ -114,22 +109,24 @@ as long as you leave my copyright notice on the source code.
 
 Although **big** is *crammed full* of fabulous code, a few of
 its subsystems rise above the rest.  If you're curious what
-**big** might do for you, here are the five things in **big**
+**big** might do for you, here are the six things in **big**
 I'm proudest of:
 
+* [**`linked_list`**](#linked_list)
+* [**`string`**](#string)
+* [**Bound inner classes**](#bound-inner-classes)
 * [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
 * [`big.state`](#bigstate)
-* [**Bound inner classes**](#bound-inner-classes)
 * [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
-* [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 
-And here are five little functions/classes I use all the time:
+And here are six little functions/classes I use all the time:
 
-* [`gently_title`](#gently_titles--apostrophesnone-double_quotesnone)
-* [`Log`](#log-clocknone)
+* [`eval_template_string`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
+* [`iterator_context`](#iterator_contextiterator-start0)
+* [`Log`](#logdestinations-options)
+* [`ModuleManager`](#ModuleManager)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
-* [`touch`](#touchpath)
 
 
 # Index
@@ -138,9 +135,9 @@ And here are five little functions/classes I use all the time:
 
 <dl><dd>
 
-[`big.all`](#`bigall`)
+[`big.all`](#bigall)
 
-[`big.boundinnerclass`](#`bigboundinnerclass`)
+[`big.boundinnerclass`](#bigboundinnerclass)
 
 [`big.builtin`](#bigbuiltin)
 
@@ -162,9 +159,15 @@ And here are five little functions/classes I use all the time:
 
 [`big.state`](#bigstate)
 
+[`big.template`](#bigtemplate)
+
 [`big.text`](#bigtext)
 
 [`big.time`](#bigtime)
+
+[`big.tokens`](#bigtokens)
+
+[`big.types`](#bigtypes)
 
 [`big.version`](#bigversion)
 
@@ -184,7 +187,15 @@ And here are five little functions/classes I use all the time:
 
 [`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
 
+[`bound_inner_base(cls)`](#bound_inner_basecls)
+
 [`BoundInnerClass`](#boundinnerclasscls)
+
+[`BOUNDINNERCLASS_OUTER_ATTR`](#boundinnerclass_outer_attr)
+
+[`BOUNDINNERCLASS_OUTER_SLOTS`](#boundinnerclass_outer_slots)
+
+[`bound_to(cls)`](#bound_tocls)
 
 [`bytes_linebreaks`](#bytes_linebreaks)
 
@@ -196,7 +207,13 @@ And here are five little functions/classes I use all the time:
 
 [`combine_splits(s, *split_arrays)`](#combine_splitss-split_arrays)
 
+[`ClassRegistry()`](#classregistry)
+
 [`CycleError()`](#cycleerror)
+
+[`date_ensure_timezone(d, timezone)`](#date_ensure_timezoned-timezone)
+
+[`date_set_timezone(d, timezone)`](#date_set_timezoned-timezone)
 
 [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone)
 
@@ -216,6 +233,8 @@ And here are five little functions/classes I use all the time:
 
 [`Event.cancel()`](#eventcancel)
 
+[`eval_template_string(s, globals, locals=None, *, ...)`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
+
 [`fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`](#fgreppath-text--encodingnone-enumeratefalse-case_insensitivefalse)
 
 [`file_mtime(path)`](#file_mtimepath)
@@ -225,6 +244,8 @@ And here are five little functions/classes I use all the time:
 [`file_size(path)`](#file_sizepath)
 
 [`format_map(s, mapping)`](#format_maps-mapping)
+
+[`generate_tokens(s)`](#generate_tokenss)
 
 [`gently_title(s, *, apostrophes=None, double_quotes=None)`](#gently_titles--apostrophesnone-double_quotesnone)
 
@@ -252,67 +273,275 @@ And here are five little functions/classes I use all the time:
 
 [`Heap.append_and_popleft(o)`](#heapappend_and_poplefto)
 
-[`Heap.popleft_and_append(o)`](#heappopleft_and_append0)
+[`Heap.popleft_and_append(o)`](#heappopleft_and_appendo)
 
 [`Heap.queue`](#heapqueue)
 
 [`int_to_words(i, *, flowery=True, ordinal=False)`](#int_to_wordsi--flowerytrue-ordinalfalse)
 
+[`Interpolation(expression, *filters, debug='')`](#interpolationexpression-filters-debug)
+
+[`is_bound(cls)`](#is_boundcls)
+
+[`is_boundinnerclass(cls)`](#is_boundinnerclasscls)
+
+[`is_unboundinnerclass(cls)`](#is_unboundinnerclasscls)
+
+[`IteratorContext`](#iterator_contextiterator-start0)
+
+[`iterator_context(iterator, start=0)`](#iterator_contextiterator-start0)
+
+[`iterator_filter(iterator, *, ...)`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone)
+
 [`linebreaks`](#linebreaks)
 
 [`linebreaks_without_crlf`](#linebreaks_without_crlf)
 
-[`LineInfo(lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`linked_list(iterable=(), *, lock=None)`](#linked_listiterable--locknone)
 
-[`LineInfo.clip_leading(line, s)`](#lineinfoclip_leadingline-s)
+[`linked_list.append(object)`](#linked_listappendobject)
 
-[`LineInfo.clip_trailing(line, s)`](#lineinfoclip_trailingline-s)
+[`linked_list.clear()`](#linked_listclear)
 
-[`LineInfo.copy()`](#lineinfocopy)
+[`linked_list.copy(*, lock=None)`](#linked_listcopy-locknone)
 
-[`lines(s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, tab_width=8, **kwargs)`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+[`linked_list.count(value)`](#linked_listcountvalue)
 
-[`lines_convert_tabs_to_spaces(li)`](#lines_convert_tabs_to_spacesli)
+[`linked_list.cut(start=None, stop=None, *, lock=None)`](#linked_listcutstartnone-stopnone--locknone)
 
-[`lines_filter_empty_lines(li)`](#lines_filter_empty_linesli)
+[`linked_list.extend(iterable)`](#linked_listextenditerable)
 
-[`lines_filter_line_comment_lines(li, comment_markers)`](#lines_filter_line_comment_linesli-comment_markers)
+[`linked_list.extendleft(iterable)`](#linked_listextendleftiterable)
 
-[`lines_containing(li, s, *, invert=False)`](#lines_containingli-s--invertfalse)
+[`linked_list.find(value)`](#linked_listfindvalue)
 
-[`lines_grep(li, pattern, *, invert=False, flags=0, match='match')`](#lines_grepli-pattern--invertfalse-flags0-matchmatch)
+[`linked_list.index(value, start=0, stop=sys.maxsize)`](#linked_listindexvalue-start0-stopsysmaxsize)
 
-[`lines_rstrip(li, separators=None)`](#lines_rstripli-separatorsnone)
+[`linked_list.insert(index, object)`](#linked_listinsertindex-object)
 
-[`lines_sort(li, *, key=None, reverse=False)`](#lines_sortli--keynone-reversefalse)
+[`linked_list.match(predicate)`](#linked_listmatchpredicate)
 
-[`lines_strip(li, separators=None)`](#lines_stripli-separatorsnone)
+[`linked_list.pop(index=-1)`](#linked_listpopindex-1)
 
-[`lines_strip_indent(li)`](#lines_strip_indentli)
+[`linked_list.prepend(object)`](#linked_listprependobject)
 
-[`lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+[`linked_list.rcount(value)`](#linked_listrcountvalue)
 
-[`Log(clock=None)`](#log-clocknone)
+[`linked_list.rcut(start=None, stop=None, *, lock=None)`](#linked_listrcutstartnone-stopnone--locknone)
 
-[`Log.enter(subsystem)`](#logentersubsystem)
+[`linked_list.remove(value, default=undefined)`](#linked_listremovevalue-defaultundefined)
+
+[`linked_list.reverse()`](#linked_listreverse)
+
+[`linked_list.rextend(iterable)`](#linked_listrextenditerable)
+
+[`linked_list.rfind(value)`](#linked_listrfindvalue)
+
+[`linked_list.rmatch(predicate)`](#linked_listrmatchpredicate)
+
+[`linked_list.rotate(n)`](#linked_listrotaten)
+
+[`linked_list.rpop(index=0)`](#linked_listrpopindex0)
+
+[`linked_list.rremove(value, default=undefined)`](#linked_listrremovevalue-defaultundefined)
+
+[`linked_list.rsplice(other, *, where=None)`](#linked_listrspliceother--wherenone)
+
+[`linked_list.sort(key=None, reverse=False)`](#linked_listsortkeynone-reversefalse)
+
+[`linked_list.splice(other, *, where=None)`](#linked_listspliceother--wherenone)
+
+[`linked_list.tail()`](#linked_listtail)
+
+[`linked_list_iterator`](#linked_list_iterator)
+
+[`linked_list_iterator.after(count=1)`](#linked_list_iteratoraftercount1)
+
+[`linked_list_iterator.append(value)`](#linked_list_iteratorappendvalue)
+
+[`linked_list_iterator.before(count=1)`](#linked_list_iteratorbeforecount1)
+
+[`linked_list_iterator.copy()`](#linked_list_iteratorcopy)
+
+[`linked_list_iterator.count(value)`](#linked_list_iteratorcountvalue)
+
+[`linked_list_iterator.cut(stop=None, *, lock=None)`](#linked_list_iteratorcutstopnone--locknone)
+
+[`linked_list_iterator.exhaust()`](#linked_list_iteratorexhaust)
+
+[`linked_list_iterator.extend(iterable)`](#linked_list_iteratorextenditerable)
+
+[`linked_list_iterator.find(value)`](#linked_list_iteratorfindvalue)
+
+[`linked_list_iterator.insert(index, object)`](#linked_list_iteratorinsertindex-object)
+
+[`linked_list_iterator.is_special()`](#linked_list_iteratoris_special)
+
+[`linked_list_iterator.linked_list`](#linked_list_iteratorlinked_list)
+
+[`linked_list_iterator.match(predicate)`](#linked_list_iteratormatchpredicate)
+
+[`linked_list_iterator.next(default=undefined, *, count=1)`](#linked_list_iteratornextdefaultundefined--count1)
+
+[`linked_list_iterator.pop(index=0)`](#linked_list_iteratorpopindex0)
+
+[`linked_list_iterator.prepend(value)`](#linked_list_iteratorprependvalue)
+
+[`linked_list_iterator.previous(default=undefined, *, count=1)`](#linked_list_iteratorpreviousdefaultundefined--count1)
+
+[`linked_list_iterator.rcount(value)`](#linked_list_iteratorrcountvalue)
+
+[`linked_list_iterator.rcut(stop=None, *, lock=None)`](#linked_list_iteratorrcutstopnone--locknone)
+
+[`linked_list_iterator.remove(value, default=undefined)`](#linked_list_iteratorremovevalue-defaultundefined)
+
+[`linked_list_iterator.reset()`](#linked_list_iteratorreset)
+
+[`linked_list_iterator.rextend(iterable)`](#linked_list_iteratorrextenditerable)
+
+[`linked_list_iterator.rfind(value)`](#linked_list_iteratorrfindvalue)
+
+[`linked_list_iterator.rmatch(predicate)`](#linked_list_iteratorrmatchpredicate)
+
+[`linked_list_iterator.rpop(index=0)`](#linked_list_iteratorrpopindex0)
+
+[`linked_list_iterator.rremove(value, default=undefined)`](#linked_list_iteratorrremovevalue-defaultundefined)
+
+[`linked_list_iterator.rsplice(other)`](#linked_list_iteratorrspliceother)
+
+[`linked_list_iterator.rtruncate()`](#linked_list_iteratorrtruncate)
+
+[`linked_list_iterator.special()`](#linked_list_iteratorspecial)
+
+[`linked_list_iterator.splice(other)`](#linked_list_iteratorspliceother)
+
+[`linked_list_iterator.truncate()`](#linked_list_iteratortruncate)
+
+[`linked_list_reverse_iterator`](#linked_list_reverse_iterator)
+
+[`linked_list_reverse_iterator.after(count=1)`](#linked_list_reverse_iteratoraftercount1)
+
+[`linked_list_reverse_iterator.append(value)`](#linked_list_reverse_iteratorappendvalue)
+
+[`linked_list_reverse_iterator.before(count=1)`](#linked_list_reverse_iteratorbeforecount1)
+
+[`linked_list_reverse_iterator.copy()`](#linked_list_reverse_iteratorcopy)
+
+[`linked_list_reverse_iterator.count(value)`](#linked_list_reverse_iteratorcountvalue)
+
+[`linked_list_reverse_iterator.cut(stop=None, *, lock=None)`](#linked_list_reverse_iteratorcutstopnone--locknone)
+
+[`linked_list_reverse_iterator.exhaust()`](#linked_list_reverse_iteratorexhaust)
+
+[`linked_list_reverse_iterator.extend(iterable)`](#linked_list_reverse_iteratorextenditerable)
+
+[`linked_list_reverse_iterator.find(value)`](#linked_list_reverse_iteratorfindvalue)
+
+[`linked_list_reverse_iterator.insert(index, object)`](#linked_list_reverse_iteratorinsertindex-object)
+
+[`linked_list_reverse_iterator.is_special()`](#linked_list_reverse_iteratoris_special)
+
+[`linked_list_reverse_iterator.linked_list`](#linked_list_reverse_iteratorlinked_list)
+
+[`linked_list_reverse_iterator.match(predicate)`](#linked_list_reverse_iteratormatchpredicate)
+
+[`linked_list_reverse_iterator.next(default=undefined, *, count=1)`](#linked_list_reverse_iteratornextdefaultundefined--count1)
+
+[`linked_list_reverse_iterator.pop(index=0)`](#linked_list_reverse_iteratorpopindex0)
+
+[`linked_list_reverse_iterator.prepend(value)`](#linked_list_reverse_iteratorprependvalue)
+
+[`linked_list_reverse_iterator.previous(default=undefined, *, count=1)`](#linked_list_reverse_iteratorpreviousdefaultundefined--count1)
+
+[`linked_list_reverse_iterator.rcount(value)`](#linked_list_reverse_iteratorrcountvalue)
+
+[`linked_list_reverse_iterator.rcut(stop=None, *, lock=None)`](#linked_list_reverse_iteratorrcutstopnone--locknone)
+
+[`linked_list_reverse_iterator.remove(value, default=undefined)`](#linked_list_reverse_iteratorremovevalue-defaultundefined)
+
+[`linked_list_reverse_iterator.reset()`](#linked_list_reverse_iteratorreset)
+
+[`linked_list_reverse_iterator.rextend(iterable)`](#linked_list_reverse_iteratorrextenditerable)
+
+[`linked_list_reverse_iterator.rfind(value)`](#linked_list_reverse_iteratorrfindvalue)
+
+[`linked_list_reverse_iterator.rmatch(predicate)`](#linked_list_reverse_iteratorrmatchpredicate)
+
+[`linked_list_reverse_iterator.rpop(index=0)`](#linked_list_reverse_iteratorrpopindex0)
+
+[`linked_list_reverse_iterator.rremove(value, default=undefined)`](#linked_list_reverse_iteratorrremovevalue-defaultundefined)
+
+[`linked_list_reverse_iterator.rsplice(other)`](#linked_list_reverse_iteratorrspliceother)
+
+[`linked_list_reverse_iterator.rtruncate()`](#linked_list_reverse_iteratorrtruncate)
+
+[`linked_list_reverse_iterator.special()`](#linked_list_reverse_iteratorspecial)
+
+[`linked_list_reverse_iterator.splice(other)`](#linked_list_reverse_iteratorspliceother)
+
+[`linked_list_reverse_iterator.truncate()`](#linked_list_reverse_iteratortruncate)
+
+[`Log(*destinations, **options)`](#logdestinations-options)
+
+[`Log.box(s)`](#logboxs)
+
+[`Log.Callable(callable)`](#logcallablecallable)
+
+[`Log.close(block=True)`](#logcloseblocktrue)
+
+[`Log.Destination`](#logdestination)
+
+[`Log.Destination.Buffer(destination=None)`](#logdestinationbufferdestinationnone)
+
+[`Log.enter(message)`](#logentermessage)
 
 [`Log.exit()`](#logexit)
 
-[`Log.print(*, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9)`](#logprint-printnone-titleevent-log-headingstrue-indent2-seconds_width2-fractional_width9)
+[`Log.File(path, initial_mode="at", *, flush=False)`](#logfilepath-initial_modeat--flushfalse)
+
+[`Log.FileHandle(handle, *, flush=False)`](#logfilehandlehandle--flushfalse)
+
+[`Log.flush(block=True)`](#logflushblocktrue)
+
+[`Log.List(list)`](#loglistlist)
+
+[`Log.map_destination(o)`](#logmap_destinationo)
+
+[`Log.print(*args, end='\n', sep=' ', flush=False, format='print')`](#logprintargs-endn-sep--flushfalse-formatprint)
+
+[`Log.Print()`](#logprint)
 
 [`Log.reset()`](#logreset)
 
+[`Log.Sink()`](#logsink)
+
+[`Log.TmpFile(*, flush=False)`](#logtmpfile-flushfalse)
+
+[`Log.write(formatted)`](#logwriteformatted)
+
 [`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
 
-[`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reverseFalse-separateTrue)
+[`metadata.version`](#metadataversion)
+
+[`ModuleManager()`](#modulemanager)
+
+[`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reversefalse-separatetrue)
 
 [`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 
-[`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-leftTrue-rightTrue)
+[`multistrip(s, separators, left=True, right=True)`](#multistrips-separators-lefttrue-righttrue)
 
-[`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsNone-replacementnone)
+[`normalize_whitespace(s, separators=None, replacement=None)`](#normalize_whitespaces-separatorsnone-replacementnone)
+
+[`OldDestination()`](#olddestination)
+
+[`OldLog(clock=None)`](#oldlogclocknone)
+
+[`parse_template_string(s, *, ...)`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape)
 
 [`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
+
+[`Pattern(s, flags=0)`](#patterns-flags0)
 
 [`pure_virtual()`](#pure_virtual)
 
@@ -321,6 +550,8 @@ And here are five little functions/classes I use all the time:
 [`PushbackIterator.next(default=None)`](#pushbackiteratornextdefaultnone)
 
 [`PushbackIterator.push(o)`](#pushbackiteratorpusho)
+
+[`prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12)`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12)
 
 [`pushd(directory)`](#pushddirectory)
 
@@ -336,13 +567,13 @@ And here are five little functions/classes I use all the time:
 
 [`Regulator()`](#regulator)
 
+[`Regulator.lock`](#regulatorlock)
+
 [`Regulator.now()`](#regulatornow)
 
 [`Regulator.sleep(t)`](#regulatorsleept)
 
 [`Regulator.wake()`](#regulatorwake)
-
-[Release history](#release-history)
 
 [`reversed_re_finditer(pattern, string, flags=0)`](#reversed_re_finditerpattern-string-flags0)
 
@@ -360,7 +591,7 @@ And here are five little functions/classes I use all the time:
 
 [`Scheduler.non_blocking()`](#schedulernon_blocking)
 
-[`search_path(paths, extensions=('',), *, case_sensitive=None, preserve_extension=True, want_directories=False, want_files=True)`](#search_pathpaths-extensions---case_sensitivenone-preserve_extensiontrue-want_directoriesfalse-want-filestrue)
+[`search_path(paths, extensions=('',), *, case_sensitive=None, preserve_extension=True, want_directories=False, want_files=True)`](#search_pathpaths-extensions--case_sensitivenone-preserve_extensiontrue-want_directoriesfalse-want_filestrue)
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
@@ -372,9 +603,41 @@ And here are five little functions/classes I use all the time:
 
 [`split_title_case(s, *, split_allcaps=True)`](#split_title_cases--split_allcapstrue)
 
+[`SinkEvent`](#sinkevent)
+
+[`SinkEndEvent`](#sinkendevent)
+
+[`SinkEnterEvent`](#sinkenterevent)
+
+[`SinkExitEvent`](#sinkexitevent)
+
+[`SinkLogEvent`](#sinklogevent)
+
+[`SinkStartEvent`](#sinkstartevent)
+
+[`SinkWriteEvent`](#sinkwriteevent)
+
+[`SpecialNodeError`](#specialnodeerror)
+
 [`State()`](#state)
 
 [`StateManager(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
+
+[`Statement(statement)`](#statementstatement)
+
+[`string(s='', *, ...)`](#strings--sourcenone-line_number1-column_number1-first_column_number1-tab_width8)
+
+[`string.bisect(index)`](#stringbisectindex)
+
+[`string.cat(*strings)`](#stringcatstrings)
+
+[`string.compile(flags=0)`](#stringcompileflags0)
+
+[`string.generate_tokens()`](#stringgenerate_tokens)
+
+[`strip_indents(lines, *, tab_width=8, linebreaks=linebreaks)`](#strip_indentslines--tab_width8-linebreakslinebreaks)
+
+[`strip_line_comments(lines, line_comment_markers, *, escape='\\', quotes=(), multiline_quotes=(), linebreaks=linebreaks)`](#strip_line_commentslines-line_comment_markers--escape-quotes-multiline_quotes-linebreakslinebreaks)
 
 [`str_linebreaks`](#str_linebreaks)
 
@@ -386,9 +649,11 @@ And here are five little functions/classes I use all the time:
 
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
-[`timestamp_human(t=None, want_microseconds=None)`](#timestamp_humantnone-want_microsecondsnone)
+[`timestamp_human(t=None, want_microseconds=None, *, tzinfo=None)`](#timestamp_humantnone-want_microsecondsnone--tzinfonone)
 
 [`ThreadSafeRegulator()`](#threadsaferegulator)
+
+[`TMPFILE`](#tmpfile)
 
 [`TopologicalSorter(graph=None)`](#topologicalsortergraphnone)
 
@@ -430,7 +695,13 @@ And here are five little functions/classes I use all the time:
 
 [`try_int(o)`](#try_into)
 
+[`type_bound_to(instance)`](#type_bound_toinstance)
+
+[`unbound(cls)`](#unboundcls)
+
 [`UnboundInnerClass`](#unboundinnerclasscls)
+
+[`UndefinedIndexError`](#undefinedindexerror)
 
 [`unicode_linebreaks`](#unicode_linebreaks)
 
@@ -442,7 +713,7 @@ And here are five little functions/classes I use all the time:
 
 [`Version(s=None, *, epoch=None, release=None, release_level=None, serial=None, post=None, dev=None, local=None)`](#versionsnone--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone)
 
-['Version.format(s)'](#versionformats)
+[`Version.format(s)`](#versionformats)
 
 [`whitespace`](#whitespace)
 
@@ -452,15 +723,13 @@ And here are five little functions/classes I use all the time:
 
 </dd></dl>
 
-### Topic deep-dives
+### Tutorials
 
 <dl><dd>
 
 [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
 
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-
-[**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 
 [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
@@ -483,6 +752,15 @@ imports every other submodule in **big**, and uses `import *` to
 import every symbol from every other submodule, too.  Every
 public symbol in **big** is available in `big.all`.
 
+When I'm using big in my own projects, I tend to import it as
+
+```Python
+import big.all as big
+```
+
+That way, all big's symbols are available as one big flat namespace.
+
+
 </dd></dl>
 
 ## `big.boundinnerclass`
@@ -491,7 +769,7 @@ public symbol in **big** is available in `big.all`.
 
 Class decorators that implement bound inner classes.  See the
 [**Bound inner classes**](#bound-inner-classes)
-deep-dive for more information.
+tutorial for more information.
 
 </dd></dl>
 
@@ -548,30 +826,187 @@ class ***S*** *must* be decorated with either
 `BoundInnerClass` or `UnboundInnerClass`.
 </dd></dl>
 
+#### `bound_inner_base(cls)`
+
+<dl><dd>
+Simple wrapper for Python 3.6 compatibility for bound inner classes.
+
+Returns the base class for declaring a subclass of a
+bound inner class while still in the outer class scope.
+Only needed for Python 3.6 compatibility; unnecessary
+in Python 3.7+, or when the child class is defined
+after exiting the outer class scope.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `bound_to(cls)`
+
+<dl><dd>
+
+Returns the outer instance that `cls` is bound to, or `None`.
+
+If `cls` is a bindable inner class that was bound to an outer
+instance, returns that outer instance.  If `cls` is any other
+variety of type object, returns `None`.  Raises `TypeError` if
+`cls` is not a class object.
+
+[`BoundInnerClass`](#boundinnerclasscls) doesn't keep strong
+references to outer instances.  If `cls` was bound to an object
+that has since been destroyed, `bound_to` will return `None`.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `BOUNDINNERCLASS_OUTER_ATTR`
+
+<dl><dd>
+
+A string constant containing the attribute name that
+[`BoundInnerClass`](#boundinnerclasscls) uses to store
+its per-instance cache on the outer instance.
+If your outer class uses `__slots__`, you must include
+this attribute in your slots definition.
+
+However, rather than using this attribute directly,
+we suggest you use [`BOUNDINNERCLASS_OUTER_SLOTS`](#boundinnerclass_outer_slots)
+to add the necessary attribute to your `__slots__` tuple.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `BOUNDINNERCLASS_OUTER_SLOTS`
+
+<dl><dd>
+
+A tuple containing [`BOUNDINNERCLASS_OUTER_ATTR`](#boundinnerclass_outer_attr).
+If your outer class uses `__slots__`, you can add this to your
+slots definition to ensure [`BoundInnerClass`](#boundinnerclasscls) works correctly.
+
+Example:
+
+```Python
+class Foo:
+    __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
+
+    @BoundInnerClass
+    class Bar:
+        ...
+```
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `is_bound(cls)`
+
+<dl><dd>
+
+Returns `True` if `cls` is a bound inner class that has been
+bound to a specific outer instance.  Said another way,
+`is_bound(cls)` returns `True` if
+[`bound_to(cls)`](#bound_tocls) would return a non-`None` value.
+
+Returns `False` for unbound inner classes and non-participating classes.
+Raises `TypeError` if `cls` is not a class object.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `is_boundinnerclass(cls)`
+
+<dl><dd>
+
+Returns `True` if `cls` was decorated with
+[`@BoundInnerClass`](#boundinnerclasscls),
+or is a bound wrapper class created from one.
+
+Returns `False` for [`@UnboundInnerClass`](#unboundinnerclasscls)
+classes and regular classes.
+Raises `TypeError` if `cls` is not a class object.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `is_unboundinnerclass(cls)`
+
+<dl><dd>
+
+Returns `True` if `cls` was decorated with
+[`@UnboundInnerClass`](#unboundinnerclasscls),
+or is a wrapper class created from one.
+
+Returns `False` for [`@BoundInnerClass`](#boundinnerclasscls)
+classes and regular classes.
+Raises `TypeError` if `cls` is not a class object.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `type_bound_to(instance)`
+
+<dl><dd>
+
+Returns the outer instance that `type(instance)` is bound to, or `None`.
+
+This is a convenience function equivalent to calling
+[`bound_to(type(instance))`](#bound_tocls).
+
+[`BoundInnerClass`](#boundinnerclasscls) doesn't keep strong
+references to outer instances.  If `type(instance)` was bound
+to an object that has since been destroyed, `type_bound_to`
+will return `None`.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
+#### `unbound(cls)`
+
+<dl><dd>
+
+Returns the unbound version of a bound class.
+
+If `cls` is a bound inner class, returns the original unbound class.
+If `cls` is already unbound (or not a bindable inner class), returns `cls`.
+
+Raises `ValueError` if `cls` inherits directly from a bound class
+(e.g. `class Child(o.Inner)`), since such classes have no unbound
+version.  Raises `TypeError` if `cls` is not a class object.
+
+See the [**Bound inner classes**](#bound-inner-classes) tutorial for more information.
+</dd></dl>
+
 
 ## `big.builtin`
 
 <dl><dd>
 
-Functions for working with builtins.  (Named `builtin` to avoid a
-name collision with the `builtins` module.)
+Fundamental functions and types that don't fit neatly into
+any other submodule.  (Named `builtin` to avoid a name collision
+with Python's `builtins` module.)
 
-In general, the idea with these functions is a principle I first
-read about in either
-[Code Complete](http://aroma.vn/web/wp-content/uploads/2016/11/code-complete-2nd-edition-v413hav.pdf)
-or
-[Writing Solid Code:](http://cs.brown.edu/courses/cs190/2008/documents/restricted/Writing%20Solid%20Code.pdf)
+</dd></dl>
 
-> *Don't associate with losers.*
+#### `ClassRegistry()`
 
-The intent here is, try to design APIs where it's impossible to call them
-the wrong way.  Restrict the inputs to your functions to values you can
-always handle, and you won't ever have to return an error.
+<dl><dd>
 
-The functions in this sub-module are designed to always work.  None of
-them should ever raise an exception--no matter *what* nonsense you pass in.
-(But don't take that as a challenge!)
+A `dict` subclass with attribute-style access, useful as
+a class decorator for registering base classes.
 
+[`BoundInnerClass`](#boundinnerclasscls) encourages heavily-nested
+classes, but Python's scoping rules make it clumsy to reference
+base classes defined in a different class scope.  `ClassRegistry`
+solves this by giving you a place to store references to base
+classes you can access later.
+
+To use, create a `ClassRegistry` instance, then use it as a
+decorator to register classes.  Access registered classes as
+attributes on the `ClassRegistry`.  By default the class's
+`__name__` is used as the attribute name; pass a string argument
+to use a custom name instead.
+
+When using with [`BoundInnerClass`](#boundinnerclasscls), put
+`@base()` *above* `@BoundInnerClass`.
 </dd></dl>
 
 #### `get_float(o, default=_sentinel)`
@@ -605,6 +1040,34 @@ tries `int(o)`.  If that conversion succeeds, returns the result.
 Otherwise, tries `float(o)`.  If that conversion succeeds, returns
 the result.  Otherwise returns the default value.  If you don't
 pass in an explicit default value, the default value is `o`.
+</dd></dl>
+
+#### `ModuleManager()`
+
+<dl><dd>
+
+A class that manages your module's namespace, including `__all__`.
+
+`ModuleManager` makes it easy to populate `__all__` and clean up
+temporary symbols.  Instantiate a `ModuleManager` at module scope,
+use its methods to declare exports and deletions, then call the
+instance at the end of your module to finalize.
+
+`ModuleManager` provides two methods, both of which can be used
+as decorators or called with string arguments:
+
+`mm.export(*args)` adds symbols to `__all__`.  When used as a
+decorator, adds the decorated function or class by name.  When
+called with strings, adds those strings to `__all__`.
+
+`mm.delete(*args)` marks symbols for deletion.  When used as a
+decorator, marks the decorated function or class for deletion.
+When called with strings, marks those names for deletion.
+
+When the `ModuleManager` instance is called, it deletes all
+symbols on the deletions list from the module namespace.
+It also automatically deletes itself, and any module-level
+references to its `export` and `delete` methods.
 </dd></dl>
 
 #### `pure_virtual()`
@@ -974,7 +1437,7 @@ with an enhanced API.  This version of `TopologicalSorter` allows modifying the
 graph at any time, and supports multiple simultaneous *views,* allowing
 iteration over the graph more than once.
 
-See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) deep-dive for more information.
+See the [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter) tutorial for more information.
 
 </dd></dl>
 
@@ -1248,38 +1711,141 @@ of the heap, in sorted order.
 <dl><dd>
 
 Functions and classes for working with iteration.
-Only one entry so far.
 
+</dd></dl>
+
+#### `iterator_context(iterator, start=0)`
+
+<dl><dd>
+
+Iterates over `iterable`.  Yields `(ctx, o)` where `o`
+is each value yielded by `iterable`, and `ctx` is a
+"context" variable of type `IteratorContext`
+containing metadata about the iteration.
+
+`ctx` supports the following attributes:
+
+</dd><dt>
+`ctx.countdown`
+</dt><dd>
+   contains the "opposite" value of `ctx.index`.
+   The values yielded by `ctx.countdown` are the same as
+   `ctx.index`, but in reversed order.  (If `start` is 0,
+   and the iterator yields four items, `ctx.index` will
+   be `0`, `1`, `2`, and `3` in that order, and `ctx.countdown`
+   will be `3`, `2`, `1`, and `0` in that order.)  `ctx.countdown`
+   requires the iterator to support `__len__`; if it doesn't,
+   `ctx.countdown` will be undefined.
+</dd><dt>
+`ctx.current`
+</dt><dd>
+   contains the current value yielded by the
+   iterator (`o` as described above).
+</dd><dt>
+`ctx.index`
+</dt><dd>
+   contains the index of this value.  The first
+   time the iterator yields a value, this will be `start`;
+   the second time, it will be `start + 1`, etc.
+<dl><dt>
+`ctx.is_first`
+</dt><dd>
+   is true only for the first value yielded,
+   and false otherwise.
+</dd><dt>
+`ctx.is_last`
+</dt><dd>
+   is true only for the last value yielded,
+   and false otherwise.  (If the iterator only yields
+   one value, `is_first` and `is_last` will both be true.)
+</dd><dt>
+`ctx.length`
+</dt><dd>
+   contain the total number of items that will be yielded.
+   `ctx.length` requires the iterator to support `__len__`;
+   if it doesn't, `ctx.length` will be undefined.
+</dd><dt>
+`ctx.next`
+</dt><dd>
+   contains the next value to be yielded by
+   this iterator if there is one.  (If `o` is the last
+   value yielded by the iterator, `ctx.previous` will be
+   an `undefined` value.)
+</dd><dt>
+`ctx.previous`
+</dt><dd>
+   contains the previous value yielded if
+   this is the second or subsequent time this iterator
+   has yielded a value.  (If this is the first time
+   the iterator has yielded, `ctx.previous` will be
+   an `undefined` value.)
+</dd>
+
+</dd></dl>
+
+#### `iterator_filter(iterator, *, stop_at_value=undefined, stop_at_in=None, stop_at_predicate=None, stop_at_count=None, reject_value=undefined, reject_in=None, reject_predicate=None, only_value=undefined, only_in=None, only_predicate=None)`
+
+<dl><dd>
+
+Wraps any iterator, filtering the values it yields based on rules
+you specify as keyword-only parameters.
+
+There are three categories of rules, examined in order:
+
+*"stop_at"* rules cause the iterator to become exhausted.
+If a value passes a "stop_at" rule, the iterator immediately
+becomes exhausted without yielding that value.
+
+*"reject"* rules act as a blacklist.  If a value passes any
+"reject" rule, it's discarded and iteration continues.
+
+*"only"* rules act as a whitelist.  If a value doesn't pass
+all "only" rules, it's discarded and iteration continues.
+
+Each category supports three suffix variants that define the test:
+
+A rule ending in `_value` passes if the yielded value `==` the argument.
+
+A rule ending in `_in` passes if the yielded value is `in` the argument
+(which must support the `in` operator).
+
+A rule ending in `_predicate` takes a callable as its argument; it passes
+if calling the argument with the yielded value returns a true value.
+
+There is one additional rule: `stop_at_count`, an integer.  The iterator
+becomes exhausted after yielding `stop_at_count` items.  If `stop_at_count`
+is initially `<= 0`, the iterator is initialized in an exhausted state.
 </dd></dl>
 
 #### `PushbackIterator(iterable=None)`
 
 <dl><dd>
 
-Wraps any iterator, allowing you to push items back on the iterator.
-This allows you to "peek" at the next item (or items); you can get the
-next item, examine it, and then push it back.  If any objects have
-been pushed onto the iterator, they are yielded first, before attempting
-to yield from the wrapped iterator.
+Wraps any iterator, letting you push items to be yielded first.
 
-The constructor accepts one argument, an `iterable`, with a default of `None`.
-If `iterable` is `None`, the `PushbackIterator` is created in an exhausted state.
+The `PushbackIterator` constructor accepts one argument, an iterable.
+When you iterate over the `PushbackIterator` instance, it yields values
+from that iterable.  You may also pass in `None`, in which case the
+`PushbackIterator` is created in an *"exhausted"* state.
 
-When the wrapped `iterable` is exhausted (or if you passed in `None`
-to the constructor) you can still call the `push` method to add items,
-at which point the `PushBackIterator` can be iterated over again.
+`PushbackIterator` also supports a `push(o)`` method, which "pushes"
+that object onto the iterator.  If any objects have been pushed onto
+the iterator, they're yielded first, before attempting to yield
+from the wrapped iterator.  Pushed values are yielded in
+first-in-first-out order, like a stack.
 
-In addition to the following methods, `PushbackIterator` supports
-the iterator protocol and testing for truth.  A `PushbackIterator`
-is true if iterating over it will yield at least one value.
+When the wrapped iterable is exhausted, you can still call push
+to add new items, at which point the `PushbackIterator` can be
+iterated over again.
 </dd></dl>
 
 #### `PushbackIterator.next(default=None)`
 
 <dl><dd>
 
-Equivalent to `next(PushbackIterator)`, but won't raise `StopIteration`.
-If the iterator is exhausted, returns the `default` argument.
+Equivalent to `next(PushbackIterator)`, but won't raise
+`StopIteration`. If the iterator is exhausted,
+returns the `default` argument.
 </dd></dl>
 
 #### `PushbackIterator.push(o)`
@@ -1291,6 +1857,14 @@ When a `PushbackIterator` is iterated over, and there are
 any pushed values, the top value on the stack will be popped
 and yielded.  `PushbackIterator` only yields from the
 iterator it wraps when this internal stack is empty.
+
+Example: you have a pushback iterator `J`, and you call `J.push(3)`
+followed by `J.push('x')`.  The next two times you iterate over
+`J`, it will yield `'x'`, followed by `3`.
+
+It's explicitly supported to push values that were never yielded by
+the wrapped iterator.  If you create `J = PushbackIterator(range(1, 20))`,
+you may still call `J.push(33)`, or `J.push('xyz')`, or `J.push(None)`, etc.
 </dd></dl>
 
 
@@ -1298,9 +1872,19 @@ iterator it wraps when this internal stack is empty.
 
 <dl><dd>
 
-A simple and lightweight logging class, useful for performance analysis.
-Not intended as a full-fledged logging facility like Python's
+A lightweight, high-performance text-based logging module,
+intended for debug-print-style use.  Not a full-fledged
+application logger like Python's
 [`logging`](https://docs.python.org/3/library/logging.html) module.
+
+`Log` is flexible in where output is written (stdout, files,
+lists, arbitrary callables, or custom
+[`Destination`](#logdestination) objects)
+and when (by default it runs in a background thread for
+minimal overhead).
+
+See the [**The big `Log`**](#the-big-log) tutorial for an
+introduction and examples.
 
 </dd></dl>
 
@@ -1308,127 +1892,251 @@ Not intended as a full-fledged logging facility like Python's
 
 <dl><dd>
 
-The default clock function used by the [`Log`](#log-clocknone) class.
-This function returns elapsed time in nanoseconds,
-expressed as an integer.
+The default clock function used by [`Log`](#logdestinations-options).
+Returns the current time, expressed as integer nanoseconds (>= 0)
+since some earlier event.
 
 In Python 3.7+, this is
-[`time.monotonic_ns`](https://docs.python.org/3/library/time.html#time.monotonic_ns);
-in Python 3.6 this is
-a custom function that calls
-[`time.perf_counter`](https://docs.python.org/3/library/time.html#time.perf_counter),
-then converts that time to an integer number of nanoseconds.
+[`time.monotonic_ns`](https://docs.python.org/3/library/time.html#time.monotonic_ns).
+In Python 3.6 this is a compatibility function that calls
+[`time.monotonic`](https://docs.python.org/3/library/time.html#time.monotonic)
+and converts the result to integer nanoseconds.
 </dd></dl>
 
-#### `Log(*, clock=None)`
+#### `Log(*destinations, **options)`
 
 <dl><dd>
 
-A simple and lightweight logging class, useful for performance analysis.
-Not intended as a full-fledged logging facility like Python's
-[`logging`](https://docs.python.org/3/library/logging.html) module.
-
-Allows nesting, which is literally just a presentation thing.
-
-The `clock` named parameter specifies the function the `Log` object
-should call to get the time.  This function should return an `int`,
-representing elapsed time in nanoseconds.
-
-To use: first, create your `Log` object.
+A lightweight, high-performance text-based log object
+intended for debug-print-style use.  To use, create
+a `Log` instance, then call it to log messages:
 
 ```Python
-log = Log()
+    j = Log()
+    j("Hello, world!")
 ```
 
-Then log events by calling your `Log` object, passing in
-a string describing the event.
+Calling the `Log` instance is equivalent to calling
+[`Log.print`](#logprintargs-end-sep--flushfalse-formatprint).
 
-```Python
-log('text')
-```
+`Log` has three states: *initial* (just created or reset),
+*logging* (actively accepting messages), and *closed*
+(ignoring all writes).  The log transitions from initial
+to logging automatically the first time a message is logged.
 
-Enter a nested subsystem containing events with `log.enter`:
+See the [**The big `Log`**](#the-big-log) for
+an in-depth tutorial on how to use `Log`, including examples.
 
-```Python
-log.enter('subsystem')
-```
+**Destinations**
 
-Then later exit that subsystem with `log.exit`:
+Positional arguments to the `Log` constructor define destinations
+for log messages.  The log sends every formatted message to
+every destination.
 
-```Python
-log.exit()
-```
+If you construct a `Log` and don't specify any positional arguments,
+it will send logged messages to `builtins.print`.
 
-And finally print the log:
+Destinations can be any of the following:
 
-```Python
-log.print()
-```
+`print` (or `builtins.print`) — Log messages are printed using
+`print(s, end='')`.  Equivalent to
+[`Log.Print()`](#logprint).
 
-You can also iterate over the log events using `iter(log)`.
-This yields 4-tuples:
+`str` or `pathlib.Path` — Log messages are buffered locally
+and written to the named file.  Equivalent to
+[`Log.File(path)`](#logfilepath-initial_modeat--flushfalse).
 
-```
-    (start_time, elapsed_time, event, depth)
-```
+`list` — Log messages are appended to the list.  Equivalent to
+[`Log.List(list)`](#loglistlist).
 
-`start_time` and `elapsed_time` are times, expressed as
-an integer number of nanoseconds.  The first event
-is at `start_time` 0, and all subsequent start times are
-relative to that time.
+`io.TextIOBase` — Log messages are written to the file-like object.
+Equivalent to
+[`Log.FileHandle(handle)`](#logfilehandlehandle).
 
-`event` is the event string you
-passed in to `log()` (or `"<subsystem> start"` or
-`"<subsystem> end"`).
+`callable` — The callable is called with every formatted log message.
+Equivalent to
+[`Log.Callable(callable)`](#logcallablecallable).
 
-`depth` is an integer indicating how many subsystems
-the event is nested in; larger numbers indicate deeper nesting.
+[`TMPFILE`](#tmpfile) — A special sentinel value.  Log messages are
+written to a timestamped temporary file.
+
+[`Log.Destination`](#logdestination) — Used directly as a destination.
+
+You can also call [`Log.map_destination`](#logmap_destinationo)
+to manually convert any of the above types to the appropriate
+`Destination` object.
+
+**Keyword-only options**
+
+Keyword-only parameters for the `Log` constructor
+specify configuration for the log.  `Log` accepts
+the following keyword-only parameters:
+
+`name` — The name for this log.  Default is `'Log'`.
+
+`threading` — If true (the default), log messages are sent to
+a background thread for formatting and writing, reducing
+overhead in the calling thread.  If false, messages are
+formatted and written immediately, using a lock for thread
+safety.  `Log` is always thread-safe regardless of this setting.
+
+`indent` — Number of spaces to indent per nesting level when
+using [`Log.enter`](#logentermessage).  Default is `4`.
+
+`width` — Width in characters used for formatting separator
+lines.  Default is `79`.
+
+`clock` — A function returning nanoseconds since some
+arbitrary past event, expressed as an integer.
+Default is [`default_clock`](#default_clock).
+
+`timestamp_clock` — A function returning seconds
+since the UNIX epoch, expressed as a float.
+Default is `time.time`.
+
+`timestamp_format` — A function that formats values
+returned by `timestamp_clock` into a human-readable
+string.  Default is [`big.time.timestamp_human`](#timestamp_humantnone-want_microsecondsnone--tzinfonone).
+
+`prefix` — A format string used to format text inserted at the
+beginning of every log message.  Default is
+[`prefix_format(3, 10, 12)`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12).
+
+`formats` — A dict mapping format names to format dicts.
+A format dict has a `"template"` key (a template string with
+`{}`-style placeholders) and an optional `"line"` key (a fill
+character for separator lines).
+`Log` has six built-in formats: `"print"`, `"box"`, `"enter"`,
+`"exit"`, `"start"`, and `"end"`.  User-defined formats are
+automatically added as methods on the `Log` instance.  To
+suppress the initial or final log messages, set `"start"` or
+`"end"` to `None` in the formats dict.
+
+All keyword-only options are also available as read-only
+properties on the `Log` instance.
+
+**Read-only properties**
+
+In addition to the constructor options above, `Log` exposes
+these read-only properties:
+
+`dirty` — `True` if any formatted text has been written to the
+log since it was started or last flushed.
+
+`closed` — `True` if the log is in the "closed" state.
+
+`start_time_ns` — The time reported by `Log.clock`
+when the log was started, in nanoseconds.
+
+`start_time_epoch` — The wall-clock time reported by
+`Log.timestamp_clock` when the log was
+started, as seconds since the UNIX epoch.
+
+`end_time_epoch` — The wall-clock time when the log was
+closed, as seconds since the UNIX epoch.
+
 </dd></dl>
 
-
-#### `Log.enter(subsystem)`
+#### `Log.box(s)`
 
 <dl><dd>
 
-Notifies the log that you've entered a subsystem.
-The `subsystem` parameter should be a string describing the subsystem.
+Logs `s` to the log, formatted with a three-sided box around
+it to call attention to the message.
 
-This is really just a presentation
-thing; all subsequent logged entries will be indented
-until you make the corresponding `log.exit()` call.
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
 
-You may nest subsystems as deeply as you like.
+#### `Log.close(block=True)`
+
+<dl><dd>
+
+Closes the log.  This ensures the log is in the "closed" state,
+in which all writes are silently ignored.  To write to the log
+again after closing, call [`Log.reset()`](#logreset).
+
+* If the log is in "logging" state, it gets closed.
+* If the log is in "initial" state, it gets opened then immediately closed.
+* If the log is already "closed", this is a no-op.
+
+If `block` is true (the default), `close` won't return
+until after the log is fully closed.  If false, the log
+may be closed asynchronously.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.enter(message)`
+
+<dl><dd>
+
+Logs `message` to the log formatted with a box, then indents
+subsequent log output.  Call [`Log.exit()`](#logexit) to
+outdent.  Nesting may be arbitrarily deep.
+
+`Log.enter` returns a context manager; if used with a `with`
+statement, [`Log.exit()`](#logexit) will be called automatically
+upon exiting the block.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
 </dd></dl>
 
 #### `Log.exit()`
 
 <dl><dd>
 
-Exits a logged subsystem.  See [`Log.enter.`](#logentersubsystem)
+Outdents the log from the most recent
+[`Log.enter()`](#logentermessage) call.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
 </dd></dl>
 
-#### `Log.print(*, print=None, title="[event log]", headings=True, indent=2, seconds_width=2, fractional_width=9)`
+#### `Log.flush(block=True)`
 
 <dl><dd>
 
-Prints the log.
+Flushes the log, if it is in "logging" state and is dirty.
+A log is "dirty" if any formatted text has been written
+since the log was started or last flushed.
 
-Keyword-only parameters:
+If `block` is true (the default), `flush` won't return
+until after the log is flushed.  If false, the log may
+be flushed asynchronously.
 
-`print` specifies the print function to use, default is `builtins.print`.
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
 
-`title` specifies the title to print at the beginning.
-Default is `"[event log]"`.  To suppress, pass in `None`.
+#### `Log.map_destination(o)`
 
-`headings` is a boolean; if `True` (the default),
-prints column headings for the log.
+<dl><dd>
 
-`indent` is the number of spaces to indent in front of log entries,
-and also how many spaces to indent each time we enter a subsystem.
+Class method.  Maps `o` to the appropriate
+[`Destination`](#logdestination) object using the same
+conversion rules as the `Log` constructor's positional
+arguments (e.g. `builtins.print` becomes `Log.Print()`,
+a `str` becomes `Log.File(path)`, etc.).
 
-`seconds_width` is how wide to make the seconds column, default 2.
+Returns the `Destination` object, or raises `TypeError`
+if `o` is not a recognized type.
+</dd></dl>
 
-`fractional_width` is how wide to make the fractional column, default 9.
+#### `Log.print(*args, end='\n', sep=' ', flush=False, format='print')`
+
+<dl><dd>
+
+Logs a message, with an interface similar to `builtins.print`.
+
+The arguments are formatted into a string as
+`sep.join(str(a) for a in args) + end`, then logged
+using the specified `format` (default `"print"`).
+
+Calling the `Log` instance directly (e.g. `log("message")`)
+is equivalent to calling this method.
+
+If `flush` is true, the log is flushed immediately
+after logging this message.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
 </dd></dl>
 
 #### `Log.reset()`
@@ -1436,10 +2144,377 @@ and also how many spaces to indent each time we enter a subsystem.
 <dl><dd>
 
 Resets the log to its initial state.
-After resetting the log, the log is
-empty except for the initial `"log start"`
-message, the elapsed time is zero, and
-the log has not "entered" any subsystems.
+
+* If the log is in "initial" state, this is a no-op.
+* If the log is in "logging" state, the log is closed, then reset.
+* If the log is in "closed" state, the log is reset.
+
+`Log.reset()` is the only way to reopen a closed log.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.write(formatted)`
+
+<dl><dd>
+
+Writes a pre-formatted string directly to the log with no
+further formatting or modification.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+
+#### `Log.Destination`
+
+<dl><dd>
+
+Base class for objects that perform the actual logging for a
+[`Log`](#logdestinations-options).  A `Destination` is owned
+by a `Log`, and the `Log` sends it events by calling named
+methods.
+
+All `Destination` subclasses must implement the `write` method:
+
+```Python
+    write(elapsed, thread, formatted)
+```
+
+Subclasses may also optionally override:
+
+```Python
+    flush()
+    close()
+    reset()
+    start(start_time_ns, start_time_epoch, formatted)
+    end(elapsed, formatted)
+    log(elapsed, thread, format, message, formatted)
+    enter(elapsed, thread, message, formatted)
+    exit(elapsed, thread, message, formatted)
+```
+
+The default implementations of `start`, `end`, `log`, `enter`,
+and `exit` all call `self.write(elapsed, thread, formatted)`.
+Subclasses need not call the base class method for any of these.
+
+Subclasses may also override `register(owner)`, but *must*
+call the base class implementation via `super().register(owner)`.
+Subclasses must also call the base class `__init__` without
+arguments.
+
+The meaning of the arguments to the various `Destination` methods:
+
+* `elapsed` is the elapsed time since the log was started/reset,
+in nanoseconds.
+
+* `thread` is the `threading.Thread` handle for the thread that
+logged the message.
+
+* `formatted` is the formatted log message.
+
+* `format` is the name of the format applied to `message` to
+produce `formatted`.
+
+* `message` is the original message passed in to a `Log` method.
+
+* `owner` is the `Log` object that owns this `Destination`.
+
+`Log` guarantees events are sent in this order:
+
+```
+    register → start → [write | log | enter | exit | flush]* → end → [flush] → close
+```
+
+`register` is sent once, while the log is in its initial state.
+The log transitions to logging state the first time a message
+is logged.  `flush` is only sent when the log is dirty.
+If the log is reset, it sends `end` / [`flush`] / `close` /
+`reset`, returning to initial state.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.Destination.Buffer(destination=None)`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) that buffers log messages
+before sending them to another `Destination`.
+
+Every formatted log message is stored in an internal buffer.
+When the log is flushed, `Buffer` concatenates all buffered
+messages into one string, writes that string to the underlying
+`Destination`, and flushes it.
+
+If `destination` is `None` (the default), `Buffer` wraps a
+[`Log.Print()`](#logprint) destination.  Otherwise,
+`destination` is mapped using
+[`Log.map_destination`](#logmap_destinationo).
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.Callable(callable)`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) wrapping a callable.
+
+Calls `callable(formatted)` for every formatted log message.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.File(path, initial_mode="at", *, flush=False)`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) that writes to a file in
+the filesystem.  `path` may be a `str` or `pathlib.Path`.
+
+If `flush` is false (the default), formatted log messages are
+buffered internally.  When the log is flushed, `File`
+concatenates all buffered messages, opens the file, writes
+them with one write call, and closes it.
+
+If `flush` is true, the file is opened and kept open.  Every
+formatted log message is written and flushed immediately.
+On `close`, the file is closed; on `reset`, it is reopened.
+
+The first time the file is opened, it uses `initial_mode`
+(default `"at"`).  After the first time, `File` always uses
+mode `"at"`.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.FileHandle(handle, *, flush=False)`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) wrapping an already-open
+Python file handle (an `io.TextIOBase` instance).
+
+Every formatted log message is written to the file handle
+immediately.  `FileHandle` will never close the handle;
+it only writes to it and flushes it.
+
+If `flush` is true, the file handle is flushed after every
+write.  By default `flush` is false.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.List(list)`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) wrapping a Python list.
+
+Appends every formatted log message to `list`.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.Print()`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) that writes to stdout
+using `builtins.print`.
+
+Calls `builtins.print(formatted, end='', flush=True)` for
+every formatted log message.
+
+This is the default destination when no destinations are
+passed to the [`Log`](#logdestinations-options) constructor.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.Sink()`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) that retains all log events
+in order as [`SinkEvent`](#sinkevent) objects.
+
+You may iterate over a `Sink` to yield all events logged so far.
+`Sink` also has a `print` method that prints the events so far
+with some simple formatting.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `Log.TmpFile(*, flush=False)`
+
+<dl><dd>
+
+A [`Destination`](#logdestination) subclass of
+[`Log.File`](#logfilepath-initial_modeat--flushfalse)
+that writes to a timestamped temporary file.
+
+The filename is computed approximately as:
+
+    tempfile.gettempdir() / "{Log.name}.{start timestamp}.{pid}.txt"
+
+The filename is recomputed on `register` and `reset` events,
+so resetting the `Log` closes the old file and opens a new one.
+
+The sentinel value [`TMPFILE`](#tmpfile) is a pre-created
+`Log.TmpFile()` instance.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `OldDestination()`
+
+<dl><dd>
+
+A [`Log.Destination`](#logdestination) subclass providing
+backwards compatibility with the old `big.log.Log` interface.
+Deprecated; will be removed no earlier than March 2027.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `OldLog(clock=None)`
+
+<dl><dd>
+
+A drop-in replacement for the old `big.log.Log` class, reimplemented
+on top of the new [`Log`](#logdestinations-options).  Provides
+interface compatibility with the old `Log` to ease the transition
+to the new one.  Deprecated; will be removed no earlier than
+March 2027.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12)`
+
+<dl><dd>
+
+Returns a prefix format string for use with the `prefix`
+option of the [`Log`](#logdestinations-options) constructor.
+
+The returned format string produces a prefix of the form:
+
+```
+    [{elapsed} {thread.name}]
+```
+
+formatted with the specified widths.  For example, the default
+`Log` prefix is `prefix_format(3, 10, 12)`, which produces
+output like:
+
+```
+    [003.0706368860   MainThread]
+```
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `SinkEvent`
+
+<dl><dd>
+
+Base class for log events stored by [`Log.Sink`](#logsink).
+Each subclass represents a different type of event.
+
+All `SinkEvent` objects have these read-only properties:
+
+`type` — A string identifying the event type
+(e.g. `"start"`, `"end"`, `"write"`, `"log"`, `"enter"`, `"exit"`).
+
+`number` — The log's sequence number (incremented on each reset).
+
+`elapsed` — Elapsed time in nanoseconds since the log was started.
+
+`duration` — Time in nanoseconds since the previous event with
+a message.
+
+`thread` — The `threading.Thread` that logged the event, or `None`.
+
+`formatted` — The formatted log message string.
+
+`message` — The original unformatted message, or `None`.
+
+`format` — The format name used, or `None`.
+
+`depth` — The nesting depth at the time of the event.
+
+The subclasses are:
+
+* [`SinkStartEvent`](#sinkstartevent),
+* [`SinkEndEvent`](#sinkendevent),
+* [`SinkWriteEvent`](#sinkwriteevent),
+* [`SinkLogEvent`](#sinklogevent),
+* [`SinkEnterEvent`](#sinkenterevent),
+* and [`SinkExitEvent`](#sinkexitevent).
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
+</dd></dl>
+
+#### `SinkStartEvent`
+
+<dl><dd>
+
+A [`SinkEvent`](#sinkevent) representing the start of a log.
+Has a `configuration` property containing a dict of the
+`Log`'s configuration at start time.
+</dd></dl>
+
+#### `SinkEndEvent`
+
+<dl><dd>
+
+A [`SinkEvent`](#sinkevent) representing the end of a log.
+</dd></dl>
+
+#### `SinkWriteEvent`
+
+<dl><dd>
+
+A [`SinkEvent`](#sinkevent) representing a
+[`Log.write`](#logwriteformatted) call.
+</dd></dl>
+
+#### `SinkLogEvent`
+
+<dl><dd>
+
+A [`SinkEvent`](#sinkevent) representing a
+[`Log.print`](#logprintargs-end-sep--flushfalse-formatprint)
+call (or any format-based log call).
+</dd></dl>
+
+#### `SinkEnterEvent`
+
+<dl><dd>
+
+A [`SinkEvent`](#sinkevent) representing a
+[`Log.enter`](#logentermessage) call.
+</dd></dl>
+
+#### `SinkExitEvent`
+
+<dl><dd>
+
+A [`SinkEvent`](#sinkevent) representing a
+[`Log.exit`](#logexit) call.
+</dd></dl>
+
+#### `TMPFILE`
+
+<dl><dd>
+
+A pre-created [`Log.TmpFile()`](#logtmpfile-flushfalse) sentinel
+value.  Pass this as a destination to the
+[`Log`](#logdestinations-options) constructor to log to a
+timestamped temporary file.
+
+See the [**The big `Log`**](#the-big-log) tutorial for more.
 </dd></dl>
 
 ## `big.metadata`
@@ -1724,7 +2799,7 @@ designed for use in multithreaded programs.
 
 <dl><dd>
 
-Library code for working with simple state machines.
+Code that makes it easy to write simple state machines.
 
 There are lots of popular Python libraries for implementing
 state machines.  But they all seem to be designed for
@@ -1734,7 +2809,7 @@ And, as a rule, they require the state to be
 a passive object (e.g. an `Enum`), and require you to explicitly
 describe every possible state transition.
 
-This approach is great for massive, super-complex state
+That approach is great for massive, super-complex state
 machines--you need the features of a sophisticated library
 to manage all that complexity.  It also enables clever
 features like automatically generating diagrams of your
@@ -1742,27 +2817,28 @@ state machine, which is great!
 
 But most of the time this level of sophistication is
 unnecessary.  There are lots of use cases for small scale,
-*simple* state machines, where this data-driven approach
-and expansive, complex API only gets in the way.  I prefer
-writing my state machines with active objects--where states
-are implemented as classes, events are implemented as method
-calls on those classes, and you transition to a new state by
-simply overwriting a `state` attribute with a different state
-instance.
+*simple* state machines, where the sophisticated data-driven
+approach and expansive, complex API only gets in the way.
+I prefer writing my state machines with active objects--where
+states are implemented as classes, events are implemented as
+method calls on those classes, and you transition to a new
+state by simply overwriting a `state` attribute with a
+different state instance.
 
-`big.state` makes this style of state machine easy.  It has
-a deliberately minimal, simple interface--the constructor for
-the main `StateManager` class only has four parameters,
+`big.state` makes it easy to write this style of state machine.
+It has a deliberately minimal, simple interface--the constructor
+for the main `StateManager` class only has four parameters,
 and it only exposes three attributes.  The module also has
 two decorators to make your life easier.  And that's it!
 But even this small API surface area makes it effortless to
-write large scale state machines.
+write some pretty big state machines.
 
-(But you can also write tiny data-driven state machines too.
-Although `big.state` makes state machines with active states
-easy to write, it's agnostic about how you actually implement
-your state machine.  `big.state` makes it easy to write any
-kind of state machine you like!)
+(Of course, you can also use `big.state` to write *tiny*
+data-driven state machines too. Although `big.state` makes
+state machines with active states easy to write, it's agnostic
+about how you actually implement your state machine.
+Really, `big.state` makes it easy to write any kind of
+state machine you like!)
 
 `big.state` provides features like:
 
@@ -1850,7 +2926,7 @@ class StateMachine:
             ...
 
     @BoundInnerClass
-    class Off(State.cls):
+    class Off(State):
         def on_enter(self):
             print("off!")
 
@@ -1859,7 +2935,7 @@ class StateMachine:
             sm.state = sm.On() # sm.state is the accessor
 
     @BoundInnerClass
-    class On(State.cls):
+    class On(State):
         def on_enter(self):
             print("on!")
 
@@ -2202,7 +3278,7 @@ If it's `None`, states can be any object (except `None`).
 
 #### State transitions
 
-To transition to a new state, simply assign to the 'state'
+To transition to a new state, simply assign to the `state`
 attribute.
 
 * If `state_class` is `None`, you may use *any* value as a state
@@ -2240,7 +3316,7 @@ and you transition it to `new_state`:
       to the new state.
 * If `state_manager.state` has an `on_exit` attribute,
   call `state_manager.state.on_exit()`.
-* For every object `o` in the `state_manager.observer` list,
+* For every object `o` in the `state_manager.observers` list,
   call `o(self)`.
 * Set `state_manager.next` to `None`.
 * Set `state_manager.state` to `new_state`.
@@ -2281,6 +3357,98 @@ There are only two types of illegal state transitions:
 </dd></dl>
 
 
+## `big.template`
+
+<dl><dd>
+
+Functions for parsing strings containing a simple template syntax,
+patterned after
+[Django Templates](https://docs.djangoproject.com/en/stable/ref/templates/language/)
+and [Jinja](https://jinja.palletsprojects.com/).
+Similar in spirit to Python 3.14+ t-strings.
+
+</dd></dl>
+
+#### `eval_template_string(s, globals, locals=None, *, parse_expressions=True, parse_comments=False, parse_whitespace_eater=False)`
+
+<dl><dd>
+
+Parses and evaluates a template string, returning the rendered result.
+
+`s` is parsed using
+[`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape),
+then each [`Interpolation`](#interpolation) is evaluated using
+Python's built-in `eval()` with the provided `globals` and
+`locals` dicts.  Filters are applied in order.  The rendered
+string is returned with all interpolations replaced by their
+values.
+
+`parse_comments` and `parse_whitespace_eater` may be enabled
+optionally; they are disabled by default.  Statement parsing
+is not supported by `eval_template_string`.
+</dd></dl>
+
+#### `Interpolation(expression, *filters, debug='')`
+
+<dl><dd>
+
+Represents a `{{ }}` expression interpolation from a parsed template.
+
+`expression` contains the text of the expression.  `filters`
+is a tuple containing the text of each filter expression, if any.
+If the expression ended with `=`, `debug` contains the text
+of the expression along with the `=` and all whitespace;
+otherwise it is an empty string.
+
+See [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape).
+</dd></dl>
+
+#### `parse_template_string(s, *, parse_expressions=True, parse_comments=False, parse_statements=False, parse_whitespace_eater=False, quotes=('"', "'"), multiline_quotes=(), escape='\\')`
+
+<dl><dd>
+
+Parses a string containing simple template markup, yielding
+its components.
+
+Returns a generator yielding `str` objects (literal text),
+[`Interpolation`](#interpolation) objects (parsed expressions),
+and [`Statement`](#statement) objects (parsed statements).
+
+The supported delimiters are:
+
+`{{ ... }}` — An expression.  Parsed into an
+[`Interpolation`](#interpolation) object.  Expressions may
+include filters separated by `|`.
+
+`{% ... %}` — A statement.  Parsed into a
+[`Statement`](#statement) object.  Quoted strings inside
+statements are preserved and respected when looking for the
+close delimiter.
+
+`{# ... #}` — A comment.  The delimiters and all text between
+them are discarded.
+
+`{>}` — The whitespace eater.  These three characters and all
+subsequent whitespace are discarded.
+
+Each delimiter type can be individually enabled or disabled
+via its corresponding boolean keyword-only parameter.
+By default only `parse_expressions` is true.
+</dd></dl>
+
+#### `Statement(statement)`
+
+<dl><dd>
+
+Represents a `{% %}` statement from a parsed template.
+
+`statement` contains the text of the statement, including
+all leading and trailing whitespace.
+
+See [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape).
+</dd></dl>
+
+
 ## `big.text`
 
 <dl><dd>
@@ -2288,10 +3456,9 @@ There are only two types of illegal state transitions:
 Functions for working with text strings.  There are
 several families of functions inside the `text` module;
 for a higher-level view of those families, read the
-following deep-dives:
+following tutorials:
 
 * [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
-* [**`lines` and lines modifier functions**](#lines-and-lines-modifier-functions)
 * [**Word wrapping and formatting**](#word-wrapping-and-formatting)
 
 All the functions in `big.text` will work with either
@@ -2341,18 +3508,17 @@ A tuple of `str` objects, representing every line-breaking whitespace
 character defined by ASCII.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.
 If you don't want to include this string, use [`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf) instead.
-See the deep-dive section on
+See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -2371,18 +3537,17 @@ A tuple of `str` objects, representing every whitespace
 character defined by ASCII.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `'\r\n'`.
 If you don't want to include this string, use [`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf) instead.
-See the deep-dive section on
+See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -2402,18 +3567,17 @@ A tuple of `bytes` objects, representing every line-breaking whitespace
 character recognized by the Python `bytes` object.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `b'\r\n'`.
 If you don't want to include this string, use [`bytes_linebreaks_without_crlf`](#bytes_linebreaks_without_crlf) instead.
-See the deep-dive section on
+See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -2433,18 +3597,17 @@ character recognized by the Python `bytes` object.  (`bytes.isspace`,
 `bytes.split`, etc will tell you which characters are considered whitespace...)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
 Also contains `b'\r\n'`.
 If you don't want to include this string, use [`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf) instead.
-See the deep-dive section on
+See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -2750,16 +3913,15 @@ whitespace character recognized by the Python `str` object.
 Identical to [`str_linebreaks`.](#str_linebreaks)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
-Also contains `'\r\n'`.  See the deep-dive section on
+Also contains `'\r\n'`.  See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -2772,418 +3934,6 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 
 </dd></dl>
 
-
-#### `LineInfo(lines, line, line_number, column_number, *, leading=None, trailing=None, end=None, indent=0, match=None, **kwargs)`
-
-<dl><dd>
-
-The first object in the 2-tuple yielded by a
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-iterator, containing metadata about the line.
-Every parameter to the constructor is stored as
-an attribute of the new `LineInfo` object using
-the same identifier.
-
-`line` is the original unmodified line, split
-from the original `s` input to `lines`.  Note
-that `line` includes the trailing newline character,
-if any.
-
-`line_number` is the line number of this line.
-`
-`column_number` is the starting column of the
-accompanying `line` string (the second entry
-in the 2-tuple yielded by `lines`).
-
-`leading` and `trailing` are strings that have
-been stripped from the beginning or end of the
-original `line`, if any.  (Not counting the
-line-terminating linebreak character.)
-
-`end` is the linebreak character that terminated
-the current line, if any.  If the `s` passed in to
-`lines` is an iterator yielding strings, `end`
-will always be an empty string.
-
-`indent` is the indent level of the current line,
-represented as an integer.  See [`lines_strip_indent`](#lines_strip_indentli).
-If the indent level hasn't been measured yet this
-should be `0`.
-
-`match` is the `re.Match` object that matched this
-line, if any.  See [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch).
-
-You can add your own fields by passing them in
-via `**kwargs`; you can also add new attributes
-or modify existing attributes as needed from
-inside a "lines modifier" function.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `LineInfo.clip_leading(line, s)`
-
-<dl><dd>
-
-Clip the leading substring `s` from `line`.
-
-`s` may be either a string (`str` or `bytes`) or an `int`.
-If `s` is a string, it must match the leading substring
-of `line` you wish clipped.  If `s` is an `int`, it should
-representing the number of characters you want clipped
-from the beginning of `s`.
-
-Returns `line` with `s` clipped; also appends
-the clipped portion to `self.leading`, and updates
-`self.column_number` to represent the column number
-where `line` now starts.  (If the clipped portion of
-`line` contains tabs, it's detabbed using `lines.tab_width`
-and the `detab` method on the clipped substring before it
-is measured.)
-
-</dd></dl>
-
-#### `LineInfo.clip_trailing(line, s)`
-
-<dl><dd>
-
-Clip the trailing substring `s` from `line`.
-
-`s` may be either a string (`str` or `bytes`) or an `int`.
-If `s` is a string, it must match the trailing substring
-of `line` you wish clipped.  If `s` is an `int`, it should
-representing the number of characters you want clipped
-from the end of `s`.
-
-Returns `line` with `s` clipped; also appends
-the clipped portion to `self.trailing`.
-
-
-</dd></dl>
-
-#### `LineInfo.copy()`
-
-<dl><dd>
-
-Returns a copy of the `LineInfo` object,
-including all current state (e.g. `leading`, `trailing`).
-
-</dd></dl>
-
-
-#### `lines(s, separators=None, *, clip_linebreaks=True, line_number=1, column_number=1, tab_width=8, **kwargs)`
-
-<dl><dd>
-
-A "lines iterator" object.  Splits s into lines, and iterates yielding those lines.
-
-
-When iterated over, yields 2-tuples:
-
-```
-     (info, line)
-```
-
-where `info` is a
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object, and `line` is a `str` or `bytes` object.
-
-`s` can be `str`, `bytes`, or an iterable.
-
-If `s` is neither `str` nor `bytes`, `s` must be an iterable.
-The iterable should either yield individual strings, which is the
-line, or it should yield a tuple containing two strings, in which case
-the strings should be the line and the line-terminating newline respectively.
-All "string" objects yielded by this iterable should be homogeneous,
-either `str` or `bytes`.
-
-`separators` should either be `None` or an iterable of separator strings,
-as per the `separators` argument to `multisplit`.  If `s` is `str` or `bytes`,
-it will be split using `multisplit`, using these separators.  If
-`separators` is `None`--which is the default value--and `s` is `str` or `bytes`,
-`s` will be split at linebreak characters.  (If `s` is neither `str` nor `bytes`,
-`separators` must be `None`.)
-
-`line_number` is the starting line number given to the first
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object.  This number is then incremented for every subsequent line.
-
-`column_number` is the starting column number given to every
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object.  This number represents the leftmost column of every line.
-
-`tab_width` isn't used by lines itself, but is stored internally and
-may be used by other lines modifier functions (e.g. [`lines_strip_indent`](#lines_strip_indentli),
-`lines_convert_tabs_to_spaces`).  Similarly, all keyword arguments passed
-in via kwargs are stored internally and can be accessed by user-defined
-lines modifier functions.
-
-`lines` copies the line-breaking character (usually `\n`) from each line
-to `info.end`. If `clip_linebreaks` is true (the default), `lines` will clip
-the line-breaking character off the end of each line.  If `clip_linebreaks`
-is false, `lines` will leave the line-breaking character in place.
-
-You can pass in an instance of a subclass of `bytes` or `str`
-for `s` and elements of `separators`, but the base class
-for both must be the same (`str` or `bytes`).  `lines` will
-only yield `str` or `bytes` objects for `line`.
-
-Composable with all the `lines_` modifier functions in the `big.text` module.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-
-#### `lines_convert_tabs_to_spaces(li)`
-
-<dl><dd>
-
-A lines modifier function.  Converts tabs to spaces for the lines
-of a "lines iterator", using the `tab_width` passed in to
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs).
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_filter_empty_lines(li)`
-
-<dl><dd>
-
-A lines modifier function.  Filters out the empty lines
-of a "lines iterator".
-
-Preserves the line numbers.  If lines 0 through 2 are empty,
-line 3 is `'a'``, line 4 is empty, and line 5 is `'b'``, this will yield:
-```
-    (LineInfo(line='a', line_number=3), 'a')
-    (LineInfo(line='b', line_number=5), 'b')
-```
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_filter_line_comment_lines(li, comment_markers)`
-
-<dl><dd>
-
-A lines modifier function.  Filters out comment lines from the
-lines of a "lines iterator".  Comment lines are lines whose
-first non-whitespace characters appear in the iterable of
-`comment_separators` strings passed in.
-
-What's the difference between
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
-and
-`lines_filter_line_comment_lines`?
-
-* `lines_filter_line_comment_lines`
-  only recognizes lines that *start* with a comment separator
-  (ignoring leading whitespace).  Also, it filters out those
-  lines completely, rather than modifying the line.
-* [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
-  handles comment markers anywhere in the line, and it can also ignore
-  comments inside quoted strings.  It truncates the line but still always
-  yields the line.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_containing(li, s, *, invert=False)`
-
-<dl><dd>
-
-A lines modifier function.  Only yields lines
-that contain `s`.  (Filters out lines that
-don't contain `s`.)
-
-If `invert` is true, returns the opposite--filters
-out lines that contain `s`.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_grep(li, pattern, *, invert=False, flags=0, match='match')`
-
-<dl><dd>
-
-A lines modifier function.  Only yields lines
-that match the regular expression `pattern`.
-(Filters out lines that don't match `pattern`.)
-Stores the resulting `re.Match` object in `info.match`.
-
-`pattern` can be `str`, `bytes`, or an `re.Pattern` object.
-If `pattern` is not an `re.Pattern` object, it's compiled
-with `re.compile(pattern, flags=flags)`.
-
-If `invert` is true, returns the opposite--filters
-out lines that match `pattern`.
-
-The match parameter specifies the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-attribute name to
-write to.  By default it writes to `info.match`; you can specify
-any valid identifier, and it will instead write the `re.Match`
-object (or `None`) to the identifier you specify.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-
-(In older versions of Python, `re.Pattern` was a private type called
-`re._pattern_type`.)
-</dd></dl>
-
-#### `lines_rstrip(li, separators=None)`
-
-<dl><dd>
-
-A lines modifier function.  Strips trailing whitespace from the
-lines of a "lines iterator".
-
-`separators` is an iterable of separators, like the argument
-to `multistrip`.  The default value is `None`, which means
-`lines_rstrip` strips all trailing whitespace characters.
-
-All characters removed are clipped to `info.trailing`
-as appropriate.  If the line is non-empty before stripping, and
-empty after stripping, the entire line is clipped to `info.trailing`.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_sort(li, *, key=None, reverse=False)`
-
-<dl><dd>
-
-A lines modifier function.  Sorts all input lines before
-yielding them.
-
-If `key` is specified, it's used as the `key` parameter to `list.sort`.
-The `key` function will be called with the `(info, line)`` tuple yielded
-by the *lines iterator.*  If `key` is a false value, `lines_sort`
-sorts the lines lexicographically, from lowest to highest.
-
-If `reverse` is true, lines are sorted from highest to lowest.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip(li, separators=None)`
-
-<dl><dd>
-
-A lines modifier function.  Strips leading and trailing strings
-from the lines of a "lines iterator".
-
-`separators` is an iterable of separators, like the argument
-to `multistrip`.  The default value is `None`, which means
-`lines_strip` strips all leading and trailing whitespace characters.
-
-All characters are clipped to `info.leading` and `info.trailing`
-as appropriate.  If the line is non-empty before stripping, and
-empty after stripping, the entire line is clipped to `info.trailing`.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip_indent(li)`
-
-<dl><dd>
-
-A lines modifier function.  Strips leading whitespace and tracks
-the indent level.
-
-The indent level is stored in the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object's attribute
-`indent`.  `indent` is an integer, the ordinal number of the current
-indent; if the text has been indented three times, `indent` will be 3.
-
-Strips any leading whitespace from the line, updating the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-attributes `leading` and `column_number` as needed.
-
-Uses an intentionally simple algorithm.
-Only understands tab and space characters as indent characters.
-Internally detabs to spaces first for consistency, using the
-`tab_width` passed in to lines.
-
-You can only dedent out to a previous indent.
-Raises `IndentationError` if there's an illegal dedent.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
-
-#### `lines_strip_line_comments(li, line_comment_markers, *, quotes=(), escape='\\', multiline_quotes=())`
-
-<dl><dd>
-
-A lines modifier function.  Strips comments from the lines
-of a "lines iterator".  Comments are substrings that indicate
-the rest of the line should be ignored; `lines_strip_line_comments`
-truncates the line at the beginning of the leftmost comment
-separator.
-
-`line_comment_markers` should be an iterable of line comment
-marker strings.  These are strings that denote a "line comment",
-which is to say, a comment that starts at that marker and extends
-to the end of the line.
-
-By default, `quotes` and `multiline_quotes` are both false,
-in which case `lines_strip_line_comments` will truncate each
-line, starting at the leftmost comment marker, and yield
-the resulting line.  If the line doesn't contain any comment
-markers, `lines_strip_line_comments` will yield it unchanged.
-
-However, the syntax of the text you're parsing might support
-quoted strings, and if so, comment marks in those quoted strings
-should be ignored.  `lines_strip_quoted_strings` supports this
-too, with its `escape`, `quotes`, and `multiline_quotes` parameters.
-
-If `quotes` is true, it must be an iterable of quote characters.
-`lines_strip_line_comments` will parse the line using **big**'s
-[`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
-function and ignore comment
-markers inside quoted strings.  Quote marks must be balanced; if you
-open a quoted string, you must close it.  If a line ends with an
-quoted string still open, `lines_strip_line_comments` will raise
-`SyntaxError`.
-
-`multiline_quotes` is similar to `quotes`, except quoted strings are
-permitted to span lines.  If the iterator stops iteration with a
-multiline quoted string still open, `lines_strip_line_comments`
-will raise `SyntaxError`.
-
-`escape` specifies an escape string to allow having the closing quote
-marker inside a quoted string without closing ending the string.
-If false, there is no escape string.
-
-What's the difference between
-`lines_strip_line_comments`
-and
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)?
-
-* [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
-  only recognizes lines that *start* with a comment separator
-  (ignoring leading whitespace).  Also, it filters out those lines
-  completely, rather than modifying the line.
-* `lines_strip_line_comments`
-  handles comment markers anywhere in the line, and it can even ignore
-  comments inside quoted strings.  It always yields the line, whether or
-  not it's truncated the line.
-
-For more information, see the deep-dive on
-[**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
-</dd></dl>
 
 #### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
 
@@ -3227,7 +3977,7 @@ either `overflow_before` or `overflow_after` is nonzero, these
 specify the number of extra lines before or after
 the overflowed lines in a column.
 
-For more information, see the deep-dive on
+For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
 
@@ -3279,7 +4029,7 @@ If `reverse` is true, multipartition behaves like `str.rpartition`.
 It partitions starting on the right, scanning backwards through s
 looking for separators.
 
-For more information, see the deep-dive on
+For more information, see the tutorial on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 </dd></dl>
 
@@ -3471,7 +4221,7 @@ the rightmost overlapping separator:
 multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True) => "A x", " x ", "Z"
 ```
 
-For more information, see the deep-dive on
+For more information, see the tutorial on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 </dd></dl>
 
@@ -3502,7 +4252,7 @@ Returns a copy of `s` with the leading and/or trailing
 separators stripped.  (If `left` and `right` are both
 false, returns `s` unchanged.)
 
-For more information, see the deep-dive on
+For more information, see the tutorial on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
 </dd></dl>
 
@@ -3532,6 +4282,27 @@ be replaced with the replacement string, e.g.:
 ```
 normalize_whitespace("   a    b   c") == " a b c"
 ```
+</dd></dl>
+
+#### `Pattern(s, flags=0)`
+
+<dl><dd>
+
+A drop-in replacement for
+[`re.Pattern`](https://docs.python.org/3/library/re.html#re.Pattern)
+that preserves `str` subclasses.
+
+Python's `re` module converts `str` subclasses to plain `str`
+when returning matched strings.  `Pattern` preserves the subclass:
+if you search or match against a
+[`big.string`](#the-big-string), the strings returned
+in the `Match` object will be `big.string` slices, retaining
+their line number and column number information.
+
+`Pattern` supports the same interface as `re.Pattern`.
+See the Python documentation for
+[`re.Pattern`](https://docs.python.org/3/library/re.html#re.Pattern)
+for the full API.
 </dd></dl>
 
 
@@ -3870,7 +4641,7 @@ Returns an iterator yielding 3-tuples:
 ```
 
 where `leading_quote` and `trailing_quote` are either
-empty strings or quote delimiters from `quotes`,
+empty strings or quote delimiters from `quotes` (or `multiline_quotes`),
 and `segment` is a substring of `s`.  Joining together
 all strings yielded recreates `s`.
 
@@ -3959,7 +4730,7 @@ preserved.  (This will preserve the formatting of code
 examples when these words are rejoined into lines by
 [`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).)
 
-For more information, see the deep-dive on
+For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
 
@@ -4027,16 +4798,15 @@ whitespace character recognized by the Python `str` object.
 Identical to [`linebreaks`.](#linebreaks)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
-Also contains `'\r\n'`.  See the deep-dive section on
+Also contains `'\r\n'`.  See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -4057,16 +4827,15 @@ character recognized by the Python `str` object.
 Identical to [`whitespace`.](#whitespace)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
-Also contains `'\r\n'`.  See the deep-dive section on
+Also contains `'\r\n'`.  See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -4078,6 +4847,71 @@ Equivalent to [`str_whitespace`](#str_whitespace) without `'\r\n'`.
 
 </dd></dl>
 
+#### `strip_indents(lines, *, tab_width=8, linebreaks=linebreaks)`
+
+<dl><dd>
+
+Takes an iterable of lines, with or without linebreaks;
+strips the leading whitespace from each line and tracks
+the indent level.  Yields 2-tuples of `(depth, lstripped_line)`.
+
+`depth` is an integer, the ordinal number of times the lines
+were indented to reach the current indent.  Text at the leftmost
+column is at `depth` 0; if the line was indented three times,
+`depth` will be 3.
+
+Uses an intentionally simple algorithm.  Only understands
+tab and space characters as indent characters.  Internally
+converts tabs to spaces for consistency, using the `tab_width`
+passed in.
+
+Text can only dedent out to a previous indent.  Raises
+`IndentationError` if there's an illegal dedent.
+
+Blank lines and empty lines have the indent level of the
+*next* non-blank line, or `0` if there are no subsequent
+non-blank lines.  If the line contains only whitespace,
+any trailing characters found in `linebreaks` will be
+preserved.  Pass in `None` or an empty sequence for
+`linebreaks` to suppress this.
+</dd></dl>
+
+#### `strip_line_comments(lines, line_comment_markers, *, escape='\\', quotes=(), multiline_quotes=(), linebreaks=linebreaks)`
+
+<dl><dd>
+
+Strips line comments from an iterable of lines.
+
+Line comments are substrings beginning with a special marker
+that mean the rest of the line should be ignored.
+`strip_line_comments` truncates each line at the beginning of
+the leftmost line comment marker and yields the result.
+If the line doesn't contain any unquoted comment markers,
+it's yielded unchanged.
+
+`line_comment_markers` should be an iterable of strings
+denoting line comment markers (e.g. `['#']` or `['//']`).
+
+If `quotes` is specified, it must be an iterable of quote
+marker strings.  `strip_line_comments` will parse the line
+using [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+and ignore comment characters inside quoted strings.  Quoted
+strings may not span lines; if a line ends with an unterminated
+quoted string, `strip_line_comments` will raise a `SyntaxError`.
+
+If `multiline_quotes` is specified, it must be an iterable of
+quote marker strings.  Quoted strings enclosed in multiline
+quotes may span multiple lines.  There must be no quote markers
+in common between `quotes` and `multiline_quotes`.
+
+`escape` is a string used to escape quote markers inside quoted
+strings, as per backslash inside strings in Python.  The default
+is `'\\'`.
+
+If lines end with linebreak characters, they will be preserved
+even when a comment is stripped.
+</dd></dl>
+
 #### `unicode_linebreaks`
 
 <dl><dd>
@@ -4086,16 +4920,15 @@ A tuple of `str` objects, representing every line-breaking
 whitespace character defined by Unicode.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
-Also contains `'\r\n'`.  See the deep-dive section on
+Also contains `'\r\n'`.  See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -4115,16 +4948,15 @@ A tuple of `str` objects, representing every whitespace
 character defined by Unicode.
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
-Also contains `'\r\n'`.  See the deep-dive section on
+Also contains `'\r\n'`.  See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -4145,16 +4977,15 @@ character recognized by the Python `str` object.
 Identical to [`str_whitespace`.](#str_whitespace)
 
 Useful as a `separator` argument for **big** functions that accept one,
-e.g. [the **big** "multi-" family of functions,](#the-multi--family-of-string-functions)
-or the [`lines` and lines modifier functions.](#lines-and-lines-modifier-functions)
+e.g. [the **big** "multi-" family of functions.](#the-multi--family-of-string-functions)
 
-Also contains `'\r\n'`.  See the deep-dive section on
+Also contains `'\r\n'`.  See the tutorial section on
 [**The Unix, Mac, and DOS linebreak conventions**](#the-unix-mac-and-dos-linebreak-conventions)
 for more.
 
 For more information, please see the
 [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
-deep-dive.
+tutorial.
 
 </dd></dl>
 
@@ -4196,10 +5027,54 @@ Elements in `words` are not modified; any leading or trailing
 whitespace will be preserved.  You can use this to preserve
 whitespace where necessary, like in code examples.
 
-For more information, see the deep-dive on
+For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
 
+## `big.tokens`
+
+<dl><dd>
+
+Functions and constants for working with Python's tokenizer.
+
+#### Token constants
+
+`big.tokens` defines a `TOKEN_<n>` constant for every
+token that could exist in any supported version of Python.
+If a token isn't defined in the current version, its value
+is set to `-1`, an invalid token value that won't match
+any tokens.
+
+This lets you write version-independent code like:
+
+```Python
+if token.type == big.tokens.TOKEN_FSTRING_START:
+   ...
+```
+
+In Python versions where `FSTRING_START` doesn't exist,
+`TOKEN_FSTRING_START` is `-1` and the condition will never
+be true.
+
+</dd></dl>
+
+#### `generate_tokens(s)`
+
+<dl><dd>
+
+A convenient wrapper around
+[`tokenize.generate_tokens`](https://docs.python.org/3/library/tokenize.html#tokenize.generate_tokens).
+
+This function takes a `str` (or
+[`big.string`](#the-big-string))
+and handles the `readline` interface required by
+`tokenize.generate_tokens` internally.
+
+If the argument is a `big.string`, the string values in
+the yielded `TokenInfo` objects will be `big.string` slices
+from the original string, preserving line and column
+information.
+</dd></dl>
 
 ## `big.time`
 
@@ -4301,12 +5176,12 @@ fractional seconds: a float, a `datetime` object, or the
 value `None`.
 </dd></dl>
 
-#### `timestamp_human(t=None, want_microseconds=None)`
+#### `timestamp_human(t=None, want_microseconds=None, *, tzinfo=None)`
 
 <dl><dd>
 
 Return a timestamp string formatted in a pleasing way
-using the currently-set local timezone.  This format
+for the local timezone (by default).  This format
 is intended for human readability; for computer-parsable
 time, use `timestamp_3339Z()`.
 
@@ -4316,18 +5191,963 @@ Example timestamp: `"2021/05/24 23:42:49.099437"`
 
 * If `t` is `None`, `timestamp_human` uses the current local time.
 * If `t` is an int or float, it's interpreted as seconds since the epoch.
-* If `t` is a `time.struct_time` or `datetime.datetime` object,
-  it's converted to the local timezone.
+* If `t` is a `time.struct_time`, it's converted to a `datetime.datetime` object.
+* If `t` is a `datetime.datetime` object, it's used directly
 
 If `want_microseconds` is true, the timestamp will end with
 the microseconds, represented as ".######".  If `want_microseconds`
 is false, the timestamp will not include the microseconds.
 
-If `want_microseconds` is `None` (the default), the timestamp
-ends with microseconds if the type of `t` can represent
-fractional seconds: a float, a `datetime` object, or the
-value `None`.
+If `tzinfo` is `None` (the default), the time is converted to the local
+timezone.  If `tzinfo` is a `datetime.timezone` object, the time is
+converted to this timezone.  The timezone is printed at the end of
+the string.
+
+*0.13 update:* Added `tzinfo` parameter, and added the timezone
+to the end of the string.
 </dd></dl>
+
+## `big.types`
+
+<dl><dd>
+
+New types for **big**.  Currently contains
+[`string`](#strings--sourcenone-line_number1-column_number1-first_column_number1-tab_width8) and
+[`linked_list`](#linked_listiterableundefined).
+
+</dd></dl>
+
+### `string`
+
+<dl><dd>
+
+`string` is a subclass of `str` that knows its own line number,
+column number, and source.  Every operation that returns a substring
+returns a `big.string` that preserves this information.
+
+See the [**The big `string`**](#the-big-string) tutorial for
+an introduction and examples.
+
+</dd></dl>
+
+#### `string(s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8)`
+
+<dl><dd>
+
+A subclass of `str` that maintains line, column, and offset
+information.
+
+`string` is a drop-in replacement for Python's `str`.  It
+implements every `str` method; every operation that returns
+a substring returns a `big.string` that knows its own line
+and column information.  For documentation of the standard
+`str` methods, see the Python documentation for
+[`str`](https://docs.python.org/3/library/stdtypes.html#str).
+
+Keyword-only parameters to the constructor:
+
+* `source` — A human-readable string describing where this
+  string came from (e.g. a filename).  Included in `where`.
+
+* `line_number` — The line number of the first character.
+  Default is `1`.
+
+* `column_number` — The column number of the first character.
+  Default is `1`.
+
+* `first_column_number` — The column number to reset to after
+  a linebreak.  Default is `1`.
+
+* `tab_width` — The distance between tab columns, used when
+  computing column numbers.  Default is `8`.
+
+Read-only properties:
+
+* `line_number` — The line number of this string.
+
+* `column_number` — The column number of this string.
+
+* `source` — The source string passed to the constructor.
+
+* `origin` — The original `big.string` this string was sliced from.
+
+* `offset` — The index of the first character of this string within
+  `origin`.
+
+* `first_column_number` — The column number reset to after linebreaks.
+
+* `tab_width` — The tab width used for column calculations.
+
+* `where` — A human-readable location string for error messages,
+  in the format `"<source> line <n> column <n>"` (or without the
+  source if none was specified).
+
+If you pass a `big.string` into Python modules implemented in C,
+the returned substrings will be plain `str` objects.  big provides
+wrappers for two of these, drop-in replacements where the returned
+substrings will be `big.string` slices of the original string:
+
+* [`string.generate_tokens`](#stringgenerate_tokens), a wrapper for
+  [`tokenize.generate_tokens`](https://docs.python.org/3/library/tokenize.html#tokenize.generate_tokens), and
+* [`string.compile`](#stringcompileflags0), a wrapper for `re.compile`.
+
+See the [**The big `string`**](#the-big-string) tutorial for more.
+</dd></dl>
+
+#### `string.bisect(index)`
+
+<dl><dd>
+
+Splits the string at `index`.  Returns a tuple of two strings:
+`(string[:index], string[index:])`.
+</dd></dl>
+
+#### `string.cat(*strings)`
+
+<dl><dd>
+
+Class method.  Concatenates the `str` or `big.string` objects
+passed in.  Roughly equivalent to `big.string('').join()`.
+Always returns a `big.string`.
+</dd></dl>
+
+#### `string.compile(flags=0)`
+
+<dl><dd>
+
+Returns a [`Pattern`](#patterns-flags0) compiled from this
+string.  Equivalent to `re.compile(self, flags)`.  All methods
+on the `Pattern`, and method calls on objects it returns,
+return `big.string` slices of the original string as appropriate.
+</dd></dl>
+
+#### `string.generate_tokens()`
+
+<dl><dd>
+
+Wraps
+[`tokenize.generate_tokens`](https://docs.python.org/3/library/tokenize.html#tokenize.generate_tokens),
+preserving `big.string` slices in the yielded `TokenInfo` objects.
+Equivalent to calling
+[`big.tokens.generate_tokens`](#generate_tokenss) with this
+string.
+</dd></dl>
+
+### `linked_list`
+
+<dl><dd>
+
+`linked_list` is a doubly-linked list with an interface that's
+a superset of both `list` and `collections.deque`.  It also supports
+extracting and merging ranges of nodes with
+[`cut`](#linked_listcutstartnone-stopnone--locknone) and
+[`splice`](#linked_listspliceother--wherenone), and its iterators
+behave like database cursors.
+
+See the [**The big `linked_list`**](#the-big-linked_list) tutorial
+for an introduction and examples.
+
+</dd></dl>
+
+#### `linked_list(iterable=(), *, lock=None)`
+
+<dl><dd>
+
+A doubly-linked list.
+
+`iterable` provides initial values.  If `lock` is `True`,
+the list uses an internal `threading.Lock` for thread safety.
+If `lock` is a lock object, that lock is used (but the list
+cannot be pickled).  If `lock` is `False` or `None`, no
+locking is used.
+
+`linked_list` has explicit "head" and "tail" sentinel nodes.
+Iterating yields values between head and tail.
+`linked_list` supports `len`, indexing, slicing,
+`in`, `==`, `bool`, pickling, and `reversed`.
+
+See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
+</dd></dl>
+
+#### `linked_list.append(object)`
+
+<dl><dd>
+
+Appends `object` to the end of the linked list.
+</dd></dl>
+
+#### `linked_list.clear()`
+
+<dl><dd>
+
+Removes all values from the linked list.
+</dd></dl>
+
+#### `linked_list.copy(*, lock=None)`
+
+<dl><dd>
+
+Returns a shallow copy of the linked list.  `lock` is
+passed to the new list's constructor.
+</dd></dl>
+
+#### `linked_list.count(value)`
+
+<dl><dd>
+
+Returns the number of occurrences of `value` in the linked list.
+</dd></dl>
+
+#### `linked_list.cut(start=None, stop=None, *, lock=None)`
+
+<dl><dd>
+
+Cuts a range of nodes from the list and returns them as a
+new `linked_list`.
+
+`start` and `stop`, if specified, must be iterators over this
+list.  If `start` is `None`, it defaults to the first node
+after head.  If `stop` is `None`, it defaults to tail.
+The range includes `start` but excludes `stop`.  `start`
+must not point to a node after `stop`.
+
+`lock` is passed to the new list's constructor; if `None`,
+the new list reuses this list's lock parameter.
+
+Will not cut head.  Raises `SpecialNodeError` if `start`
+points to head.
+
+See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
+</dd></dl>
+
+#### `linked_list.extend(iterable)`
+
+<dl><dd>
+
+Extends the linked list by appending elements from `iterable`.
+</dd></dl>
+
+#### `linked_list.extendleft(iterable)`
+
+<dl><dd>
+
+Prepends the elements from `iterable` to the linked list,
+in reverse order.  Provided for `collections.deque` compatibility.
+</dd></dl>
+
+#### `linked_list.find(value)`
+
+<dl><dd>
+
+Returns an iterator pointing at the first occurrence of `value`,
+or `None` if `value` does not appear.
+</dd></dl>
+
+#### `linked_list.index(value, start=0, stop=sys.maxsize)`
+
+<dl><dd>
+
+Returns the first index of `value`.  Raises `ValueError`
+if `value` is not present.  `start` and `stop` limit the
+search to a subsequence.
+</dd></dl>
+
+#### `linked_list.insert(index, object)`
+
+<dl><dd>
+
+Inserts `object` before `index`.
+</dd></dl>
+
+#### `linked_list.match(predicate)`
+
+<dl><dd>
+
+Returns an iterator pointing at the first value for which
+`predicate(value)` returns a true value, or `None` if no
+such value exists.
+</dd></dl>
+
+#### `linked_list.pop(index=-1)`
+
+<dl><dd>
+
+Removes and returns the value at `index` (default last).
+</dd></dl>
+
+#### `linked_list.prepend(object)`
+
+<dl><dd>
+
+Prepends `object` to the beginning of the linked list.
+</dd></dl>
+
+#### `linked_list.rcount(value)`
+
+<dl><dd>
+
+Returns the number of occurrences of `value` in the linked list.
+Equivalent to [`linked_list.count`](#linked_listcountvalue)
+but searches in reverse order.
+</dd></dl>
+
+#### `linked_list.rcut(start=None, stop=None, *, lock=None)`
+
+<dl><dd>
+
+Like [`linked_list.cut`](#linked_listcutstartnone-stopnone--locknone),
+except all directions are reversed: `start` must not point to a
+node before `stop`, and the cut range is from `stop` forwards to
+`start`.  The returned list is still in forwards order.
+</dd></dl>
+
+#### `linked_list.remove(value, default=undefined)`
+
+<dl><dd>
+
+Removes and returns the first occurrence of `value`.
+If `value` does not appear, returns `default` if specified,
+otherwise raises `ValueError`.
+</dd></dl>
+
+#### `linked_list.reverse()`
+
+<dl><dd>
+
+Reverses all values in the linked list in place.
+</dd></dl>
+
+#### `linked_list.rextend(iterable)`
+
+<dl><dd>
+
+Extends the linked list by prepending elements from `iterable`,
+in forwards order.
+</dd></dl>
+
+#### `linked_list.rfind(value)`
+
+<dl><dd>
+
+Returns an iterator pointing at the last occurrence of `value`,
+or `None` if `value` does not appear.
+</dd></dl>
+
+#### `linked_list.rmatch(predicate)`
+
+<dl><dd>
+
+Returns an iterator pointing at the last value for which
+`predicate(value)` returns a true value, or `None` if no
+such value exists.
+</dd></dl>
+
+#### `linked_list.rpop(index=0)`
+
+<dl><dd>
+
+Removes and returns the value at `index` (default first).
+</dd></dl>
+
+#### `linked_list.rotate(n)`
+
+<dl><dd>
+
+Rotates the linked list `n` steps to the right.
+If `n` is negative, rotates left.  Provided for
+`collections.deque` compatibility.
+</dd></dl>
+
+#### `linked_list.rremove(value, default=undefined)`
+
+<dl><dd>
+
+Removes and returns the last occurrence of `value`.
+If `value` does not appear, returns `default` if specified,
+otherwise raises `ValueError`.
+</dd></dl>
+
+#### `linked_list.rsplice(other, *, where=None)`
+
+<dl><dd>
+
+Like [`linked_list.splice`](#linked_listspliceother--wherenone),
+except: if `where` is `None`, the nodes are prepended (rather
+than appended).  If `where` is not `None`, the nodes are inserted
+before (rather than after) the node pointed to by `where`.
+</dd></dl>
+
+#### `linked_list.sort(key=None, reverse=False)`
+
+<dl><dd>
+
+Sorts the linked list in ascending order.  Arguments are the
+same as `list.sort`.
+</dd></dl>
+
+#### `linked_list.splice(other, *, where=None)`
+
+<dl><dd>
+
+Moves all nodes from `other` into this list.  `other`
+must be a `linked_list`; after a successful splice, `other`
+will be empty.
+
+`where` must be an iterator over this list, or `None`.
+If `where` is an iterator, the nodes are inserted after
+the node pointed to by `where`.  If `where` is `None`,
+the nodes are appended.
+
+See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
+</dd></dl>
+
+#### `linked_list.tail()`
+
+<dl><dd>
+
+Returns a forwards iterator pointing at the linked list's
+tail sentinel node.
+</dd></dl>
+
+#### `SpecialNodeError`
+
+<dl><dd>
+
+A `LookupError` subclass raised when an operation is attempted
+on a special (sentinel) node that doesn't support it.
+</dd></dl>
+
+#### `UndefinedIndexError`
+
+<dl><dd>
+
+An `IndexError` subclass raised when accessing an undefined
+index in a `linked_list` (before head or after tail).
+</dd></dl>
+
+
+#### `linked_list_iterator`
+
+<dl><dd>
+
+Iterates over a [`linked_list`](#linked_listiterable--locknone),
+yielding values in order.  Created by calling `iter()` on a
+`linked_list` or by calling `linked_list.find()` etc.
+
+A `linked_list_iterator` behaves like a cursor: when it yields
+a value, it continues pointing at that node until explicitly
+advanced.  Indexing and slicing are relative to the current
+node, and negative indices access previous nodes (not the end
+of the list).
+
+`linked_list` explicitly supports removing nodes while
+iterating.  If the current node is removed, the iterator
+points at a "special" placeholder node until advanced.
+
+See the [**The big `linked_list`**](#the-big-linked_list)
+tutorial for more.
+</dd></dl>
+
+#### `linked_list_iterator.after(count=1)`
+
+<dl><dd>
+
+Returns a new iterator pointing at the node `count` steps
+after the current node.
+</dd></dl>
+
+#### `linked_list_iterator.append(value)`
+
+<dl><dd>
+
+Appends `value` immediately after the current node.
+</dd></dl>
+
+#### `linked_list_iterator.before(count=1)`
+
+<dl><dd>
+
+Returns a new iterator pointing at the node `count` steps
+before the current node.
+</dd></dl>
+
+#### `linked_list_iterator.copy()`
+
+<dl><dd>
+
+Returns a copy of the iterator, pointing at the same node
+in the same linked list.
+</dd></dl>
+
+#### `linked_list_iterator.count(value)`
+
+<dl><dd>
+
+Returns the number of occurrences of `value` between the
+current node and tail.
+</dd></dl>
+
+#### `linked_list_iterator.cut(stop=None, *, lock=None)`
+
+<dl><dd>
+
+Bisects the list at the current node.  Cuts nodes starting
+at the current node up to (but not including) `stop`, and
+returns them as a new `linked_list`.
+
+If `stop` is `None`, all subsequent nodes are cut (the
+original list gets a new tail).  `lock` is passed to the
+new list's constructor.
+
+See the [**The big `linked_list`**](#the-big-linked_list)
+tutorial for more.
+</dd></dl>
+
+#### `linked_list_iterator.exhaust()`
+
+<dl><dd>
+
+Advances the iterator to point to tail.
+</dd></dl>
+
+#### `linked_list_iterator.extend(iterable)`
+
+<dl><dd>
+
+Extends the list by appending elements from `iterable` after
+the current node.
+</dd></dl>
+
+#### `linked_list_iterator.find(value)`
+
+<dl><dd>
+
+Returns an iterator pointing at the nearest next occurrence
+of `value`, or `None` if not found before tail.
+</dd></dl>
+
+#### `linked_list_iterator.insert(index, object)`
+
+<dl><dd>
+
+Inserts `object` after the `index`'th node relative to the
+current position.
+</dd></dl>
+
+#### `linked_list_iterator.is_special()`
+
+<dl><dd>
+
+Returns `True` if the iterator is pointing at a special
+(sentinel) node, `False` otherwise.
+</dd></dl>
+
+#### `linked_list_iterator.linked_list`
+
+<dl><dd>
+
+Returns the `linked_list` this iterator belongs to.
+</dd></dl>
+
+#### `linked_list_iterator.match(predicate)`
+
+<dl><dd>
+
+Returns an iterator pointing at the nearest next value for which
+`predicate(value)` returns a true value, or `None` if no such
+value exists before tail.
+</dd></dl>
+
+#### `linked_list_iterator.next(default=undefined, *, count=1)`
+
+<dl><dd>
+
+Advances the iterator by `count` steps and returns the value
+there.  If the iterator is exhausted, returns `default` if
+specified, otherwise raises `StopIteration`.
+</dd></dl>
+
+#### `linked_list_iterator.pop(index=0)`
+
+<dl><dd>
+
+Removes and returns the value at `index` relative to the current
+position.  If `index` is `0` (the default), removes the current
+node and the iterator advances backwards to the previous node.
+</dd></dl>
+
+#### `linked_list_iterator.prepend(value)`
+
+<dl><dd>
+
+Inserts `value` immediately before the current node.
+</dd></dl>
+
+#### `linked_list_iterator.previous(default=undefined, *, count=1)`
+
+<dl><dd>
+
+Advances the iterator backwards by `count` steps and returns
+the value there.  If the iterator reaches head, returns
+`default` if specified, otherwise raises `StopIteration`.
+</dd></dl>
+
+#### `linked_list_iterator.rcount(value)`
+
+<dl><dd>
+
+Returns the number of occurrences of `value` between the
+current node and head.
+</dd></dl>
+
+#### `linked_list_iterator.rcut(stop=None, *, lock=None)`
+
+<dl><dd>
+
+Like [`linked_list_iterator.cut`](#linked_list_iteratorcutstopnone--locknone),
+except it cuts backwards: nodes from `stop` up to and including
+the current node.  If `stop` is `None`, all preceding nodes
+are cut.
+</dd></dl>
+
+#### `linked_list_iterator.remove(value, default=undefined)`
+
+<dl><dd>
+
+Removes the nearest next occurrence of `value`.
+Returns `default` if specified and `value` is not found,
+otherwise raises `ValueError`.
+</dd></dl>
+
+#### `linked_list_iterator.reset()`
+
+<dl><dd>
+
+Resets the iterator to point to head.
+</dd></dl>
+
+#### `linked_list_iterator.rextend(iterable)`
+
+<dl><dd>
+
+Extends the list by prepending elements from `iterable` before
+the current node, preserving their order.
+</dd></dl>
+
+#### `linked_list_iterator.rfind(value)`
+
+<dl><dd>
+
+Returns an iterator pointing at the nearest previous occurrence
+of `value`, or `None` if not found before head.
+</dd></dl>
+
+#### `linked_list_iterator.rmatch(predicate)`
+
+<dl><dd>
+
+Returns an iterator pointing at the nearest previous value for which
+`predicate(value)` returns a true value, or `None` if no such
+value exists before head.
+</dd></dl>
+
+#### `linked_list_iterator.rpop(index=0)`
+
+<dl><dd>
+
+Removes and returns the value at `index` relative to the current
+position (default `0`).
+</dd></dl>
+
+#### `linked_list_iterator.rremove(value, default=undefined)`
+
+<dl><dd>
+
+Removes the nearest previous occurrence of `value`.
+Returns `default` if specified and `value` is not found,
+otherwise raises `ValueError`.
+</dd></dl>
+
+#### `linked_list_iterator.rsplice(other)`
+
+<dl><dd>
+
+Removes all nodes from `other` and inserts them immediately
+before the current node.
+</dd></dl>
+
+#### `linked_list_iterator.rtruncate()`
+
+<dl><dd>
+
+Truncates the linked list at the current node, discarding the
+current node and all previous nodes.  After this operation,
+the iterator points to head.
+</dd></dl>
+
+#### `linked_list_iterator.special()`
+
+<dl><dd>
+
+Returns the `special` attribute of the current node: `None`
+for normal nodes, or a string (`'head'`, `'tail'`, or
+`'special'`) for sentinel nodes.
+</dd></dl>
+
+#### `linked_list_iterator.splice(other)`
+
+<dl><dd>
+
+Removes all nodes from `other` and inserts them immediately
+after the current node.
+</dd></dl>
+
+#### `linked_list_iterator.truncate()`
+
+<dl><dd>
+
+Truncates the linked list at the current node, discarding the
+current node and all subsequent nodes.  After this operation,
+the iterator points to tail.
+</dd></dl>
+
+
+#### `linked_list_reverse_iterator`
+
+<dl><dd>
+
+Iterates over a [`linked_list`](#linked_listiterable--locknone)
+in reverse order, yielding values from tail towards head.
+Created by calling `reversed()` on a `linked_list` or on a
+`linked_list_iterator`.
+
+Provides the same interface as
+[`linked_list_iterator`](#linked_list_iterator), but with all
+directions reversed: `next` advances towards head, `previous`
+advances towards tail, and so on.
+
+See the [**The big `linked_list`**](#the-big-linked_list)
+tutorial for more.
+</dd></dl>
+
+#### `linked_list_reverse_iterator.after(count=1)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.before`](#linked_list_iteratorbeforecount1).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.append(value)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.prepend`](#linked_list_iteratorprependvalue).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.before(count=1)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.after`](#linked_list_iteratoraftercount1).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.copy()`
+
+<dl><dd>
+
+Returns a copy of the reverse iterator, pointing at the same node.
+</dd></dl>
+
+#### `linked_list_reverse_iterator.count(value)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rcount`](#linked_list_iteratorrcountvalue).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.cut(stop=None, *, lock=None)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rcut`](#linked_list_iteratorrcutstopnone--locknone).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.exhaust()`
+
+<dl><dd>
+
+Advances the reverse iterator to point to head.
+</dd></dl>
+
+#### `linked_list_reverse_iterator.extend(iterable)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rextend`](#linked_list_iteratorrextenditerable).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.find(value)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rfind`](#linked_list_iteratorrfindvalue).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.insert(index, object)`
+
+<dl><dd>
+
+Inserts `object` relative to the current position, with reversed
+index direction.
+</dd></dl>
+
+#### `linked_list_reverse_iterator.is_special()`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.is_special`](#linked_list_iteratoris_special).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.linked_list`
+
+<dl><dd>
+
+Returns the `linked_list` this iterator belongs to.
+</dd></dl>
+
+#### `linked_list_reverse_iterator.match(predicate)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rmatch`](#linked_list_iteratorrmatchpredicate).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.next(default=undefined, *, count=1)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.previous`](#linked_list_iteratorpreviousdefaultundefined--count1).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.pop(index=0)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rpop`](#linked_list_iteratorrpopindex0).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.prepend(value)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.append`](#linked_list_iteratorappendvalue).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.previous(default=undefined, *, count=1)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.next`](#linked_list_iteratornextdefaultundefined--count1).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rcount(value)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.count`](#linked_list_iteratorcountvalue).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rcut(stop=None, *, lock=None)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.cut`](#linked_list_iteratorcutstopnone--locknone).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.remove(value, default=undefined)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rremove`](#linked_list_iteratorrremovevalue-defaultundefined).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.reset()`
+
+<dl><dd>
+
+Resets the reverse iterator to point to tail.
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rextend(iterable)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.extend`](#linked_list_iteratorextenditerable).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rfind(value)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.find`](#linked_list_iteratorfindvalue).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rmatch(predicate)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.match`](#linked_list_iteratormatchpredicate).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rpop(index=0)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.pop`](#linked_list_iteratorpopindex0).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rremove(value, default=undefined)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.remove`](#linked_list_iteratorremovevalue-defaultundefined).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rsplice(other)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.splice`](#linked_list_iteratorspliceother).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rtruncate()`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.truncate`](#linked_list_iteratortruncate).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.special()`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.special`](#linked_list_iteratorspecial).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.splice(other)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rsplice`](#linked_list_iteratorrspliceother).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.truncate()`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rtruncate`](#linked_list_iteratorrtruncate).
+</dd></dl>
+
 
 ## `big.version`
 
@@ -4381,7 +6201,7 @@ expression.
       normalized.
 * Don't tell anybody, but, you can also pass a `sys.version_info`
   object or a `packaging.Version` object into the constructor
-  instead of a version string.
+  instead of a version string. Shh!
 
 When constructing a `Version` by passing in a string `s`, the string must conform to this scheme,
 where square brackets denote optional substrings and names in angle brackets represent parameterized
@@ -4508,9 +6328,1525 @@ returns the string `'1.3'`.
 </dd></dl>
 
 
-# Topic deep-dives
+# Tutorials
+
+## The big `string`
+
+<dl><dd>
+
+Python's `tokenize` and `re` (regular expression) modules both had to
+solve an API problem.  In both cases, you submit a large string to them,
+and they split it up and return little substrings--tiny little slices
+of the big string.  Often, the user needs to know *where* those little
+slices came from.  How do you communicate that?
+
+What `tokenize` and `re` did was add extra information accompanying the
+string.  But they took different--and incompatible--approaches.  They
+both represent "where" the little bitty strings came from differently:
+
+* [`tokenize.tokenize`](https://docs.python.org/3/library/tokenize.html#tokenize.tokenize)
+  returns a `TokenInfo` object containing the line and column numbers of the string it contains).
+* `search` and `match` methods on a compiled regular expression return
+  a [`Match`](https://docs.python.org/3/library/re.html#re.Match) object
+  which tells you the index where the string started in the original string.
+
+This is sufficient--barely.  It's also fragile.  What if you further
+subdivide the string?   What if you join the text with the antecedent
+or subsequent text from the original?  Now you have to clumsily
+track these offsets yourself.  And if you want line and column
+information, the re module's `Match` object is of no help.
+
+And what if you're parsing your text yourself, rather than using
+`tokenize` or `re`?  If you split up a string into lines using the
+`splitlines` method on a string, you have to track the line numbers
+yourself.  Worse yet, if you split by lines, then use `re` to subdivide
+the string, you have to mate your offset tracking with the `re.Match`
+object's tracking.  What a pain!
+
+big's `string` object solves all that.  It's a drop-in replacement for
+Python's `str` object, and in fact is a subclass of `str`.  What it gives you:
+any time you extract a substring of a `string` object, the substring knows
+its *own* offset, line number, and column number relative to the original
+string.  You *don't* need to figure it out yourself, and you *don't* need to
+store the information separately using some fragile external representation.
+Any time you have a `string` object, you *automatically* know where it came
+from.  (You can even specify a "source" for the text--the original filename
+or what have you--and the `string` object will retain that too.)
+
+This makes producing syntax error messages effortless.  If `s` is a `string`
+object, and represents a syntax error because it was an unexpected token
+in the middle of a text you're parsing, you can simply write this:
+
+```Python
+raise SyntaxError(f'{s.where}: unexpected token {s}')
+```
+
+`where` is a property, an automatically-formatted string containing
+the line and column information for the string.  And if you specified
+a "source", it contains that too.  For example, if you initialized the
+`string` with "source" set to `/home/larry/myscript.py`, and `s` was
+the token `whule` (whoops! mistyped `while`!), from line number 12,
+column number 15, the text of the exception would read:
+
+```
+"/home/larry/myscript.py" line 12 column 15: unexpected token 'whule'
+```
+
+#### Tomorrow's methods, today
+
+big supports older versions of Python; as of this writing it supports all
+the way back to 3.6.  (The Python core development team dropped support for
+3.6 several years ago!)
+
+The `string` object supports *all* the methods of the `str` object.  At the
+moment there's a new `str` method as of version 3.7, `isascii`.  Rather than
+only provide that in 3.7+, `string` makes that available in 3.6 too.
+
+#### Naughty modules not honoring the subclass
+
+It was important that `string` not only be a drop-in replacement for `str`.
+The only way for that to work: it had to literally *be* a subclass of `str`.
+There's a lot of code that says
+```Python
+if isinstance(obj, str):
+```
+and if `string` objects failed that test they'd break code.
+
+This has an unfortunate side-effect.  CPython ships with modules in its
+standard library written in C that check to see "is this object a `str` object?"
+And if the object passes that test, they use low-level C API calls on the `str`
+object to interact with it.  The problem is, these low-level C API calls ignore
+the fact that this is a *subclass* of `str`, and they sidestep the overloaded
+behaviors of the `string` object.  This means that, for example, when they
+extract a substring from the object, they don't get a `string` object preserving
+the offsets, they just get a plain old `str` object.
+
+Fixing this in CPython would be worthwhile, but it'd be a lot of work and it
+would only benefit the future.  We want to solve our problem today.  So big
+provides workarounds for the two worst offenders: `re` and `tokenize`.
+big's `string` object has a `compile` method that is a drop-in replacement
+for `re.compile`, and all the methods you call on it will return `string`
+objects instead of `str` objects.  The `string` object also has a method
+called `generate_tokens` that produces the same output as `tokenize.generate_tokens`,
+except (of course!) all the strings returned in its `TokenInfo` objects
+are `string` objects.
+
+Unfortunately, there's one more wrinkle.  The objects returned by CPython's
+`re` module don't let you instantitate them, nor subclass them.
+They deliberately set an internal flag that means "Python code is not
+permitted to subclass this class".  This means it's *impossible* for
+`String.compile` to return objects that pass `isinstance` tests.
+`String.compile` returns a `Pattern` object, but it's *not* an instance
+of `re.Pattern`, and `isinstance` tests will fail.  **big** was forced
+to reimplement these objects, and we ensure they behave identically
+to the originals, but CPython makes this facet of incompatibility unfixable.
+
+
+</dd></dl>
+
+## The big `linked_list`
+
+<dl><dd>
+
+### Background
+
+A [linked list](https://en.wikipedia.org/wiki/Linked_list) is a
+*fundamental* data structure in computer science, second only perhaps
+to the array and the record.  And yet Python has never officially
+shipped with a linked list!
+
+There *is* a linked list hidden in the standard library of CPython;
+[`collections.deque`](https://docs.python.org/3/library/collections.html#collections.deque)
+is *implemented* internally using a linked list.  So it's possible to
+use a `deque` where you'd want a real linked list--like, a use case
+where you frequently insert and remove values in the middle of the list.
+This would have better performance than doing it with, say, the classic
+Python `list`, where inserts and removals from the middle of the list
+are an O(n) operation.  However, the `deque` API makes it inconvenient
+to use as a linked list.
+
+In 2025, I wanted a linked list for a project.  I surveyed the linked
+lists available for Python at the time, decided I didn't want to use
+*any* of them--so I wrote my own.  Now you get to use it too!
+
+### Overview
+
+big's `linked_list` itself behaves externally like a `list` or a
+`deque`; you insert/append/prepend values to the list, and it stores
+them in order and manages the storage.
+
+Where big's `linked_list` shines is in its iterators.  `linked_list`
+iterators are more like "database cursors"; they act like a moveable
+virtual head of the list, centered on any value you like.
+
+Also, unlike Python's other data structures, `linked_list` *explicitly*
+supports modifying the list during iteration.  You can have as many
+iterators iterating over a list as you like, and you can add or remove
+nodes anywhere to your heart's content.
+
+In addition, `linked_list` supports thread-safety through automatic
+internal locking.
+
+### Implementation details
+
+Internally a big `linked_list` is a traditional doubly-linked-list.
+The list is stored in a series of nodes; each node contains forwards
+and backwards references, to the next and previous nodes respectively,
+as well as a reference to your value. This classic design makes its
+performance predictable: inserting and removing elements anywhere in
+the list is O(1), whereas accessing elements by index is O(n).
+
+There are acutally two types of node in a big `linked_list`: "data"
+nodes, which store a value, and "special" nodes, which don't store a
+value.  Why are these "special" nodes needed?  Several reasons.
+First, `linked_list` makes a design choice that's uncommon
+but not exactly rare for linked lists: the "head" and "tail" nodes
+are "special" nodes in the linked list.  When you create a new
+`linked_list` object, it contains *two* nodes, not *zero:* the
+newly-created list already contains "head" and "tail" nodes.
+This makes for a nice implementation; *every* insert and delete
+simply updates four references, rather than needing lots of
+"if we're pointed at the head" special cases all over the place.
+
+There's a third type of "special" node: a *deleted* node.
+If an iterator is pointing at a data node containing a value X,
+and you remove X from the linked list, the *data* is removed but
+the *node* stays in place.  That node is demoted to a "special"
+node--again, "data" nodes store a reference to a value, "special"
+nodes don't.  This change is harmless; the iterator can continue
+pointing to it indefinitely, or can iterate forward or backwards
+without difficulty. The fact that the node was demoted is invisible
+to the user of the iterator if all they're doing is conventional
+iteration. However, this implementation choice will have
+ramifications for the "iterators as database cursors" APIs,
+as we'll see shortly.
+
+(In case you're wondering: once the last iterator departs a
+"special" node resulting from a deleted value, `linked_list`
+removes the node.)
+
+
+#### `linked_list` methods
+
+`linked_list` provides a superset of the union of the APIs of
+[`list`](https://docs.python.org/3/library/stdtypes.html#list)
+and
+[`collections.deque`.](https://docs.python.org/3/library/collections.html#collections.deque)
+Every method call supported by both `list` and `deque` is supported
+by `linked_list`, and you can read the documentation for those types
+to see the basics.
+
+However, there are also some important changes.  First and
+foremost, for `list` and `deque` methods that return an *index*
+into the list, the `linked_list` equivalent returns an *iterator*.
+This is a superior API, due to the "database cursor" features of
+`linked_list` iterators.  It's also better for performance, as
+this reduces accessing values by index, which is O[n] on
+`linked_list`.
+
+In addition, `linked_list` contains many "reversed" versions of
+methods.  These are named by taking the original method name and
+prepending it with `r`.  For example:
+* `extend` is complemented with `rextend`, which inserts
+  the values from the iterable in front of the head of the list
+  in forwards order.
+* `find` is complemented by `rfind`, which searches for a value
+  starting at the end of the list and searching backwards.
+
+
+`linked_list` also supports many of Python's "magic methods":
+
+* `__add__`: `t + x` returns a new list containing the contents of `t` appended with `x`;
+  `x` must be an iterable.
+* `__bool__`: `bool(t)` returns `True` if `t` contains any values, or `False` if `t` is empty.
+* `__contains__`: `v in t` evaluates to `True` if the value `v` is in `t`.
+* `__copy__`: `copy.copy(t)` returns a shallow copy of the list.
+* `__delitem__`: `del t[3]` will remove the fourth value in `t`.  Also supports slices.
+* `__deepcopy__`: `copy.deepcopy(t)` returns a deep copy of the list.
+* `__eq__` and the other five "rich comparison" methods: `t == t2` is true if and only if
+  `t` and `t2` are of the same type and contain the same values in the same order.
+* `__getitem__`: `t[3]` evaluates to the fourth value in `t`.  Also supports slices.
+* `__iadd__`: `t += x` appends the contents of iterable `x` to `t`.
+* `__imul__`: `t *= n` results in `t` containing `n` copies of its own contents.
+* `__iter__`: `iter(t)` returns a forward iterator over `t`.
+* `__len__`: `len(t)` returns the number of items in `t`.  If `t` is empty, this is 0.
+* `__mul__`: `t * n` return a new list containing `n` copies of the contents of `t`.
+* `__reversed__`: `reversed(t)` returns a reverse iterator over `t`.
+* `__repr__`: `repr(t)` produces a custom repr showing the current contents of the list.
+* `__setitem__`: `t[3] = v` will overwrite the fourth value in `t` with `v`.  Also supports slices.
+
+
+Finally, `linked_list` supports methods that lets you move
+nodes directly from one list to another, rather than inserting
+new nodes.  If you're moving lots of nodes, this can be a huge
+performance win.  The relevant methods:
+
+* `cut` lets you specify a range of nodes to remove from a
+  `linked_list`.  You can specify the start and stop for the
+  range of nodes to cut, as iterators.  The nodes are removed
+  from the linked list, and returned in their own new linked list.
+* `splice` lets you move *all* the nodes of one `linked_list`
+  into another.  After splicing linked list A into linked list B,
+  A will be empty, and B will contain all of A's nodes, in order.
+* `rcut` and `rsplice` are "reversed" versions of `cut` and `splice`.
+
+
+### `linked_list` iterators
+
+While developing `linked_list`, it occured to me: the usual use
+case for a linked list involves an arbitrarily-long sequence of
+data, which you iterate over and process.  For example, compilers
+generally represent the program being compiled as a linked list
+of "basic blocks".
+
+When using a linked list for these sorts of use cases, you
+generally operate on a pointer to the linked list node under
+current consideration.  In Python parlance, you iterate over the
+list, getting a reference to each node in the list in turn.
+You perform your computation on that node, then iterate to the
+next one.
+
+However, you often want to *modify* the list while you're doing
+this.  You may want to remove the node, or insert new nodes,
+or both--replace the node with something else.  But idiomatic
+Python iterators don't let you do anything like that.  All they
+know how to do is "advance to the next value and yield it".
+This was a genius design choice for Python, but for our linked
+list it's simply not enough.
+
+`linked_list` solves this by making its iterators far more
+powerful.  One way of describing this is like a *database cursors:*
+a `linked_list` iterator points at a value (or "row"), and
+lets you modify the list (or "table") relative to that value.
+I think of it more like a moveable virtual list "head";
+the iterator points at a value, and provides APIs that let
+it behave like a `linked_list` pointed at that value.
+`linked_list` iterators provide nearly the *entire* API
+that `linked_list` itself provides, though modified to
+make sense given the context of pointing at any arbitrary
+node in the list.
+
+#### Indexing
+
+Iterators support all operations you can perform by indexing
+into a linked list; you can get, set, and delete values.
+
+However, the meaning of the index is slightly different for
+an iterator.  Negative indices don't start at the end and
+work backwards; instead, they start at the *current node*
+and work backwards.  If `t` is a linked list containing
+`range(5)`, and `it` is an iterator pointing at value `2`,
+indexing would look like this:
+
+```
+                            it
+                            |
+                            v
+[head] <-> [0] <-> [1] <-> [2] <-> [3] <-> [4] <-> [tail]
+        it[-2]  it[-1]   it[0]   it[1]   it[2]
+```
+
+If you advanced `it` once, so it pointed to the value `3`,
+indexing would now look like this:
+
+```
+                                    it
+                                    |
+                                    v
+[head] <-> [0] <-> [1] <-> [2] <-> [3] <-> [4] <-> [tail]
+        it[-3]  it[-2]  it[-1]   it[0]   it[1]
+```
+
+Indexing into or past the "head" and "tail" nodes raises an
+`IndexError`.
+
+You can also use slices, e.g. `it[-3:5:2]`.  There are two
+important differences from slicing into `list` or `deque` objects:
+
+* First, negative indices in slices work like negative
+  indices normally, retreating backwards into the list.
+* Second, slices into `linked_list` iterators don't
+  clamp for you.  Indexing into or past the "head" and "tail"
+  nodes raises an `IndexError`, rather than silently
+  clamping the indices to a legal range.
+
+
+#### Method calls
+
+You can also make method calls on the iterator, to operate
+on the list starting at the current node.  These operations
+always operate relative to the *current node,* rather than
+relative to the beginning (or end) of the list.  Also, as
+a rule, methods that operate on one or more nodes always
+operate on the *current* node.
+
+Here are some examples.  In these examples, `it` is always
+a forwards iterator:
+
+* `it.pop` pops and returns the value the iterator currently
+  points at, then moves the iterator *back* one node.
+* `it.rpop` pops and returns the value the iterator currently
+  points at, then moves the iterator *forward* one node.
+* `it.append` inserts a value *after* the current node.
+* `it.prepend` inserts a value *before* the current node.
+* `it.find` searches for a value, starting at the current
+  node and continuing forwards.
+* `it.rfind` searches for a value, starting at the current
+  node and continuing backwards.
+* `it.truncate` deletes all values at or after the current
+  node.  When `it.truncate` is done, `it` will be pointing
+  at "tail", and `it[-1]` will be unchanged.
+
+#### Magic methods
+
+`linked_list` iterators also implements many of the magic methods
+supported by `linked_list`.  For example, if `it` is a forward
+iterator pointing at an arbitrary node:
+
+* `__bool__`: `bool(it)` returns `True` if `it` is not pointed at "tail".
+* `__contains__`: `v in it` evaluates to `True` if the value `v` is found at or after `it` in the list.
+* `__eq__`: `it == it2` is true if and only if
+  `it` and `it2` point to the same node.  Iterators don't support relative comparison (less-than, etc).
+* `__iter__`: `iter(it)` returns a copy of `it`.
+* `__len__`: `len(t)` returns the number of items at or after `it` in the list.  If `it` points to "tail", this returns 0.
+* `__reversed__`: `reversed(t)` returns a reverse iterator pointing at the same node as `it`.
+
+
+#### Special nodes
+
+There are two rules that apply to iterators when interacting
+with special nodes:
+
+* Special nodes never have a value.
+* When an iterator navigates through a `linked_list`, it automatically skips over special nodes.
+
+
+Let's see specifically how iterators interact with special nodes.
+We'll create a new empty linked list, then create an iterator
+over that linked list, and call `next` on it twice:
+
+```Python
+t = LinkedList((1,))
+it = iter(t)
+value_a = next(it, None)
+value_b = next(it, None)
+```
+
+When this is done, `value_a` will be `1`, and `value_b` will be `None`.
+How does this work internally?
+
+Our iterator `it` started out pointing at the "head" node.  When you call `next(it, None)` the
+first time, it advances to `1` and returns it.  The iterator is now pointing at the node for
+the value `1`.  Calling `next(it, None)` the second time advances to the "tail" node;
+this would normally raise `StopIteration`, but the second argument to `next` is a
+"default value" it will return instead of raising.  So this second call to `next(it, None)`
+just returns `None`.  After this second `next` call, `it` points to the "tail" node.
+
+#### Deleted nodes
+
+If an iterator is pointing at a value, and that value is deleted, the node is demoted
+from a "data" node to a "special" node.  The iterator continues to point to it.  Consider
+this example:
+
+```Python
+t = linked_list([1, 2, 3, 4, 5])
+it = t.find(3)
+del t[2]
+```
+
+The internal layout of the list and iterator now looks like this:
+
+```
+                               it
+                               |
+                               v
+[head] <-> [1] <-> [2] <-> [special] <-> [4] <-> [5] <-> [tail]
+```
+
+Here `it` points to a "special" node, where the value `2` used to be.
+(To be clear: the *value* of the node isn't the string `"special"`.
+As mentioned before, special nodes *have* no value.  We just put
+the word "special" there to annotate that as a special node.)
+
+If you now iterated over the linked list:
+
+```Python
+for i in t:
+   print(i)
+```
+
+you'd see 1, 2, 4, and 5, like you'd expect.  The special node is
+still there, but remember the rule: *linked list iterators automatically
+skip over special nodes.*
+
+When you have an iterator pointed at a special node, you can do almost anything
+you can do with an iterator pointed at a normal node.  You can:
+
+* navigate, using `next` or `previous` or `find` or `rfind` or `match` or `rmatch`
+* create new iterators using `before` or `after`
+* insert new values using `append` or `prepend` or `extend` or `extendleft`
+* attempt to remove values using `remove` or `rremove`
+
+What can't you do when pointing at a special node?  Any operation that attempts
+to interact with the *value* of the *current* node will raise `SpecialNodeError`
+(a subclass of `LookupError`).  For example:
+
+* Evaluating `it[0]`.
+* Evaluating `it[-1:1]`.
+* Popping the current value using `it.pop()` or `it.rpop()`.
+
+If you're worried about whether your iterator is pointing at a special node,
+you can check the `special` property.  That returns `None` for a normal node,
+`"head"` for the head node, `"tail"` for the tail node, and `"special"` for
+any other special node.
+
+
+#### Reverse iterators
+
+`linked_list` objects also support reverse iteration.  You create a
+reverse iterator by calling `reversed` on the list.  You can also create
+a reverse iterator by calling `reversed` on a forwards iterator; this
+returns a reverse iterator pointing at the same node.
+
+Conceptually, a reverse iterator behaves identically to a forwards
+iterator, except the reverse iterator "sees" the list backwards.
+If you have a linked list that looks like this:
+
+```
+[head] <-> [1] <-> [2] <-> [special] <-> [3] <-> [4] <-> [5] <-> [tail]
+```
+
+a *reverse* iterator would see the list like this:
+
+```
+[tail] <-> [5] <-> [4] <-> [3] <-> [special] <-> [2] <-> [1] <-> [head]
+```
+
+Apart from this behavioral change, reverse iterators behave identically
+to forwards iterators.  They support the exact same APIs with the same
+arguments.
+
+This makes the behavior of a reverse iterator easy to predict.  For example,
+if `fi` is a forwards iterator, and `ri` is a reverse iterator on the same list:
+
+* A newly-created reverse iterator points to the "tail" node, and `ri.reset()`
+  resets `ri` so it points at the "tail" node again.
+* A reverse iterator becomes exhausted once it reaches the "head" node.
+  `ri.exhaust()` moves `ri` so it points at the "head" node.
+* `ri.append()` inserts *before* the current node, `ri.prepend()`
+  inserts *after* the current node.  Remember, from the perspective
+  of `ri`, it's inserting those nodes in the correct places!
+* `ri[1]` evaluates to the *previous* value in the list, and `ri[-1]`
+  evaluates to the *next* value in the list.
+
+One thing that *doesn't* change: when inserting multiple nodes (`splice`, `extend`,
+`rextend`), the nodes are always inserted in forwards order.  Effectively, if `fi` and
+`ri` point to the same node, `fi.extend(X)` and `ri.rextend(X)` would do the same thing,
+and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
+
+#### Invariants
+
+* An iterator pointing at a node will continue to point at that node until it takes action to move to a new node.
+* If you use an iterator to append a new value, and nobody deletes that value, and you subsequently advance that
+  iterator with `next()` enough times, the iterator will yield that value.
+    * If you use an iterator to prepend a new value, and nobody deletes that value, and you subsequently advance
+      that iterator with `previous()` enough times, the iterator will yield that value.
+* As a rule, actions on iterators that act on multiple nodes include the node they're pointing at.
+* iterator[0] *always* refers to the node the iterator is currently pointing at, even if it's a special
+  node.  If the index is non-zero, it skips over special nodes.
+
+
+</dd></dl>
+
+
+## The big `Log`
+
+<dl><dd>
+
+### Overview
+
+big's `Log` object is a high-performance logging mechanism, suitable
+for debugging.  It has a very convenient interface, and it's easy to get
+up and logging with very little configuration.  It's thread-safe,
+ensuring logged messages are rendered atomically (unlike calling `print`
+from multiple threads, which can interleave messages.)  And with default
+parameters, logging a message is very quick--perhaps 5x faster than
+calling `print`.
+
+Although it's really designed for "print-style" debugging--where you
+print out all the state in your program that you need to diagnose a
+problem--it's usable for classic application logging, like Python's
+`logging` module.  That said, it has a very different interface, and
+is missing a lot of features as compared to the `logging` module, so
+it's hardly a drop-in replacement.
+
+### tl;dr
+
+The downside of feature-rich classes and functions is that it can be
+hard to remember how to use them.  So here's all you need to remember
+to be productive with `Log`:
+
+> Create your Log object, and pass in the objects where you want
+> the log to go--`print`, a file path, an open file handle, a `list`,
+> whatever.  Then call the Log object to log messages--it behaves
+> like `print`.
+
+### Getting started
+
+Let's start by showing you a whole Python script that exercises
+many of the big `Log` features.  We'll show you the script, then
+its output, and then we'll go over it line by line and discuss
+each of the features independently.
+
+Here's the script:
+
+```Python
+import big.all as big
+
+j = big.Log()
+j.print("Hello, world!  2 + 2 =", 2 + 2)
+j("Hello, world, round 2!  4 + 4 =", 4 + 4)
+j.write("This was written without formatting!\nLine breaks work too!\n")
+j.box(f"Today's important number is {6 * 7}!")
+with j.enter("Newline subsystem"):
+    j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
+```
+
+If you copy that to a new file, and run it (with big installed), you'll see
+this on the output:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:46:51.410751 PST
+===============================================================================
+[000.0004777570   MainThread] Hello, world!  2 + 2 = 4
+[000.0004971740   MainThread] Hello, world, round 2!  4 + 4 = 8
+This was written without formatting!
+Line breaks work too!
+[000.0005088170   MainThread] +------------------------------------------------
+[000.0005088170   MainThread] | Today's important number is 42!
+[000.0005088170   MainThread] +------------------------------------------------
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005117220   MainThread] |start| Newline subsystem
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005174830   MainThread]     Line one!
+[000.0005174830   MainThread]     And here's line two.
+[000.0005174830   MainThread]       Leading spaces are preserved too!
+[000.0005174830   MainThread]     And here's the final line
+[000.0005208190   MainThread] +-----+------------------------------------------
+[000.0005208190   MainThread] | end | Newline subsystem
+[000.0005208190   MainThread] +-----+------------------------------------------
+===============================================================================
+Log finish at 2026/02/15 13:46:51.411292 PST
+===============================================================================
+```
+
+Let's break it down, line by line.
+
+To use `Log`, simply instantiate a `Log` object:
+
+```Python
+j = big.Log()
+```
+
+With all default parameters, your `Log` will send the log
+to stdout via `builtins.print`.  However, it'll use a separate
+thread to do the actual printing.  Logging a message will lightly
+pre-format the message, then send it to the `Log` object's
+internal thread; that thread finishes the formatting and sends
+it to `print`.
+
+The usual method call to log a message is the `Log.print` method:
+
+```Python
+j.print("Hello, world!  2 + 2 =", 2 + 2)
+```
+
+`Log.print` has a similar signature to `builtins.print`, although it
+doesn't support the `file` parameter.
+
+This is so common, there's a shortcut: calling the `Log` instance
+itself behaves identically to calling the `print` method:
+
+```Python
+j("Hello, world, round 2!  4 + 4 =", 4 + 4)
+```
+
+The three lines we've examined so far produce the first five lines of the output:
+
+```
+===============================================================================
+Log start at 2026/02/15 13:14:13.648816 PST
+===============================================================================
+[000.0004797210   MainThread] Hello, world!  2 + 2 = 4
+[000.0005004200   MainThread] Hello, world, round 2!  4 + 4 = 8
+```
+
+As you can see, `Log` automatically adds a "start" banner showing the current
+local time that the log was started.  (There's a symmetric "end" banner for
+when the log is closed.)
+
+Also, every printed log message gets a "prefix", showing the elapsed time
+so far (since the start of the log) and the thread that logged the message.
+
+(Obviously, if you run this script, *your* times will be different.  Probably
+in the future... unless you've borrowed Guido's time machine.)
+
+Let's explore the other `Log` methods that append messages to the log.
+The simplest one is `write`, which only takes one `str` argument, and writes that
+string to the log without any further formatting whatsoever:
+
+```Python
+j.write("This was written without formatting!\nLine breaks work too!\n")
+```
+
+This is useful in case you've carefully formatted some text by hand and
+you want to dump it straight into the log.  (Or you simply want to suppress
+the per-line prefix.)
+
+`Log` also supports a method called `box` that writes a message with a three-sided
+box drawn around it:
+
+```Python
+j.box(f"Today's important number is {6 * 7}!")
+```
+
+If you want to call attention to a logged message,  use `box` instead of `print`.
+Note that the `box` method also only takes a single `str` object.  (But that's no
+problem--just use an f-string!)
+
+The above two lines in the script produce these five lines in the output:
+
+```
+This was written without formatting!
+Line breaks work too!
+[000.0005261250   MainThread] +------------------------------------------------
+[000.0005261250   MainThread] | Today's important number is 42!
+[000.0005261250   MainThread] +------------------------------------------------
+```
+
+You can see, the message logged with `Log.write` doesn't get the "prefix".
+And it's easy to pick out the "boxed" message due to the lines `Log` draws
+around it.
+
+Let's finish up, examining the final two lines of the script.
+
+`Log` supports two intertwined methods, `enter` and `exit`.  `enter`
+logs a message in a box, then adds an indent that applies to subsequent
+messages. `exit` outdents, then re-logs the message from the most recent
+`enter` in another box.  This is a great way to add some structure to
+your log, showing visually how your program enters and exits conceptual
+subsystems (modules, functions, classes, algorithms, what have you).
+
+For convenience, `Log.enter` also returns a "context manager".  If you use
+a call to `Log.enter` as the argument to a `with` statement, it'll automatically
+call `Log.exit` when you exit the `with` statement.   We use that feature in
+the example script.
+
+The last line demonstrates one more feature of `Log`.  All `Log` methods
+that write to the log support newline characters, not just `Log.write`.
+But when you log a message using the other methods--methods that write
+the "prefix"--the lines are split up before they're formatted for the
+log, and each line gets the prefix.
+
+Here are the last two lines of the script:
+
+```Python
+with j.enter("Newline subsystem"):
+    j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
+```
+
+Those two lines produce these *thirteen* lines in the output:
+
+```
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005117220   MainThread] |enter| Newline subsystem
+[000.0005117220   MainThread] +-----+------------------------------------------
+[000.0005174830   MainThread]     Line one!
+[000.0005174830   MainThread]     And here's line two.
+[000.0005174830   MainThread]       Leading spaces are preserved too!
+[000.0005174830   MainThread]     And here's the final line
+[000.0005208190   MainThread] +-----+------------------------------------------
+[000.0005208190   MainThread] |exit | Newline subsystem
+[000.0005208190   MainThread] +-----+------------------------------------------
+===============================================================================
+Log finish at 2026/02/15 13:46:51.411292 PST
+===============================================================================
+```
+
+Notice how the logged message inside the "enter" / "exit" section are indented by
+four spaces.  If you nested another `with j.enter` inside the first one, text
+logged inside that would be indented by eight spaces.
+
+Once the script exited, `Log` automatically closed the log for you, including
+writing the "end" banner with the end time of the log.
+
+
+### Other methods
+
+Log has three more methods; none of these write messages to the log.
+
+`Log.flush(block=True)` flushes the log.  In some configurations, the log will
+buffer up messages, instead of sending them right away.  A `flush` call
+will flush all buffered messages.  If `block` is true (the default), the
+`flush` call won't exit until all messages have been flushed.  If `block`
+is false, `flush` may start the flushing process but won't necessarily
+wait until it's complete.
+
+`Log.close(block=True)` flushes then closes the log.  When a log is closed,
+it *ignores* all attempts to write log messages to the log.  No error is
+reported--the messages are simply ignored.  The only way to re-open a
+closed log is to call its `reset` method.  The `block` parameter works
+the same as it does for `flush`.
+
+`Log.reset()` resets a log to its initial state.  After a log is reset,
+it will print the "start" banner.  Resetting the log is the only way
+to re-open a closed log.
+
+Every `Log` also registers an "atexit" handler.  The "atexit" handler
+closes the `Log` if it hasn't been closed already.
+
+
+### Destinations
+
+All our logging so far has just gone to `builtins.print`, which means it
+shows up on `stdout`.  But what if you want to send the log somewhere else?
+
+All *positional* arguments to the `Log` constructor specify *destinations.*
+A *destination* is simply an object that the log sends messages to.  You
+can specify as many destinations as you like when creating your `Log`
+instance; however you can't add or remove destinations later.
+
+As we've already seen, if you don't specify any destinations when you
+construct the `Log`, the default is to log to `builtins.print`.  You
+can explicitly configure your log to to this by passing in `print`
+as a positional argument:
+
+```Python
+j = Log(print)
+```
+
+But there are lots of other options!  If you specify an list, `Log` will
+append all the logged message strings to that list:
+
+```Python
+a = []
+j = Log(a)
+```
+
+If you specify a string, `Log` will assume that string represents a
+filename, and append the log to that file:
+
+```Python
+j = Log('/tmp/log.txt')
+```
+
+(You can also specify a `pathlib.Path` object--that works the same.)
+
+When writing to a file, `Log` will buffer up messages until the log
+is flushed, then open the file, flush *all* messages with one big
+write, and close the file.
+
+Some more options:
+
+* If you pass in an open file handle (like the result of calling `open`),
+  `Log` will write log messages to the file handle.
+* If you pass in a callable, `Log` will call the callable once for every
+  formatted message, with just one argument, the formatted log message.
+* There's a special sentinel value in the `big.log` module: `big.log.TMPFILE`.
+  If you specify that as a destination, `Log` will send the log to a
+  file with a dynamically generated name in your configured temporary
+  directory.  The filename starts with the name of the log; this is
+  followed by the start time, then the process ID, and finally ends with
+  `.txt`.  Every time the log resets it switches to a new filename.
+* A destination of `None` doesn't log anywhere.  If you want to
+  create a `Log` object that doesn't actually write the log anywhere,
+  construct it as `big.Log(None)`.
+
+If you pass in multiple destinations, `Log` will send all the
+log messages to *all* of them.  You could log to `TMPFILE`, `print`,
+and an array, all at the same time!
+
+Finally, if you like the "buffer-until-flush" behavior of files,
+but want to use that with another destination, wrap that destination
+with a call to `Log.Buffer()`.  Without an argument, `Log.Buffer()`
+buffers all messages until flush, then writes them all to
+`builtins.print`.  If you specify a destination (as a positional
+parameter), *that* destination is where the log messages are sent
+when the log is flushed.  See the *Custom Destinations* section
+below for more information on this and similar advanced techniques.
+
+
+### Configuration via keyword-only parameters
+
+You configure your `Log` instance by supplying keyword
+arguments to the `Log` constructor.  Note that, like
+the list of destinations, these can only be specified
+as arguments to the constructor; you can't change any
+of these settings once the `Log` instance is initialized.
+
+The most important setting is the `threading`
+parameter.  This configures whether or not the `Log`
+instance uses a worker thread to do all the actual
+logging.  By default `threading` is true, which means
+the log uses an external thread to format and write
+the log messages.  Log messages and other operations
+are sent to that thread via a `queue.Queue`, which
+ensures log messages are sent to the log in a
+high-performance and thread-safe way.
+
+If you pass in `threading=False` to the `Log` constructor,
+the log won't use an external thread.  Instead, every
+logging call will write to the log immediately; it
+uses a `threading.Lock` to guarantee atomicity.
+
+You can set the name of the log with the `name`
+parameter.  This is shown in the start and end banners.
+
+`indent` defaults to 4; this is how many spaces `enter`
+indents the log.  `width` defaults to 79; this is the
+column that "line" formats are truncated at.
+
+`clock` is the clock used to compute the time at which
+log messages were logged.  It should return an integer,
+which is the number of nanoseconds since some previous
+event.  By default it uses `time.monotonic_ns`.  (Well,
+on Python 3.7+ anyway.  On Python 3.6 it simulates
+`time.monotonic_ns` by calling `time.monotonic` and
+multiplying it by a billion.)
+
+`timestamp_clock` is the clock used to produce timestamps
+used in the log.  It should return a float, which is the
+number of seconds since the UNIX epoch.  The default value
+is `time.time`.  `timestamp_format` is a callable that should
+convert a `timestamp_clock` value into a pleasing human-readable
+format; the default value is `big.time.timestamp_human`.
+
+`prefix` is the string that will be inserted in front
+of every line of a logged message (except `Log.write`).
+It's formatted using the *Line formatting* rules as
+described in the next section.  The `formats` parameter
+establishes the formatting applied to log messages of
+various types; this is quite involved, so see the *Formats*
+section below for documentation on that.
+
+
+### Line formatting
+
+Several configuration settings for `Log` use what's called
+"line formatting".  This formatting method lets you substitute
+in dynamic values at runtime when writing to the log; the values
+are recomputed and substituted every time `Log` formats a message
+for the log.  For example, the `prefix` is freshly reformatted
+for every log message.
+
+The formatting is done using the `format` method on the
+string.
+
+Here are the values you can substitute when formatting the `prefix`:
+
+  * `elapsed`:
+            The elapsed time since the log was started,
+            as float-seconds.
+  * `format`:
+            The format being applied to this log message.
+  * `line`:
+            The string used for repeating horizontal lines.  See next section, *Formats*.
+  * `name`:
+            The "name" of the log passed in to the Log constructor.
+  * `thread`:
+            A handle to the thread that logged this message.
+  * `time`:
+            The time of the log message, as float-seconds-since-epoch.
+  * `timestamp`:
+            The `time` value, formatted using the "timestamp_format"
+            callable passed in to the Log constructor.
+
+There are three more (`line`, `message`, and `prefix`) you can use when
+formatting a "format", see next section.
+
+### Formats and format dicts
+
+The formatting of the various formatted log messages
+is specified using a "format".  `Log` supports those six formats,
+and has default values for each of those formats; you can change
+how those messages are formatted, or add your own.
+
+The `formats` parameter to the `Log` constructor should specify a
+dict.  A key in this dict is the name of a format; a custom format name
+must be a valid Python identifier, and can't collide with an existing
+`Log` method name.  The matching value should be a "format dict",
+which specifies the formatting to use for this message.
+
+A "format dict" in turn supports only two fields, and one is optional.
+The required one is `"template"`, which should be a string; this string
+is formatted with the "line formatting" rules specified in the
+previous section, with some additional values.  The optional one
+is `"line"`, and you'll see what that's used for in a moment.
+
+The string value of `"template"` is allowed to be a multi-line string.
+Each line will be split up and formatted independently, using the
+"line formatting" approach above.  But a template supports three additional
+values:
+
+  * `line`:
+            The value of the "line" value from the format dict.
+            If `{line}` is the last thing on a template line
+            (either immediately before a '\n', or immediately
+            before the end of the template string), the "line" value
+            will be repeatedly appended to the formatted string
+            until the line is >= `Log.width`, and then the line
+            will then be truncated at `Log.width` characters.
+            This is how `box` and the other methods draw those
+            horizontal lines.
+  * `message`:
+            The message that was logged.  You can specify multiple
+            lines containing `{message}`, however, all lines
+            containing `{message}` must be contiguous.  The message
+            will be split by lines, and then the template lines
+            containing `{message}` will be "zipped" together with
+            the lines of the message. For example, the first template
+            line containing `{message}` will get the first line of
+            the message, the second template line containing `{message}`
+            will get the second line of the message, etc.  If there
+            are more template lines than lines in the message, it skips
+            the subsequent template lines; if there are more lines in the
+            message than template lines, the last template line is repeated.
+  * `prefix`:
+            A string pre-formatted using the `prefix` format
+            string passed in to the `Log` constructor.
+
+### Predefined and user-defined formats
+
+`Log` comes with six pre-defined formats:
+
+  * `print`: used (by default) by `Log.print` and `Log.__call__`
+  * `box`: used by `Log.box`
+  * `enter`: used by `Log.enter`
+  * `exit`: used by `Log.exit`
+  * `start`: used to produce the "start banner" whenever the log is started
+  * `end`: used to produce the "end banner" whenever the log is closed
+
+You can override the default formatting for these by passing in a new format
+dict for that value to the `formats` parameter to the `Log` constructor.
+For example, to remove the prefix for lines printed by `Log.print`
+and `Log.__call__`, construct your `Log` as follows:
+
+```Python
+j = big.Log(..., formats={"print": {"template": "{message}"}})
+```
+
+You can also suppress the "start banner" and "end banner", by setting those
+to `None` in the `formats` dict you pass in.  This log won't print the
+start and end banners:
+
+```Python
+j = big.Log(..., formats={"start": None, "end": None})
+```
+
+You can also add your own formats!  Here's some sample code that defines
+a new format we'll call "critical":
+
+```Python
+j = big.Log(formats={"critical": {"template": "{prefix} =critical=start{line}\n{prefix} == {message}\n{prefix} =critical=end{line}", "line": "=-"}})
+```
+
+You'll notice, the template contains several newline characters, but
+doesn't *end* with a newline.  `Log` automatically adds a trailing newline
+character for you.
+
+How do you use it?  `Log.print` and `Log.__call__` both take a
+`format` keyword-only parameter, which specifies the format to apply
+to the message.  So you can use it like this:
+
+```Python
+j("My hair is on fire!", format="critical")
+```
+
+However, `Log` also adds a method to the log instance for every user-defined
+format.  You can just call `j.peanut` directly:
+
+```Python
+j.critical("We're almost out of coffee!")
+```
+
+This line, using the `"critical"` format specified above, produces the
+following output in the log:
+
+```
+[000.0002390010   MainThread]  =critical=start=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+[000.0002390010   MainThread]  == We're almost out of coffee!
+[000.0002390010   MainThread]  =critical=end=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+```
+
+(And yes, you *could* use custom formats to simulate "log levels" with `Log`.)
+
+### Custom Destinations
+
+`Log` supports sending the log to lots of different kinds of
+objects, called "destinations".  The actual implementation
+wraps each of these diverse object types in a wrapper object
+that handles logging to that "destination" object.  These wrapper
+objects are all subclasses of a base class called `Log.Destination`.
+You can write your own `Destination` subclasses, and `Log` will
+happily send the log to those too!
+
+First, declare your subclass.  You probably need to write an
+`__init__`; that's fine, but you *must* call the base class init.
+
+```Python
+class MyDestination(Log.Destination):
+    def __init__(self, o):
+        super().__init__()
+        ...
+```
+
+The methods on `Destination` subclasses called by the `Log` object
+are referred to as "events".  They generally map to method calls
+on the `Log` object, and represent the user calling that method on
+the `Log`.
+
+Second, all `Destination` subclasses *must* implement a `write`
+method, like so:
+
+```Python
+    def write(elapsed, thread, formatted):
+        ...
+```
+
+The `elapsed` parameter is the elapsed time since the log was
+started / reset, in nanoseconds.  The `thread` parameter is the
+`threading.Thread` handle for the thread that wrote this message,
+or `None` if the message isn't associated with a particular thread
+(like the "start banner" and "end banner" messages).  Finally,
+`formatted` is the formatted string to be written to the log.
+`Destination.write` is called directly to implement `Log.write`.
+
+Next there are five optional `Destination` methods
+representing high-level method calls on the `Log` object:
+
+```Python
+    def start(self, start_time_ns, start_time_epoch, formatted):
+        ...
+
+    def end(self, elapsed, formatted):
+        ...
+
+    def log(self, elapsed, thread, format, message, formatted):
+        ...
+
+    def enter(self, elapsed, thread, message, formatted):
+        ...
+
+    def exit(self, elapsed, thread, message, formatted):
+        ...
+```
+
+These map respectively to the "start banner", the "end banner",
+`Log.print` (and `Log.__call__`), `Log.enter`, and `Log.exit`.
+If you implement one of these, it'll be called when the user
+calls that method on the `Log`.  If you don't bother, you'll
+get the base class implementation, which calls
+`self.write(elapsed, thread, message)`.
+
+`Destination` also supports optional methods handling the
+three `Log` methods that don't send a log message:
+
+```Python
+    def reset(self):
+        ...
+
+    def flush(self):
+        ...
+
+    def close(self):
+        ...
+```
+
+Finally, `Destination` objects support a `register` method,
+which is called when they're passed in to the `Log` constructor.
+If you override this method, you *must* call the base class
+method, passing in the `owner` parameter, like so:
+
+```Python
+    def register(self, owner):
+        super().register(owner)
+        ...
+```
+
+`Log` objects obey a certain lifecycle, and guarantee that
+the `Destination` methods will be called in this order:
+
+```
+register
+  |
+  v
+start
+  |
+  +<---------------------------------+
+  |                                  |
+  v                                  |
+write | log | enter | exit | flush   |
+  |                                  |
+  |                                  |
+  +----------------------------------+
+  |
+  v
+end
+  |
+  v
+[flush]
+  |
+  v
+close
+```
+
+The final `flush`, before `close`, is optional; it's only called
+if the `Log` is "dirty".  (If the `Log` has sent formatted text to
+its destinations since the log was started, or the last time the
+log was flushed.)
+
+### Final notes on `Log`
+
+There's no guarantee that log messages will be logged in strict
+chronological order.  It *usually* happens that way, but it's
+not guaranteed.  If two threads both send a message at the same
+time, they might arrive in any order--and it's possible the
+later of the two arrives first.  This is a known behavior,
+and is unlikely to change in future versions.
+
+</dd></dl>
+
+## Bound inner classes
+
+<dl><dd>
+
+#### Overview
+
+One feature missing from Python pertains to "inner classes"--classes
+defined inside other classes.
+
+Consider this Python code:
+
+```Python
+class Outer(object):
+    def think(self):
+        pass
+
+o = Outer()
+o.think()
+```
+
+We've defined a function `think` inside class `Outer`.
+When you call `o.think`, Python automatically passes in the `o` object as the
+first parameter (by convention called `self`).  In object-oriented parlance,
+`o` is *bound* to `think`, and indeed Python calls the object `o.think`
+a *bound method*:
+
+```
+    >>> o.think
+    <bound method Outer.think of <__main__.Outer object at 0x########>>
+```
+
+And if you refer to `Outer.think`--if you get your reference to the `think` function
+from the class instead of an *instance* of the class--you just get the normal function.
+
+```
+    >>> Outer.think
+    <function Outer.think at 0x7b5f4f49f110>
+```
+
+But there's no similar mechanism for a *class* defined inside another class.
+Let's change our example and add a class inside `Outer`:
+
+```Python
+class Outer(object):
+    def think(self):
+        pass
+
+    class Inner(object):
+        def __init__(self):
+            pass
+
+o = Outer()
+o.think()
+i = o.Inner()
+```
+
+But classes defined inside classes don't behave the same as functions defined
+inside classes.  No matter how you reference `Inner`, you get the same class object,
+whether you access it through the outer class (`Outer.Inner`) or through an instance
+of the outer class (`o.Inner`):
+
+```
+    >>> Outer.Inner
+    <class '__main__.Outer.Inner'>
+    >>> o.Inner
+    <class '__main__.Outer.Inner'>
+```
+
+And if you call `o.Inner()`, Python won't automatically pass in `o` as an argument
+into the way it does for `o.think()`.  If you want it passed in, you have to
+pass it in yourself, like so:
+
+```Python
+class Outer(object):
+    def think(self):
+        pass
+
+    class Inner(object):
+        def __init__(self, outer):
+            self.outer = outer
+
+o = Outer()
+o.method()
+i = o.Inner(o)
+```
+
+This seems redundant.  You don't have to pass in `o` explicitly to method calls,
+why should you have to pass it in explicitly to inner classes?
+
+Well--now you don't have to!
+You can just decorate the inner class with `@big.BoundInnerClass`,
+and the `BoundInnerClass` decorator takes care of the rest.
+
+#### Using bound inner classes
+
+Let's modify the above example to use our [`BoundInnerClass`](#boundinnerclasscls)
+decorator:
+
+```Python
+from big import BoundInnerClass
+
+class Outer(object):
+    def think(self):
+        pass
+
+    @BoundInnerClass
+    class Inner(object):
+        def __init__(self, outer):
+            self.outer = outer
+
+o = Outer()
+o.method()
+i = o.Inner()
+```
+
+Notice that `Inner.__init__` now takes an `outer` parameter.
+But you didn't have to pass it in yourself!
+When you call `o.Inner()`, `o` is *automatically* passed in as the `outer`
+argument to `Inner.__init__`.  That's what the `@BoundInnerClass`
+decorator does for you.
+
+Decorating an inner class like this always inserts a second
+positional parameter, after `self`.  And, like `self`, you don't
+*have* to use the name `outer`; you can use any name you like.
+(But we'll always use the name `outer` in this documentation.)
+
+#### Inheritance
+
+Bound inner classes get slightly complicated when mixed with inheritance.
+It's not all that difficult, you merely need to obey some rules:
+
+<dl><dd>
+
+**Rule 1:** *A bound inner class can inherit normally from any unbound class.*
+
+**Rule 2:** *If your bound inner class calls `super().__init__`, and its
+parent class is also a bound inner class,* **don't** *pass in `outer` manually.*
+When you instantiate a bound inner class, `outer` will be automatically
+passed in to *all* `__init__` methods of *every* bound inner parent class.
+
+**Rule 3:** *A bound inner class can only inherit from a parent bound inner class
+if the parent is defined in the same outer class or a base of the outer class.*
+If Child inherits from Parent, and Child and Parent are both
+decorated with `@BoundInnerClass` (or `@UnboundInnerClass`), both classes
+must be defined in the same outer class (e.g. `Outer`) or in a base class
+of Child's outer class.  This is a type relation constraint; bound inner
+classes guarantee that "outer" is an instance of the outer class.
+
+**Rule 3a:** A corollary of rule 3: *A subclass of a bound inner class, whether bound
+or unbound, can only be defined in the same outer class or a subclass of the
+outer class.*
+
+**Rule 4:** **Directly** *inheriting from a* **bound** *inner class is unsupported.*
+If `o` is an instance of `Outer`, and `Outer.Inner` is an inner class
+decorated with `@BoundInnerClass`, **don't** write a class that directly
+inherits from `o.Inner`, for example `class Mistake(o.Inner)`.
+You should *always* inherit from the unbound version, like this:
+`class GotItRight(Outer.Inner)`
+
+**Rule 5:** *An inner class that inherits from a bound inner class, and which also
+wants to be bound to the outer object, should be decorated with
+[`BoundInnerClass`](#boundinnerclasscls).*
+
+**Rule 6:** *An inner class that inherits from a bound inner class, but doesn't
+want to be bound to the outer object, should be decorated with
+[`UnboundInnerClass`](#unboundinnerclasscls).*
+
+</dd></dl>
+
+Restating the last two rules: every class that descends from any
+class decorated with
+[`BoundInnerClass`](#boundinnerclasscls)
+must itself be decorated with either
+[`BoundInnerClass`](#boundinnerclasscls)
+or
+[`UnboundInnerClass`](#unboundinnerclasscls).
+Which one you use depends on what behavior you want--whether or
+not you want your inner subclass to automatically get the `outer`
+instance passed in to its `__init__`.
+
+Here's a simple example using inheritance with bound inner classes:
+
+```Python
+from big import BoundInnerClass, UnboundInnerClass
+
+class Outer(object):
+
+    @BoundInnerClass
+    class Parent(object):
+        def __init__(self, outer):
+            self.outer = outer
+
+    @UnboundInnerClass
+    class Child(Parent):
+        def __init__(self):
+            super().__init__()
+
+o = Outer()
+child = o.Child()
+```
+
+We followed the rules:
+
+* `Outer.Parent` inherits from object; since object isn't a bound inner class,
+  there are no special rules about inheritance `Outer.Parent` needs to obey.
+* Since `Outer.Child` inherits from a
+  [`BoundInnerClass`](#boundinnerclasscls),
+  it must be
+  decorated with either [`BoundInnerClass`](#boundinnerclasscls)
+  or [`UnboundInnerClass`](#unboundinnerclasscls).
+  It doesn't want the outer object passed in, so it's decorated
+  with [`UnboundInnerClass`](#unboundinnerclasscls).
+* `Child.__init__` calls `super().__init__`, but doesn't pass in `outer`.
+* Both `Parent` and `Child` are defined in the same class.
+
+Note that, because `Child` is decorated with
+[`UnboundInnerClass`](#unboundinnerclasscls),
+it doesn't take an `outer` parameter.  Nor does it pass in an `outer`
+argument when it calls `super().__init__`.  But when the constructor for
+`Parent` is called, the correct `outer` parameter is passed in--like magic!
+
+If you wanted `Child` to also get the outer argument passed in to
+its `__init__`, just decorate it with [`BoundInnerClass`](#boundinnerclasscls)
+instead of
+[`UnboundInnerClass`](#unboundinnerclasscls),
+like so:
+
+```Python
+from big import BoundInnerClass
+
+class Outer(object):
+
+    @BoundInnerClass
+    class Parent(object):
+        def __init__(self, outer):
+            self.outer = outer
+
+    @BoundInnerClass
+    class Child(Parent):
+        def __init__(self, outer):
+            super().__init__()
+            assert self.outer == outer
+
+o = Outer()
+child = o.Child()
+```
+
+Again, `Child.__init__` doesn't need to explicitly
+pass in `outer` when calling `super.__init__`, but the
+correct value for `outer` *does* get passed in to `Parent.__init__`.
+
+You can see more complex examples of using inheritance with
+[`BoundInnerClass`](#boundinnerclasscls)
+(and [`UnboundInnerClass`](#unboundinnerclasscls))
+in the **big** test suite.
+
+#### Miscellaneous notes
+
+* A bound inner class is a *subclass* of the original (unbound) class.
+  `o.Inner` is a subclass of `Outer.Inner`.
+
+* Bound inner classes bound to different outer instances are different
+  classes. This is symmetric with methods; if you have two objects
+  `a` and `b` that are instances of the same class,
+  `a.BoundInnerClass != b.BoundInnerClass`, just as `a.method != b.method`.
+
+* If you refer to a inner class directly from the outer *class*
+  (like `Outer.Inner`) rather than an *instance* (like `o.Inner`)
+  you get the original (unbound) class.
+
+  * You might be able call `Outer.Inner` directly, to construct
+    an `Inner` object without using a bound version of the class.
+    You'll have to pass in the outer parameter by hand--just like
+    you'd have to pass in the `self` parameter by hand when calling
+    a method via the *class* (`Outer.method`) rather than via an
+    *instance* of the class (`o.method`).  This won't work if
+    `Outer.Inner` is a subclass of *another* bound inner class,
+    and calls its `super().__init__`.  The injection of the outer
+    instance argument happens when the class is bound, and this
+    handles injecting the argument for all the base classes too.
+    Without this binding mechanism getting involved, the `outer`
+    argument won't get supplied when calling the base class's
+    `__init__`.
+
+* Bound inner classes are cached in the outer object, which both
+  provides a small speedup and ensures that `isinstance`
+  relationships are consistent.  This is an explicit feature, and
+  you're permitted to rely on it.
+
+   * If you use slots on your outer class, you must add a slot for
+     BoundInnerClass to store its cache.  Just add BOUNDINNERCLASS_OUTER_SLOTS
+     to your slots tuple, like so:
+
+```Python
+__slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
+```
+
+* Binding only goes one level deep.  If you had a bound inner class `C`
+  define inside another bound inner class `B`, which in turn was defined
+  inside a class `A`, the constructor for `C` would be called with
+  the `B` object, but not the `A` object.
+
+* If you support Python 3.6, and you define bound inner child classes,
+  you'll need to wrap all the bound inner base classes of those child
+  classes with `big.boundinnerclass.bound_inner_base`.  For example:
+  `class Child(bound_inner_base(Parent)):`  This is unnecessary
+  in Python 3.7+.  However, using `bound_inner_base` works fine in
+  all versions of Python supported by big.
+
+* The rewrite of bound inner classes that shipped with big version 0.13
+  removed some old provisos:
+
+  * You may now rename your inner classes, even after
+    decorating them with `@BoundInnerClass` (or `@UnboundInnerClass`).
+    In previous versions this would break some internal mechanisms,
+    but renaming your classes is now explicitly supported behavior.
+  * The race condition around creating and caching the bound version
+    of an inner class from multiple threads has been prevented, by
+    adding just a little internal locking.  The implementation doesn't
+    need to lock very often, so the performance cost is negligible.
+  * It's no longer required to call `super().__init__` in bound
+    inner subclasses!  In fact it was probably never necessary.
+    It's totally up to you whether or not you call `super().__init__`.
+
+
+</dd></dl>
+
 
 ## The `multi-` family of string functions
+
 
 <dl><dd>
 
@@ -4525,8 +7861,8 @@ string in *exactly* one of those two modes, you probably can't use
 
 So what *can* you use?  There's
 [`re.split`,](https://docs.python.org/3/library/re.html#re.split)
-but that can be  hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
-Regular expressions can be so hard to get right, and the
+but that can be hard to use.<sup id=back_to_re_strip><a href=#re_strip_footnote>1</a></sup>
+Regular expressions can be difficult to get right, and the
 semantics of `re.split` are subtly different from the usual
 string splitting functions.  Not to mention, it doesn't support
 reverse!
@@ -4550,9 +7886,9 @@ complexity is to use it as a building block for your own
 text splitting functions.  For example, **big** uses
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to implement
-[`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
-[`normalize_whitespace`,](#normalize_whitespaces-separatorsNone-replacementnone)
-[`lines`,](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+[`multipartition`,](#multipartitions-separators-count1--reversefalse-separatetrue)
+[`normalize_whitespace`,](#normalize_whitespaces-separatorsnone-replacementnone)
+[`lines`,](#bigtext)
 and several other functions.
 
 ### Using `multisplit`
@@ -4607,12 +7943,12 @@ magic value.  All the *other* keyword-only parameters default
 to `False`.)
 
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-also inspired [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
- and [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+also inspired [`multistrip`](#multistrips-separators-lefttrue-righttrue)
+ and [`multipartition`,](#multipartitions-separators-count1--reversefalse-separatetrue)
 which also take this same `separators` arguments.  There are also
 other **big** functions that take a `separators` argument,
 for example `comment_markers` for
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers).)
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_lines).)
 
 ### Demonstrations of each `multisplit` keyword-only parameter
 
@@ -5257,7 +8593,7 @@ And I should know--`multisplit` is implemented using `re.split`!
 Several functions in **big** take a `separators`
 argument, an iterable of separator strings.
 Examples of these functions include
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+[`lines`](#bigtext)
 and
 [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 Although you can use any iterable of strings
@@ -5785,164 +9121,6 @@ into two-byte segments and operate on those.
 
 </dd></dl>
 
-
-## `lines` and lines modifier functions
-
-<dl><dd>
-
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
-is a function that makes it easy to write well-behaved, feature-rich text parsers.
-
-
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) itself
-iterates over a string, returning an iterator that yields individual lines
-split from that string.  The iterator yields a 2-tuple:
-```
-(LinesInfo, line)
-```
-The `LinesInfo` object provides the line number and starting column number
-for each line.  This makes it easy for your parser to provide
-line and column information for error messages.
-
-This iterator is designed to be modified by "lines modifier"
-functions.  These are functions that consume a lines
-iterator and re-yield the values, possibly modifying or
-discarding them along the way.  For example, passing
-a [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) iterator into `lines_filter_empty_lines` results
-in an iterator that skips over the empty lines.
-All the lines modifier functions that ship with **big**
-start with the string `lines_`.
-
-Most lines modifier function names belong to a category,
-encoded as the second word in the function name
-(immediately after `lines_`).  Some examples:
-
-* `lines_filter_` functions conditionally remove
-  lines from the output.  For example, `lines_filter_empty_lines`
-  will only yield a line if it isn't empty.
-* `lines_strip_` functions may remove one or
-  more substrings from the line.  For example,
-  [`lines_strip_indent`](#lines_strip_indentli)
-  strips the leading whitespace from a line before yielding
-  it.  (Whenever a lines modifier removes leading text from a line,
-  it will add a `leading` field to the accompanying
-  [`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-  object containing the removed substring, and will also update the
-  `column_number` of the line to reflect the new starting column.)
-* `lines_convert_` functions means this lines modifier may change one
-  or more substrings in the line.  For example,
-  `lines_convert_tabs_to_spaces` changes tab characters
-  to space characters in any lines it processes.
-
-(**big** isn't strictly consistent about these category names though.
-For example,
-[`lines_containing`](#lines_containingli-s--invertfalse)
-and
-[`lines_grep`](#lines_grepli-pattern--invertfalse-flags0)
-are obviously "filter" modifiers, but their names
-don't start with `lines_filter_`.)
-
-All lines modifier functions are composable with each
-other; you can "stack" them together simply by passing
-the output of one into the input of another.  For example,
-
-```Python
-     with open("textfile.txt", "rt") as f:
-         for info, line in big.lines_filter_empty_lines(
-     	     big.lines_rstrip(lines(f.read()))):
-     	     ...
-```
-
-will iterate over the lines of `textfile.txt`, skipping
-over all empty lines and lines that consist only of
-whitespace.
-
-When you stack line modifiers in this way, note that the
-*outer* modifiers happen *later*.  In the above example,
-each line is first "r-stripped", and then discarded
-if it's empty.  If you stacked the line modifiers in
-the opposite order:
-
-```Python
-     with open("textfile.txt", "rt") as f:
-         for info, line in big.lines_rstrip(
-     	     big.lines_filter_empty_lines(lines(f.read()))):
-     	     ...
-```
-
-then it'd filter out empty lines first, and *then*
-"r-strip" the lines.  So lines in the input that contained
-only whitespace would still get yielded as empty lines,
-which is probably not what you want.  Ordering is important!
-
-It's probably clearer to constructed nested lines modifiers
-this way:
-
-```Python
-     with open("textfile.txt", "rt") as f:
-         li = lines(f.read())
-         li = big.lines_filter_empty_lines(li)
-         li = big.lines_rstrip(li)
-         for info, line in li:
-           ...
-```
-
-This is much easier to read, particularly when one or
-more lines modifiers take additional arguments.
-
-Of course, you can write your own lines modifier functions.
-Simply accept a lines iterator as an argument, iterate over
-it, and yield each line info and line--modifying them
-(or not yielding them!) as you see fit.  You could
-even write your own lines iterator, a replacement for
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs),
-if you need functionality
-[`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs) doesn't provide.
-
-Note that if you write your own lines modifier function,
-and it removes text from the beginning the line, you must
-update `column_number` in the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-object manually--it
-doesn't happen automatically.  The easiest way to handle this
-is also the best way: whenever clipping text from the beginning
-or end of the line, use the
-[`clip_leading`](#lineinfoclip_leadingline-s)
-and
-[`clip_trailing`](#lineinfoclip_trailingline-s)
-methods on the `LineInfo` object.
-
-Speaking of best practices for lines modifier functions,
-it's also best practice to *modify* the *existing*
-`LineInfo` object that was yielded to you, rather than
-throwing it away, creating a new one, and yielding that
-instead.  Previous lines modifier iterators may have added
-fields to the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-that you'd to preserve.
-
-### leading + line + trailing + end
-
-Generally speaking,
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
-objects obey an invariant.
-For any `(info, line)` pair yielded by `lines` or a lines
-modifier:
-
-    info.leading + line + info.trailing + info.end == info.line
-
-That is, you can recreate the original line by concatenating
-the "leading" string, the modified line, the "trailing" string,
-and the "end" string.
-
-Of course, this won't be true if you use lines modifiers that
-replace characters in the line.  For example, `lines_convert_tabs_to_spaces`
-replaces tab characters with one or more space characters.
-If the original line contains tabs, obviously the above invariant
-will no longer hold true.
-
-</dd></dl>
-
 ## Word wrapping and formatting
 
 <dl><dd>
@@ -6289,273 +9467,212 @@ others.  Views are completely independent from each other.
 
 </dd></dl>
 
-## Bound inner classes
-
-<dl><dd>
-
-#### Overview
-
-One minor complaint I have about Python regards inner classes.
-An "inner class" is a class defined inside another class.  And,
-well, inner classes seem kind of half-baked.  Unlike functions,
-inner classes don't get bound to the object.
-
-Consider this Python code:
-
-```Python
-class Outer(object):
-    def method(self):
-        pass
-    class Inner(object):
-        def __init__(self):
-            pass
-
-o = Outer()
-o.method()
-i = o.Inner()
-```
-
-When `o.method` is called, Python automatically passes in the `o` object as the first parameter
-(generally called `self`).  In object-oriented lingo, `o` is *bound* to `method`, and indeed
-Python calls this object a *bound method*:
-
-```
-    >>> o.method
-    <bound method Outer.method of <__main__.Outer object at 0x########>>
-```
-
-But that doesn't happen when `o.Inner` is called.  (It *does* pass in
-a `self`, but in this case it's the newly-created `Inner` object.)
-There's just no built-in way for the `o.Inner` object being constructed
-to *automatically* get a reference to `o`.  If you need one, you must
-explicitly pass one in, like so:
-
-```Python
-class Outer(object):
-    def method(self):
-        pass
-    class Inner(object):
-        def __init__(self, outer):
-            self.outer = outer
-
-o = Outer()
-o.method()
-i = o.Inner(o)
-```
-
-This seems redundant.  You don't have to pass in `o` explicitly to method calls,
-why should you have to pass it in explicitly to inner classes?
-
-Well--now you don't have to!
-You just decorate the inner class with `@big.BoundInnerClass`,
-and `BoundInnerClass` takes care of the rest!
-
-#### Using bound inner classes
-
-Let's modify the above example to use our [`BoundInnerClass`](#boundinnerclasscls)
-decorator:
-
-```Python
-from big import BoundInnerClass
-
-class Outer(object):
-    def method(self):
-        pass
-
-    @BoundInnerClass
-    class Inner(object):
-        def __init__(self, outer):
-            self.outer = outer
-
-o = Outer()
-o.method()
-i = o.Inner()
-```
-
-Notice that `Inner.__init__` now requires an `outer` parameter,
-even though you didn't pass in any arguments to `o.Inner`.
-When it's called, `o` is magically passed in to `outer`!
-Thanks, [`BoundInnerClass`](#boundinnerclasscls)!  You've saved the day!
-
-Decorating an inner class like this always adds a second positional
-parameter, after `self`.  And, like `self`, you don't have
-to use the name `outer`, you can use any name you like.
-(Although it's probably a good idea, for consistency's sakes.)
-
-#### Inheritance
-
-Bound inner classes get slightly complicated when mixed with inheritance.
-It's not all that difficult, you merely need to obey the following rules:
-
-1. *A bound inner class can inherit normally from any unbound class.*
-
-2. *To subclass from a bound inner class while still inside the outer
-class scope, or when referencing the inner class from the outer class
-(as opposed to an instance of the outer class), you must actually
-subclass or reference `classname.cls`.*  This is because inside the
-outer class, the "class" you see is actually an instance of a
-[`BoundInnerClass`](#boundinnerclasscls) object.
-
-3. *All classes that inherit from a bound inner class must always call the
-superclass's `__init__`. You don't need to pass in the `outer` parameter;
-it'll be automatically passed in to the superclass's `__init__` as before.*
-
-4. *An inner class that inherits from a bound inner class, and which also
-wants to be bound to the outer object, should be decorated with
-[`BoundInnerClass`](#boundinnerclasscls).*
-
-5. *An inner class that inherits from a bound inner class, but doesn't
-want to be bound to the outer object, should be decorated with
-[`UnboundInnerClass`](#unboundinnerclasscls).*
-
-Restating the last two rules: every class that descends from any
-[`BoundInnerClass`](#boundinnerclasscls)
-should be decorated with either
-[`BoundInnerClass`](#boundinnerclasscls)
-or
-[`UnboundInnerClass`](#unboundinnerclasscls).
-Which one you use depends on what behavior you want--whether or
-not you want your inner subclass to automatically get the `outer`
-instance passed in to its `__init__`.
-
-Here's a simple example using inheritance with bound inner classes:
-
-```Python
-from big import BoundInnerClass, UnboundInnerClass
-
-class Outer(object):
-
-    @BoundInnerClass
-    class Inner(object):
-        def __init__(self, outer):
-            self.outer = outer
-
-    @UnboundInnerClass
-    class ChildOfInner(Inner.cls):
-        def __init__(self):
-            super().__init__()
-
-o = Outer()
-i = o.ChildOfInner()
-```
-
-We followed the rules:
-
-* `Inner` inherits from object; since object isn't a bound inner class,
-  there are no special rules about inheritance `Inner` needs to obey.
-* `ChildOfInner` inherits from `Inner.cls`, not `Inner`.
-* Since `ChildOfInner` inherits from a
-  [`BoundInnerClass`](#boundinnerclasscls),
-  it must be
-  decorated with either [`BoundInnerClass`](#boundinnerclasscls)
-  or [`UnboundInnerClass`](#unboundinnerclasscls).
-  It doesn't want the outer object passed in, so it's decorated
-  with [`UnboundInnerClass`](#unboundinnerclasscls).
-* `ChildOfInner.__init__` calls `super().__init__`.
-
-Note that, because `ChildOfInner` is decorated with
-[`UnboundInnerClass`](#unboundinnerclasscls),
-it doesn't take an `outer` parameter.  Nor does it pass in an `outer`
-argument when it calls `super().__init__`.  But when the constructor for
-`Inner` is called, the correct `outer` parameter is passed in--like magic!
-Thanks again, [`BoundInnerClass`](#boundinnerclasscls)!
-
-If you wanted `ChildOfInner` to also get the outer argument passed in to
-its `__init__`, just decorate it with [`BoundInnerClass`](#boundinnerclasscls)
-instead of
-[`UnboundInnerClass`](#unboundinnerclasscls),
-like so:
-
-```Python
-from big import BoundInnerClass
-
-class Outer(object):
-
-    @BoundInnerClass
-    class Inner(object):
-        def __init__(self, outer):
-            self.outer = outer
-
-    @BoundInnerClass
-    class ChildOfInner(Inner.cls):
-        def __init__(self, outer):
-            super().__init__()
-            assert self.outer == outer
-
-o = Outer()
-i = o.ChildOfInner()
-```
-
-Again, `ChildOfInner.__init__` doesn't need to explicitly
-pass in `outer` when calling `super.__init__`.
-
-You can see more complex examples of using inheritance with
-[`BoundInnerClass`](#boundinnerclasscls)
-(and [`UnboundInnerClass`](#unboundinnerclasscls))
-in the **big** test suite.
-
-#### Miscellaneous notes
-
-* If you refer to a bound inner class directly from the outer *class,*
-  rather than using the outer *instance,* you get the original class.
-  This ensures that references to `Outer.Inner` are consistent; this
-  class is also a base class of all the bound inner classes. Additionally,
-  if you attempt to construct an instance of an unbound `Outer.Inner`
-  class without referencing it via an instance, you must pass in the
-  outer parameter by hand--just like you'd have to pass in the `self`
-  parameter by hand when calling a method on the *class itself* rather
-  than on an *instance* of the class.
-
-* If you refer to a bound inner class from an outer instance,
-  you get a subclass of the original class.
-
-* Bound classes are cached in the outer object, which both provides
-  a small speedup and ensures that `isinstance` relationships are
-  consistent.
-
-* You must not rename inner classes decorated with either
-  [`BoundInnerClass`](#boundinnerclasscls)
-  or [`UnboundInnerClass`](#unboundinnerclasscls)!
-  The implementation of
-  [`BoundInnerClass`](#boundinnerclasscls)
-  looks up
-  the bound inner class in the outer object by name in several places.
-  Adding aliases to bound inner classes is harmless, but the original
-  attribute name must always work.
-
-* Bound inner classes from different objects are different classes.
-  This is symmetric with bound methods; if you have two objects
-  `a` and `b` that are instances of the same class,
-  `a.BoundInnerClass != b.BoundInnerClass`, just as `a.method != b.method`.
-
-* The binding only goes one level deep; if you had an inner class `C`
-  inside another inner class `B` inside a class `A`, the constructor
-  for `C` would be called with the `B` object, not the `A` object.
-
-* Similarly, if you have a bound inner class `B` inside a class `A`,
-  and another bound inner class `D` inside a class `C`, and `D`
-  inherits from `B`, the constructor for `D` will be called with
-  the `B` object but not the `A` object. When `D` calls `super().__init__`
-  it'll have to fill in the `outer` parameter by hand.
-
-* There's a race condition in the implementation: if you access a
-  bound inner class through an outer instance from two separate threads,
-  and the bound inner class was not previously cached, the two threads
-  may get different (but equivalent) bound inner class objects, and only
-  one of those instances will get cached on the outer object.  This could
-  lead to confusion and possibly cause bugs. For example, you could have
-  two objects that would be considered equal if they were instances of
-  the same bound inner class, but would not be considered equal if
-  instantiated by different instances of that same bound inner class.
-  There's an easy workaround for this problem: access the bound inner
-  class from the `__init__` of the outer class, which should allow
-  the code to cache the bound inner class instance before a second
-  thread could ever get a reference to the outer object.
-
-</dd></dl>
-
 
 ## Release history
+
+#### 0.13
+
+*2026/02/17*
+
+It's been more than a year... and I've been busy!
+
+* Added three new modules:
+  * [*big.types*](#bigtypes), which contains core types,
+  * [*big.tokens*](#bigtokens), useful functions and values
+    when working with Python's tokenizer, and
+  * [*big.template*](#bigtemplate), functions that parse strings
+    containing a simple template syntax.
+* Added [`linked_list`](#linked_list) to new module *big.types*.
+  `linked_list` is a
+  thoughtful implementation of a standard linked list data
+  structure, with an API and UX modeled on Python's `list`
+  and `collections.deque` objects.  Unlike Python's builtins,
+  you're permitted to add and remove values to a `linked_list`
+  while iterating.  `linked_list` also supports locking.
+* Added [`string`](#string) to new module *big.types*.
+  `string` is a subclass
+  of `str` that tracks line number and column number offsets
+  for you.  Just initialize one big `string` containing an
+  entire file, and every substring of that string will know
+  its line number, column number, and offset in characters
+  from the beginning.
+* `big.lines` and all the "lines modifier" functions
+  are now deprecated; `string` replaces all of it
+  (and it's a *massive* upgrade!).  `big.lines` will
+  move to the `deprecated` module no sooner than
+  March 2026, and will be removed no sooner than November 2026.
+* Added [`strip_indents`](#strip_indentslines--tab_width8-linebreakslinebreaks)
+  and
+  [`strip_line_comments`](#strip_line_commentslines-line_comment_markers--escape-quotes-multiline_quotes-linebreakslinebreaks) to *big.text*.
+  These provide the same functionality as the old `lines_strip_indent`
+  and `lines_strip_line_comments` line modifier functions,
+  but now operate on iterables of strings instead of
+  "lines" iterators.
+* Added [`Pattern`](#patterns-flags0) to *big.text*.
+  This is a wrapper around `re.Pattern` that preserves
+  slices of str subclasses.
+* Added [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape)
+  and
+  [`eval_template_string`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
+  to new module *big.template*.
+    * `parse_template_string`
+      parses a string containing Jinja-like interpolations,
+      and returns an iterator that yields strings and
+      `Interpolation` objects.  (This is similar to
+      "t-strings" in Python 3.14+.)
+    * `eval_template_string` calls `parse_template_string`
+      to parse a string, then evaluates the expressions
+      (and filters) using `eval`.  It returns the resulting
+      string with all substitutions rendered.
+* Rewrote [`BoundInnerClass`](#BoundInnerClass), and it's a
+  huge improvement. The rewrite removes some old concerns:
+    * You no longer need the `parent.cls` hack!  (Well, you
+      do if you support Python 3.6, but it's no longer needed
+      in Python 3.7+.  Bound inner class adds a new function,
+      [`bound_inner_base`](#bound_inner_basecls),
+      to help with the transition.)
+    * The bound inner class implementation now relies on
+      comparison by identity instead of by name, which means
+      you may now add aliases and/or rename your inner classes
+      to your heart's content.
+    * Bound inner classes no longer keep a strong reference to
+      the outer instance; they use weakrefs.  This reduces
+      reference cycles, making it easier to reclaim abandoned
+      bound inner class objects, albeit at the cost of adding
+      a weakref "get ref" call every time a bound inner class
+      is instantiated.
+    * Bound inner classes now have explicit support for slots!
+    * Bound inner classes now have accurate signatures,
+      preserving the signature of the original class's `__init__`
+      but with the `outer` parameter removed.
+    * `BoundInnerClass` adds locking, to prevent a race condition
+      when caching the same bound inner class created
+      simultaneously in multiple threads.  It's rarely used
+      and should have no real impact on performance.
+* Added new functions to the *big.boundinnerclass* module:
+    * [`unbound`](#unboundcls) returns the unbound base class
+      of `cls` if `cls` is a bound inner class.
+    * [`is_boundinnerclass`](#is_boundinnerclasscls) returns true if called on a
+      class decorated with `@BoundInnerClass`, whether or
+      not it has been bound to an instance.
+    * [`is_unboundinnerclass`](#is_unboundinnerclasscls) returns true if called on a
+      class decorated with `@UnboundInnerClass`, whether or
+      not it has been bound to an instance.
+    * [`is_bound`](#is_boundcls) returns true if called on a bound inner
+      class that has been bound to an instance.
+    * [`bound_to`](#bound_tocls) returns the instance that cls has been
+      bound to, if `cls` is a bound inner class bound to an instance.
+    * [`type_bound_to](#type_bound_tocls)` returns the instance that `type(o)` has
+      been bound to, if `type(o)` is a bound inner class bound
+      to an instance.
+    * [`bound_inner_base`](#bound_inner_basecls) is only needed to use BoundInnerClass
+      with Python 3.6.  It's unnecessary in Python 3.7+.
+* Added [`generate_tokens`](#generate_tokenss) to new module *big.tokens*.
+  `generate_tokens` is a convenience wrapper around
+  Python's `tokenize.generate_tokens`, which has an
+  abstruse "readline"-based interface.
+  `tokens.generate_tokens` instead
+  lets you simply pass in a string object, and returns a
+  generator yielding tokens.  It also preserves slices
+  of str subclasses--if the string you pass in is a
+  `big.string` object, the `string` values it yields
+  will be slices from that original `big.string`!
+* The *big.tokens* module also contains definitions
+  for every token defined by any version
+  of Python supported by big (3.6+).  big's version
+  always starts with `TOKEN_`, e.g. `token.COMMA`
+  is `big.tokens.TOKEN_COMMA`.  Tokens not defined
+  in the currently running version of Python have
+  a value of `TOKEN_INVALID`, which is -1.
+* Added [`iterator_context`](#iterator_contextiterator-start0) to *big.itertools*.  `iterator_context`
+  is like an extended version of Python's `enumerate`,
+  directly inspired by Jinja's
+  ["loop special variables"](https://jinja.palletsprojects.com/en/stable/templates/#for)
+  and Mako's ["loop context"](https://docs.makotemplates.org/en/latest/runtime.html#the-loop-context).
+  It wraps an iterator and provides helpful metadata.
+* Added
+  [`iterator_filter`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone)
+  to *big.itertools*.  `iterator_filter`
+  is a pass-through iterator that filters values.
+  You pass in an iterator, and rules for what values you
+  want to see / don't want to see, and it returns
+  an iterator that only yields the values you want.
+* Rewrote the entire [*big.log*](#biglog) module.  I'd stopped
+  using the old `Log` class, yet on a couple recent projects
+  I hacked up a quick-and-dirty log... clearly the old `Log`
+  wasn't solving my problem anymore.  The new `Log` is designed
+  explicitly for lightweight logging, mostly for debugging.
+  It's simple to use, feature-rich, high-performance, and by
+  default runs in "threaded" mode where logging calls are 5x
+  faster than calling `print`!
+  * I added a backwards-compatible [`OldLog`](#oldlogclocknone) to *big.log*
+    in case anybody is using the old `Log` class.  This
+    provides the API and functionality of the old `Log`
+    class, but is reimplemented on top of the new `Log`.
+    Hopefully the way I did it will ease your transition
+    to the obviously-superior new `Log`.  The old `Log`
+    has been relocated to the *big.deprecated*
+    module. Both `OldLog` and the old `Log` are deprecated,
+    and will be removed someday, no earlier than March 2027.
+* Added [`ModuleManager`](#modulemanager) to *big.builtin*.
+  `ModuleManager` helps you manage a module's namespace,
+  making it easy to populate `__all__` and clean up
+  temporary symbols.
+* Added [`ClassRegistry`](#ClassRegistry) to *big.builtin*.
+  `ClassRegistry` helps you use inheritance with heavily
+  nested class hierarchies, by giving you a place to
+  store references to base classes you can access later.
+  Very useful with [`BoundInnerClass`](#boundinnerclasscls)!
+* The string returned by `big.time.timestamp_human` now
+  includes the timezone, using the local timezone by default.
+  If you want to override that and use a specific timezone,
+  you can pass in a `datetime.timezone` object via the new
+  `tzinfo` keyword-only parameter.
+* Added support for Python 3.14, mainly to support t-strings:
+  * `python_delimiters` now recognizes all the new string
+    prefixes containing `t` (or `T`).
+  * *big.tokens* supports the new tokens associated with
+    t-strings, although that's a new module anyway.
+* Sped up `test/test_text.py`.  The tests confirm that **big**'s list of whitespace
+  characters is accurate.  It used to test if a particular character `c` was
+  whitespace by using `len(f'a{c}b'.split()) == 2`.  D'oh!  It's obviously much
+  faster to simply ask it with `c.isspace()`.  The resulting loop runs 3x
+  faster... saving a whole 0.1 seconds on my workstation!
+  Modifying the equivalent code for bytes instead of Unicode objects
+  is also faster, but that optimization only saved 0.0000014 seconds.
+  Hat tip to Eric V. Smith for his suggestions on how to make
+  Big's test suite so much faster!
+* [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+  in *big.text* now obeys
+  subclasses of str better.  (It now works well with
+  `big.string` for example.)
+* Removed a bunch of old deprecated stuff:
+  * Old names for sets of characters:
+    * `whitespace_without_dos`
+    * `ascii_whitespace_without_dos`
+    * `newlines`
+    * `newlines_without_dos`
+    * `ascii_newlines`
+    * `ascii_newlines_without_dos`
+    * `utf8_whitespace`
+    * `utf8_whitespace_without_dos`
+    * `utf8_newlines`
+    * `utf8_newlines_without_dos`
+  * Old functions / classes / aliases:
+    * `split_quoted_strings`
+    * `lines_strip_comments`
+    * `parse_delimiters` and its associated stuff:
+      * `Delimiter` (a class)
+      * `delimiter_parentheses`
+      * `delimiter_square_brackets`
+      * `delimiter_curly_braces`
+      * `delimiter_angle_brackets`
+      * `delimiter_single_quote`
+      * `delimiter_double_quotes`
+      * `parse_delimiters_default_delimiters`
+      * `parse_delimiters_default_delimiters_bytes`
+    * The old alias `lines_filter_comment_lines`
+* Updated copyright notices to 2026.
 
 #### 0.12.8
 
@@ -6806,7 +9923,7 @@ would sometimes raise `ValueError`.)
 
 <dl><dd>
 
-* A minor semantic change to [`lines_strip_indent`](#lines_strip_indentli):
+* A minor semantic change to [`lines_strip_indent`](#lines_strip_indent):
   when it encounters a whitespace-only line, it clips the line to *trailing*
   in the `LineInfo` object.  It used to clip such lines to *leading*.  But this
   changed `LineInfo.column_number` in a nonsensical way.
@@ -6865,7 +9982,7 @@ New package.  A package for working with version information.
 The default value for `quotes` has changed.  Now it's
 what it should always have been: empty.  No quote marks
 are defined by default, which means the default behavior of
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+[`lines_strip_line_comments`](#lines_strip_line_comments)
 is now to simply truncate the line
 at the leftmost comment marker.
 
@@ -6926,9 +10043,9 @@ The following functions and classes have breaking changes:
 
 [`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse)
 
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+[`lines_strip_line_comments`](#lines_strip_line_comments)
 
 [`split_delimiters`](#split_delimiterss-delimiters--state)
 
@@ -6941,9 +10058,9 @@ These functions have been renamed:
 
 <dl><dd>
 
-`lines_filter_comment_lines` is now [`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
+`lines_filter_comment_lines` is now [`lines_filter_line_comment_lines`](#lines_filter_line_comment_lines)
 
-`lines_strip_comments` is now [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+`lines_strip_comments` is now [`lines_strip_line_comments`](#lines_strip_line_comments)
 
 `parse_delimiters` is now [`split_delimiters`](#split_delimiterss-delimiters--state)
 
@@ -6958,9 +10075,9 @@ These functions have been renamed:
 
 [`encode_strings`](#encode_stringso--encodingascii)
 
-[`LineInfo.clip_leading`](#lineinfoclip_leadingline-s)
+[`LineInfo.clip_leading`](#lineinfoclip_leading-and-lineinfoclip_trailing)
 
-[`LineInfo.clip_trailing`](#lineinfoclip_trailingline-s)
+[`LineInfo.clip_trailing`](#lineinfoclip_leading-and-lineinfoclip_trailing)
 
 [`split_title_case`](split_title_cases--split_allcapstrue)
 
@@ -7103,7 +10220,7 @@ Minor updates to the documentation and to the text of some exceptions.
 > This API has breaking changes.
 
 Breaking change: the
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 constructor has a
 new `lines` positional parameter, added *in front of*
 the existing positional parameters.  This new first argument
@@ -7113,7 +10230,7 @@ should be the  `lines` iterator that yielded this
 needed by the lines modifiers, for example `tab_width`.)
 
 Minor optimization:
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 objects previously had many
 optional fields, which might or might not be added
 dynamically.  Now all fields are pre-added.  (This makes
@@ -7131,7 +10248,7 @@ the "lines modifiers" are now very consistent about updating
 `leading`, and the new symmetrical attribute `trailing`.
 
 New feature:
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 now has an `end` attribute,
 which contains the end-of-line character that ended this line.
 
@@ -7141,7 +10258,7 @@ turning tabs into spaces),
 
     info.leading + line + info.trailing + info.end == info.line
 
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 objects now always have these attributes:
   * `lines`, which contains the base lines iterator.
   * `line`, which contains the original unmodified line.
@@ -7169,15 +10286,15 @@ objects now always have these attributes:
 #### `LineInfo.clip_leading` and `LineInfo.clip_trailing`
 
 
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 also has two new methods:
-[`LineInfo.clip_leading`](#lineinfoclip_leadingline-s)
+[`LineInfo.clip_leading`](#lineinfoclip_leading-and-lineinfoclip_trailing)
 and
-[`LineInfo.clip_trailing(line, s)`](#lineinfoclip_trailingline-s).
+[`LineInfo.clip_trailing(line, s)`](#lineinfoclip_leading-and-lineinfoclip_trailing).
 These methods clip a leading or
 trailing substring from the current `line`, and transfer
 it to the relevant field in
-[`LineInfo`](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`](#lineinfo)
 (either `leading` or
 `trailing`).  `clip_leading` also updates the `column_number`
 attribute.
@@ -7194,7 +10311,7 @@ somewhere else.
 <dl><dd>
 
 `lines_filter_comment_lines` has been renamed to
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers).
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_lines).
 For backwards compatibility, the function
 is also available under the old name; this old name will
 eventually be removed, but not before September 2025.
@@ -7210,7 +10327,7 @@ eventually be removed, but not before September 2025.
 New name for `lines_filter_comment_lines`.
 
 Correctness improvements:
-[`lines_filter_line_comment_lines`](#lines_filter_line_comment_linesli-comment_markers)
+[`lines_filter_line_comment_lines`](#lines_filter_line_comment_lines)
 now enforces that single-quoted strings can't span lines,
 and multi-quoted strings must be closed before the end of
 the last line.
@@ -7226,7 +10343,7 @@ itself skips past any leading whitespace.
 
 <dl><dd>
 
-New feature: [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch)
+New feature: [`lines_grep`](#lines_grep)
 has always used `re.search` to examine
 the lines yielded.  It now writes the result to `info.match`.
 (If you pass in `invert=True` to `lines_grep`, `lines_grep`
@@ -7243,9 +10360,9 @@ parameter `match`.
 <dl><dd>
 
 New feature:
-[`lines_rstrip`](#lines_rstripli-separatorsnone)
+[`lines_rstrip`](#lines_rstrip-and-lines_strip)
 and
-[`lines_strip`](#lines_stripli-separatorsnone)
+[`lines_strip`](#lines_rstrip-and-lines_strip)
 now both accept a
 `separators` argument; this is an iterable of separators,
 like the argument to
@@ -7260,7 +10377,7 @@ stripping whitespace.
 <dl><dd>
 
 New feature:
-[`lines_sort`](#lines_sortli--keynone-reversefalse)
+[`lines_sort`](#lines_sort)
 now accepts a `key` parameter,
 which is used as the `key` argument for `list.sort`.
 The value passed in to `key` is the `(info, line)` tuple
@@ -7276,7 +10393,7 @@ the previous behavior, sorting by the `line` (ignoring the
 <dl><dd>
 
 This function has been renamed
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+[`lines_strip_line_comments`](#lines_strip_line_comments)
 and
 rewritten, see below.  The old deprecated version will be
 available at `big.deprecated.lines_strip_comments` until at
@@ -7284,7 +10401,7 @@ least September 2025.
 
 Note that the old version of `line_strip_comments` still uses
 the current version of
-[`LineInfo`,](#lineinfolines-line-line_number-column_number--leadingnone-trailingnone-endnone-indent0-matchnone-kwargs)
+[`LineInfo`,](#lineinfo)
 so use of this deprecated
 function is still exposed to those breaking changes.
 (For example, `LineInfo.line` now includes the linebreak character
@@ -7297,7 +10414,7 @@ that terminated the current line, if any.)
 <dl><dd>
 
 Bugfix:
-[`lines_strip_indent`](#lines_strip_indentli)
+[`lines_strip_indent`](#lines_strip_indent)
 previously required
 whitespace-only lines to obey the indenting rules, which was
 a mistake.  My intention was always for `lines_strip_indent`
@@ -7318,7 +10435,7 @@ behavior is how you'd intuitively expect it to work.)
 
 > This API has breaking changes.
 
-[`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+[`lines_strip_line_comments`](#lines_strip_line_comments)
 is the new name for the old
 `lines_strip_comments` lines modifier function.  It's also
 been completely rewritten.
@@ -7335,7 +10452,7 @@ Changes:
 * The `rstrip` parameter has been removed.  If you need to
   rstrip the line after stripping the comment, wrap your
   `lines_strip_line_comments` call with a
-  [`lines_rstrip`](#lines_rstripli-separatorsnone)
+  [`lines_rstrip`](#lines_rstrip-and-lines_strip)
   call.
 * The old function didn't enforce that strings shouldn't
   span lines--single-quoted and triple-quoted strings behaved
@@ -7582,7 +10699,7 @@ discussions._
   I've also changed the suffix `_without_dos` to the more accurate and intuitive
   `_without_crlf`, and similarly changed `newlines` to `linebreaks`.
   Sorry for all the confusion.  This resulted from a lot of research into whitespace
-  and newline characters, in Python, Unicode, and ASCII; please see the new deep-dive
+  and newline characters, in Python, Unicode, and ASCII; please see the new tutorial
   [**Whitespace and line-breaking characters in Python and big**](#whitespace-and-line-breaking-characters-in-python-and-big)
   to see what all the fuss is about.  Here's a summary of all the
   changes to the whitespace tuples:
@@ -7659,7 +10776,7 @@ discussions._
   depending on the type of `s`.)  But the documentation
   didn't reflect this change until... now.
 * Improved the prose in
-  [**The `multi-` family of string functions** deep-dive.](#The-multi--family-of-string-functions)
+  [**The `multi-` family of string functions** tutorial.](#The-multi--family-of-string-functions)
   Hopefully now it does a better job of selling `multisplit` to the reader.
 * The usual smattering of small doc fixes and improvements.
 
@@ -7919,7 +11036,7 @@ Extremely minor release.  No new features or bug fixes.
 * Retooled
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
   and
-  [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+  [`multistrip`](#multistrips-separators-lefttrue-righttrue)
   argument verification code.  Both functions now consistently check all
   their inputs, and use consistent error messages when raising an exception.
 </dd></dl>
@@ -7983,7 +11100,7 @@ Extremely minor release.  No new features or bug fixes.
 * Improved the text of the `RuntimeError` raised by `TopologicalSorter.View`
   when the view is incoherent.  Now it tells you exactly what nodes are
   conflicting.
-* Expanded the deep dive on `multisplit`.
+* Expanded the tutorial on `multisplit`.
 </dd></dl>
 
 #### 0.6.13
@@ -8011,7 +11128,7 @@ Extremely minor release.  No new features or bug fixes.
   that exception and simply skips sorting.  (It's only a presentation thing anyway.)
 * Added a secret (otherwise undocumented!) function: `multirpartition`,
   which is like
-  [`multipartition`](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  [`multipartition`](#multipartitions-separators-count1--reversefalse-separatetrue)
   but with `reverse=True`.
 * Added the list of conflicted nodes to the "node is incoherent"
   exception text.
@@ -8078,9 +11195,9 @@ Extremely minor release.  No new features or bug fixes.
 
 * Renamed two of the three freshly-added lines modifier functions:
   `lines_filter_contains` is now 
-  [`lines_containing`](#lines_containingli-s--invertfalse),
+  [`lines_containing`](#bigtext),
   and `lines_filter_grep` is now
-  [`lines_grep`](#lines_grepli-pattern--invertfalse-flags0-matchmatch).
+  [`lines_grep`](#lines_grep).
 </dd></dl>
 
 #### 0.6.7
@@ -8093,7 +11210,7 @@ Extremely minor release.  No new features or bug fixes.
   `lines_filter_contains`,
   `lines_filter_grep`,
   and
-  [`lines_sort`.](#lines_sortli--keynone-reversefalse)
+  [`lines_sort`.](#lines_sort)
 * [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
   now accepts `str` or `bytes`.  Also added the `apostrophes` and
   `double_quotes` arguments.
@@ -8129,7 +11246,7 @@ Extremely minor release.  No new features or bug fixes.
 * Added the new [`itertools`](#bigitertools) module, which so far only contains
   [`PushbackIterator`](#pushbackiteratoriterablenone).
 * Added
-  `lines_strip_comments` [ed: now [`lines_strip_line_comments`](#lines_strip_line_commentsli-line_comment_markers--quotes-escape-multiline_quotes)
+  `lines_strip_comments` [ed: now [`lines_strip_line_comments`](#lines_strip_line_comments)
   and
   [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
   to the
@@ -8160,13 +11277,13 @@ A **big** upgrade!
 * Completely retooled and upgraded
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse),
   and added
-  [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+  [`multistrip`](#multistrips-separators-lefttrue-righttrue)
   and
-  [`multipartition`,](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  [`multipartition`,](#multipartitions-separators-count1--reversefalse-separatetrue)
   collectively called
   [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
   (Thanks to Eric Smith for suggesting
-  [`multipartition`!](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  [`multipartition`!](#multipartitions-separators-count1--reversefalse-separatetrue)
   Well, sort of.)
   * `[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)`
     now supports five (!) keyword-only parameters, allowing the caller
@@ -8174,11 +11291,11 @@ A **big** upgrade!
   * Also, the original implementation of
     `[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)`
     got its semantics a bit wrong; it was inconsistent and maybe a little buggy.
-  * [`multistrip`](#multistrips-separators-leftTrue-rightTrue)
+  * [`multistrip`](#multistrips-separators-lefttrue-righttrue)
     is like `str.strip` but accepts an iterable of
     separator strings.  It can strip from the left, right, both, or
     neither (in which case it does nothing).
-  * [`multipartition`](#multipartitions-separators-count1--reverseFalse-separateTrue)
+  * [`multipartition`](#multipartitions-separators-count1--reversefalse-separatetrue)
     is like `str.partition`, but accepts an iterable
     of separator strings.  It can also partition more than once,
     and supports `reverse=True` which causes it to partition from the right
@@ -8198,13 +11315,13 @@ A **big** upgrade!
   [`Scheduler`](#schedulerregulatornone).
   These are in their own modules, [`big.heap`](#bigheap) and [`big.scheduler`](#bigscheduler).
 * Added
-  [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+  [`lines`](#bigtext)
   and all the `lines_` modifiers.  These are great for writing little text parsers.
-  For more information, please see the deep-dive on
+  For more information, please see the tutorial on
   [**`lines` and lines modifier functions.**](#lines-and-lines-modifier-functions)
 * Removed`stripped_lines` and `rstripped_lines` from the `text` module,
   as they're superceded by the far superior
-  [`lines`](#liness-separatorsnone--line_number1-column_number1-tab_width8-kwargs)
+  [`lines`](#bigtext)
   family.
 * Enhanced
   [`normalize_whitespace`](#normalize_whitespaces-separatorsNone-replacementNone).

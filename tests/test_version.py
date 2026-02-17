@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -96,7 +96,7 @@ class BigTestVersion(unittest.TestCase):
 
         # now do it the hard way
         release = [sys.version_info.major, sys.version_info.minor]
-        if sys.version_info.micro:
+        if sys.version_info.micro: # pragma: nocover
             release.append(sys.version_info.micro)
         release = tuple(release)
 

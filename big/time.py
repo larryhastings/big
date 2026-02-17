@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,6 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+# I'm on my way, I'm making it
+
+
 import calendar
 from datetime import date, datetime, timezone
 try: # pragma: no cover
@@ -33,20 +36,17 @@ except ImportError: # pragma: no cover
     have_dateutils = False
 import time
 
-# I'm on my way, I'm making it
 
-__all__ = []
-
-def export(o):
-    __all__.append(o.__name__)
-    return o
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
 
 
-
-_timestamp_human_format = "%Y/%m/%d %H:%M:%S"
+_timestamp_human_format_with_us = "%Y/%m/%d %H:%M:%S.%f %Z"
+_timestamp_human_format_without_us = _timestamp_human_format_with_us.replace('.%f', '')
 
 @export
-def timestamp_human(t=None, want_microseconds=None):
+def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
     """
     Return a timestamp string formatted in a pleasing way
     using the currently-set local timezone.  This format
@@ -54,7 +54,7 @@ def timestamp_human(t=None, want_microseconds=None):
     time, use timestamp_3339Z().
 
     Example timestamp:
-        '2021/05/24 23:42:49.099437'
+        '2021/05/24 23:42:49.099437 PST'
 
     t can be one of several types:
         If t is None, timestamp_human uses the current local time.
@@ -69,9 +69,8 @@ def timestamp_human(t=None, want_microseconds=None):
     the microseconds, represented as ".######".  If want_microseconds
     is false, the timestamp will not include the microseconds.
     If want_microseconds is None (the default), the timestamp
-    ends with microseconds if t is a type that can represent
-    fractional seconds: a float, a datetime object, or the
-    value None.
+    ends in microseconds if t is a type that can represent
+    fractional seconds (which is any accepted type except int).
     """
     if isinstance(t, time.struct_time):
         if t.tm_zone == "GMT":
@@ -87,25 +86,25 @@ def timestamp_human(t=None, want_microseconds=None):
         if want_microseconds == None:
             want_microseconds = isinstance(t, float)
         t = datetime.fromtimestamp(t)
-    elif isinstance(t, datetime):
-        if t.tzinfo != None:
-            t = t.astimezone(None)
-    else:
+    elif not isinstance(t, datetime):
         raise TypeError(f"unrecognized type {type(t)}")
+    if t.tzinfo is None:
+        t = t.astimezone(tzinfo)
 
     if want_microseconds == None:
         # if it's still None, t must be a type that supports microseconds
         want_microseconds = True
 
-    s = t.strftime(_timestamp_human_format)
     if want_microseconds:
-        s = f"{s}.{t.microsecond:06d}"
+        format = _timestamp_human_format_with_us
+    else:
+        format = _timestamp_human_format_without_us
+    s = t.strftime(format)
     return s
 
 
-_timestamp_3339Z_format_base = "%Y-%m-%dT%H:%M:%S"
-_timestamp_3339Z_format = f"{_timestamp_3339Z_format_base}Z"
-_timestamp_3339Z_microseconds_format = f"{_timestamp_3339Z_format_base}.%fZ"
+_timestamp_3339Z_format_with_us =  "%Y-%m-%dT%H:%M:%S.%fZ"
+_timestamp_3339Z_format_without_us = _timestamp_3339Z_format_with_us.replace('.%f', '')
 
 @export
 def timestamp_3339Z(t=None, want_microseconds=None):
@@ -162,11 +161,11 @@ def timestamp_3339Z(t=None, want_microseconds=None):
         want_microseconds = True
 
     if want_microseconds:
-        f = _timestamp_3339Z_microseconds_format
+        format = _timestamp_3339Z_format_with_us
     else:
-        f = _timestamp_3339Z_format
-
-    return t.strftime(f)
+        format = _timestamp_3339Z_format_without_us
+    s = t.strftime(format)
+    return s
 
 
 @export
@@ -219,3 +218,5 @@ if have_dateutils:
         assert d
         d = datetime_ensure_timezone(d, timezone)
         return d
+
+mm()

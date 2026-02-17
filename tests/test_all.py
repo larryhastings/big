@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -40,8 +40,11 @@ for test_module in """
     test_metadata
     test_scheduler
     test_state
+    test_template
     test_text
     test_time
+    test_tokens
+    test_types
     test_version
 """.strip().split():
     module = __import__(test_module)

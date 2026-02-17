@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -102,7 +102,7 @@ def run(name, module, permutations=None):
         break
 
 def finish():
-    if not (stats['failures'] or stats['errors']):
+    if not (stats['failures'] or stats['errors']): # pragma: nocover
         result = "OK"
     else: # pragma: no cover
         result = "FAILED"

@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,11 +41,9 @@ except ImportError: # pragma: no cover
 from .text import decode_python_script
 
 
-__all__ = []
-
-def export(o):
-    __all__.append(o.__name__)
-    return o
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
 
 
 import shutil
@@ -606,3 +604,6 @@ def search_path(paths, extensions=('',),
                     return valid[0]
         return None
     return search
+
+
+mm()

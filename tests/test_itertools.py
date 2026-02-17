@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -26,6 +26,8 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import bigtestlib
 bigtestlib.preload_local_big()
+
+from big.itertools import *
 
 import big.all as big
 import copy
@@ -87,6 +89,200 @@ class BigItertoolsTests(unittest.TestCase):
         for i in pbi:
             self.assertEqual(True, False, "shouldn't reach here! pbi is exhausted!") # pragma: no cover
 
+
+
+# --8<-- start tidy itertools tests --8<--
+
+class TidyItertoolsTests(unittest.TestCase):
+    def test_iterator_context(self):
+        self.assertEqual(repr(undefined), '<Undefined>')
+        with self.assertRaises(TypeError):
+            x = Undefined()
+
+        self.assertFalse(undefined)
+
+        # iterator yields zero things:
+        # iterator_context should also never yield.
+        for ctx, i in iterator_context( [] ): # pragma: nocover
+            self.assertTrue(False)
+
+        # iterator yields one thing:
+        # iterator_context should be is_first *and* is_last.
+        for start in range(-2, 5):
+            with self.subTest(start=start):
+                first_time = True
+                for ctx, o in iterator_context((('abc',)), start):
+                    self.assertTrue(first_time)
+                    first_time = False
+
+                    self.assertIsInstance(ctx, IteratorContext)
+                    self.assertTrue(ctx.is_first)
+                    self.assertTrue(ctx.is_last)
+
+                    # the length and countdown properties both cache _length.
+                    # so, examine length first this time...
+                    self.assertEqual(ctx.length, 1)
+
+                    self.assertEqual(ctx.index, start)
+                    self.assertEqual(ctx.countdown, start)
+
+                    with self.assertRaises(AttributeError):
+                        print(ctx.previous)
+                    self.assertEqual(ctx.current, o)
+                    with self.assertRaises(AttributeError):
+                        print(ctx.next)
+
+                    self.assertEqual(repr(ctx), f"IteratorContext(iterator=('abc',), start={start}, index={start}, is_first=True, is_last=True, current='abc')")
+
+
+        for start in range(-2, 5):
+            for items in ('abc', 'abcd'):
+                with self.subTest(start=start, items=items):
+                    buffer = [undefined]
+                    buffer.extend(items)
+                    buffer.append(undefined)
+
+                    countdowns = []
+                    indices = []
+
+                    is_first = True
+                    computed_index = start
+                    computed_countdown = start + len(items) - 1
+
+                    for ctx, o in iterator_context(items, start):
+                        self.assertIsInstance(ctx, IteratorContext)
+                        self.assertEqual(ctx.is_first, is_first)
+                        is_last = (o == items[-1])
+                        self.assertEqual(ctx.is_last, is_last)
+
+                        self.assertEqual(ctx.index, computed_index)
+                        self.assertEqual(ctx.countdown, computed_countdown)
+
+                        previous, current, next = buffer[:3]
+
+                        if not is_first:
+                            self.assertEqual(ctx.previous, previous)
+                        else:
+                            with self.assertRaises(AttributeError):
+                                print(ctx.previous)
+                            self.assertEqual(previous, undefined)
+
+                        self.assertEqual(ctx.current, current)
+
+                        if not is_last:
+                            self.assertEqual(ctx.next, next)
+                        else:
+                            with self.assertRaises(AttributeError):
+                                print(ctx.next)
+                            self.assertEqual(next, undefined)
+
+                        self.assertEqual(ctx.length, len(items))
+
+                        countdowns.append(ctx.countdown)
+                        indices.append(ctx.index)
+
+                        is_first = False
+                        computed_index += 1
+                        computed_countdown -= 1
+                        buffer.pop(0)
+
+                    reversed_countdowns = list(countdowns)
+                    reversed_countdowns.reverse()
+                    self.assertEqual(reversed_countdowns, indices)
+
+    def test_iterator_filter(self):
+        l = [1, 'a', 2, 'b', 3, 'c', 4, 'd', 5]
+
+        def test(expected, **kwargs):
+            got = list(iterator_filter(l, **kwargs))
+            self.assertEqual(expected, got)
+
+        test([1, 'a', 2, 'b'],         stop_at_value=3)
+        test([1, 'a', 2, 'b', 3],      stop_at_in=set(('c', 4, 'd')))
+        test([1, 'a', 2, 'b', 3, 'c'], stop_at_predicate=lambda o: o==4)
+
+        test([1, 'a', 2, 'b'], stop_at_count= 4)
+        test([1, 'a', 2],      stop_at_count= 3)
+        test([1, 'a'],         stop_at_count= 2)
+        test([],               stop_at_count= 0)
+        test([],               stop_at_count=-1)
+
+        test([1, 'a', 2, 'b', 'c', 4, 'd', 5], reject_value=3)
+        test([1, 'a', 2, 'b', 3, 5],           reject_in=set(('c', 4, 'd')))
+        test([1, 'a', 2, 'b', 3, 'c', 'd', 5], reject_predicate=lambda o: o==4)
+
+        test([3,],          only_value=3)
+        test(['c', 4, 'd'], only_in=set(('c', 4, 'd')))
+        test([2, 3, 4, 5],  only_predicate=lambda o: isinstance(o, int) and o > 1)
+
+        seven_threes = (3, 33, 333, 3333, 33333, 333333, 3333333)
+        six_threes   = (3, 33, 333, 3333, 33333, 333333)
+        five_threes  = (3, 33, 333, 3333, 33333)
+        four_threes  = (3, 33, 333, 3333)
+        three_threes = (3, 33, 333)
+        two_threes   = (3, 33)
+        one_three    = (3,)
+
+        class OnlyFourThrees(int):
+            def __ne__(self, other):
+                return other not in four_threes
+
+        only_four_threes = OnlyFourThrees()
+
+        # now test with all nine rules in play
+        def test(l, expected):
+            got = list(iterator_filter(l,
+                stop_at_value='stop1',
+                stop_at_in=set(('stop2', 'stop3', 'stop4')),
+                stop_at_predicate=lambda o: o=='stop5',
+                stop_at_count=4,
+
+                reject_value=3333333,                 # seven threes
+                reject_in=set((333333,)),             # six threes
+                reject_predicate=lambda o: o ==33333, # five threes
+
+                only_value=only_four_threes,
+                only_in=three_threes,
+                only_predicate=lambda o: o in two_threes,
+                ))
+            self.assertEqual(expected, got)
+
+        test([33, 3, 'stop1', 3, 33], [33, 3])
+        test([33, 3, 'stop3', 3, 33], [33, 3])
+        test([33, 3, 'stop5', 3, 33], [33, 3])
+
+        test([33, 3, 3333333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,  333333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,   33333, 3, 33], [33, 3, 3, 33])
+
+        test([33, 3,    3333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,     333, 3, 33], [33, 3, 3, 33])
+        test([33, 3,      33, 3, 33], [33, 3, 33, 3])
+
+        # test exhaustion
+        it = iterator_filter(l, stop_at_value=2)
+        got = list(it)
+        self.assertEqual(got, [1, 'a'])
+        got = list(it)
+        self.assertEqual(got, [])
+        got = list(it)
+        self.assertEqual(got, [])
+
+        # regression:
+        #       iterator_filter(i, stop_at_count=0)
+        #   should *not* iterate over i!
+        #   it should start out in an "exhausted" state and never touch i.
+        def fail_immediately(): # pragma: nocover
+            raise RuntimeError('you should not call next on me!')
+            yield 1
+
+        for stop_value in range(-20, 1):
+            with self.subTest(stop_value=stop_value):
+                for i in iterator_filter(fail_immediately(), stop_at_count=stop_value): # pragma: nocover
+                    raise RuntimeError(f"we shouldn't have entered the body of this for loop! i={i!r}")
+
+
+# --8<-- end tidy itertools tests --8<--
 
 def run_tests():
     bigtestlib.run(name="big.itertools", module=__name__)

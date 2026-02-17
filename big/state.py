@@ -2,7 +2,7 @@
 
 _license = """
 big
-Copyright 2022-2024 Larry Hastings
+Copyright 2022-2026 Larry Hastings
 All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -28,11 +28,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from functools import update_wrapper
 from inspect import signature
 
-__all__ = []
-
-def export(o):
-    __all__.append(o.__name__)
-    return o
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
 
 
 @export
@@ -431,3 +429,5 @@ def dispatch(state_manager='state_manager', *, prefix='', suffix=''):
         wrapper.__signature__ = signature(fn)
         return wrapper
     return dispatch
+
+mm()
