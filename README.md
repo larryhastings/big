@@ -54,23 +54,12 @@ in **big** because:
    considered and designed.
 
 For example, consider
-[`StateManager`.](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
-If you remove the comments and documentation, it's actually pretty
-short--easily less than a hundred lines.  I myself have written
-state machines from scratch using a similar approach many times.
-They're easy to write.  So why bother using `StateManager`?
-Why not roll your own each time?
-
-Because `StateManager` not only supports all the features you need--consider
-[`accessor`](#accessorattributestate-state_managerstate_manager)
-and
-[`dispatch`](#dispatchstate_managerstate_manager--prefix-suffix)--its
-API is carefully designed to help prevent bugs and logical errors.
-In considering the predecessor of `StateManager` for inclusion in **big**,
-I realized that if an "observer" initiated a state transition, it would produce
-a blurry mess of observer callbacks and entered and exited states,
-executed in a confusing order.  So `StateManager` in **big** simply
-prevents you from executing state transitions in observers.
+[`Log(*destinations, **options)`](#logdestinations-options).
+It's easy to write a quick little disposable log function.
+I should know; I've done it myself, many times.
+But big's `Log` class is feature-rich, thoroughly debugged,
+and lightning fast.  Rather than waste your time hacking
+together something cheap, just use big!
 
 
 ## Using big
@@ -109,7 +98,7 @@ You can also use **big.all** with `import *`:
 from big.all import *
 ```
 
-but that's up to you.
+but that's up to you.  Me, I generally use `import big.all as big` .
 
 **big** is licensed using the
 [MIT license.](https://opensource.org/licenses/MIT)
