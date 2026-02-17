@@ -177,36 +177,10 @@ def iterator_context(iterator, start=0):
     Wraps any iterator, yielding values with a helpful context object.
 
     Wraps any iterator.  Yields (ctx, o), where o is a value
-    yielded by iterable, and ctx is a "context" variable
-    containing metadata about the iteration.
+    yielded by iterable, and ctx is a "context" variable of type
+    IteratorContext containing metadata about the iteration.
 
-    ctx will always have these six attributes:
-
-    * ctx.is_first is true for the first value yielded
-      and false otherwise.
-    * ctx.is_last is true for the last value yielded
-      and false otherwise.  (If the iterator only yields
-      one value, is_first and is_last will both be true.)
-    * ctx.current contains the current value yielded by the
-      iterator.   (The same as the 'o' value in the
-      yielded tuple).
-    * ctx.previous contains the previous value yielded, if
-      is_first is false.  If is_first is true, ctx.previous
-      will be undefined, and accessing it will raise
-      AttributeError.
-    * ctx.next contains the next value to be yielded by this
-      iterator if is_last is False.  If is_last is True,
-      ctx.previous will be undefined, and accessing it will
-      raise AttributeError.
-    * ctx.index contains the index of this value.  The first
-      time the iterator yields a value, this will be "start";
-      the second time, it will be start + 1, etc.
-
-    ctx also supports two more attributes, ctx.length and
-    ctx.countdown, but these require the "iterator" object
-    to support __len__.  If the iterator doesn't support
-    __len__, these two attributes are not defined, and
-    accessing them will raise an exception.
+    ctx supports the following attributes:
 
     * ctx.countdown contains the "opposite" value of ctx.index.
       The values yielded by ctx.countdown are the same as
@@ -216,9 +190,31 @@ def iterator_context(iterator, start=0):
       will be 3, 2, 1, and 0 in that order.  If start is 3,
       and the iterator yields four items, ctx.index will
       be 3, 4, 5, and 6 in that order, and ctx.countdown
-      will be 6, 5, 4, and 3 in that order.
+      will be 6, 5, 4, and 3 in that order.  ctx.countdown
+      requires the iterator to support __len__; if it doesn't,
+      ctx.countdown will be undefined.
+    * ctx.current contains the current value yielded by the
+      iterator.   (The same as the 'o' value in the
+      yielded tuple).
+    * ctx.index contains the index of this value.  The first
+      time the iterator yields a value, this will be "start";
+      the second time, it will be start + 1, etc.
+    * ctx.is_first is true for the first value yielded
+      and false otherwise.
+    * ctx.is_last is true for the last value yielded
+      and false otherwise.  (If the iterator only yields
+      one value, is_first and is_last will both be true.)
     * ctx.length contains the total number of items that
-      will be yielded.
+      will be yielded.  ctx.length requires the iterator to
+      support __len__; if it doesn't, ctx.length will be undefined.
+    * ctx.next contains the next value to be yielded by this
+      iterator if is_last is False.  If is_last is True,
+      ctx.previous will be undefined, and accessing it will
+      raise AttributeError.
+    * ctx.previous contains the previous value yielded, if
+      is_first is false.  If is_first is true, ctx.previous
+      will be undefined, and accessing it will raise
+      AttributeError.
     """
     index = start
 

@@ -5528,11 +5528,12 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
     """
     Takes an iterable of lines, with or without linebreaks; strips
     the leading whitespace from each line and tracks the indent level.
-    Yields 2-tuples of (indent, lstripped_line).
+    Yields 2-tuples of (depth, lstripped_line).
 
-    indent is an integer, the ordinal number of the current
-    indent.  Text at the leftmost column is at indent 0.
-    If the line was indented three times, indent will be 3.
+    depth is an integer, the ordinal number of times the lines
+    were indented to reach the current indent.  Text at the leftmost
+    column is at depth 0; if the line was indented three times,
+    depth will be 3.
 
     Uses an intentionally simple algorithm.  Only understands tab and
     space characters as indent characters.  Internally detabs to spaces
@@ -5548,7 +5549,7 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
     will be preserved.  (If you don't want linebreak characters
     preserved, pass in None or an empty sequence for "linebreaks".)
     """
-    indent = 0
+    depth = 0
     leadings = []
 
     # a "blank line" is either empty or only has whitespace.
@@ -5601,7 +5602,7 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
         if not column_number:
             # this line doesn't start with whitespace; text is at column 0.
             # outdent to zero.
-            indent = 0
+            depth = 0
             leadings.clear()
             new_indent = False
         # in all the remaining else cases, the line starts with whitespace.   and...
@@ -5619,7 +5620,7 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
             # ensure that this line's indent is one we've seen before.
             assert leadings
             leadings.pop()
-            indent -= 1
+            depth -= 1
             while leadings:
                 l = leadings[-1]
                 if l >= column_number:
@@ -5627,7 +5628,7 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
                         leadings.clear()
                     break
                 leadings.pop()
-                indent -= 1
+                depth -= 1
             if not leadings:
                 raise IndentationError(f"unindent doesn't match any outer indentation level")
             new_indent = False
@@ -5635,15 +5636,15 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
         # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
             leadings.append(column_number)
-            indent += 1
+            depth += 1
 
         if blank_lines:
             # print(f"BL+ {blank_lines=}")
             for line in blank_lines:
-                yield (indent, line)
+                yield (depth, line)
             blank_lines.clear()
 
-        yield (indent, lstripped)
+        yield (depth, lstripped)
 
     # flush trailing blank lines
     if blank_lines:

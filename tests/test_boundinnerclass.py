@@ -333,9 +333,12 @@ class TestBoundToFunctions(unittest.TestCase):
 
     def test_bound_to_with_non_class(self):
         """bound_to returns None for non-class arguments."""
-        self.assertIsNone(bound_to(42))
-        self.assertIsNone(bound_to("string"))
-        self.assertIsNone(bound_to(None))
+        with self.assertRaises(TypeError):
+            bound_to(42)
+        with self.assertRaises(TypeError):
+            bound_to("string")
+        with self.assertRaises(TypeError):
+            bound_to(None)
 
 
 class TestSlotsCompatibility(unittest.TestCase):
@@ -1087,9 +1090,12 @@ class TestIsBound(unittest.TestCase):
 
     def test_is_bound_with_non_class(self):
         """is_bound returns False for non-class arguments."""
-        self.assertFalse(is_bound(42))
-        self.assertFalse(is_bound("string"))
-        self.assertFalse(is_bound(None))
+        with self.assertRaises(TypeError):
+            is_bound(42)
+        with self.assertRaises(TypeError):
+            is_bound("string")
+        with self.assertRaises(TypeError):
+            is_bound(None)
 
 
 class TestRenamedBICSlowPaths(unittest.TestCase):
