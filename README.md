@@ -119,11 +119,12 @@ I'm proudest of:
 * [`big.state`](#bigstate)
 * [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
 
-And here are five little functions/classes I use all the time:
+And here are six little functions/classes I use all the time:
 
 * [`eval_template_string`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
-* [`iterator_context`](#iteratorcontext)
+* [`iterator_context`](#iterator_contextiterator-start0)
 * [`Log`](#logdestinations-options)
+* [`ModuleManager`](#ModuleManager)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
 
@@ -186,7 +187,7 @@ And here are five little functions/classes I use all the time:
 
 [`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
 
-[`bound_inner_base(o)`](#bound_inner_baseo)
+[`bound_inner_base(cls)`](#bound_inner_basecls)
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
@@ -415,8 +416,6 @@ And here are five little functions/classes I use all the time:
 [`linked_list_iterator.splice(other)`](#linked_list_iteratorspliceother)
 
 [`linked_list_iterator.truncate()`](#linked_list_iteratortruncate)
-
-[`linked_list_node`](#linked_list_node)
 
 [`linked_list_reverse_iterator`](#linked_list_reverse_iterator)
 
@@ -827,7 +826,7 @@ class ***S*** *must* be decorated with either
 `BoundInnerClass` or `UnboundInnerClass`.
 </dd></dl>
 
-#### `bound_inner_base(o)`
+#### `bound_inner_base(cls)`
 
 <dl><dd>
 Simple wrapper for Python 3.6 compatibility for bound inner classes.
@@ -1925,6 +1924,9 @@ Calling the `Log` instance is equivalent to calling
 (ignoring all writes).  The log transitions from initial
 to logging automatically the first time a message is logged.
 
+See the [**The big `Log`**](#the-big-log) for
+an in-depth tutorial on how to use `Log`, including examples.
+
 **Destinations**
 
 Positional arguments to the `Log` constructor define destinations
@@ -2033,7 +2035,6 @@ started, as seconds since the UNIX epoch.
 `end_time_epoch` — The wall-clock time when the log was
 closed, as seconds since the UNIX epoch.
 
-See the [**The big `Log`**](#the-big-log) tutorial for more.
 </dd></dl>
 
 #### `Log.box(s)`
@@ -5608,28 +5609,6 @@ Returns a forwards iterator pointing at the linked list's
 tail sentinel node.
 </dd></dl>
 
-#### `linked_list_node`
-
-<dl><dd>
-
-A node in a [`linked_list`](#linked_listiterableundefined).
-`linked_list_node` objects are not created directly; they
-are managed internally by the linked list.
-
-Attributes:
-
-`value` — The value stored in the node.
-
-`special` — `None` for normal nodes, or a string (`'head'`,
-`'tail'`, or `'special'`) for sentinel nodes.
-
-`next` — The next node.
-
-`previous` — The previous node.
-
-`linked_list` — The `linked_list` this node belongs to.
-</dd></dl>
-
 #### `SpecialNodeError`
 
 <dl><dd>
@@ -7669,14 +7648,16 @@ positional parameter, after `self`.  And, like `self`, you don't
 Bound inner classes get slightly complicated when mixed with inheritance.
 It's not all that difficult, you merely need to obey some rules:
 
-1. *A bound inner class can inherit normally from any unbound class.*
+<dl><dd>
 
-2. *If your bound inner class calls `super().__init__`, and its
+**Rule 1:** *A bound inner class can inherit normally from any unbound class.*
+
+**Rule 2:** *If your bound inner class calls `super().__init__`, and its
 parent class is also a bound inner class,* **don't** *pass in `outer` manually.*
 When you instantiate a bound inner class, `outer` will be automatically
 passed in to *all* `__init__` methods of *every* bound inner parent class.
 
-3. *A bound inner class can only inherit from a parent bound inner class
+**Rule 3:** *A bound inner class can only inherit from a parent bound inner class
 if the parent is defined in the same outer class or a base of the outer class.*
 If Child inherits from Parent, and Child and Parent are both
 decorated with `@BoundInnerClass` (or `@UnboundInnerClass`), both classes
@@ -7684,24 +7665,26 @@ must be defined in the same outer class (e.g. `Outer`) or in a base class
 of Child's outer class.  This is a type relation constraint; bound inner
 classes guarantee that "outer" is an instance of the outer class.
 
-3a. A corollary of rule 3: *A subclass of a bound inner class, whether bound
+**Rule 3a:** A corollary of rule 3: *A subclass of a bound inner class, whether bound
 or unbound, can only be defined in the same outer class or a subclass of the
 outer class.*
 
-4. **Directly** *inheriting from a* **bound** *inner class is unsupported.*
+**Rule 4:** **Directly** *inheriting from a* **bound** *inner class is unsupported.*
 If `o` is an instance of `Outer`, and `Outer.Inner` is an inner class
 decorated with `@BoundInnerClass`, **don't** write a class that directly
 inherits from `o.Inner`, for example `class Mistake(o.Inner)`.
 You should *always* inherit from the unbound version, like this:
 `class GotItRight(Outer.Inner)`
 
-5. *An inner class that inherits from a bound inner class, and which also
+**Rule 5:** *An inner class that inherits from a bound inner class, and which also
 wants to be bound to the outer object, should be decorated with
 [`BoundInnerClass`](#boundinnerclasscls).*
 
-6. *An inner class that inherits from a bound inner class, but doesn't
+**Rule 6:** *An inner class that inherits from a bound inner class, but doesn't
 want to be bound to the outer object, should be decorated with
 [`UnboundInnerClass`](#unboundinnerclasscls).*
+
+</dd></dl>
 
 Restating the last two rules: every class that descends from any
 class decorated with
@@ -9494,18 +9477,20 @@ others.  Views are completely independent from each other.
 It's been a whole year... and I've been busy!
 
 * Added three new modules:
-  * *big.types*, which contains core types,
-  * *big.tokens*, useful functions and values
+  * [*big.types*](#bigtypes), which contains core types,
+  * [*big.tokens*](#bigtokens), useful functions and values
     when working with Python's tokenizer, and
-  * *big.template*, functions that parse strings
+  * [*big.template*](#bigtemplate), functions that parse strings
     containing a simple template syntax.
-* Added `linked_list` to new module *big.types*.  `linked_list` is a
+* Added [`linked_list`](#linked_list) to new module *big.types*.
+  `linked_list` is a
   thoughtful implementation of a standard linked list data
   structure, with an API and UX modeled on Python's `list`
   and `collections.deque` objects.  Unlike Python's builtins,
   you're permitted to add and remove values to a `linked_list`
   while iterating.  `linked_list` also supports locking.
-* Added `string` to new module *big.types*.  `string` is a subclass
+* Added [`string`](#string) to new module *big.types*.
+  `string` is a subclass
   of `str` that tracks line number and column number offsets
   for you.  Just initialize one big `string` containing an
   entire file, and every substring of that string will know
@@ -9515,15 +9500,20 @@ It's been a whole year... and I've been busy!
   are now deprecated; `string` replaces all of it
   (and it's a *massive* upgrade!).  `big.lines` will
   move to the `deprecated` module no sooner than
-  November 2025, and will be removed no sooner than May 2026.
-* Added `strip_indents` and `strip_line_comments` to *big.text*.
+  March 2026, and will be removed no sooner than November 2026.
+* Added [`strip_indents`](#strip_indentslines--tab_width8-linebreakslinebreaks)
+  and
+  [`strip_line_comments`](#strip_line_commentslines-line_comment_markers--escape-quotes-multiline_quotes-linebreakslinebreaks) to *big.text*.
   These provide the same functionality as the old `lines_strip_indent`
   and `lines_strip_line_comments` line modifier functions,
   but now operate on iterables of strings instead of
   "lines" iterators.
-* Added `Pattern` to *big.text*.  This is a wrapper around
-  `re.Pattern` that preserves slices of str subclasses.
-* Added `parse_template_string` and `eval_template_string`
+* Added [`Pattern`](#patterns-flags0) to *big.text*.
+  This is a wrapper around `re.Pattern` that preserves
+  slices of str subclasses.
+* Added [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape)
+  and
+  [`eval_template_string`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
   to new module *big.template*.  `parse_template_string`
   parses a string containing Jinja-like interpolations,
   and returns an iterator that yields strings and
@@ -9532,11 +9522,13 @@ It's been a whole year... and I've been busy!
   `eval_template_string` calls `parse_template_string` to
   parse a string, but then evaluates the expressions (and
   filters) using `eval`, returning the rendered string.
-* Rewrote `BoundInnerClass`.  This removes some old concerns:
+* Rewrote [`BoundInnerClass`](#BoundInnerClass), and it's a
+  huge improvement. The rewrite removes some old concerns:
     * You no longer need the `parent.cls` hack!  (Well, you
       do if you support Python 3.6, but it's no longer needed
       in Python 3.7+.  Bound inner class adds a new function,
-      `bound_inner_base`, to help with the transition.)
+      [`bound_inner_base`](#bound_inner_basecls),
+      to help with the transition.)
     * The bound inner class implementation now relies on
       comparison by identity instead of by name, which means
       you may now add aliases and/or rename your inner classes
@@ -9556,24 +9548,24 @@ It's been a whole year... and I've been busy!
       simultaneously in multiple threads.  It's rarely used
       and should have no real impact on performance.
 * Added new functions to the *big.boundinnerclass* module:
-    * `unbound(cls)` returns the unbound base class
+    * [`unbound`](#unboundcls) returns the unbound base class
       of `cls` if `cls` is a bound inner class.
-    * `is_boundinnerclass(cls)` returns true if called on a
+    * [`is_boundinnerclass`](#is_boundinnerclasscls) returns true if called on a
       class decorated with `@BoundInnerClass`, whether or
       not it has been bound to an instance.
-    * `is_unboundinnerclass(cls)` returns true if called on a
+    * [`is_unboundinnerclass`](#is_unboundinnerclasscls) returns true if called on a
       class decorated with `@UnboundInnerClass`, whether or
       not it has been bound to an instance.
-    * `is_bound(cls)` returns true if called on a bound inner
+    * [`is_bound`](#is_boundcls) returns true if called on a bound inner
       class that has been bound to an instance.
-    * `bound_to(cls)` returns the instance that cls has been
+    * [`bound_to`](#bound_tocls) returns the instance that cls has been
       bound to, if `cls` is a bound inner class bound to an instance.
-    * `type_bound_to(o)` returns the instance that `type(o)` has
+    * [`type_bound_to](#type_bound_tocls)` returns the instance that `type(o)` has
       been bound to, if `type(o)` is a bound inner class bound
       to an instance.
-    * `bound_inner_base(cls)` is only needed to use BoundInnerClass
+    * [`bound_inner_base`](#bound_inner_basecls) is only needed to use BoundInnerClass
       with Python 3.6.  It's unnecessary in Python 3.7+.
-* Added `generate_tokens` to new module *big.tokens*.
+* Added [`generate_tokens`](#generate_tokenss) to new module *big.tokens*.
   `generate_tokens` is a convenience wrapper around
   Python's `tokenize.generate_tokens`, which has an
   abstruse "readline"-based interface.  `tokens.generate_tokens`
@@ -9589,26 +9581,28 @@ It's been a whole year... and I've been busy!
   is `big.tokens.TOKEN_COMMA`.  Tokens not defined
   in the currently running version of Python have
   a value of `TOKEN_INVALID`, which is -1.
-* Added `iterator_context` to *big.itertools*.  `iterator_context`
+* Added [`iterator_context`](#iterator_contextiterator-start0) to *big.itertools*.  `iterator_context`
   is like an extended version of Python's `enumerate`,
   directly inspired by Jinja's
   ["loop special variables"](https://jinja.palletsprojects.com/en/stable/templates/#for)
   and Mako's ["loop context"](https://docs.makotemplates.org/en/latest/runtime.html#the-loop-context).
   It wraps an iterator and provides helpful metadata.
-* Added `iterator_filter` to *big.itertools*.  `iterator_filter`
+* Added
+  [`iterator_filter`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone)
+  to *big.itertools*.  `iterator_filter`
   is a pass-through iterator that filters values.
   You pass in an iterator, and rules for what values you
   want to see / don't want to see, and it returns
   an iterator that only yields the values you want.
-* Rewrote the entire *big.log* module.  I stopped using
-  the old `Log` class, yet on a couple recent projects
+* Rewrote the entire [*big.log*](#biglog) module.  I stopped
+  using the old `Log` class, yet on a couple recent projects
   I coded up a quick-and-dirty log... clearly the old `Log`
   wasn't solving my problem anymore.  The new `Log` is designed
   explicitly for lightweight logging, mostly for debugging
   purposes.  It's easy to use, feature-rich, high-performance,
   and by default runs in "threaded" mode where logging calls
   are 5x faster than calling `print`!
-  * I added a backwards-compatible `OldLog` to *big.log*
+  * I added a backwards-compatible [`OldLog`](#oldlogclocknone) to *big.log*
     in case anybody is using the old `Log` class.  This
     provides the API and functionality of the old `Log`
     class, but is reimplemented on top of the new `Log`.
@@ -9617,11 +9611,11 @@ It's been a whole year... and I've been busy!
     has been relocated to the *big.deprecated*
     module. Both `OldLog` and the old `Log` are deprecated,
     and will be removed someday, no earlier than March 2027.
-* Added `ModuleManager` to *big.builtin*.
+* Added [`ModuleManager`](#modulemanager) to *big.builtin*.
   `ModuleManager` helps you manage a module's namespace,
   making it easy to populate `__all__` and clean up
   temporary symbols.
-* Added `ClassRegistry` to *big.builtin*.
+* Added [`ClassRegistry`](#ClassRegistry) to *big.builtin*.
   `ClassRegistry` helps you use inheritance with heavily
   nested class hierarchies, by giving you a place to
   store references to base classes you can access later.
@@ -9645,7 +9639,8 @@ It's been a whole year... and I've been busy!
   is also faster, but that optimization only saved 0.0000014 seconds.
   Hat tip to Eric V. Smith for his suggestions on how to make
   Big's test suite so much faster!
-* `split_quoted_strings` in *big.text* now obeys
+* [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+  in *big.text* now obeys
   subclasses of str better.  (It now works well with
   `big.string` for example.)
 * Removed a bunch of old deprecated stuff:
