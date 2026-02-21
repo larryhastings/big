@@ -560,8 +560,6 @@ class Log:
 
         # if threading is True, _lock is only used for close and reset (and shutdown)
         self._lock = Lock()
-        self._blocker = blocker = Lock()
-        blocker.acquire()
 
         self._parse_formats(formats)
 
@@ -581,7 +579,6 @@ class Log:
 
         self._manage_thread()
 
-        self._atexited = False
         atexit.register(self._atexit)
 
 
@@ -679,7 +676,7 @@ class Log:
     @property
     def closed(self):
         with self._lock:
-            return self._state == 'closed'
+            return self._state in ('closed', 'exited')
 
     @property
     def start_time_ns(self):
@@ -743,19 +740,19 @@ class Log:
             },
         }
 
+        result = {}
+
         for key, value in formats.items():
             if value is None:
-                if key not in ("start", "end"):
-                    raise ValueError("None is only a valid value for keys 'start' and 'end'")
+                if key not in ("start", "end", 'enter', 'exit'):
+                    raise ValueError("None is only a valid value for 'start', 'end', 'enter', and 'exit' formats")
                 base_formats.pop(key, None)
+                result[key] = None
             else:
                 if not isinstance(value, dict):
                     raise TypeError(f"format values must be dict or None, not {type(value)}")
                 d = base_formats.setdefault(key, {})
                 d.update(value)
-
-        result = {}
-
 
         class Format:
             def __init__(self, line):
@@ -776,18 +773,11 @@ class Log:
 
         for key, value in base_formats.items():
             if not isinstance(key, str):
-                raise TypeError(f"format keys must be str, not {type(key)}")
-            if not key.isidentifier():
-                raise ValueError(f"format key strings must be valid Python identifiers, not {key!r}")
+                raise TypeError(f"format keys must be str, not {type(key)!r}")
             if not isinstance(value.get('template', None), str):
                 raise TypeError(f"format dicts must contain 'template' key with value str, not {type(value)!r}")
             if not isinstance(value.get('line', ''), str):
                 raise TypeError(f"format dicts 'line' value, if specified, must be str, not {type(value)!r}")
-
-            attribute_exists = hasattr(self, key)
-            predefined_key = key in ("enter", "exit", "start", "end", "print")
-            if (not predefined_key) and attribute_exists:
-                raise ValueError(f'format {key} attribute is already in use')
 
             template = value['template']
             line = value.get('line', '')
@@ -823,9 +813,9 @@ class Log:
                     state.append((template_line, append_repeated_line))
             result[key] = f
 
-            if not attribute_exists:
+            if key.isidentifier() and (not hasattr(self, key)):
                 def make_method(key):
-                    def method(message):
+                    def method(message=''):
                         time = self._clock()
                         thread = current_thread()
 
@@ -840,8 +830,7 @@ class Log:
         self._formats = result
 
 
-    def _format_message(self, time, thread, format, message):
-        elapsed = self._elapsed(time)
+    def _format_message(self, elapsed, thread, format, message):
         if thread:
             prefix = self._format_s(elapsed, thread, self._prefix) + self._spaces
         else:
@@ -858,7 +847,11 @@ class Log:
         line_append = line_buffer.append
         line_clear = line_buffer.clear
 
-        line, prologue, body, epilogue = self._formats[format]
+        f = self._formats[format]
+        if f is None:
+            return ''
+        line, prologue, body, epilogue = f
+
         for state in (prologue, body, epilogue):
             if not state:
                 continue
@@ -969,9 +962,13 @@ class Log:
                         thread.join()
 
     def _atexit(self):
-        with self._lock:
-            self._atexited = True
-        self.close()
+        clock = self._clock
+        ns1 = clock()
+        epoch = self._timestamp_clock()
+        ns2 = clock()
+        ns = (ns1 + ns2) // 2
+
+        self._ensure_state('exited', ns, epoch)
         self._stop_thread()
 
 
@@ -1052,16 +1049,11 @@ class Log:
 
 
     def _log_banner(self, format, time):
-        f = self._formats.get(format)
-        if f is None:
-            return
-
-        if not (f.prologue or f.body or f.epilogue):
-            return
-
         elapsed = self._elapsed(time)
         formatted = self._format_message(elapsed, None, format, None)
-        assert formatted
+
+        if not formatted:
+            return
 
         for destination in self._destinations:
             destination.log(elapsed, None, format, '', formatted)
@@ -1079,11 +1071,20 @@ class Log:
         """
         An object used to buffer initial events for a log, e.g. "start".
 
-        Once the log is started, we don't send *any* events until we
-        get formatted text.  If no event ever writes formatted text,
-        no events are sent.
+        Log guarantees that it sends a "start" event to the destinations
+        before it sends them any formatted text (via "log" or "write").
+        However, if we *never* send any formatted text, we don't want
+        to send that "start" event, either.
 
-        We use this object to buffer up
+        Log starts in 'initial' state, and automatically transitions
+        to 'logged' state once we send *any* formatted text to the
+        destinations.  So Log uses this _InitialEvents object to buffer
+        up initial events that we want to send ONLY if we ever log some
+        formatted text.  At the moment we have confirmed formatted text
+        to send, if we're still in 'initial' state, we flush all the
+        events we buffered inside _InitialEvents.
+
+        Specifically, we use this object to buffer up
             * the "start" event
             * the "start banner" log event
             * any number of "enter" events
@@ -1100,8 +1101,8 @@ class Log:
                 [log._start, ()]
                 ]
 
-        def dispatch(self, work):
-            self.work.extend(work)
+        def append(self, method, args):
+            self.work.append((method, args))
 
         def __call__(self):
             log = self.log
@@ -1122,145 +1123,174 @@ class Log:
             # "execute" the work, right now.
             log._execute(work)
 
-
-    def _ensure_state(self, state, ns=None, epoch=None):
-        """
-        Attempt to ensure we're in state "state".
-
-        If we're not in state "state", attempt to transition to it.
-        Returns True if we're in state "state" when _ensure_state
-        returns, False otherwise.
-
-        Only three states are supported; they exist in a loop:
-              +---------+
-              |         |
-              v         |
-            initial--+  |
-              |      |  |
-              |      |  |
-              |      |  |
-              v      |  |
-            logging  |  |
-              |      |  |
-              +<-----+  |
-              |         |
-              v         |
-            closed      |
-              |         |
-              +---------+
-
-        You can always transition from any state to any other
-        state, with one exception: you can't transition directly
-        from "closed" to "logging".  (The only way to escape
-        "closed" state is to reset the log, which transitions
-        to "initial".)
-
-        This means you can in some circumstances make two state
-        transitions at once:
-             from "initial" to "closed", and
-             from "logging" to "initial".
-        When you do, you usually pass through the intermediary
-        state.  The exception: if you transition from "initial"
-        directly to "closed", you skip over "logging" and just
-        go directly to "closed".  (This allows us to skip
-        needless "start" and "end" messages to the destinations.)
-
-        If you're in "initial" and transition to "logging",
-        you open the log, which sends a "start" event.
-
-        If you're in "logging" and transition to "closed",
-        you close the log, which sends "end", "flush", and
-        "close" events.
-
-        If you're in "initial" and transition to "closed",
-        you close the log, and send neither "start" nor
-        "end". events.
-
-        If you're in "closed" and transition to "initial",
-        you'll reset the log.  If you entered the "logging"
-        state on this loop, this sends a "reset" event.
-        (If you went straight from "initial" to "closed",
-        it doesn't send the "reset" event.)
-
-        If ns and epoch are specified, those are used as
-        the ns and epoch times for any events that send times.
-        If you transition from "initial" to "logging", the
-        start event will use ns and epoch as the start time
-        of the log.  If you transition from "logging" to "closed",
-        the end event will use ns as the end time of the log.
-
-        It's an error to transition from another state
-        to "closed" or "initial" without specifying
-        ns and epoch.
-
-        If the Log's atexit handler has been called,
-        it won't advance past "closed".
-        """
-        while True:
-            if state == self._state:
-                return True
-
-            if self._state == 'initial':
-                self._state = 'logging'
-                self._initial_events = self._InitialEvents(self)
-                continue
-
-            wrote_to_log = self._initial_events is None
-
-            if self._state == 'logging':
-                # transition to "closed"
-
-                if wrote_to_log:
-                    assert ns is not None
-                    assert epoch is not None
-
-                    self._end_time_ns = ns
-                    self._end_time_epoch = epoch
-
-                    thread = current_thread()
-                    while self._nesting:
-                        self._exit(self._end_time_ns, thread)
-
-                    self._log_end_banner()
-
-                    self._flush()
-
-                    # send end event
-                    elapsed = self._elapsed(self._end_time_ns)
-                    for destination in self._destinations:
-                        destination.end(elapsed)
-
-                self._state = 'closed'
-                continue
-
-            if self._state == 'closed':
-                if state != 'initial':
-                    return False
-
-                if self._atexited:
-                    return False
-
-                assert ns is not None
-                assert epoch is not None
-
-                self._reset(ns, epoch)
-
-                # send reset event,
-                # but only if we ever wrote formatted text to the log.
-                if wrote_to_log:
-                    for destination in self._destinations:
-                        destination.reset()
-
-                self._state = 'initial'
-                continue
-
     def _reset(self, start_time_ns, start_time_epoch):
         self._start_time_ns = start_time_ns
         self._start_time_epoch = start_time_epoch
         self._end_time_ns = None
         self._end_time_epoch = None
         self._dirty = False
-        self._initial_events = None
+        self._initial_events = self._InitialEvents(self)
+
+        self._state = 'initial'
+
+
+    def _ensure_closed(self, ns, epoch):
+        """
+        Ensure the Log is in its closed state, regardless of current state.
+
+        Always called from a thread holding self._lock,
+        though that probably isn't necessary for correctness.
+        (It's only in case the _atexit handler gets called
+        while we're already executing a state transition.)
+        """
+
+        currently_in_initial_state = self._state == 'initial'
+        assert currently_in_initial_state or (self._state == 'logged')
+        assert ns is not None
+        assert epoch is not None
+
+        self._end_time_ns = ns
+        self._end_time_epoch = epoch
+
+        if not currently_in_initial_state:
+            self._clear_nesting()
+
+            self._log_end_banner()
+
+            self._flush()
+
+            elapsed = self._elapsed(self._end_time_ns)
+            for destination in self._destinations:
+                destination.end(elapsed)
+
+        self._state = 'closed'
+
+
+    def _ensure_state(self, state, ns=None, epoch=None):
+        # four states:
+        #
+        #     initial
+        #        The initial state.  Log starts out in initial,
+        #        and Log.reset() returns to initial.
+        #        Reachable from closed and logged.
+        #
+        #     logged
+        #        We have ever logged formatted text.
+        #        Only reachable from initial.
+        #
+        #     closed
+        #        Log has been closed.  Reachable from initial
+        #        and logged.
+        #
+        #     exited
+        #        Log's _atexit handler has been called;
+        #        the process is shutting down.
+        #        Only reachable from closed.
+        #        Is a terminal state; you can't transition
+        #        out of it.
+        #
+        assert state in ('initial', 'logged', 'closed', 'exited')
+        # print(f"\n\n>>>>>>>>>>>>>>>>>>>>>>>>>\n>>ES>> {self._state!r} --> {state!r}")
+
+        # fast path: we're already in the correct state
+        if self._state == state:
+            return True
+
+        # exited is a terminal state.
+        if self._state == 'exited':
+            return False
+
+        # always hold the lock while changing state.
+        # (just in case the _atexit handler gets called
+        # while we're doing a state transition.)
+        if not self._threading:
+            lock = None
+        else:
+            lock = self._lock
+            lock.acquire()
+            # this should be impossible; it could only happen
+            # if two threads were in a race to simultaneously
+            # ensure state 'exited', and that could never happen...
+            # right?  only the _atexit handler attempts to ensure
+            # state 'exited', and you should never get _atexit
+            # handler calls from any thread except the main thread.
+            assert self._state != 'exited'
+
+        try:
+
+            if state == 'initial':
+                # print(f">> {self._state} BACK to initial")
+                # because of the above ifs, we already know
+                # we're not in 'initial' or 'exited'.
+                # that means we're in 'logged' or 'closed'.
+                # we're transitioning backwards!
+                assert ns is not None
+                assert epoch is not None
+
+                # we should send reset only if we ever logged.
+                # if we went straight from initial to closed,
+                # we deliberately don't clear self._initial_events,
+                # *precisely* so we can suppress the destination.reset
+                # calls here.
+                should_send_reset = self._initial_events is None
+                if self._state == 'logged':
+                    self._ensure_closed(ns, epoch)
+                self._reset(ns, epoch)
+
+                if should_send_reset:
+                    for destination in self._destinations:
+                        destination.reset()
+                return True
+
+            # we're not in the correct state,
+            # and we're not trying to get to 'initial'.
+            # therefore we're making a forwards transition.
+            if self._state == 'initial':
+                if state in ('closed', 'exited'):
+                    # we're transitioning directly from 'initial' to 'closed' or 'exited'.
+                    # we don't need to do any intermediary stuff.
+                    # print(f">> initial directly to closed")
+                    self._ensure_closed(ns, epoch)
+                    self._state = state
+                    return True
+
+                # transition to 'logged':
+                # flush buffered initial events.
+                # print(f">> to logged, {state=}")
+                self._state = 'logged'
+                self._initial_events()
+
+                if state == 'logged':
+                    assert ns is None
+                    assert epoch is None
+                    return True
+
+            if self._state == 'logged':
+                # print(f">> to closed")
+                self._ensure_closed(ns, epoch)
+
+                if state == 'closed':
+                    return True
+
+            assert self._state == 'closed'
+            if state == 'logged':
+                # print(f">> closed to logged?! no.")
+                # it's illegal to transition directly from closed to logged,
+                # you have to go through initial first (by resetting)
+                return False
+
+
+            # print(f">> to exited")
+            assert state == 'exited'
+            # transition to exited
+            self._state = 'exited'
+
+            return True
+
+        finally:
+            if lock:
+                lock.release()
+
 
     def reset(self):
         """
@@ -1272,8 +1302,11 @@ class Log:
         If the log is currently in "closed" state,
         resets it.
 
-        If the log is currently in "logging" state,
+        If the log is currently in "logged" state,
         closes it, then resets it.
+
+        If the log is currently in "exited" state,
+        reset silently fails--the Log doesn't change state.
         """
         clock = self._clock
         ns1 = clock()
@@ -1284,9 +1317,8 @@ class Log:
         self._dispatch( [(self._ensure_state, ('initial', ns, epoch)),] )
 
     def _flush(self, blocker=None):
-        if not self._ensure_state('logging'):
-            return
         if self._dirty:
+            assert self._state == 'logged'
             for destination in self._destinations:
                 destination.flush()
             self._dirty = False
@@ -1295,7 +1327,7 @@ class Log:
         """
         Flushes the log, if it's open and dirty.
 
-        If the log is in "logging" state, and it's
+        If the log is in "logged" state, and it's
         "dirty" (any formatted text has been logged
         to the log since either the log was started
         or since the last flush), flushes the log.
@@ -1365,12 +1397,8 @@ class Log:
         # we should only call _write if we have formatted text.
         assert formatted
 
-        if not self._ensure_state('logging'):
+        if not self._ensure_state('logged'):
             return
-
-        initial_events = self._initial_events
-        if initial_events:
-            initial_events()
 
         elapsed = self._elapsed(time)
 
@@ -1427,31 +1455,13 @@ class Log:
         """
 
         elapsed = self._elapsed(time)
-        formatted = self._format_message(time, thread, format, message)
+        formatted = self._format_message(elapsed, thread, format, message)
+        if not (formatted and self._ensure_state('logged')):
+            return
 
-        formatted_is_nonempty = bool(formatted)
-
-        if message or formatted_is_nonempty:
-            if not self._ensure_state('logging'):
-                return
-
-            initial_events = self._initial_events
-            if initial_events:
-                if not formatted_is_nonempty:
-                    # buffer the log event.
-                    # somehow, the message is true (non-empty),
-                    # but the formatted version is empty.
-                    # This would show up in an event sink.
-                    # For now, we'll queue it on the InitialEvents;
-                    # it'll get flushed only if we ever get formatted text.
-                    initial_events.dispatch([self._log, (time, thread, format, message)])
-                    return
-                initial_events()
-
-            for destination in self._destinations:
-                destination.log(elapsed, thread, format, message, formatted)
-            if formatted_is_nonempty:
-                self._dirty = True
+        for destination in self._destinations:
+            destination.log(elapsed, thread, format, message, formatted)
+        self._dirty = True
 
 
     def _print(self, time, thread, args, sep, end, flush, format):
@@ -1518,23 +1528,24 @@ class Log:
 
 
     def _enter(self, time, thread, message):
-        if not self._ensure_state('logging'):
-            return
-
         elapsed = self._elapsed(time)
-        formatted = self._format_message(time, thread, 'enter', message)
+        formatted = self._format_message(elapsed, thread, 'enter', message)
         formatted_is_nonempty = bool(formatted)
 
-        initial_events = self._initial_events
-        if initial_events:
+        if self._state == 'initial':
             if not formatted_is_nonempty:
-                initial_events.dispatch([self._enter, (time, thread, message)])
+                initial_events = self._initial_events
+                assert initial_events
+                initial_events.append(self._enter, (time, thread, message))
                 initial_events.nesting.append(message)
                 return
-            initial_events()
+
+        if not self._ensure_state('logged'):
+            return
 
         for destination in self._destinations:
-            destination.log(elapsed, thread, 'enter', message, formatted)
+            if formatted_is_nonempty:
+                destination.log(elapsed, thread, 'enter', message, formatted)
             destination.enter(elapsed, thread, message)
 
         self._append_nesting(message)
@@ -1550,31 +1561,29 @@ class Log:
         return self.LogEnterAndExitContextManager(self)
 
     def _exit(self, time, thread):
-        if not self._ensure_state('logging'):
-            return
-
-        initial_events = self._initial_events
         initial_message = None
-        if initial_events:
+        elapsed = formatted = None
+
+        if self._state == 'initial':
+            initial_events = self._initial_events
             if not initial_events.nesting:
                 return
             initial_message = initial_events.nesting.pop()
             elapsed = self._elapsed(time)
-            formatted = self._format_message(time, thread, 'exit', initial_message)
+            formatted = self._format_message(elapsed, thread, 'exit', initial_message)
             if not formatted:
-                initial_events.dispatch([self._exit, (time, thread)])
+                initial_events.append(self._exit, (time, thread))
                 return
-            initial_events()
-            assert self._nesting
-        else:
-            if not self._nesting:
-                return
+
+        if not (self._ensure_state('logged') and self._nesting):
+            return
 
         message = self._pop_nesting()
         assert (initial_message is None) or (initial_message == message)
 
-        elapsed = self._elapsed(time)
-        formatted = self._format_message(time, thread, 'exit', message)
+        if elapsed is None:
+            elapsed = self._elapsed(time)
+            formatted = self._format_message(elapsed, thread, 'exit', message)
 
         for destination in self._destinations:
             destination.exit(elapsed, thread)
@@ -1993,11 +2002,12 @@ class Log:
 
         def _event(self, event):
             if event.message is not None:
-                duration = event.elapsed - self.previous_message_elapsed
-                assert duration >= 0, f"duration should be >= 0 but it's {duration}"
-                event._duration = duration
-                self.previous_message_elapsed = event.elapsed
                 self.longest_message = max(self.longest_message, len(event.message))
+
+            duration = event.elapsed - self.previous_message_elapsed
+            assert duration >= 0, f"duration should be >= 0 but it's {duration} ({event})"
+            event._duration = duration
+            self.previous_message_elapsed = event.elapsed
             self.events.append(event)
 
         def reset(self):
@@ -2022,6 +2032,7 @@ class Log:
 
         def end(self, elapsed):
             self._event(SinkEndEvent(self.number, elapsed))
+            self.depth = 0
 
         def write(self, elapsed, thread, formatted):
             self._event(SinkWriteEvent(self.number, self.depth, elapsed, thread, formatted))

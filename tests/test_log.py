@@ -268,7 +268,7 @@ class TestFile(unittest.TestCase):
             log.close()
             self.assertEqual(big.log.TMPFILE.path.name, expected)
         finally:
-            if tmpfile and os.path.exists(tmpfile):
+            if tmpfile and os.path.exists(tmpfile): # pragma: nocover
                 os.unlink(tmpfile)
 
 
@@ -406,6 +406,12 @@ class TestLogBasics(unittest.TestCase):
         finally:
             big.Log.destination_mappers.clear()
 
+    def test_exit_without_logging_or_enter(self):
+        sink = EventSink()
+        log = big.Log(sink, threading=False, formats={"start": None, "end": None}, prefix='')
+        log.exit()
+        log.close()
+        self.assertFalse(sink.value)
 
     def test_log_after_closed(self):
         array = []
@@ -450,14 +456,20 @@ class TestLogBasics(unittest.TestCase):
         self.assertFalse(log.dirty)
 
     def test_log_atexit(self):
-        # simulate atexit calls
-        log = big.Log([], threading=True)
-        self.assertFalse(log.closed)
-        log._atexit()
-        self.assertTrue(log.closed)
-        # log ignores reset after atexit
-        log.reset()
-        self.assertTrue(log.closed)
+        for threading in (False, True):
+            for log_once in (False, True):
+                with self.subTest(threading=threading, log_once=log_once):
+                    log = big.Log([], threading=threading)
+                    self.assertFalse(log.closed)
+                    if log_once:
+                        log("hello!")
+                        log.flush()
+                    log._atexit()
+                    self.assertTrue(log.closed)
+                    # log ignores reset after atexit
+                    log.reset()
+                    self.assertTrue(log.closed)
+
 
 
 
@@ -620,6 +632,18 @@ class TestLogMethods(unittest.TestCase):
         self.assertIn("flushed message!\n", s.getvalue())
         log.close()
 
+    def test_blank_enter_and_exit_before_formatted_logging(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": None, "end": None, 'enter': None, 'exit': None}, prefix='')
+        log.enter('subsystem')
+        log.exit()
+        with log.enter('subsystem 2'):
+            with log.enter('subsystem 3'):
+                log('finally!')
+        log.close()
+        self.assertEqual(s.getvalue(), 'finally!\n')
+
+
     def test_log_messages_after_close(self):
         s = io.StringIO()
         log = big.Log(s, threading=False, formats={"start": None, "end": None}, prefix='')
@@ -638,11 +662,9 @@ class TestLogMethods(unittest.TestCase):
 
     def test_formats_exceptions(self):
         with self.assertRaises(ValueError):
-            big.Log(formats={"enter": None})
+            big.Log(formats={"mixmox": None})
         with self.assertRaises(TypeError):
             big.Log(formats={83: {"template": "abc", "line": "-"}})
-        with self.assertRaises(ValueError):
-            big.Log(formats={"not an id": {"template": "abc", "line": "-"}})
         with self.assertRaises(TypeError):
             # formats value must be dict
             big.Log(formats={"splunk": 55})
@@ -652,14 +674,28 @@ class TestLogMethods(unittest.TestCase):
         with self.assertRaises(TypeError):
             # format dict line value is optional, but if specified must be str
             big.Log(formats={"splunk": {"template": "abc", "line": 77}})
-        with self.assertRaises(ValueError):
-            # can't name a format "reset", Log already has a "reset" method
-            big.Log(formats={"reset": {"template": "abc", "line": "-"}})
 
         l = big.Log(formats={"start": None, "end": None})
         with self.assertRaises(ValueError):
             l.print("abc", format="spooky")
         l.close()
+
+        # you're allowed to use format names that collide with Log methods,
+        # as well as format names containing spaces.
+        # you just won't get the prebound method (a la "box", "peanut", etc).
+        s = io.StringIO()
+        l = big.Log(s, formats={"start": None, "end": None, "reset": {"template": "_reset_{line}\n{message}\n{line}", "line": "_"}, "has two spaces": {"template": "#has two spaces#{line}\n{message}\n{line}", "line": "#"}}, width=20)
+        l('dis is rasat', format='reset')
+        l('has spacings', format='has two spaces')
+        l.close()
+        self.assertEqual(s.getvalue(), """
+_reset______________
+dis is rasat
+____________________
+#has two spaces#####
+has spacings
+####################
+""".lstrip())
 
 
 
@@ -1129,8 +1165,11 @@ class TestEventSink(unittest.TestCase):
         with log.enter("subsystem"):
             log.box("xyz")
         log.close()
+        log.reset()
+        log.print('hey now')
+        log.close()
 
-        self.assertEqual(esink.value, "start log write log log enter log exit log log flush end")
+        self.assertEqual(esink.value, "start log write log log enter log exit log log flush end reset start log log log flush end")
 
 
 

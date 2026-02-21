@@ -124,11 +124,13 @@ class TestOldDestination(unittest.TestCase):
     def test_old_logger_basic(self):
         old = big.OldDestination()
         log = big.Log(old, threading=False, formats={"start": None, "end": None }, prefix='')
-        log("event")
+        log("mischief")
         log.close()
 
         events = list(old)
-        self.assertEqual(len(events), 1)
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0][2], 'log start')
+        self.assertEqual(events[1][2], 'mischief')
 
     def test_old_logger_enter_exit(self):
         old = big.OldDestination()
