@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.13.](#013)
+The current version is [0.13.1.](#0131)
 
 *Think big!*
 
@@ -2180,22 +2180,22 @@ All `Destination` subclasses must implement the `write` method:
     write(elapsed, thread, formatted)
 ```
 
-Subclasses may also optionally override:
+Subclasses may also optionally override these seven methods:
 
 ```Python
     flush()
-    close()
     reset()
-    start(start_time_ns, start_time_epoch, formatted)
-    end(elapsed, formatted)
+    start(start_time_ns, start_time_epoch)
+    end(elapsed)
     log(elapsed, thread, format, message, formatted)
     enter(elapsed, thread, message, formatted)
     exit(elapsed, thread, message, formatted)
 ```
 
-The default implementations of `start`, `end`, `log`, `enter`,
-and `exit` all call `self.write(elapsed, thread, formatted)`.
-Subclasses need not call the base class method for any of these.
+The default implementations of `log`, `enter`, and `exit`
+all call `self.write(elapsed, thread, formatted)`.
+Subclasses need not call the base class method for any of these
+seven methods.
 
 Subclasses may also override `register(owner)`, but *must*
 call the base class implementation via `super().register(owner)`.
@@ -2208,28 +2208,54 @@ The meaning of the arguments to the various `Destination` methods:
 in nanoseconds.
 
 * `thread` is the `threading.Thread` handle for the thread that
-logged the message.
+logged the message.  This can be `None` for messages that aren't
+logged from any particular thread; currently this includes the
+"start banner" (using format `"start"`) and the "end banner"
+(using format `"end"`).
 
-* `formatted` is the formatted log message.
+* `formatted` is the formatted log message.  This is always a `str`.
 
 * `format` is the name of the format applied to `message` to
 produce `formatted`.
 
 * `message` is the original message passed in to a `Log` method.
+This can be an empty string if no text was actually logged.
+(The "start banner" and "end banner" also specify empty
+strings for their `message` arguments.)
 
 * `owner` is the `Log` object that owns this `Destination`.
 
 `Log` guarantees events are sent in this order:
 
 ```
-    register → start → [write | log | enter | exit | flush]* → end → [flush] → close
+    register → start → [write | log | enter | exit | flush]* → [flush] → end
 ```
 
-`register` is sent once, while the log is in its initial state.
-The log transitions to logging state the first time a message
-is logged.  `flush` is only sent when the log is dirty.
-If the log is reset, it sends `end` / [`flush`] / `close` /
-`reset`, returning to initial state.
+* `register` is always the first event sent; it's sent exactly
+  once, when the destination is added to the `Log`, in the constructor.
+
+* `start` is lazily sent immediately before the first message
+  is logged (one of `write`, `log`, or `enter`).  If no message
+  is ever logged, `start` is never sent.
+
+* `flush` is only sent if the the log is dirty.  The log is
+  only considered "dirty" if any non-empty `formatted` strings
+  were sent to the log.
+
+* When the log is closed, if `start` was ever sent, it sends an
+  optional `flush` (if the log is dirty, followed by `end`.
+
+* If the log is reset, if `start` was ever sent,
+  the log is immediately closed--possibly sending `flush`,
+  always sending `end`--followed by a `reset` event.
+  `reset` should reset the destination to its initial state.
+
+* If the log is closed but `start` was never sent,
+  `Log` doesn't bother sending *any* messages to the
+  destinations.  No `flush`, and no `end`.  And if a
+  log in this state is reset, no `reset` event is sent.
+  (Nothing has happened, so there's no point in
+  notifying the destinations of meaningless non-events.)
 
 See the [**The big `Log`**](#the-big-log) tutorial for more.
 </dd></dl>
@@ -9469,6 +9495,62 @@ others.  Views are completely independent from each other.
 
 
 ## Release history
+
+#### 0.13.1
+
+*under development*
+
+Observing the big release tradition: a day after I ship a big
+chunk of work, I make a new release to make a dinky tweak to
+it.
+
+* Retooled `Log` behavior around "start" and "end".  Bad news:
+  this is a breaking change.  (Good news: it probably won't
+  affect anybody, I doubt anyone has started writing their
+  own Destinations already.)  The problem: in 0.13, if you
+  create a Log with default behavior (no positional arguments,
+  no keyword-only arguments), and you *never* print to it,
+  it still prints the "start banner" and the "end banner".
+  That's kinda dumb, huh.  Addressing this caused me to re-think
+  a few things.  The basic approach: disconnect the "start banner"
+  from the `start` event, and disconnect the "end banner"
+  from the `end` event.  This had ramifications for other
+  parts of the API.  Here's the full list of resulting changes:
+   * `Destination.start` and `Destination.end` no longer take
+     a `formatted` argument.
+   * `Destination.start(self, start_time_ns, start_time_epoch)`
+     is called lazily, just before the first `write`, `log`,
+     or `enter` event is logged.  `start` is sent even if the
+     event has no `formatted` text.
+   * `Destination.close()` has been removed.  Instead, the last
+     event sent to a destination is `Destination.end(elapsed)`,
+     after the optional `flush`.
+   * The "start banner" and "end banner" are now logged
+     as their own `Destination.log`.  For these `log` events,
+     `thread` is `None`, `message` is an empty string, and `format`
+     is either `"start"` or `"end"` respectively.  (The `elapsed`
+     parameter is accurate; for `start` it's `0`, and for `end`
+     it's the (elapsed) time the log was closed.)
+   * The "start banner" is logged immediately before the first
+     message logged that has any `formatted` text. The "end banner"
+     is only logged if the "start banner" was ever logged, in which
+     case it's logged immediately before the final `flush` event
+     (which in turn is immediately before the `end` event).
+   * If you close a log without ever logging a message,
+     the log internally goes directly from "initial" state
+     to "closed" state, and never sends *any* events to
+     the destinations (apart from the "register").  The
+     `start` and `end` events are *not* sent.  If you
+     then reset the log while in this state, it also
+     doesn't send a `reset` event to the destinations.
+     (Why?  The log state has not meaningfully changed,
+     there's no point in marching the destinations through
+     pointless non-events.)
+* Swapped two of the parameters for `Destination.log`.
+  This makes more sense, and again I don't think anybody is using
+  it yet.  The new prototype is `def log(self, elapsed, thread, message, format, formatted)`.
+  (I swapped `message` and `format`.  Sorry, I guess I just like chaos.)
+
 
 #### 0.13
 

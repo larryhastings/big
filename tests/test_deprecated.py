@@ -128,8 +128,7 @@ class TestOldDestination(unittest.TestCase):
         log.close()
 
         events = list(old)
-        # Should have "log start" and "event"
-        self.assertTrue(len(events) >= 2)
+        self.assertEqual(len(events), 1)
 
     def test_old_logger_enter_exit(self):
         old = big.OldDestination()
