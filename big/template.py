@@ -25,9 +25,11 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import builtins
-from .types import string
-from .text import split_quoted_strings
+import itertools
 import token
+
+from .types import string
+from .text import split_quoted_strings, split_delimiters, Delimiter
 
 # TODO
 # test all unclosed open delimiters
@@ -397,5 +399,267 @@ def eval_template_string(s, globals, locals=None, *,
 
     return ''.join(result)
 
+
+_curly_brace_delimiters = {'{': Delimiter('}')}
+
+
+@export
+class Formatter:
+    """
+    A sophisticated template formatter, similar to str.format.
+
+    Example:
+
+        fmt = Formatter('{line*}\\n{name} start\\n{double*}{line*}',
+            {'line*': '-', 'double*': '=', 'name': 'Log'},
+            width=20)
+        print(fmt())
+
+    This prints:
+
+        --------------------
+        Log start
+        ==========----------
+
+    The template string is split on newlines into template lines.
+    Template lines are classified into three groups:
+
+        prologue: lines before any {message} line
+        body: contiguous lines containing {message}
+        epilogue: lines after the last {message} line
+
+    When the message is formatted, the lines of the message are
+    zipped together with the "body".  If the message has more lines
+    than body template lines, Formatter repeats the last body
+    template line.
+
+    Substitution values in the template use str.format_map syntax.
+    Values whose keys end with * (e.g. "{line*}") are "starred
+    interpolations": their value is repeated to fill the line to
+    the target width.  Starred interpolations must not use a
+    conversion or format spec.
+    """
+
+    def __init__(self, template, map=None, *, width=79, **kwargs):
+        if not isinstance(template, str):
+            raise TypeError(f"template must be str, not {type(template).__name__}")
+        if not isinstance(width, int):
+            raise TypeError(f"width must be int, not {type(width).__name__}")
+
+        for k, v in kwargs.items():
+            if not isinstance(v, str):
+                raise TypeError(f"keyword argument {k!r} must be str, not {type(v).__name__}")
+
+        if map is not None:
+            if not isinstance(map, dict):
+                raise TypeError(f"map must be dict or None, not {type(map).__name__}")
+            for k, v in map.items():
+                if not isinstance(k, str):
+                    raise TypeError(f"map keys must be str, not {type(k).__name__}")
+                if not isinstance(v, str):
+                    raise TypeError(f"map values must be str, not {type(v).__name__}")
+            map = dict(map)
+            map.update(kwargs)
+        else:
+            map = dict(kwargs)
+
+        self._template = template
+        self._width = width
+        self._map = map
+
+        self._parse(template, map)
+
+    def _parse(self, template, map):
+        prologue = []
+        body = []
+        epilogue = []
+        state = prologue
+
+        for template_line in template.split('\n'):
+            cleaned = template_line.replace('{{', '').replace('}}', '')
+
+            contains_message = in_interpolation = False
+            starred_interpolations = []
+
+            for text, open, close, change in split_delimiters(cleaned, _curly_brace_delimiters, yields=4):
+                if open and in_interpolation:
+                    raise ValueError("template does not support nested curly braces")
+                if close:
+                    # strip conversion and format spec first
+                    bare, _, _ = text.partition('!')
+                    bare, _, _ = bare.partition(':')
+                    if bare.endswith('*'):
+                        # it's a starred interpolation
+                        if bare != text:
+                            raise ValueError(f"starred interpolation {{{text}}} must not use a conversion or format spec")
+                        if bare == '*':
+                            raise ValueError(f"starred interpolation {{{text}}} must have a name")
+                        if text not in map:
+                            raise ValueError(f"template uses {{{text}}} but {text!r} is not defined in map")
+                        starred_interpolations.append(text)
+                    else:
+                        if bare == 'message':
+                            contains_message = True
+                in_interpolation = bool(open)
+
+            if state is prologue:
+                if contains_message:
+                    state = body
+            elif state is body:
+                if not contains_message:
+                    state = epilogue
+            else:
+                assert state is epilogue
+                if contains_message:
+                    raise ValueError("all {message} lines in template must be contiguous")
+
+            if not starred_interpolations:
+                if template_line:
+                    state.append((template_line, 0, (), None, None))
+                continue
+
+            original_last_key = starred_interpolations[-1]
+            count = len(starred_interpolations)
+
+            # Generate a unique key for the last starred interpolation
+            # on each line, so it can expand to share + remainder characters
+            # while all other occurrences expand to share characters.
+            # Maybe a little silly, but: try "last line*",
+            # then "last line* 2", "last line* 3", etc.
+            all_keys = set(starred_interpolations) | set(map)
+            last_key = "last " + original_last_key
+            if last_key in all_keys:
+                n = 2
+                base = last_key
+                while last_key in all_keys:
+                    last_key = f"{base} {n}"
+                    n += 1
+
+            starred_interpolations[-1] = last_key
+
+            before, sep, after = template_line.rpartition(f'{{{original_last_key}}}')
+            assert sep
+            template_line = f'{before}{{{last_key}}}{after}'
+
+            # unique_keys: deduplicated list preserving order, last_key always last
+            seen = set()
+            unique_keys = []
+            for key in starred_interpolations:
+                if key not in seen:
+                    seen.add(key)
+                    unique_keys.append(key)
+
+            test_starred_interpolations_map = dict.fromkeys(starred_interpolations, '')
+
+            state.append((template_line, count, unique_keys, original_last_key, test_starred_interpolations_map))
+
+        self._prologue = prologue
+        self._body = body
+        self._epilogue = epilogue
+
+    @property
+    def template(self):
+        """The original template string."""
+        return self._template
+
+    @property
+    def width(self):
+        """The target line width for starred interpolations."""
+        return self._width
+
+    @property
+    def map(self):
+        """A copy of the substitution dict."""
+        return dict(self._map)
+
+    def __repr__(self):
+        return f"Formatter({self._template!r}, {self._map!r}, width={self._width!r})"
+
+    def __call__(self, message='', **kwargs):
+        """Alias for format."""
+        return self.format_map(message, kwargs)
+
+    def format(self, message='', **kwargs):
+        """
+        Format the template with the given message and kwargs.
+
+        message must be str.
+        kwargs override the map for this call only.
+        Raises TypeError if message is not str.
+        Raises ValueError if message is non-empty but the
+        template has no {message} lines.
+        Returns the formatted string.
+        """
+        return self.format_map(message, kwargs)
+
+    def format_map(self, message='', map={}):
+        """
+        Format the template with the given message and map.
+
+        message must be str.
+        map overrides the stored map for this call only.
+        Raises TypeError if message is not str.
+        Raises ValueError if message is non-empty but the
+        template has no {message} lines.
+        Returns the formatted string.
+        """
+        if not isinstance(message, str):
+            raise TypeError(f"message must be str, not {type(message).__name__}")
+        if message and not self._body:
+            raise ValueError("message is non-empty but template has no {message} lines")
+
+        extra = self._map
+        if map:
+            extra = dict(extra)
+            extra.update(map)
+
+        message_lines = message.split('\n')
+        width = self._width
+
+        if not self._body:
+            body_iter = ()
+        elif len(self._body) > len(message_lines):
+            body_iter = zip(self._body, message_lines)
+        else:
+            body_iter = itertools.zip_longest(self._body, message_lines, fillvalue=self._body[-1])
+
+        prologue_iter = ((entry, None) for entry in self._prologue)
+        epilogue_iter = ((entry, None) for entry in self._epilogue)
+
+        buffer = []
+        append = buffer.append
+
+        for template_entry, message_line in itertools.chain(prologue_iter, body_iter, epilogue_iter):
+            template, starred_interpolations, unique_keys, original_last_key, test_starred_interpolations_map = template_entry
+
+            line_map = dict(extra)
+            if message_line is not None:
+                line_map['message'] = message_line
+
+            line = None
+            if starred_interpolations:
+                line_map.update(test_starred_interpolations_map)
+                test_line = template.format_map(line_map)
+                delta = width - len(test_line)
+                if delta <= 0:
+                    line = test_line
+                else:
+                    share, remainder = divmod(delta, starred_interpolations)
+
+                    last_key = unique_keys[-1]
+                    for key in unique_keys:
+                        if key is not last_key:
+                            fill_value = self._map[key]
+                        else:
+                            share += remainder
+                            fill_value = self._map[original_last_key]
+                        repeated = fill_value * ((share // len(fill_value)) + 1)
+                        line_map[key] = repeated[:share]
+
+            if line is None:
+                line = template.format_map(line_map)
+            append(line)
+
+        return "\n".join(buffer)
 
 mm()
