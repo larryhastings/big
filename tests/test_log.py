@@ -1003,25 +1003,14 @@ class TestSink(unittest.TestCase):
             self.assertEqual(e.depth, 0)
             self.assertGreaterEqual(e.duration, 0)
             self.assertGreater(e.elapsed, 0)
-            self.assertEqual(e.epoch, None)
             self.assertIn('message', e.formatted)
             self.assertTrue(e.message.startswith('message'))
             self.assertTrue(e.message.endswith(str(i)))
-            self.assertEqual(e.ns, None)
             self.assertEqual(e.number, 1)
             self.assertEqual(e.thread, threading.current_thread())
 
         e = events[0]
-        clone = log_module.SinkLogEvent(
-            number=e.number,
-            elapsed=e.elapsed,
-            thread=e.thread,
-            format=e.format,
-            message=e.message,
-            formatted=e.formatted,
-            depth=e.depth,
-            )
-        clone._duration = e.duration
+        clone = e._calculate_duration(events[1])
         self.assertEqual(e, clone)
         self.assertNotEqual(e, events[1])
         self.assertLess(e, events[1])
@@ -1030,7 +1019,7 @@ class TestSink(unittest.TestCase):
             e < 3.1415
 
         sse = big.SinkStartEvent(0, 5, 10, {})
-        self.assertEqual(repr(sse), "SinkStartEvent(configuration={}, epoch=10, ns=5)")
+        self.assertEqual(repr(sse), "SinkStartEvent(number=0, ns=5, epoch=10, configuration={}, duration=0)")
 
     def test_sink_event_types(self):
         sink = big.Log.Sink()
@@ -1048,12 +1037,24 @@ class TestSink(unittest.TestCase):
         events = list(sink)
         types = [e.type for e in events]
         Sink = big.Log.Sink
-        self.assertIn(SinkEvent.TYPE_START, types)
-        self.assertIn(SinkEvent.TYPE_END, types)
-        self.assertIn(SinkEvent.TYPE_WRITE, types)
-        self.assertIn(SinkEvent.TYPE_LOG, types)
-        self.assertIn(SinkEvent.TYPE_ENTER, types)
-        self.assertIn(SinkEvent.TYPE_EXIT, types)
+        self.assertIn('start', types)
+        self.assertIn('end', types)
+        self.assertIn('write', types)
+        self.assertIn('log', types)
+        self.assertIn('enter', types)
+        self.assertIn('exit', types)
+
+        # coverage stuff
+        # exercise __hash__ on every sink event type
+        events_map = dict.fromkeys(events, None)
+        number = 1
+        for e in events:
+            with self.subTest(e=e):
+                self.assertEqual(e.number, number)
+                if isinstance(e, big.log.SinkEndEvent):
+                    number += 1
+                else:
+                    self.assertGreaterEqual(e.duration, 0)
 
 
     def test_sink_events_without_any_logging(self):

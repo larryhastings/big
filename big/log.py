@@ -27,7 +27,6 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import atexit
 import builtins
-from functools import partial
 from io import TextIOBase
 from itertools import zip_longest
 import os
@@ -35,7 +34,6 @@ from pathlib import Path
 from queue import Queue
 import tempfile
 from threading import current_thread, Lock, Thread
-from .boundinnerclass import BoundInnerClass
 from . import time as big_time
 from . import file as big_file
 import time
@@ -58,241 +56,287 @@ except ImportError: # pragma: no cover
 export('default_clock')
 
 
+
 @export
-class SinkEvent:
+class SinkEvent(tuple):
     """
-    Base class for Log events stored by the Sink destination.
+    Abstract base class for Log events stored by the Sink destination.
+
+    SinkEvent is a tuple subclass.  Subclasses are immutable
+    and define only the fields relevant to their event type.
     """
-    __slots__ = (
-        '_configuration',
-        '_depth',
-        '_duration',
-        '_elapsed',
-        '_epoch',
-        '_format',
-        '_formatted',
-        '_message',
-        '_ns',
-        '_number',
-        '_thread',
-        '_type',
-        )
 
-    _DEFAULT_CONFIGURATION = None
-    _DEFAULT_DEPTH = 0
-    _DEFAULT_DURATION = 0
-    _DEFAULT_ELAPSED = 0
-    _DEFAULT_EPOCH = None
-    _DEFAULT_FORMAT = None
-    _DEFAULT_FORMATTED = None
-    _DEFAULT_MESSAGE = None
-    _DEFAULT_NS = None
-    _DEFAULT_NUMBER = 0
-    _DEFAULT_THREAD = None
-    _DEFAULT_TYPE = None
-
-    TYPE_RESET = "reset"
-    TYPE_START = 'start'
-    TYPE_END   = 'end'
-    TYPE_FLUSH = "flush"
-    TYPE_CLOSE = "close"
-    TYPE_WRITE = 'write'
-    TYPE_LOG   = 'log'
-    TYPE_ENTER = 'enter'
-    TYPE_EXIT  = 'exit'
-
-    def __init__(self, *,
-        configuration=_DEFAULT_CONFIGURATION,
-        depth=_DEFAULT_DEPTH,
-        duration=_DEFAULT_DURATION,
-        elapsed=_DEFAULT_ELAPSED,
-        epoch=_DEFAULT_EPOCH,
-        format=_DEFAULT_FORMAT,
-        formatted=_DEFAULT_FORMATTED,
-        message=_DEFAULT_MESSAGE,
-        ns=_DEFAULT_NS,
-        number=_DEFAULT_NUMBER,
-        thread=_DEFAULT_THREAD,
-        type=_DEFAULT_TYPE,
-        ):
-        self._configuration = configuration
-        self._depth = depth
-        self._duration = duration
-        self._elapsed = elapsed
-        self._epoch = epoch
-        self._format = format
-        self._formatted = formatted
-        self._message = message
-        self._ns = ns
-        self._number = number
-        self._thread = thread
-        self._type = type
-
-    @property
-    def configuration(self):
-        return self._configuration
-
-    @property
-    def depth(self):
-        return self._depth
-
-    @property
-    def duration(self):
-        return self._duration
-
-    @property
-    def elapsed(self):
-        return self._elapsed
-
-    @property
-    def epoch(self):
-        return self._epoch
-
-    @property
-    def format(self):
-        return self._format
-
-    @property
-    def formatted(self):
-        return self._formatted
-
-    @property
-    def message(self):
-        return self._message
-
-    @property
-    def ns(self):
-        return self._ns
-
-    @property
-    def number(self):
-        return self._number
-
-    @property
-    def thread(self):
-        return self._thread
-
-    @property
-    def type(self):
-        return self._type
-
+    __slots__ = ()
 
     def __repr__(self):
-        buffer = []
-        append = buffer.append
-        for name in (
-            "configuration",
-            "depth",
-            "duration",
-            "elapsed",
-            "epoch",
-            "format",
-            "formatted",
-            "message",
-            "ns",
-            "number",
-            "thread",
-            ):
+        fields = []
+        for name in self._field_names:
             value = getattr(self, name)
-            default = getattr(self, "_DEFAULT_" + name.upper())
-            if value != default:
-                append(f"{name}={value!r}")
-
-        text = ", ".join(buffer)
-        return f"{self.__class__.__name__}({text})"
-
-    def __eq__(self, other):
-        return (isinstance(other, SinkEvent)
-            and (self._number == other._number)
-            and (self._elapsed == other._elapsed)
-            and (self._type == other._type)
-            and (self._message == other._message)
-            and (self._thread == other._thread)
-            and (self._epoch == other._epoch)
-            and (self._depth == other._depth)
-            and (self._configuration == other._configuration)
-            )
+            fields.append(f"{name}={value!r}")
+        return f"{self.__class__.__name__}({', '.join(fields)})"
 
     def __lt__(self, other):
         if not isinstance(other, SinkEvent):
             raise TypeError(f"'<' not supported between instances of SinkEvent and {type(other)}")
         return (
-                (self._number  <= other._number)
-            and (self._elapsed <  other._elapsed)
+                (self.number  <= other.number)
+            and (self.elapsed <  other.elapsed)
             )
 
 
 @export
 class SinkStartEvent(SinkEvent):
-    def __init__(self, number, start_time_ns, start_time_epoch, configuration):
-        super().__init__(
-            type=self.TYPE_START,
-            number=number,
-            ns=start_time_ns,
-            epoch=start_time_epoch,
-            configuration=configuration,
+
+    __slots__ = ()
+
+    type = 'start'
+
+    _field_names = ('number', 'ns', 'epoch', 'configuration', 'duration')
+
+    def __new__(cls, number, ns, epoch, configuration, duration=0):
+        return tuple.__new__(cls, (number, ns, epoch, configuration, duration))
+
+    @property
+    def number(self):
+        return self[0]
+
+    @property
+    def ns(self):
+        return self[1]
+
+    @property
+    def epoch(self):
+        return self[2]
+
+    @property
+    def configuration(self):
+        return self[3]
+
+    @property
+    def duration(self):
+        return self[4]
+
+    @property
+    def elapsed(self):
+        return 0
+
+    @property
+    def depth(self):
+        return 0
+
+    def __hash__(self):
+        return hash((self.number, self.ns, self.epoch))
+
+    def _calculate_duration(self, next_event):
+        return SinkStartEvent(
+            self.number, self.ns, self.epoch, self.configuration,
+            next_event.elapsed - self.elapsed,
             )
+
 
 @export
 class SinkEndEvent(SinkEvent):
-    def __init__(self, number, elapsed):
-        super().__init__(
-            type=self.TYPE_END,
-            number=number,
-            elapsed=elapsed,
-            )
+
+    __slots__ = ()
+
+    type = 'end'
+
+    _field_names = ('number', 'elapsed')
+
+    def __new__(cls, number, elapsed):
+        return tuple.__new__(cls, (number, elapsed))
+
+    @property
+    def number(self):
+        return self[0]
+
+    @property
+    def elapsed(self):
+        return self[1]
+
+    @property
+    def depth(self):
+        return 0
+
 
 @export
 class SinkWriteEvent(SinkEvent):
-    def __init__(self, number, depth, elapsed, thread, formatted):
-        super().__init__(
-            type=self.TYPE_WRITE,
-            number=number,
-            elapsed=elapsed,
-            thread=thread,
-            formatted=formatted,
-            depth=depth,
+
+    __slots__ = ()
+
+    type = 'write'
+
+    _field_names = ('number', 'depth', 'elapsed', 'thread', 'formatted', 'duration')
+
+    def __new__(cls, number, depth, elapsed, thread, formatted, duration=0):
+        return tuple.__new__(cls, (number, depth, elapsed, thread, formatted, duration))
+
+    @property
+    def number(self):
+        return self[0]
+
+    @property
+    def depth(self):
+        return self[1]
+
+    @property
+    def elapsed(self):
+        return self[2]
+
+    @property
+    def thread(self):
+        return self[3]
+
+    @property
+    def formatted(self):
+        return self[4]
+
+    @property
+    def duration(self):
+        return self[5]
+
+    def _calculate_duration(self, next_event):
+        return SinkWriteEvent(
+            self.number, self.depth, self.elapsed,
+            self.thread, self.formatted,
+            next_event.elapsed - self.elapsed,
             )
+
 
 @export
 class SinkLogEvent(SinkEvent):
-    def __init__(self, number, depth, elapsed, thread, format, message, formatted):
-        super().__init__(
-            type=self.TYPE_LOG,
-            number=number,
-            elapsed=elapsed,
-            thread=thread,
-            format=format,
-            message=message,
-            formatted=formatted,
-            depth=depth,
+
+    __slots__ = ()
+
+    type = 'log'
+
+    _field_names = ('number', 'depth', 'elapsed', 'thread', 'format', 'message', 'formatted', 'duration')
+
+    def __new__(cls, number, depth, elapsed, thread, format, message, formatted, duration=0):
+        return tuple.__new__(cls, (number, depth, elapsed, thread, format, message, formatted, duration))
+
+    @property
+    def number(self):
+        return self[0]
+
+    @property
+    def depth(self):
+        return self[1]
+
+    @property
+    def elapsed(self):
+        return self[2]
+
+    @property
+    def thread(self):
+        return self[3]
+
+    @property
+    def format(self):
+        return self[4]
+
+    @property
+    def message(self):
+        return self[5]
+
+    @property
+    def formatted(self):
+        return self[6]
+
+    @property
+    def duration(self):
+        return self[7]
+
+    def _calculate_duration(self, next_event):
+        return SinkLogEvent(
+            self.number, self.depth, self.elapsed,
+            self.thread, self.format, self.message, self.formatted,
+            next_event.elapsed - self.elapsed,
             )
+
 
 @export
 class SinkEnterEvent(SinkEvent):
-    def __init__(self, number, depth, elapsed, thread, message):
-        super().__init__(
-            type=self.TYPE_ENTER,
-            format='enter',
-            number=number,
-            elapsed=elapsed,
-            thread=thread,
-            message=message,
-            depth=depth,
+
+    __slots__ = ()
+
+    type = 'enter'
+
+    _field_names = ('number', 'depth', 'elapsed', 'thread', 'message', 'duration')
+
+    def __new__(cls, number, depth, elapsed, thread, message, duration=0):
+        return tuple.__new__(cls, (number, depth, elapsed, thread, message, duration))
+
+    @property
+    def number(self):
+        return self[0]
+
+    @property
+    def depth(self):
+        return self[1]
+
+    @property
+    def elapsed(self):
+        return self[2]
+
+    @property
+    def thread(self):
+        return self[3]
+
+    @property
+    def message(self):
+        return self[4]
+
+    @property
+    def duration(self):
+        return self[5]
+
+    def _calculate_duration(self, next_event):
+        return SinkEnterEvent(
+            self.number, self.depth, self.elapsed,
+            self.thread, self.message,
+            next_event.elapsed - self.elapsed,
             )
+
 
 @export
 class SinkExitEvent(SinkEvent):
-    def __init__(self, number, depth, elapsed, thread):
-        super().__init__(
-            type=self.TYPE_EXIT,
-            format='exit',
-            number=number,
-            elapsed=elapsed,
-            thread=thread,
-            depth=depth,
-            )
 
+    __slots__ = ()
+
+    type = 'exit'
+
+    _field_names = ('number', 'depth', 'elapsed', 'thread', 'duration')
+
+    def __new__(cls, number, depth, elapsed, thread, duration=0):
+        return tuple.__new__(cls, (number, depth, elapsed, thread, duration))
+
+    @property
+    def number(self):
+        return self[0]
+
+    @property
+    def depth(self):
+        return self[1]
+
+    @property
+    def elapsed(self):
+        return self[2]
+
+    @property
+    def thread(self):
+        return self[3]
+
+    @property
+    def duration(self):
+        return self[4]
+
+    def _calculate_duration(self, next_event):
+        return SinkExitEvent(
+            self.number, self.depth, self.elapsed,
+            self.thread,
+            next_event.elapsed - self.elapsed,
+            )
 
 
 _sep = " "
@@ -435,10 +479,10 @@ class Log:
     (Log is always thread-safe, whether or not "threading" is true.)
 
     "indent" should be an integer, the number of spaces to indent by
-    when indenting the log (using Log.start).  Default is 4.
+    when indenting the log (using Log.enter).  Default is 4.
 
     "width" should be an integer, default is 79.  This is only used
-    to format separator lines (see "separator" and "banner_separator").
+    with {line} in a "template" in a format dict.
 
     "clock" should be a function returning nanoseconds since some
     arbitrary past event. The default value is time.monotonic_ns
@@ -457,15 +501,15 @@ class Log:
     at the beginning of every log message.  Default is
     big.Log.prefix_format(3, 10, 12).
 
-    "formats" should be a dict mapping strings (for which s.isidentifier()
-    is True) to format dicts.  A "format dict" is itself a dict with two
-    supported values: "format", and optionally "line", both strings.
-    "format" specifies a string that will be used to format log messages;
-    if you call Log.print(foo, format="peanut"), this will use the format
-    dict specified by Log(format={"peanut": {...}}).
+    "formats" should be a dict mapping strings to format dicts.
+    A "format dict" is itself a dict with two supported values:
+    "template", and optionally "line", both strings.  "template"
+    specifies a string that will be used to format log messages;
+    if you call Log.print(foo, format="peanut"), this will use
+    the format dict specified by Log(format={"peanut": {...}}).
 
-    The "format" string in the format dict is processed using the ".format"
-    method on a string, with the following values defined:
+    The "template" string in the format dict is processed using
+    the ".format" method on a string, with the following values defined:
 
         elapsed
             The elapsed time since the log was started,
@@ -509,12 +553,15 @@ class Log:
     You may also add your own user-defined formats; simply add these
     to the dict you pass in as the format parameter.  The Log instance
     will add a method with the name of format which logs using this
-    format; this is how log.box() is implemented.
+    format, if the format name passes an .isinstance() check, and
+    there isn't already an attribute on Log with that name;
+    this is how log.box() is implemented.
 
-    To suppress the initial and/or final log messages, pass in a dict
-    to the format parameter with "start" or "end" respectively set to
-    None.  To suppress both:
-        Log(format={"start": None, "end": None})
+    To suppress the banners printed for "start", "end", "enter",
+    or "exit" messages, pass in a dict to the formats parameter
+    with that format name set to None.  To suppress both the start
+    and end banners:
+        Log(formats={"start": None, "end": None})
     """
 
     def __init__(self, *destinations,
@@ -529,7 +576,7 @@ class Log:
             timestamp_format=big_time.timestamp_human,
 
             prefix=prefix_format(3, 10, 12),
-            formats = {},
+            formats={},
             ):
 
         t1 = clock()
@@ -552,11 +599,9 @@ class Log:
 
         self._formats_parameter = formats
 
-        self._reset(start_time_ns, start_time_epoch)
-
         self._nesting = []
 
-        self._state = 'initial'
+        self._reset(start_time_ns, start_time_epoch)
 
         # if threading is True, _lock is only used for close and reset (and shutdown)
         self._lock = Lock()
@@ -865,10 +910,10 @@ class Log:
             else:
                 iterator = ((template, None) for template in state)
 
-            for template_entry, message in iterator:
+            for template_entry, message_line in iterator:
                 line_buffer.clear()
                 template, append_repeated_line = template_entry
-                formatted = self._format_s(elapsed, thread, template, message=message, line=line, prefix=prefix)
+                formatted = self._format_s(elapsed, thread, template, message=message_line, line=line, prefix=prefix)
                 line_append(formatted)
                 if append_repeated_line:
                     length = len(formatted)
@@ -1005,7 +1050,7 @@ class Log:
         another thread trying to log something; that other thread
         could get its message logged after the "enter" message but
         before the indent!  By sending both jobs in a list all at
-        once, we guarantee that no job from aother thread gets
+        once, we guarantee that no job from another thread gets
         queued between these two jobs.
 
         _dispatch also takes a notify argument.  If it's true,
@@ -1090,7 +1135,7 @@ class Log:
             * any number of "enter" events
 
         (It's unlikely, but possible, for the format for "enter" to
-        produce no text.  That's the only scenarion in which we'd buffer
+        produce no text.  That's the only scenario in which we'd buffer
         "enter" events.)
         """
         def __init__(self, log):
@@ -1134,7 +1179,7 @@ class Log:
         self._state = 'initial'
 
 
-    def _ensure_closed(self, ns, epoch):
+    def _ensure_closed(self, ns, epoch, state):
         """
         Ensure the Log is in its closed state, regardless of current state.
 
@@ -1163,7 +1208,8 @@ class Log:
             for destination in self._destinations:
                 destination.end(elapsed)
 
-        self._state = 'closed'
+        assert state in ('closed', 'exited')
+        self._state = state
 
 
     def _ensure_state(self, state, ns=None, epoch=None):
@@ -1190,7 +1236,6 @@ class Log:
         #        out of it.
         #
         assert state in ('initial', 'logged', 'closed', 'exited')
-        # print(f"\n\n>>>>>>>>>>>>>>>>>>>>>>>>>\n>>ES>> {self._state!r} --> {state!r}")
 
         # fast path: we're already in the correct state
         if self._state == state:
@@ -1219,7 +1264,6 @@ class Log:
         try:
 
             if state == 'initial':
-                # print(f">> {self._state} BACK to initial")
                 # because of the above ifs, we already know
                 # we're not in 'initial' or 'exited'.
                 # that means we're in 'logged' or 'closed'.
@@ -1234,7 +1278,7 @@ class Log:
                 # calls here.
                 should_send_reset = self._initial_events is None
                 if self._state == 'logged':
-                    self._ensure_closed(ns, epoch)
+                    self._ensure_closed(ns, epoch, 'closed')
                 self._reset(ns, epoch)
 
                 if should_send_reset:
@@ -1249,14 +1293,11 @@ class Log:
                 if state in ('closed', 'exited'):
                     # we're transitioning directly from 'initial' to 'closed' or 'exited'.
                     # we don't need to do any intermediary stuff.
-                    # print(f">> initial directly to closed")
-                    self._ensure_closed(ns, epoch)
-                    self._state = state
+                    self._ensure_closed(ns, epoch, state)
                     return True
 
                 # transition to 'logged':
                 # flush buffered initial events.
-                # print(f">> to logged, {state=}")
                 self._state = 'logged'
                 self._initial_events()
 
@@ -1266,21 +1307,17 @@ class Log:
                     return True
 
             if self._state == 'logged':
-                # print(f">> to closed")
-                self._ensure_closed(ns, epoch)
+                self._ensure_closed(ns, epoch, 'closed')
 
                 if state == 'closed':
                     return True
 
             assert self._state == 'closed'
             if state == 'logged':
-                # print(f">> closed to logged?! no.")
                 # it's illegal to transition directly from closed to logged,
                 # you have to go through initial first (by resetting)
                 return False
 
-
-            # print(f">> to exited")
             assert state == 'exited'
             # transition to exited
             self._state = 'exited'
@@ -1352,7 +1389,7 @@ class Log:
 
     def close(self, block=True):
         """
-        Closes the log, if it's logging.
+        Closes the log, if it's open.
 
         This ensures the log is in "closed" state.
         When the log is in "closed" state, it ignores
@@ -1363,7 +1400,7 @@ class Log:
         If the log is currently in "closed" state,
         this is a no-op.
 
-        If the log is currently in "logging" state,
+        If the log is currently in "logged" state,
         closes the log.
 
         If the log is currently in "initial" state,
@@ -1584,10 +1621,12 @@ class Log:
         if elapsed is None:
             elapsed = self._elapsed(time)
             formatted = self._format_message(elapsed, thread, 'exit', message)
+        formatted_is_nonempty = bool(formatted)
 
         for destination in self._destinations:
             destination.exit(elapsed, thread)
-            destination.log(elapsed, thread, 'exit', message, formatted)
+            if formatted_is_nonempty:
+                destination.log(elapsed, thread, 'exit', message, formatted)
 
     def exit(self):
         """
@@ -1697,14 +1736,14 @@ class Log:
 
         The "register" event is sent while the log is still in
         its "initial" state; all other events are sent while the
-        log is in "logging" state.  (The log transitions to
+        log is in "logged" state.  (The log transitions to
         "closed" state only *after* sending the "end" event.)
         "register" will only ever be sent once, and it is always
         the first event received by a Destination.
 
-        The log transitions from "initial" to "logging" only
+        The log transitions from "initial" to "logged" only
         after it's logged to for the first time.  It transitions
-        to its "logging" state, sends a "start" event, then
+        to its "logged" state, sends a "start" event, then
         sends the actual logged message.  Once the log has been
         started in this way, it can send any number of "write",
         "log", "enter", "exit", or "flush" events, in any order.
@@ -1714,9 +1753,9 @@ class Log:
         automatically sends a "flush" before the "end".
 
         If the log is reset, and the log is not in "initial" state,
-        it will close the log (sending end / [flush] / close),
-        then send a "reset" event, at which time the log will be
-        back in "initial" state.
+        it will close the log (sending an optional "flush" event,
+        followed by an "end" event), then send a "reset" event,
+        at which time the log will be back in "initial" state.
 
         If a Log object is created, and literally never logged
         to before it's closed, it won't send *any* events to its
@@ -1775,13 +1814,12 @@ class Log:
 
     class Print(Destination):
         """
-        A Destination wrapping a callable.
+        A Destination wrapping builtins.print.
 
         Calls
             builtins.print(formatted, end='', flush=True)
         for every formatted log message.
         """
-        "A Destination wrapping builtins.print."
         def __init__(self):
             super().__init__()
             self.print = builtins.print
@@ -1825,7 +1863,6 @@ class Log:
         but you may supply your own Destination as a
         positional argument to the constructor.
         """
-        ""
         def __init__(self, destination=None):
             super().__init__()
             self.array = []
@@ -1862,8 +1899,8 @@ class Log:
         If flush=True, the file is opened and kept open.  Every
         time it receives a formatted log message, it writes the
         message immediately and flushes the file handle.  If File
-        receives a "close" message, it closes the file; if it
-        receives a "reset" message, it reopens the file.
+        receives an "end" message, it closes the file; if it
+        receives a subsequent "start" message, it reopens the file.
 
         The first time the file is opened, it's opened using the
         "initial_mode" passed in, by default "at".  After the first
@@ -1923,9 +1960,10 @@ class Log:
         (If the computed filename contains illegal or inconvenient characters,
         they may be replaced with other characters; for example ':' is replaced with '-'.)
 
-        The filename is recomputed whenever TmpFile receives a "register"
-        or "reset" event.  Thus, if the Log is reset, TmpFile will close
-        the old temporary log, and open a new one.
+        The filename is recomputed whenever TmpFile receives a "start" event.
+        Thus, if a Log is reset, TmpFile will close the old temporary log;
+        if that Log is subsequently logged to, TmpFile will open a new temporary
+        log with a freshly recalculated name.
         """
 
         def __init__(self, *, flush=False):
@@ -1998,16 +2036,18 @@ class Log:
 
         def _reset(self):
             self.depth = 0
-            self.previous_message_elapsed = 0
 
         def _event(self, event):
-            if event.message is not None:
+            if hasattr(event, 'message') and (event.message is not None):
                 self.longest_message = max(self.longest_message, len(event.message))
 
-            duration = event.elapsed - self.previous_message_elapsed
-            assert duration >= 0, f"duration should be >= 0 but it's {duration} ({event})"
-            event._duration = duration
-            self.previous_message_elapsed = event.elapsed
+            if self.events:
+                previous = self.events[-1]
+                if not isinstance(previous, SinkEndEvent):
+                    assert event.elapsed >= previous.elapsed, \
+                        f"duration should be >= 0 but it's {event.elapsed - previous.elapsed} ({previous})"
+                    self.events[-1] = previous._calculate_duration(event)
+
             self.events.append(event)
 
         def reset(self):
@@ -2026,7 +2066,7 @@ class Log:
                 "timestamp_clock" : self.owner.timestamp_clock,
                 "timestamp_format" : self.owner.timestamp_format,
                 "prefix" : self.owner.prefix,
-                "formats " : dict(self.owner.formats),
+                "formats" : dict(self.owner.formats),
             }
             self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch, configuration))
 
@@ -2069,16 +2109,16 @@ class Log:
 
             for e in self.events:
                 elapsed = e.elapsed / 1_000_000_000.0
-                duration = e.duration / 1_000_000_000.0
+                duration = getattr(e, 'duration', 0) / 1_000_000_000.0
                 epoch = elapsed + self.owner._start_time_epoch
                 ts = timestamp(epoch)
                 indent_str = ' ' * (e.depth * indent)
-                thread = e.thread or current_thread()
+                thread = getattr(e, 'thread', current_thread())
 
                 fields = {
                     'elapsed': elapsed,
                     'duration': duration,
-                    'format': e.format or '',
+                    'format': getattr(e, 'format', ''),
                     'timestamp': ts,
                     'thread': thread,
                     'type': e.type,
@@ -2087,7 +2127,7 @@ class Log:
                 }
                 prefix_str = prefix.format_map(fields)
                 space_str = " " * len(prefix_str)
-                message = e.message or ''
+                message = getattr(e, 'message', '')
                 for line in message.split('\n'):
                     print(prefix_str + line)
                     prefix_str = space_str
@@ -2183,7 +2223,7 @@ class OldLog:
     def __init__(self, clock=None):
         self._destination = OldDestination()
         clock=clock or default_clock
-        self._log = Log(self._destination, threading=False, formats={"start": {"template": "log start Y"}, "end": None}, prefix='', clock=clock, indent=2)
+        self._log = Log(self._destination, threading=False, formats={"start": {"template": "log start"}, "end": None}, prefix='', clock=clock, indent=2)
 
     def reset(self):
         self._log.reset()
