@@ -32,6 +32,7 @@ import big.all as big
 import big.log as log_module
 import io
 import os.path
+import pathlib
 import tempfile
 import threading
 import time
@@ -194,6 +195,48 @@ class TestBuffer(unittest.TestCase):
 class TestFile(unittest.TestCase):
     """Tests for the File destination."""
 
+    def test_map_destination_support(self):
+        # if we never start logging, we don't open the file,
+        # so we don't have to clean up here
+        expected = pathlib.Path('/tmp/x')
+        log = big.Log('/tmp/x')
+        log.close()
+        self.assertEqual(log.destinations[0].path, expected)
+
+        log = big.Log(b'/tmp/x')
+        log.close()
+        self.assertEqual(log.destinations[0].path, expected)
+
+        log = big.Log(pathlib.Path('/tmp/x'))
+        log.close()
+        self.assertEqual(log.destinations[0].path, expected)
+
+    def test_file_type_checks(self):
+        with self.assertRaises(TypeError):
+            big.Log.File(3456)
+        with self.assertRaises(TypeError):
+            big.Log.File(3.14159)
+        with self.assertRaises(TypeError):
+            big.Log.File([1, 2, 3])
+        with self.assertRaises(TypeError):
+            big.Log.File({'a': 'b'})
+
+        with self.assertRaises(ValueError):
+            big.Log.File('')
+        with self.assertRaises(ValueError):
+            big.Log.File(b'')
+
+        with self.assertRaises(TypeError):
+            big.Log.File('xyz', b'at')
+        with self.assertRaises(TypeError):
+            big.Log.File('xyz', [1, 2, 3])
+        with self.assertRaises(TypeError):
+            big.Log.File('xyz', 8475)
+        with self.assertRaises(ValueError):
+            big.Log.File('xyz', '')
+        with self.assertRaises(ValueError):
+            big.Log.File('xyz', 'marjoram')
+
     def test_file_buffered_mode(self):
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
             path = f.name
@@ -259,17 +302,44 @@ class TestFile(unittest.TestCase):
             os.unlink(path)
 
     def test_TmpFile(self):
-        tmpfile = None
+        path = None
         try:
-            log = big.Log(big.log.TMPFILE, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            tmpfile = big.log.Log.TmpFile()
+            log = big.Log(tmpfile, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
             log("xyz")
-            tmpfile = big.log.TMPFILE.path.name
-            expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.txt"
+            path = tmpfile.path.name
             log.close()
-            self.assertEqual(big.log.TMPFILE.path.name, expected)
+
+            expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.MainThread.txt"
+            self.assertEqual(path, expected)
         finally:
-            if tmpfile and os.path.exists(tmpfile): # pragma: nocover
-                os.unlink(tmpfile)
+            if path and os.path.exists(path): # pragma: nocover
+                os.unlink(path)
+
+        path = None
+        try:
+            tmpfile = big.log.Log.TmpFile(prefix='wackadoodle')
+            log = big.Log(tmpfile, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            log("xyz")
+            path = tmpfile.path.name
+            log.close()
+
+            expected = f"wackadoodle.ABACAB.-DEADBEEF.{os.getpid()}.MainThread.txt"
+            self.assertEqual(path, expected)
+        finally:
+            if path and os.path.exists(path): # pragma: nocover
+                os.unlink(path)
+
+        with self.assertRaises(TypeError):
+            big.log.Log.TmpFile(prefix=345)
+        with self.assertRaises(TypeError):
+            big.log.Log.TmpFile(prefix=3.1415)
+        with self.assertRaises(TypeError):
+            big.log.Log.TmpFile(prefix=[1, 2, 3])
+        with self.assertRaises(TypeError):
+            big.log.Log.TmpFile(prefix={'a': 'b'})
+        with self.assertRaises(TypeError):
+            big.log.Log.TmpFile(prefix=b'foo bar')
 
 
 
@@ -469,6 +539,26 @@ class TestLogBasics(unittest.TestCase):
                     # log ignores reset after atexit
                     log.reset()
                     self.assertTrue(log.closed)
+
+    def test_log_name(self):
+        log = big.Log(name='xyz')
+        self.assertEqual(log.name, 'xyz')
+        log.close()
+
+        with self.assertRaises(TypeError):
+            big.Log(name=385)
+
+        with self.assertRaises(TypeError):
+            big.Log(name=3.1415)
+
+        with self.assertRaises(TypeError):
+            big.Log(name=[1, 2, 3])
+
+        with self.assertRaises(TypeError):
+            big.Log(name={1:2})
+
+        with self.assertRaises(ValueError):
+            big.Log(name='')
 
 
 

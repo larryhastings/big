@@ -1872,7 +1872,7 @@ you may still call `J.push(33)`, or `J.push('xyz')`, or `J.push(None)`, etc.
 
 <dl><dd>
 
-A lightweight, high-performance text-oriented logging module,
+A lightweight, high-performance text-oriented thread-safe logging module,
 intended for debug-print-style use.  Not a full-fledged
 application logger like Python's
 [`logging`](https://docs.python.org/3/library/logging.html) module.
@@ -1907,7 +1907,7 @@ and converts the result to integer nanoseconds.
 
 <dl><dd>
 
-A lightweight, high-performance text-oriented log object
+A lightweight, high-performance text-oriented thread-safe log object
 intended for debug-print-style use.  To use, create
 a `Log` instance, then call it to log messages:
 
@@ -1942,7 +1942,7 @@ Destinations can be any of the following:
 `print(s, end='')`.  Equivalent to
 [`Log.Print()`](#logprint).
 
-`str` or `pathlib.Path` — Log messages are buffered locally
+`bytes`, `str` or `pathlib.Path` — Log messages are buffered locally
 and written to the named file.  Equivalent to
 [`Log.File(path)`](#logfilepath-initial_modeat--flushfalse).
 
@@ -2296,7 +2296,8 @@ See the [**The big `Log`**](#the-big-log) tutorial for more.
 <dl><dd>
 
 A [`Destination`](#logdestination) that writes to a file in
-the filesystem.  `path` may be a `str` or `pathlib.Path`.
+the filesystem.  `path` may be a `bytes`, `str` or `pathlib.Path`
+object.  (`bytes` objects are decoded to `str` using `os.fsdecode`.)
 
 If `flush` is false (the default), formatted log messages are
 buffered internally.  When the log is flushed, `File`
@@ -6889,6 +6890,45 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
 
 <dl><dd>
 
+### tl;dr
+
+Here's the "elevator pitch" for why you want to use `Log`.
+
+Do you ever do print-style debugging?  Of course you do.
+The big `Log` makes print-style debugging so much better!
+
+   * `Log` automatically prepends each log message with the
+     elapsed time so far, as well as the name of the thread
+     that logged the message.
+   * Want to write to a file instead?  Maybe a temporary file
+     with a dynamically-generated filename, so old logs don't
+     get overwritten?  Maybe you want to buffer all the output
+     until the program exits, then print it all at once?  Or
+     maybe you're done with debugging and you just want to switch
+     all logging off?  `Log` makes it effortless to switch between
+     all these options--or even to log to multiple places at the
+     same time.  You can easily write to a temporary file *and*
+     print to the screen, or any combination of outputs.
+     And the API is so easy, it's even easy to remember.
+   * `Log` adds some nice formatting options; you can call
+     attention to one message by calling the `box` method,
+     which draws a box around the value in the output.  You
+     can also indent and dedent the log output using the `enter`
+     and `exit` methods.
+   * If your program is multithreaded, you've probably observed
+     print statements interleaving.  Python's `print()` doesn't
+     format the entire message then write it to stdout all at
+     once; it does it a bit at a time, including the ending newline.
+     `Log` only writes complete messages.
+   * By default `Log` uses threading, which means it spends a lot
+     less time in each call than calling `print` would.  So, less
+     overhead for your program, not to mention less Heisenberg-uncertainty
+     around synchronization due to the time spent in `print`.
+     (Yes, `print` is written in C, so its code runs very fast.  But
+     logging using a `Log` in threaded mode does *way* less work.
+     According to the wall clock, logging using `Log` consumes way
+     less time in your thread than logging using `print`.)
+
 ### Overview
 
 big's `Log` object is a high-performance logging mechanism, suitable
@@ -6912,10 +6952,10 @@ The downside of feature-rich classes and functions is that it can be
 hard to remember how to use them.  So here's all you need to remember
 to be productive with `Log`:
 
-> Create your Log object, and pass in the objects where you want
-> the log to go--`print`, a file path, an open file handle, a `list`,
-> whatever.  Then call the Log object to log messages--it behaves
-> like `print`.
+> When you create your `Log` object, just pass in the objects where you
+> want the log to go--`print`, a file path, an open file handle,
+> a `list`, whatever.  Then call that `Log` object to log messages;
+> it behaves like `print`.
 
 ### Getting started
 
@@ -6998,7 +7038,7 @@ itself behaves identically to calling the `print` method:
 j("Hello, world, round 2!  4 + 4 =", 4 + 4)
 ```
 
-The three lines we've examined so far produce the first five lines of the output:
+The three lines we've examined so far produce these first five lines of the output:
 
 ```
 ===============================================================================
@@ -7009,14 +7049,16 @@ Log start at 2026/02/15 13:14:13.648816 PST
 ```
 
 As you can see, `Log` automatically adds a "start" banner showing the current
-local time that the log was started.  (There's a symmetric "end" banner for
+local time that the log was started.  (There's a symmetric "end" banner produced
 when the log is closed.)
 
 Also, every printed log message gets a "prefix", showing the elapsed time
 so far (since the start of the log) and the thread that logged the message.
+The default prefix is fixed width; it's the thing enclosed in `'[...]'` at
+the start of each line (after the start banner).
 
-(Obviously, if you run this script, *your* times will be different.  Probably
-in the future... unless you've borrowed Guido's time machine.)
+(Obviously, if you run this script, *your* times will be different.  Yours
+will be in the future... unless you've borrowed Guido's time machine.)
 
 Let's explore the other `Log` methods that append messages to the log.
 The simplest one is `write`, which only takes one `str` argument, and writes that
@@ -7038,8 +7080,8 @@ j.box(f"Today's important number is {6 * 7}!")
 ```
 
 If you want to call attention to a logged message,  use `box` instead of `print`.
-Note that the `box` method also only takes a single `str` object.  (But that's no
-problem--just use an f-string!)
+Note that the `box` method also only takes a single `str` object.  (But formatting
+it is no problem--just use an f-string!)
 
 The above two lines in the script produce these five lines in the output:
 

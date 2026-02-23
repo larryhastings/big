@@ -380,10 +380,15 @@ _empty_thread = _EmptyThread()
 def _none_format(*args):
     return ''
 
+
+##
+## It's better than bad, it's good!
+##
+
 @export
 class Log:
     """
-    A lightweight text-based log suitable for debugging.
+    A lightweight text-based thread-safe log, suitable for debugging.
 
     Log is a logging object, intended for debugging.
     It's not a full-fledged application logger like
@@ -453,10 +458,12 @@ class Log:
             Log messages are printed using print(s, end='').
             This is the default.  Equivalent to
             big.log.Log.Print().
-        str or pathlib.Path object
+        str, bytes, or pathlib.Path object
             Log messages are buffered locally,
             and dumped to the file named by the string.
             Equivalent to big.log.Log.File(pathlib.Path(destination)).
+            (If the destination is a bytes object, it's encoded
+            using os.fsencode.)
         list object
             Log messages are appended to the list.  Equivalent
             to big.log.Log.List(destination).
@@ -601,6 +608,11 @@ class Log:
         t2 = clock()
         start_time_ns = (t1 + t2) // 2
 
+        if not isinstance(name, str):
+            raise TypeError('name must be a non-empty str')
+        if not name:
+            raise ValueError('name must be a non-empty str')
+
         self._name = name
         self._threading = threading
 
@@ -654,9 +666,7 @@ class Log:
             return o
         if o is print:
             return cls.Print()
-        if isinstance(o, str):
-            return cls.File(Path(o))
-        if isinstance(o, Path):
+        if isinstance(o, (bytes, str, Path)):
             return cls.File(o)
         if isinstance(o, list):
             return cls.List(o)
@@ -696,8 +706,7 @@ class Log:
 
     @property
     def destinations(self):
-        for d in self._destinations:
-            yield d
+        return list(self._destinations)
 
     @property
     def indent(self):
@@ -1821,10 +1830,28 @@ class Log:
         def __init__(self, path, initial_mode="at", *, flush=False):
             super().__init__()
 
-            assert initial_mode in ("at", "wt", "xt", "a", "w", "x")
+            is_bytes = isinstance(path, bytes)
+            is_str = isinstance(path, str)
+            is_path = isinstance(path, Path)
+
+            if not (is_bytes or is_str or is_path):
+                raise TypeError("path must be str, bytes, or Path, and non-empty")
+            if not path:
+                raise ValueError("path must be str, bytes, or Path, and non-empty")
+
+            if is_bytes:
+                path = os.fsdecode(path)
+                is_str = True
+            if is_str:
+                path = Path(path)
+
+            if not isinstance(initial_mode, str):
+                raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
+            if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
+                raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
 
             self.array = array = []
-            self.path = Path(path)
+            self.path = path
             self.mode = initial_mode
             self._flush = flush
             self.f = None
@@ -1878,17 +1905,26 @@ class Log:
         log with a freshly recalculated name.
         """
 
-        def __init__(self, *, flush=False):
+        def __init__(self, prefix='', *, flush=False):
             # use a fake path for now,
             # we'll compute a proper one when they call reset()
             path = Path(tempfile.gettempdir()) / f"tmpfile-init.{os.getpid()}.tmp"
             super().__init__(path, flush=flush)
+            if not isinstance(prefix, str):
+                raise TypeError("prefix must be str")
+            self.prefix = prefix
+
+        def register(self, owner):
+            super().register(owner)
+            if not self.prefix:
+                self.prefix = owner.name
 
         def start(self, start_time_ns, start_time_epoch):
             assert self.owner
             log_timestamp = self.owner.timestamp_format(self.owner.start_time_epoch)
             log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
-            tmpfile = f"{self.owner.name}.{log_timestamp}.{os.getpid()}.txt"
+            thread = current_thread()
+            tmpfile = f"{self.prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
             tmpfile = big_file.translate_filename_to_exfat(tmpfile)
             tmpfile = tmpfile.replace(" ", '_')
             self.path = Path(tempfile.gettempdir()) / tmpfile
