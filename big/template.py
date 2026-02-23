@@ -446,30 +446,29 @@ class Formatter:
         if not isinstance(width, int):
             raise TypeError(f"width must be int, not {type(width).__name__}")
 
-        for k, v in kwargs.items():
-            if not isinstance(v, str):
-                raise TypeError(f"keyword argument {k!r} must be str, not {type(v).__name__}")
-
         if map is not None:
             if not isinstance(map, dict):
                 raise TypeError(f"map must be dict or None, not {type(map).__name__}")
+            if "message" in map:
+                raise ValueError(f"map must not contain 'message'")
+
             for k, v in map.items():
                 if not isinstance(k, str):
                     raise TypeError(f"map keys must be str, not {type(k).__name__}")
-                if not isinstance(v, str):
-                    raise TypeError(f"map values must be str, not {type(v).__name__}")
             map = dict(map)
             map.update(kwargs)
         else:
             map = dict(kwargs)
 
+        # pre str-ize all starred interpolation values
+        for key, value in map.items():
+            if key.endswith('*'):
+                map[key] = str(value)
+
         self._template = template
         self._width = width
         self._map = map
 
-        self._parse(template, map)
-
-    def _parse(self, template, map):
         prologue = []
         body = []
         epilogue = []
@@ -610,8 +609,13 @@ class Formatter:
 
         extra = self._map
         if map:
+            if "message" in map:
+                raise ValueError(f"map must not contain 'message'")
             extra = dict(extra)
-            extra.update(map)
+            for key, value in map.items():
+                if key.endswith('*'):
+                    value = str(value)
+                extra[key] = value
 
         message_lines = message.split('\n')
         width = self._width
@@ -649,10 +653,10 @@ class Formatter:
                     last_key = unique_keys[-1]
                     for key in unique_keys:
                         if key is not last_key:
-                            fill_value = self._map[key]
+                            fill_value = extra[key]
                         else:
                             share += remainder
-                            fill_value = self._map[original_last_key]
+                            fill_value = extra[original_last_key]
                         repeated = fill_value * ((share // len(fill_value)) + 1)
                         line_map[key] = repeated[:share]
 

@@ -542,11 +542,18 @@ class TestLogMethods(unittest.TestCase):
 )
 
     def test_log_box_not_string(self):
-        array = []
-        log = big.Log(array, threading=False, formats={"start": None, "end": None}, prefix='')
-        with self.assertRaises(TypeError):
-            log.box(12345)
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": None, "end": None}, prefix='', width=7)
+        log.box(12345)
         log.close()
+        self.assertEqual(s.getvalue(), "+------\n| 12345\n+------\n")
+
+    def test_log_empty_thread(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": {'template': "thread.name={thread.name} thread={thread} thread!r={thread!r} thread.ident={thread.ident} thread.native_id={thread.native_id} thread.daemon={thread.daemon}"}, "end": None}, prefix='')
+        log('boo')
+        log.close()
+        self.assertEqual(s.getvalue(), "thread.name= thread= thread!r= thread.ident= thread.native_id= thread.daemon=\nboo\n")
 
     def test_log_enter_exit(self):
         array = []
@@ -668,12 +675,16 @@ class TestLogMethods(unittest.TestCase):
         with self.assertRaises(TypeError):
             # formats value must be dict
             big.Log(formats={"splunk": 55})
+        with self.assertRaises(ValueError):
+            # format dict must contain template
+            big.Log(formats={"splunk": {"zippy": "howdy doodles!"}})
         with self.assertRaises(TypeError):
-            # format dict format value must be str
+            # format dict template value must be str
             big.Log(formats={"splunk": {"template": 33}})
-        with self.assertRaises(TypeError):
-            # format dict line value is optional, but if specified must be str
-            big.Log(formats={"splunk": {"template": "abc", "line": 77}})
+
+        with self.assertRaises(ValueError):
+            # format dict can't have message
+            big.Log(formats={"splunk": {"template": "xyz", "message": "hello dere!"}})
 
         l = big.Log(formats={"start": None, "end": None})
         with self.assertRaises(ValueError):
@@ -684,7 +695,12 @@ class TestLogMethods(unittest.TestCase):
         # as well as format names containing spaces.
         # you just won't get the prebound method (a la "box", "peanut", etc).
         s = io.StringIO()
-        l = big.Log(s, formats={"start": None, "end": None, "reset": {"template": "_reset_{line}\n{message}\n{line}", "line": "_"}, "has two spaces": {"template": "#has two spaces#{line}\n{message}\n{line}", "line": "#"}}, width=20)
+        l = big.Log(s, formats={
+            "start": None,
+            "end": None,
+            "reset": {"template": "_reset_{line*}\n{message}\n{line*}", "line*": "_"},
+            "has two spaces": {"template": "#has two spaces#{line*}\n{message}\n{line*}", "line*": "#"}},
+            width=20)
         l('dis is rasat', format='reset')
         l('has spacings', format='has two spaces')
         l.close()
@@ -919,7 +935,7 @@ class TestLogFormatting(unittest.TestCase):
         # to exercise some specific code in Log
         log = big.Log(s,
             threading=False,
-            formats={"start": None, "end": None, "peanut": {"template": "{prefix}{line}\n{prefix}=peanut=start{line}\n{prefix}== {message}\n{prefix}-- {message}\n{prefix}=peanut=end{line}\n{prefix}{line}", "line": "=-"}},
+            formats={"start": None, "end": None, "peanut": {"template": "{prefix}{line*}\n{prefix}=peanut=start{line*}\n{prefix}== {message}\n{prefix}-- {message}\n{prefix}=peanut=end{line*}\n{prefix}{line*}", "line*": "=-"}},
             prefix='[PFX] ')
         log.peanut("test\ntest2\ntest3")
         log.close()

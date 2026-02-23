@@ -330,6 +330,12 @@ class TestFormatter(unittest.TestCase):
         fmt = Formatter('{greeting}, {name}!', greeting='hello', name='world')
         self.assertEqual(fmt.format_map('', {'name': 'Larry'}), 'hello, Larry!')
 
+    def test_message_in_format_map_raises(self):
+        """Non-str key in map raises TypeError."""
+        f = Formatter('X {message} X')
+        with self.assertRaises(ValueError):
+            f.format_map("hello!", {"message": "oopsie"})
+
     def test_format_kwargs_override(self):
         """format kwargs override map."""
         fmt = Formatter('{greeting}, {name}!', greeting='hello', name='world')
@@ -531,6 +537,25 @@ Log start
 ==========----------
 """.strip())
 
+    def test_non_str_map_value(self):
+        f = Formatter('hello {key} {message}', map={'key': 42})
+        self.assertEqual(f('bartholomew'), 'hello 42 bartholomew')
+
+    def test_non_str_kwarg_value(self):
+        """Non-str keyword argument value raises TypeError."""
+        f = Formatter('hello {message} {key}', map={'key': 36})
+        self.assertEqual(f('ratfink'), 'hello ratfink 36')
+
+    def test_non_str_starred_interpolation_map_in_constructor(self):
+        """Non-str keyword argument value raises TypeError."""
+        f = Formatter('hello {message} {line*}', map={'line*': 45}, width=20)
+        self.assertEqual(f('bessie'), 'hello bessie 4545454')
+
+    def test_non_str_starred_interpolation_in_format_map(self):
+        """Non-str keyword argument value raises TypeError."""
+        f = Formatter('hello {message} {cow*}', map={'cow*': 45}, width=20)
+        self.assertEqual(f.format_map('myrtle', {'cow*': 86}), 'hello myrtle 8686868')
+
     def test_non_str_template_raises(self):
         """Non-str template raises TypeError."""
         with self.assertRaises(TypeError):
@@ -551,15 +576,10 @@ Log start
         with self.assertRaises(TypeError):
             Formatter('hello', map={42: 'value'})
 
-    def test_non_str_map_value_raises(self):
-        """Non-str value in map raises TypeError."""
-        with self.assertRaises(TypeError):
-            Formatter('hello', map={'key': 42})
-
-    def test_non_str_kwarg_value_raises(self):
-        """Non-str keyword argument value raises TypeError."""
-        with self.assertRaises(TypeError):
-            Formatter('hello', staple=3)
+    def test_message_in_map_raises(self):
+        """Non-str key in map raises TypeError."""
+        with self.assertRaises(ValueError):
+            Formatter('hello', map={'message': 'value'})
 
     def test_bare_star_interpolation_raises(self):
         """Starred interpolation with no name ({*}) raises."""

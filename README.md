@@ -9504,6 +9504,66 @@ Observing the big release tradition: a day after I ship a big
 chunk of work, I make a new release to make a dinky tweak to
 it.
 
+* Retooled `Log`, resulting in observable behavior changes
+  and breaking API changes.  Sorry, but this is really for
+  the best!  The already awesome `Log` is even super-better-er
+  now!
+
+   * The `Log` that shipped in 0.13 had a somewhat annoying
+     behavior that I didn't notice: if you created a `Log`
+     object, but never logged any text, it would still print
+     the "start banner" and "end banner".  This is fixed,
+     but pulling on this thread unraveled a lot of the sweater,
+     as the expression goes, resulting in all this rewriting.
+   * In 0.13, if you called `Log.write` with an empty string,
+     the call was ignored; nothing was sent to the log, and
+     the destinations were not called.  But if you called
+     `Log.print` in such a way that the resulting formatted
+     text was empty, it would still send a `log` event to
+     the destinations.  In 0.13.1, this is changed; `Log.print`
+     calls that produce an empty string for their formatted
+     text are ignored.  In fact, any internally generated log
+     message that produces an empty string for its formatted
+     text is ignored.
+   * In 0.13, you could suppress the "start banner" and
+     "end banner" by setting their respective format to
+     `None` in the `formats` dict passed in to the `Log`
+     constructor.  In 0.13.1, this has been extended to
+     `Log.enter` and `Log.exit`; you can suppress their
+     banners by setting their format to `None`.
+   * Redesigned the API and semantics around the `formats`
+     dict.  The result is so good, you'll want to use it
+     in your own code, outside of the `Log` object!  Which
+     is why it now lives outside `Log` as the brilliant new
+     `big.template.Formatter` class.
+
+* Breaking changes to the `Log.Destination` API:
+
+   * The `start`, `end`, `enter`, and `exit` methods no longer
+     take the `formatted` parameter.  This parameter conveyed
+     the formatted "banner" associated with the message (e.g.
+     `start` took a `formatted` parameter containing the "start
+     banner" formatted text).
+     In 0.13.1, the "banner" is now sent separately, as its
+     own `log` call.
+       * `start` is followed immediately by a `log` call
+         using the `start` format.
+       * `enter` is followed immediately by a `log` call
+         using the `enter` format.
+       * `exit` is immediately preceded by a `log` call
+         using the `exit` format.
+       * `end` is immediately preceded by a `log` call
+         using the `end` format, optionally followed by
+         a `flush`.
+   * As per the previously describe change for `Log.print`,
+     any `log` call where the `formatted` parameter would
+     be an empty string is discarded.  So if the
+
+* As alluded to earlier, added `Formatter` to *big.template*.
+  This has a different approach to text formatting, and
+  includes a sophisticated approach to horizontal alignment.
+
+
 * Retooled `Log` behavior around "start" and "end".  Bad news:
   this is a breaking change.  (Good news: it probably won't
   affect anybody, I doubt anyone has started writing their

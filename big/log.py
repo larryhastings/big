@@ -34,9 +34,11 @@ from pathlib import Path
 from queue import Queue
 import tempfile
 from threading import current_thread, Lock, Thread
+import time
+
 from . import time as big_time
 from . import file as big_file
-import time
+from . import template as big_template
 
 
 from . import builtin
@@ -362,6 +364,21 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=1
     time_width = time_seconds_width + 1 + time_fractional_width
     return f'[{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}] '
 
+
+class _EmptyThread:
+    name = ''
+    ident = ''
+    native_id = ''
+    daemon = ''
+    def __repr__(self):
+        return ''
+    def __str__(self):
+        return ''
+
+_empty_thread = _EmptyThread()
+
+def _none_format(*args):
+    return ''
 
 @export
 class Log:
@@ -760,114 +777,64 @@ class Log:
     def _parse_formats(self, formats):
         base_formats = {
             "box" : {
-                "template": '{prefix}+{line}\n{prefix}| {message}\n{prefix}+{line}',
-                "line": '-',
+                "template": '{prefix}+{line*}\n{prefix}| {message}\n{prefix}+{line*}',
+                "line*": '-',
             },
             "end" : {
-                "template": '{line}\n{name} finish at {timestamp}\n{line}',
-                "line": '=',
+                "template": '{double*}\n{name} finish at {timestamp}\n{double*}',
+                "double*": '=',
             },
             "enter": {
-                "template": '{prefix}+-----+{line}\n{prefix}|enter| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
-                "line": '-',
+                "template": '{prefix}+-----+{line*}\n{prefix}|enter| {message}\n{prefix}|     | {message}\n{prefix}+-----+{line*}',
+                "line*": '-',
             },
             "exit": {
-                "template": '{prefix}+-----+{line}\n{prefix}|exit | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line}',
-                "line": '-',
+                "template": '{prefix}+-----+{line*}\n{prefix}|exit | {message}\n{prefix}|     | {message}\n{prefix}+-----+{line*}',
+                "line*": '-',
             },
             "print": {
                 "template": '{prefix}{message}',
-                "line": '',
+                "line*": '',
             },
             "start": {
-                "template": '{line}\n{name} start at {timestamp}\n{line}',
-                "line": '=',
+                "template": '{double*}\n{name} start at {timestamp}\n{double*}',
+                "double*": '=',
             },
         }
 
         result = {}
 
         for key, value in formats.items():
+            if not isinstance(key, str):
+                raise TypeError(f"formats dict contains {key!r}, formats dict keys must be str")
+
             if value is None:
                 if key not in ("start", "end", 'enter', 'exit'):
                     raise ValueError("None is only a valid value for 'start', 'end', 'enter', and 'exit' formats")
                 base_formats.pop(key, None)
-                result[key] = None
+                result[key] = _none_format
             else:
                 if not isinstance(value, dict):
-                    raise TypeError(f"format values must be dict or None, not {type(value)}")
-                d = base_formats.setdefault(key, {})
-                d.update(value)
+                    raise TypeError(f"format values must be dict or None, but formats[{key!r}] is type {type(value).__name__}")
+                if 'message' in value:
+                    raise ValueError(f"format dict for {key!r} must not contain 'message'")
+                if 'template' not in value:
+                    raise ValueError(f"format dict for {key!r} must contain 'template'")
+                template = value['template']
+                if not isinstance(template, str):
+                    raise TypeError(f"format dict template values must be str, but formats[{key!r}]['template'] is type {type(template).__name__}")
+                base_formats[key] = dict(value)
 
-        class Format:
-            def __init__(self, line):
-                self.line = line
-                self.prologue = []
-                # body lines contain {message}
-                self.body = []
-                self.epilogue = []
+        for key, d in base_formats.items():
+            template = d.pop('template')
+            result[key] = big_template.Formatter(template, d, width=self._width).format_map
 
-            def __iter__(self):
-                yield self.line
-                yield self.prologue
-                yield self.body
-                yield self.epilogue
-
-            def __repr__(self): # pragma: nocover
-                return f"<Format line={self.line!r} prologue={self.prologue} body={self.body} epilogue={self.epilogue}>"
-
-        for key, value in base_formats.items():
-            if not isinstance(key, str):
-                raise TypeError(f"format keys must be str, not {type(key)!r}")
-            if not isinstance(value.get('template', None), str):
-                raise TypeError(f"format dicts must contain 'template' key with value str, not {type(value)!r}")
-            if not isinstance(value.get('line', ''), str):
-                raise TypeError(f"format dicts 'line' value, if specified, must be str, not {type(value)!r}")
-
-            template = value['template']
-            line = value.get('line', '')
-            if line:
-                repeated_line = line * ((self._width // len(line)) + 1)
-            else:
-                repeated_line = ''
-
-            f = Format(line)
-            _, prologue, body, epilogue = f
-            state = prologue
-
-            for template_line in template.split('\n'):
-                s = template_line.replace("{{", "")
-                contains_message = "{message}" in s
-                if state is prologue:
-                    if contains_message:
-                        state = body
-                elif state is body:
-                    if not contains_message:
-                        state = epilogue
-                else:
-                    assert state is epilogue
-                    if contains_message:
-                        raise ValueError(f"invalid 'format' for {key!r} format, all {{message}} lines must be contiguous")
-                if s.endswith("{line}"):
-                    assert line
-                    template_line = template_line[:-6]
-                    append_repeated_line = repeated_line
-                else:
-                    append_repeated_line = ''
-                if template_line or append_repeated_line:
-                    state.append((template_line, append_repeated_line))
-            result[key] = f
-
-            if key.isidentifier() and (not hasattr(self, key)):
+            if isinstance(key, str) and key.isidentifier() and (not hasattr(self, key)):
                 def make_method(key):
                     def method(message=''):
                         time = self._clock()
                         thread = current_thread()
-
-                        if not isinstance(message, str):
-                            raise TypeError('message must be str')
-
-                        self._dispatch([(self._log, (time, thread, key, message))])
+                        self._dispatch([(self._log, (time, thread, key, str(message)))])
                     method.__doc__ = f"Writes a message to the log using the {key!r} format."
                     return method
                 setattr(self, key, make_method(key))
@@ -876,55 +843,26 @@ class Log:
 
 
     def _format_message(self, elapsed, thread, format, message):
-        if thread:
-            prefix = self._format_s(elapsed, thread, self._prefix) + self._spaces
-        else:
-            prefix = ''
+        epoch = elapsed + self._start_time_epoch
 
-        if message:
-            message_lines = message.split('\n')
-        else:
-            message_lines = ('',)
+        map = {
+            "elapsed": self._ns_to_float(elapsed),
+            "name": self._name,
+            "thread": thread if thread is not None else _empty_thread,
+            "time": epoch,
+            "timestamp": self._timestamp_format(epoch),
+            }
 
-        buffer = []
-        append = buffer.append
-        line_buffer = []
-        line_append = line_buffer.append
-        line_clear = line_buffer.clear
+        prefix = self._prefix.format_map(map) + self._spaces
+        map['prefix'] = prefix
 
-        f = self._formats[format]
-        if f is None:
-            return ''
-        line, prologue, body, epilogue = f
+        format = self._formats[format]
+        formatted = format(message, map)
+        if not formatted:
+            return formatted
+        # rstrip all lines before returning
+        return "\n".join(s.rstrip() for s in formatted.split('\n')) + "\n"
 
-        for state in (prologue, body, epilogue):
-            if not state:
-                continue
-            in_body = state is body
-            if in_body:
-                # if we have more body lines than message lines, zip
-                if len(body) > len(message_lines):
-                    iterator = zip(body, message_lines)
-                else:
-                    iterator = zip_longest(body, message_lines, fillvalue=body[-1])
-            else:
-                iterator = ((template, None) for template in state)
-
-            for template_entry, message_line in iterator:
-                line_buffer.clear()
-                template, append_repeated_line = template_entry
-                formatted = self._format_s(elapsed, thread, template, message=message_line, line=line, prefix=prefix)
-                line_append(formatted)
-                if append_repeated_line:
-                    length = len(formatted)
-                    delta = self._width - length
-                    if delta > 0:
-                        line_append(append_repeated_line[:delta])
-                line = "".join(line_buffer).rstrip()
-                line_clear()
-                append(line)
-                append("\n")
-        return "".join(buffer)
 
     def _cache_spaces(self):
         self._spaces = _spaces[:len(self._nesting) * self._indent]
@@ -941,32 +879,6 @@ class Log:
     def _clear_nesting(self):
         self._nesting.clear()
         self._spaces = ''
-
-
-    def _format_s(self, elapsed, thread, format, *, message=None, line=None, prefix=None):
-        if not format:
-            return ''
-
-        elapsed = self._ns_to_float(elapsed)
-        epoch = elapsed + self._start_time_epoch
-        timestamp = self._timestamp_format(epoch)
-
-        substitutions = {
-            "elapsed": elapsed,
-            "format": format,
-            "name": self._name,
-            "thread": thread,
-            "time": epoch,
-            "timestamp": timestamp,
-            }
-        if message is not None:
-            substitutions['message'] = message
-        if line is not None:
-            substitutions['line'] = line
-        if prefix is not None:
-            substitutions['prefix'] = prefix
-
-        return format.format_map(substitutions)
 
 
 
@@ -1095,7 +1007,7 @@ class Log:
 
     def _log_banner(self, format, time):
         elapsed = self._elapsed(time)
-        formatted = self._format_message(elapsed, None, format, None)
+        formatted = self._format_message(elapsed, None, format, '')
 
         if not formatted:
             return
@@ -1594,7 +1506,7 @@ class Log:
         time = self._clock()
         thread = current_thread()
 
-        self._dispatch([(self._enter, (time, thread, message))])
+        self._dispatch([(self._enter, (time, thread, str(message)))])
         return self.LogEnterAndExitContextManager(self)
 
     def _exit(self, time, thread):
