@@ -542,8 +542,7 @@ Log start
         self.assertEqual(f('bartholomew'), 'hello 42 bartholomew')
 
     def test_non_str_kwarg_value(self):
-        """Non-str keyword argument value raises TypeError."""
-        f = Formatter('hello {message} {key}', map={'key': 36})
+        f = Formatter('hello {message} {key}', key=36)
         self.assertEqual(f('ratfink'), 'hello ratfink 36')
 
     def test_non_str_starred_interpolation_map_in_constructor(self):

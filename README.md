@@ -1872,7 +1872,7 @@ you may still call `J.push(33)`, or `J.push('xyz')`, or `J.push(None)`, etc.
 
 <dl><dd>
 
-A lightweight, high-performance text-based logging module,
+A lightweight, high-performance text-oriented logging module,
 intended for debug-print-style use.  Not a full-fledged
 application logger like Python's
 [`logging`](https://docs.python.org/3/library/logging.html) module.
@@ -1907,7 +1907,7 @@ and converts the result to integer nanoseconds.
 
 <dl><dd>
 
-A lightweight, high-performance text-based log object
+A lightweight, high-performance text-oriented log object
 intended for debug-print-style use.  To use, create
 a `Log` instance, then call it to log messages:
 
