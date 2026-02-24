@@ -284,6 +284,8 @@ class string(str):
 
     def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
         if isinstance(s, string):
+            if (source is not None) or (line_number != 1) or (column_number != 1) or (first_column_number != 1) or (tab_width != 8):
+                raise ValueError("can't change metadata on an existing string object; use string(str(s), ...) to rewrite metadata")
             return s
 
         if not isinstance(s, str):
@@ -407,27 +409,27 @@ class string(str):
         self_length = self._length
 
         if isinstance(index, slice):
-            # slice clamps >:(
             start = index.start
             stop = index.stop
             step = index.step
+
+            default_start = 0
+            default_stop = self_length
 
             if step is None:
                 step = 1
             else:
                 if not hasattr(step, '__index__'):
-                    raise TypeError('string slice step integer must be int (or index type)')
+                    raise TypeError('string slice step must be None or int (or index type)')
                 step = step.__index__()
                 if not step:
                     raise ValueError('slice step cannot be zero')
 
-            if step < 0:
-                default_start = self_length - 1
-                default_stop = -1
-            else:
-                default_start = 0
-                default_stop = self_length
+                if step < 0:
+                    default_start = self_length - 1
+                    default_stop = -1
 
+            # slice clamps >:(
             clamp = self._clamp_index
             start = clamp(index.start, default_start, 'start')
             stop = clamp(index.stop, default_stop, 'stop')
@@ -439,7 +441,7 @@ class string(str):
                 start_stops = ((start, stop),)
                 length = stop - start
             else:
-                start_stops = tuple((x, x+1) for x in list(range(start, stop, step)))
+                start_stops = tuple((x, x+1) for x in range(start, stop, step))
                 length = len(start_stops)
         else:
             if not hasattr(index, '__index__'):
@@ -453,53 +455,90 @@ class string(str):
                 raise IndexError("string index out of range")
             start_stops = ((index, index+1),)
             length = 1
+            step = 1
 
         ranges = []
-        strings = []
-        remaining = length
+        strs = []
 
-        for start, stop in start_stops:
-            for r in self._ranges:
-                r_length = r.stop - r.start
-                if start >= r_length:
-                    start -= r_length
-                    stop -= r_length
-                    continue
+        if step > 0:
+            # Forward: starts are ascending (or one spanning pair for step==1).
+            range_iter = iter(self._ranges)
+            r = next(range_iter)
+            r_length = r.stop - r.start
+            range_cumulative = 0
+            range_end = r_length
 
-                if stop <= r_length:
-                    stop_at = stop + r.start
-                    consumed = stop - start
+            for start, stop in start_stops:
+                # advance cursor to range containing start
+                while start >= range_end:
+                    range_cumulative = range_end
+                    r = next(range_iter, None)
+                    if r is None:
+                        break
+                    r_length = r.stop - r.start
+                    range_end = range_cumulative + r_length
                 else:
-                    stop_at = r.stop
-                    consumed = r_length - start
+                    local_start = start - range_cumulative
+                    local_stop = stop - range_cumulative
 
-                # we should never consume more characters
-                # than we have left to append to the string!
-                assert not (consumed > remaining)
+                    # consume from current range, and subsequent ranges
+                    # if this pair spans multiple (only possible for step==1)
+                    while True:
+                        r_length = r.stop - r.start
 
-                new_range = _Range(r.origin, start + r.start, stop_at)
+                        if local_stop <= r_length:
+                            stop_at = local_stop + r.start
+                        else:
+                            stop_at = r.stop
+
+                        new_range = _Range(r.origin, local_start + r.start, stop_at)
+                        ranges.append(new_range)
+                        strs.append(r.origin.s[local_start + r.start:stop_at])
+
+                        if local_stop <= r_length:
+                            break
+
+                        local_start = 0
+                        local_stop -= r_length
+                        range_cumulative += r_length
+                        range_end = range_cumulative
+                        r = next(range_iter)
+                        r_length = r.stop - r.start
+                        range_end += r_length
+
+        else:
+            # Backward (step < 0): starts are descending, each pair is single char.
+            range_iter = reversed(self._ranges)
+            r = next(range_iter)
+            r_length = r.stop - r.start
+            range_cumulative = self_length - r_length
+
+            for start, stop in start_stops:
+                # move cursor backward to range containing start
+                while start < range_cumulative:
+                    r = next(range_iter)
+                    r_length = r.stop - r.start
+                    range_cumulative -= r_length
+
+                local_start = start - range_cumulative
+                new_range = _Range(r.origin, local_start + r.start, local_start + r.start + 1)
                 ranges.append(new_range)
-                strings.append(r.origin.s[start + r.start:stop_at])
+                strs.append(r.origin.s[local_start + r.start])
 
-                if stop <= r_length:
-                    break
-                start = 0
-                stop -= r_length
-                remaining -= consumed
-
-        if not ranges:
+        if ranges:
+            assert strs
+            str_result = ''.join(strs)
+        else:
             # zero-length slice pointing just past the end
-            # e.g. abcde.partition('x') returns (abcde, abcde[5:5], abcde[5:5])
-            # the above loop doesn't produce any range objects for abcde[5:5],
-            # so this is a last resort to fix just this one boundary case.
             r = self._ranges[-1]
             ranges = [_Range(r.origin, r.stop, r.stop)]
-            strings = ['']
+
+            str_result = ''
 
         range0 = ranges[0]
         origin = range0.origin
 
-        new = super().__new__(self.__class__, ''.join(strings))
+        new = super().__new__(self.__class__, str_result)
         new._ranges = ranges
         new._length = length
 

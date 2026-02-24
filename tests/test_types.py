@@ -545,8 +545,34 @@ class BigStringTests(unittest.TestCase):
                 self.assertEqual(hash(value), hash(s))
 
     def test___init__(self):
-        # don't need to test this special
-        pass
+        # if you pass in a string to the string constructor,
+        # and try to overwrite some metadata, we raise at you.
+        # it doesn't really make sense to support this; the
+        # string might be cobbled together from multiple
+        # origins, and there's just no sensible way to
+        # impose a different value for something like "source".
+        #
+        # If you really want to do this: as the exception suggests,
+        # just cast the s argument to str first, e.g.:
+        #
+        #     string(str(s), source='xyz')
+        #
+        too_cool_for_school = 'too cool for school.py'
+        with self.assertRaises(ValueError):
+            string(abcde, source=too_cool_for_school)
+        with self.assertRaises(ValueError):
+            string(abcde, line_number=88)
+        with self.assertRaises(ValueError):
+            string(abcde, column_number=236)
+        with self.assertRaises(ValueError):
+            string(abcde, first_column_number=1236)
+        with self.assertRaises(ValueError):
+            string(abcde, tab_width=2)
+
+        # this of course works
+        clone = string(str(abcde), source=too_cool_for_school)
+        self.assertEqual(clone.source, too_cool_for_school)
+
 
     def test___init_subclass__(self):
         # oh golly, idk.  don't subclass string, mkay?
