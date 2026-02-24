@@ -4179,29 +4179,30 @@ class BigTextTests(unittest.TestCase):
             for file in files:
                 if file.endswith(".py"):
                     path = os.path.join(root, file)
-                    expect_decode_failure = file.startswith("invalid_")
-                    try:
-                        text = read_python_file(path)
-                        self.assertFalse(expect_decode_failure, f"failed on {file}")
-                    except UnicodeDecodeError as e:
-                        self.assertTrue(expect_decode_failure, f"failed on {file}")
-                        continue
-                    state = []
-                    for info, line in lines(text, clip_linebreaks=False):
-                        for _, open, close, change in split_delimiters(line, python_delimiters, state=state):
-                            if open:
-                                state.append(open)
-                            elif close:
-                                state.pop()
-                    self.assertFalse(state)
+                    with self.subTest(path=path):
+                        expect_decode_failure = file.startswith("invalid_")
+                        try:
+                            text = read_python_file(path)
+                            self.assertFalse(expect_decode_failure, f"failed on {file}")
+                        except UnicodeDecodeError as e:
+                            self.assertTrue(expect_decode_failure, f"failed on {file}")
+                            continue
+                        state = []
+                        for info, line in lines(text, clip_linebreaks=False):
+                            for _, open, close, change in split_delimiters(line, python_delimiters, state=state):
+                                if open:
+                                    state.append(open)
+                                elif close:
+                                    state.pop()
+                        self.assertFalse(state)
 
-                    # also, all the test files in test_encodings
-                    # contain either a Unicode chipmunk or an ASCII squirrel
-                    if "test_encodings" in str(path):
-                        if "ascii" in str(path):
-                            self.assertIn("Squirrel &o", text, f"Squirrel not found in {path}!")
-                        else:
-                            self.assertIn("Chipmunk 🐿️", text, f"Chipmunk not found in {path}!")
+                        # also, all the test files in test_encodings
+                        # contain either a Unicode chipmunk or an ASCII squirrel
+                        if "test_encodings" in str(path):
+                            if "ascii" in str(path):
+                                self.assertIn("Squirrel &o", text, f"Squirrel not found in {path}!")
+                            else:
+                                self.assertIn("Chipmunk 🐿️", text, f"Chipmunk not found in {path}!")
 
 
     def test_python_delimiters_regressions(self):

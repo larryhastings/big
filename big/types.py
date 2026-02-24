@@ -165,7 +165,6 @@ class Origin:
 
         for o in range(line_start_offset, offset):
             c = s[o]
-            # print(f"{line_start_offset=} {offset=} {s=} {o=} {c=}")
             # assert c not in linebreaks
 
             if c != '\t':
@@ -1187,8 +1186,8 @@ class UndefinedIndexError(IndexError):
     "You accessed an undefined index in a linked_list (before head or after tail)."
 
 # implementation detail, no public APIs expose nodes
-_legal_special_values = set((None, 'special', 'head', 'tail'))
-class linked_list_node:
+_legal_special_values = set((None, 'special',))
+class _linked_list_node:
     __slots__ = ('value', 'special', 'next', 'previous', 'linked_list', 'iterator_refcount')
 
     def __init__(self, linked_list, value, special):
@@ -1212,12 +1211,11 @@ class linked_list_node:
     def insert_before(self, value, special=None):
         "inserts value into the linked list in front of self."
 
-        assert self.special != 'head'
         assert self.previous
 
         linked_list = self.linked_list
 
-        node = self.__class__(linked_list, value, special)
+        node = _linked_list_node(linked_list, value, special)
         previous = self.previous
 
         node.next = self
@@ -1314,7 +1312,6 @@ class linked_list_node:
         doesn't incref/decref iterator_refcount, and it doesn't check to see if a
         node's iterator_refcount drops to 0.
         """
-        # print(f">> nodes {start=} {stop=} {step=} {first=} {last=}")
 
         cursor = first
         index = start
@@ -1350,7 +1347,6 @@ class linked_list_node:
                         index -= 1
 
             assert index == i
-            # print(">> yield", cursor)
             yield cursor
 
     nodes_iterator = nodes
@@ -1360,7 +1356,6 @@ class linked_list_node:
         Returns None if either start or stop is out of range.
         Iterator, yields nodes.
         """
-        # print(f"nodes {start=} {stop=} {step=}")
 
         first = self.index(start, allow_head_and_tail=True)
         last = self.index(stop, allow_head_and_tail=True)
@@ -1373,7 +1368,6 @@ class linked_list_node:
         elif start >= stop:
             return iter(())
 
-        # print("returning an iterator")
         return self.nodes_iterator(start, first, stop, last, step)
 
 
@@ -1382,7 +1376,89 @@ class linked_list_node:
             special = f', special={self.special!r}'
         else:
             special = ''
-        return f"linked_list_node({self.value!r}{special})"
+        return f"_linked_list_node({self.value!r}{special})"
+
+
+# _head_node and _tail_node are duck-typed _linked_list_node
+# replacements for just the head and tail nodes of a linked_list.
+# they *only* support operations that are valid on head and tail,
+# which means if code tries to do something illegal on a head or
+# tail node it should fail noisily.  For example:
+#
+#     * clear, unlink, and remove are all undefined on both
+#     * insert_before is undefined on head
+#     * special and value are read-only properties with hard-coded values
+#     * head.previous and tail.next are read-only properties, value None
+#
+class _head_node:
+    __slots__ = ('next', 'linked_list', 'iterator_refcount')
+
+    def __init__(self, linked_list):
+        self.next = None
+        self.linked_list = linked_list
+        self.iterator_refcount = 0
+
+    def __getstate__(self):
+        return (None, {
+            'next': self.next,
+            'linked_list': self.linked_list,
+            'iterator_refcount': self.iterator_refcount,
+            })
+
+    index = _linked_list_node.index
+    nodes_iterator = _linked_list_node.nodes_iterator
+    nodes = _linked_list_node.nodes
+
+    def __repr__(self):
+        return f"_head_node()"
+
+    @property
+    def special(self):
+        return 'head'
+
+    @property
+    def value(self):
+        return None
+
+    @property
+    def previous(self):
+        return None
+
+
+class _tail_node:
+    __slots__ = ('previous', 'linked_list', 'iterator_refcount')
+
+    def __init__(self, linked_list):
+        self.previous = None
+        self.linked_list = linked_list
+        self.iterator_refcount = 0
+
+    def __getstate__(self):
+        return (None, {
+            'previous': self.previous,
+            'linked_list': self.linked_list,
+            'iterator_refcount': self.iterator_refcount,
+            })
+
+    insert_before = _linked_list_node.insert_before
+    index = _linked_list_node.index
+    nodes_iterator = _linked_list_node.nodes_iterator
+    nodes = _linked_list_node.nodes
+
+    def __repr__(self):
+        return f"_tail_node()"
+
+    @property
+    def special(self):
+        return 'tail'
+
+    @property
+    def value(self):
+        return None
+
+    @property
+    def next(self):
+        return None
 
 
 class _inert_context_manager_cls:
@@ -1392,6 +1468,7 @@ class _inert_context_manager_cls:
         return self
     def __exit__(self, et, ev, tr):
         return None
+
 
 _inert_context_manager = _inert_context_manager_cls()
 
@@ -1421,7 +1498,7 @@ class linked_list:
     linked_list objects have explicit "head" and "tail" nodes.
     An iterator starts out pointing at "head", and is exhausted
     once it points at "tail".  (The reverse is true for reverse
-    iterators.)  "head" and "tail" are refered to as "special"
+    iterators.)  "head" and "tail" are referred to as "special"
     nodes.
 
     linked_list explicitly supports removing nodes while iterating
@@ -1440,7 +1517,14 @@ class linked_list:
 
     __slots__ = ('_head', '_tail', '_lock', '_lock_parameter', '_length')
 
-    def _analyze_lock(self, lock, prototype):
+    def _choose_lock(self, lock, prototype):
+        """
+        Called during __init__.  Returns the correct value
+        for self._lock for self, a newly-constructed list.
+        Chooses based on the "lock" parameter passed in to
+        the linked_list constructor, as well as (optionally)
+        a "prototype" linked_list self is based on.
+        """
         # returns (lock_parameter, lock)
         if lock is True:
             return threading.Lock()
@@ -1448,7 +1532,7 @@ class linked_list:
             return None
         if lock is None:
             if prototype is not None:
-                return self._analyze_lock(prototype._lock_parameter, None)
+                return self._choose_lock(prototype._lock_parameter, None)
             return None
         # duck-typed lock
         if (hasattr(lock, 'acquire')
@@ -1461,8 +1545,8 @@ class linked_list:
         raise TypeError(f"lock parameter must be bool, None, or a lock, not {type(lock).__name__}")
 
     def __init__(self, iterable=(), *, lock=None):
-        self._head = head = linked_list_node(self, None, 'head')
-        head.next = self._tail = tail = linked_list_node(self, None, 'tail')
+        self._head = head = _head_node(self)
+        head.next = self._tail = tail = _tail_node(self)
         tail.previous = self._head
 
         self._length = 0
@@ -1473,7 +1557,7 @@ class linked_list:
         self._extend(iterable)
 
         self._lock_parameter = lock
-        self._lock = self._analyze_lock(lock, None)
+        self._lock = self._choose_lock(lock, None)
 
     def _repr(self):
         buffer = ["linked_list(["]
@@ -1697,7 +1781,7 @@ class linked_list:
         with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
             t._lock_parameter = lock
-            t._lock = t._analyze_lock(lock, self)
+            t._lock = t._choose_lock(lock, self)
         return t
 
     def __deepcopy__(self, memo):
@@ -1725,7 +1809,7 @@ class linked_list:
         self._tail = d['_tail']
         self._length = d['_length']
         self._lock_parameter = lock_parameter = d['_lock']
-        self._lock = self._analyze_lock(lock_parameter, None)
+        self._lock = self._choose_lock(lock_parameter, None)
 
     # new in 3.7
     if _python_3_7_plus:
@@ -1744,7 +1828,7 @@ class linked_list:
             t.extend(other)
 
         t._lock_parameter = lock_parameter
-        t._lock = t._analyze_lock(lock_parameter, None)
+        t._lock = t._choose_lock(lock_parameter, None)
         return t
 
     def __iadd__(self, other):
@@ -1763,7 +1847,7 @@ class linked_list:
             lock_parameter = self._lock_parameter
 
         t._lock_parameter = lock_parameter
-        t._lock = t._analyze_lock(lock_parameter, None)
+        t._lock = t._choose_lock(lock_parameter, None)
         return t
 
     __rmul__ = __mul__
@@ -1967,8 +2051,6 @@ class linked_list:
             assert -1 <= start <= length, f"failed: -1 <= start={start} <= {length}  isn't true (slice_length={slice_length})"
         assert -1 <=  stop <= length, f"failed: -1 <= stop={stop} <= {length}  isn't true"
 
-        # print(f">> [start {start:>2}] [stop {stop:>2}] [step {step:>2}] {slice_length=} [slice {slice}]")
-
         return start, stop, step, slice_length
 
     def _parse_key(self, key, *, for_assignment=False):
@@ -2083,8 +2165,6 @@ class linked_list:
         if value is self:
             raise ValueError("can't assign self to slice of self")
 
-        # print(f"{it=} {node=} {start=} {stop=} {step=} {slice_length=}")
-
         if step == 1:
             sentinel = object()
             previous_node = node
@@ -2097,7 +2177,6 @@ class linked_list:
                 raise TypeError('must assign iterable to slice') from None
 
             for node, value in zip_longest(it, values, fillvalue=sentinel):
-                # print(f">> {node=} {value=} {sentinel=}")
                 if node == sentinel:
                     if next_node is None:
                         next_node = previous_node
@@ -2106,7 +2185,7 @@ class linked_list:
                     next_node.insert_before(value)
                     continue
                 if value == sentinel:
-                    # linked_list_node.nodes is the nodes iterator here.
+                    # _linked_list_node.nodes is the nodes iterator here.
                     # it doesn't handle removing the node it just yielded.
                     # So, add a one-node delay to removing the nodes.
                     if remove_me is not None:
@@ -2154,7 +2233,7 @@ class linked_list:
             node.remove()
             return
 
-        # linked_list_node.nodes is the nodes iterator here.
+        # _linked_list_node.nodes is the nodes iterator here.
         # it doesn't handle removing the node it just yielded.
         # So, add a one-node delay to removing the nodes.
         remove_me = None
@@ -2277,7 +2356,7 @@ class linked_list:
         if not self._length:
             raise ValueError('pop from empty linked_list')
         if index == -1:
-            # speical case
+            # special case
             node = self._tail.previous
             while node.special == 'special':
                 node = node.previous
@@ -2323,7 +2402,7 @@ class linked_list:
             return self._rpop(index)
 
     def count(self, value):
-        "Return the number of occurances of value in the linked_list."
+        "Return the number of occurrences of value in the linked_list."
         return self.head().count(value)
 
     def find(self, value):
@@ -2572,7 +2651,7 @@ class linked_list:
             t2._length = count
 
             t2._lock_parameter = lock
-            t2._lock = t2._analyze_lock(lock, self)
+            t2._lock = t2._choose_lock(lock, self)
 
             if not start_is_none:
                 start_iterator._lock = t2._lock
@@ -2648,8 +2727,6 @@ class linked_list:
         """
         moves nodes from other (a linked list) to after cursor (a node).
         """
-        # print(f">> splice {self=} {other=} {where=} {is_rsplice=}")
-
         special = None
 
         if is_rsplice:
@@ -2683,8 +2760,8 @@ class linked_list:
         self._length += other_length
 
         other_first, other_last = other._internal_cut()
-        assert other_first != None
-        assert other_last != None
+        assert other_first is not None
+        assert other_last is not None
 
         cursor.next = other_first
         other_first.previous = cursor
@@ -2850,10 +2927,10 @@ class linked_list:
             segment_2_head = cursor
             segment_2_tail = self._tail.previous
 
-            assert isinstance(segment_1_head, linked_list_node)
-            assert isinstance(segment_1_tail, linked_list_node)
-            assert isinstance(segment_2_head, linked_list_node)
-            assert isinstance(segment_2_tail, linked_list_node)
+            assert isinstance(segment_1_head, _linked_list_node)
+            assert isinstance(segment_1_tail, _linked_list_node)
+            assert isinstance(segment_2_head, _linked_list_node)
+            assert isinstance(segment_2_tail, _linked_list_node)
 
             self._head.next = segment_2_head
             segment_2_head.previous = self._head
@@ -4210,12 +4287,18 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     """
     Iterates over the nodes of a linked list in reverse order.
 
-    Behaves like an iter(linked_list) object, except it yields
-    the nodes
+    Behaves like an iter(linked_list) object, except it "sees"
+    the list in reverse order.  This reverses many operations;
+    iteration yields nodes in reverse order, pop() advances
+    the iterator towards tail instead of head, etc.
 
-    Note that inserting or extracting a range of nodes
-    (e.g. extend, rextend, )
+    However, inserting or extracting a range of nodes
+    (e.g. extend, rextend) always inserts them into the list
+    in *forward* order.  If you call
+        reverse_iterator.extend([1, 2, 3])
+    you'll see [1, 2, 3] in the linked_list, not [3, 2, 1].
     """
+
     ##
     ## the super() methods that return iterators instantiate them
     ## using self.__class__.  so, we don't need to reverse the
@@ -4258,7 +4341,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
             if value is None:
                 append(default)
             elif not hasattr(value, '__index__'):
-                raise TypeError(f"slice indices must be integers or None or have an __index__ method")
+                raise TypeError("slice indices must be integers or None or have an __index__ method")
             else:
                 append(-(value.__index__()))
         if not result[2]:

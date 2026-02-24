@@ -2123,7 +2123,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         self.assertEqual(it[0], 3)
-        self.assertEqual(repr(it), f"<linked_list_iterator {hex(id(it))} cursor=linked_list_node(3)>")
+        self.assertEqual(repr(it), f"<linked_list_iterator {hex(id(it))} cursor=_linked_list_node(3)>")
         it_copy = it.copy()
         del(it_copy)
         self.assertEqual(it[0], 3)
@@ -2437,7 +2437,30 @@ class BigLinkedListTests(unittest.TestCase):
             it.pop()
 
         # white box test of repr
-        self.assertEqual(repr(t._head), "linked_list_node(None, special='head')")
+        t = linked_list('ab')
+        it_a = t.find('a')
+        it_b = t.find('b')
+        it_special = it_b.copy()
+        it_b.pop()
+
+        data_node_a = it_a._cursor
+        self.assertEqual(repr(data_node_a), "_linked_list_node('a')")
+
+        special_node = it_special._cursor
+        self.assertEqual(repr(special_node), "_linked_list_node(None, special='special')")
+
+        head_node = t.head()._cursor
+        self.assertEqual(repr(head_node), "_head_node()")
+        self.assertEqual(head_node.special, "head")
+        self.assertEqual(head_node.value, None)
+        self.assertEqual(head_node.previous, None)
+
+        tail_node = t.tail()._cursor
+        self.assertEqual(repr(tail_node), "_tail_node()")
+        self.assertEqual(tail_node.special, "tail")
+        self.assertEqual(tail_node.value, None)
+        self.assertEqual(tail_node.next, None)
+
 
 
 
@@ -3529,36 +3552,43 @@ class BigLinkedListTests(unittest.TestCase):
         # regression test 1:
         #
         # reported by Claude Opus 4.6
+        #
+        # the "head stomping" bug:
+        # head.special was getting stomped on!
+        #
+        # if you had an iterator pointing at a node
+        # when you cleared the list, linked_list._clear
+        # would demote it to "special".  The code was
+        # actually applied to previous:
+        #     previous.special = "special"
+        #
+        # The bug: this happened even if previous
+        # already WAS a special node, like head.
+        #
+        # The fix: only "demote" previous to "special"
+        # if it's a data node.
         ll = linked_list([1, 2, 3], lock=_lock())
         head = ll.head()
         it = ll.find(1)
         ll.clear()
-
-        # this was "special" for a while!
-        # linked_list._clear always set
-        #     previous.special = "special"
-        # even if previous already was a special node.
-        # the fix: only "demote" to special there
-        # if it's a data node.
         self.assertEqual(head.special, 'head')
+
 
         ##################################
         # regression test 2:
         #
         # reported by Claude Opus 4.6
-        ll = linked_list()
-
+        #
         # this raised ZeroDivisonError!
-        # this is because len(ll) is zero.
-        # we did check for that--but only
+        # this was because len(ll) is zero.
+        # which we did check for--but only
         # AFTER doing n % self._length, oops!
         #
-        # the fix: return earlier if self._length < 2.
+        # the fix: bail out earlier if self._length < 2.
         # (if zero nodes: nothing to rotate:
         #  if one node: nothing changes.)
+        ll = linked_list()
         ll.rotate(1)
-
-
 
 
 
