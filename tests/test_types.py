@@ -3520,6 +3520,48 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertLinkedListEqual(t, [1, 2,             7, 8, 9])
 
 
+    def test_regressions(self):
+        for _lock in self.lock_fns():
+            self.regressions_tests(_lock)
+
+    def regressions_tests(self, _lock):
+        ##################################
+        # regression test 1:
+        #
+        # reported by Claude Opus 4.6
+        ll = linked_list([1, 2, 3], lock=_lock())
+        head = ll.head()
+        it = ll.find(1)
+        ll.clear()
+
+        # this was "special" for a while!
+        # linked_list._clear always set
+        #     previous.special = "special"
+        # even if previous already was a special node.
+        # the fix: only "demote" to special there
+        # if it's a data node.
+        self.assertEqual(head.special, 'head')
+
+        ##################################
+        # regression test 2:
+        #
+        # reported by Claude Opus 4.6
+        ll = linked_list()
+
+        # this raised ZeroDivisonError!
+        # this is because len(ll) is zero.
+        # we did check for that--but only
+        # AFTER doing n % self._length, oops!
+        #
+        # the fix: return earlier if self._length < 2.
+        # (if zero nodes: nothing to rotate:
+        #  if one node: nothing changes.)
+        ll.rotate(1)
+
+
+
+
+
     def test_misc_methods(self):
         for _lock in self.lock_fns():
             self.misc_methods_tests(_lock)
@@ -3582,11 +3624,12 @@ class BigLinkedListTests(unittest.TestCase):
         t = linked_list(d, lock=_lock())
 
         for i in range(-10, 11):
-            t_copy = t.copy()
-            t_copy.rotate(i)
-            d_copy = d.copy()
-            d_copy.rotate(i)
-            self.assertEqual(list(t_copy), list(d_copy))
+            with self.subTest(i=i):
+                t_copy = t.copy()
+                t_copy.rotate(i)
+                d_copy = d.copy()
+                d_copy.rotate(i)
+                self.assertEqual(list(t_copy), list(d_copy))
 
         with self.assertRaises(TypeError):
             t.rotate(3.14159)
