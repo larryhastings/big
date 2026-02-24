@@ -1826,14 +1826,6 @@ class BigLinkedListTests(unittest.TestCase):
             if (name in linked_list_dir) and (name not in list_and_deque_dir):
                 linked_list_dir.remove(name)
 
-        # for name in linked_list_dir:
-        #     if name not in list_and_deque_dir:
-        #         print(f"{name} in linked_list_dir but not in list_and_deque_dir")
-
-        # for name in list_and_deque_dir:
-        #     if name not in linked_list_dir:
-        #         print(f"{name} in list_and_deque_dir but not in linked_list_dir")
-
         self.assertEqual(linked_list_dir, list_and_deque_dir)
 
     def test_empty_list(self):
@@ -2701,7 +2693,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         def raise_if_str(value):
             if isinstance(value, str): # pragma: nocover
-                raise ValueError('str found, {value!r}')
+                raise ValueError(f'str found, {value!r}')
             return False
 
         self.assertIsNone(it.match(raise_if_str))
