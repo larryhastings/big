@@ -39,19 +39,14 @@ class State:
     Base class for state machine state implementation classes.
     Use of this base class is optional; states can be instances
     of any type except types.NoneType.
+
+    States may optionally define on_enter() and on_exit()
+    methods (or whatever names are configured on the
+    StateManager).  on_enter() is called immediately after
+    transitioning to the state; on_exit() is called during
+    the transition away from the state.
     """
-
-    def on_enter(self):
-        """
-        Called when entering this state.  Optional.
-        """
-        pass
-
-    def on_exit(self):
-        """
-        Called when exiting this state.  Optional.
-        """
-        pass
+    pass
 
 
 
@@ -128,7 +123,7 @@ class StateManager:
         Passing in a false value for on_enter disables this behavior.
         on_enter is called immediately after the transition is complete,
         which means you're expressly permitted to make a state transition
-        inside an on_enter call.  If defined, on_exit will be called on
+        inside an on_enter call.  If defined, on_enter will be called on
         the initial state object, from inside the StateManager constructor.
 
         on_exit is similar to on_enter, except the attribute is
@@ -156,7 +151,7 @@ class StateManager:
 
         If the current state object has an 'on_exit' attribute,
         it will be called as a function with zero arguments during
-        the the transition to the next state.
+        the transition to the next state.
 
         If you assign an object to 'state' that has an 'on_enter'
         attribute, it will be called as a function with zero
@@ -171,7 +166,7 @@ class StateManager:
     StateManager will execute the following sequence of actions:
 
         * Set self.next to 'new_state'.
-            * At of this moment your StateManager instance is
+            * As of this moment your StateManager instance is
               "transitioning" to the new state.
         * If self.state has an attribute called 'on_exit',
           call self.state.on_exit().
@@ -321,10 +316,10 @@ def accessor(attribute='state', state_manager='state_manager'):
     def accessor(cls):
         def getter(self):
             i = getattr(self, state_manager)
-            return getattr(i, 'state')
+            return i.state
         def setter(self, value):
             i = getattr(self, state_manager)
-            setattr(i, 'state', value)
+            i.state = value
         setattr(cls, attribute, property(getter, setter))
         return cls
     return accessor

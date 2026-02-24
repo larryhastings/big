@@ -256,7 +256,6 @@ class StateManagerTests(unittest.TestCase):
                 def on_enter(self):
                     self.unittest.assertEqual(self.sm.state, self)
                     self.unittest.assertEqual(self.sm.state_manager.next, None)
-                    # self.unittest.assertEqual(self.sm.state_manager.next, big.invalid_state)
                     methods_called.append('FirstState.on_enter')
                     sm.state = sm.SecondState(sm, self.unittest)
 
@@ -269,7 +268,6 @@ class StateManagerTests(unittest.TestCase):
                 def on_enter(self):
                     self.unittest.assertEqual(self.sm.state, self)
                     self.unittest.assertEqual(self.sm.state_manager.next, None)
-                    # self.unittest.assertEqual(self.sm.state_manager.next, big.invalid_state)
                     methods_called.append('SecondState.on_enter')
                     self.next = sm.ThirdState(sm, self.unittest)
                     sm.state = self.next
