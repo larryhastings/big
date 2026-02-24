@@ -472,6 +472,54 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(endo[0:0][0:0].line_number, 2) # used to be 4!
         self.assertEqual(endo[0:0][0:0][0:0].line_number, 2) # used to be 5!
 
+        # regression: slicing using negative indices used to raise ValueError!
+        # but str object supports slicing with negative indices.  fixed in 0.13.1.
+        for value_name, value in values.items():
+            with self.subTest(value=value_name):
+                self.assertString(value[::-1], "".join(reversed(str(value))))
+                self.assertString(value[4:1:-1], str(value)[4:1:-1])
+                self.assertString(value[::-2], str(value)[::-2])
+                self.assertString(value[4:0:-2], str(value)[4:0:-2])
+
+        abc = string('abc')
+        xyz = string('xyz')
+        abcxyz = abc + xyz
+        zyxcba = abcxyz[::-1]
+        self.assertString(zyxcba, 'zyxcba')
+        self.assertString(zyxcba[0].origin, xyz)
+        self.assertString(zyxcba[-1].origin, abc)
+
+        # regression: the internal cached _length used to be
+        # miscalculated for __getitem__ when using a slice
+        # with a abs(range) > 1.
+        #
+        # the bug was there for range in (1,-1), but the code
+        # accidentally worked anyway.
+
+        # test with one-character ranges from the two ranges
+        cx = abcxyz[2:4]
+        self.assertEqual(cx._length, 2)
+        self.assertEqual(len(cx), 2)
+        self.assertString(cx, 'cx')
+
+        xc = zyxcba[2:4]
+        self.assertEqual(xc._length, 2)
+        self.assertEqual(len(xc), 2)
+        self.assertString(xc, 'xc')
+
+        # test with two-character ranges from the two ranges
+        bcxy = abcxyz[1:5]
+        self.assertEqual(bcxy._length, 4)
+        self.assertEqual(len(bcxy), 4)
+        self.assertString(bcxy, 'bcxy')
+
+        yxcb = zyxcba[1:5]
+        self.assertEqual(yxcb._length, 4)
+        self.assertEqual(len(yxcb), 4)
+        self.assertString(yxcb, 'yxcb')
+
+
+
     def test___getnewargs__(self):
         # string implements __getnewargs__, it's pickling machinery.
         for value_name, value in values.items():
@@ -1002,7 +1050,7 @@ class BigStringTests(unittest.TestCase):
 
 
 
-    def test_removeprefix(self):
+    def test_removeprefix_and_removesuffix(self):
         # smoke test for 3.6-3.8
         self.assertString(abcde.removeprefix('ab'), abcde[2:])
         self.assertString(abcde.removeprefix('xx'), abcde)
@@ -1028,10 +1076,11 @@ class BigStringTests(unittest.TestCase):
             abcde.removeprefix(33.5)
         with self.assertRaises(TypeError):
             abcde.removesuffix(33.5)
-
-    def test_removesuffix(self):
-        # see test_removeprefix
-        pass
+        # regression test: exception used to say "removeprefix"
+        try:
+            abcde.removesuffix(33.5)
+        except TypeError as e:
+            self.assertTrue(str(e).startswith("removesuffix"))
 
     def test_replace(self):
         for value_name, value in values.items():
@@ -1054,6 +1103,17 @@ class BigStringTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             abcde.replace('x', 'y', 55.5)
 
+        # regression test: exception raised by replace for a bad type passed in to old or new
+        # used to use type(count) instead of type(old) or type(new)
+        try:
+            abcde.replace(123, 'x')
+        except TypeError as e:
+            self.assertIn("int", str(e))
+        try:
+            abcde.replace('x', 456)
+        except TypeError as e:
+            self.assertIn("int", str(e))
+
     def test_reversed(self):
         for i, (s, c) in enumerate(zip(reversed(abcde), reversed(str(abcde)))):
             self.assertEqual(s, c)
@@ -1073,8 +1133,6 @@ class BigStringTests(unittest.TestCase):
         pass
 
     def test_rjust(self):
-        self.assertEqual(himem.rstrip().rjust(8), "    QEMM")
-        self.assertString(himem.rstrip().rjust(4), "QEMM")
         with self.assertRaises(TypeError):
             abcde.rjust(5, 352)
         with self.assertRaises(TypeError):
@@ -1094,8 +1152,17 @@ class BigStringTests(unittest.TestCase):
         pass
 
     def test_rstrip(self):
-        # see test_strip
-        pass
+        self.assertEqual(himem.rstrip().rjust(8), "    QEMM")
+        self.assertString(himem.rstrip().rjust(4), "QEMM")
+
+        # regression test: rstrip used to IGNORE the chars argument! of all the NERVE.
+        xxhowdyxx = string("xxhowdyxx")
+        self.assertString(xxhowdyxx.rstrip('x'), "xxhowdy")
+        self.assertString(xxhowdyxx.rstrip('xy'), "xxhowd")
+        self.assertString(xxhowdyxx.rstrip('xyz'), "xxhowd")
+
+        xxhowdxyzyxx = string("xxhowdxyzyxx")
+        self.assertString(xxhowdxyzyxx.rstrip('xyz'), "xxhowd")
 
     def test_split(self):
         for i, (s, sep, result) in enumerate([
@@ -3623,9 +3690,6 @@ class BigLinkedListTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             t.insert('this is not a valid index', 'abc')
-
-        with self.assertRaises(TypeError):
-            t.insert(0, )
 
         # regression: reverse crashed if t was empty
         t = linked_list(lock=_lock())

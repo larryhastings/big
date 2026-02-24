@@ -113,9 +113,9 @@ del _re_linebreaks
 _linebreaks_and_tab_set = set(linebreaks) | set('\t')
 
 
-class Origin:
+class _Origin:
     """
-    An Origin object is the building block of big.string objects.
+    An _Origin object is the building block of big.string objects.
     It contains an original Python string with some extra metadata.
     """
     __slots__ = ('s', 'string', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', )
@@ -180,13 +180,13 @@ class Origin:
         return line_number, column_number
 
     def __repr__(self): # pragma: nocover
-        return f"<Origin s={self.s!r} source={self.source}>"
+        return f"<_Origin s={self.s!r} source={self.source}>"
 
 
-class Range:
+class _Range:
     """
-    A Range is a reference to a range of characters in an Origin.
-    A big.string is essentially a sequence of Range objects.
+    A _Range is a reference to a range of characters in an _Origin.
+    A big.string is essentially a sequence of _Range objects.
     """
     __slots__ = ('origin', 'start', 'stop')
 
@@ -197,7 +197,8 @@ class Range:
         self.stop = stop
 
     def __repr__(self): # pragma: nocover
-        return f"<Range origin={self.origin!r} start={self.start} stop={self.stop}>"
+        result = self.origin.s[self.start:self.stop]
+        return f"<_Range {result!r} origin={self.origin!r} start={self.start} stop={self.stop}>"
 
 
 @export
@@ -313,9 +314,9 @@ class string(str):
         if tab_width < 1:
             raise ValueError(f"tab_width must be >= 1, not {tab_width}")
 
-        origin = Origin(s, source, line_number, column_number, first_column_number, tab_width)
+        origin = _Origin(s, source, line_number, column_number, first_column_number, tab_width)
         length = len(s)
-        ranges = [Range(origin, 0, length)]
+        ranges = [_Range(origin, 0, length)]
 
         self = super().__new__(cls, s)
         self._ranges = ranges
@@ -403,24 +404,36 @@ class string(str):
         return index
 
     def __getitem__(self, index):
+        self_length = self._length
+
         if isinstance(index, slice):
             # slice clamps >:(
-            clamp = self._clamp_index
-            start = clamp(index.start, 0, 'start')
-            stop = clamp(index.stop, self._length, 'stop')
+            start = index.start
+            stop = index.stop
             step = index.step
-
-            if stop < start:
-                stop = start
 
             if step is None:
                 step = 1
             else:
                 if not hasattr(step, '__index__'):
-                    raise TypeError(f'step must be an int, not {type(index).__name__}')
+                    raise TypeError('string slice step integer must be int (or index type)')
                 step = step.__index__()
-                if step <= 0:
-                    raise ValueError('step must be 1 or more')
+                if not step:
+                    raise ValueError('slice step cannot be zero')
+
+            if step < 0:
+                default_start = self_length - 1
+                default_stop = -1
+            else:
+                default_start = 0
+                default_stop = self_length
+
+            clamp = self._clamp_index
+            start = clamp(index.start, default_start, 'start')
+            stop = clamp(index.stop, default_stop, 'stop')
+
+            if (stop < start) if (step > 0) else (start < stop):
+                stop = start
 
             if step == 1:
                 start_stops = ((start, stop),)
@@ -428,45 +441,60 @@ class string(str):
             else:
                 start_stops = tuple((x, x+1) for x in list(range(start, stop, step)))
                 length = len(start_stops)
-
         else:
             if not hasattr(index, '__index__'):
                 raise TypeError('string index must be slice or integer (or index type)')
             index = index.__index__()
             if index < 0:
-                index += self._length
+                index += self_length
                 if index < 0:
                     raise IndexError("string index out of range")
-            if index >= self._length:
+            if index >= self_length:
                 raise IndexError("string index out of range")
             start_stops = ((index, index+1),)
             length = 1
 
         ranges = []
         strings = []
+        remaining = length
+
         for start, stop in start_stops:
             for r in self._ranges:
                 r_length = r.stop - r.start
-                if (start > r_length) or (stop > r_length):
+                if start >= r_length:
                     start -= r_length
                     stop -= r_length
                     continue
 
-                last_one = length <= r_length
-                if last_one:
+                if stop <= r_length:
                     stop_at = stop + r.start
+                    consumed = stop - start
                 else:
                     stop_at = r.stop
+                    consumed = r_length - start
 
-                new_range = Range(r.origin, start + r.start, stop_at)
+                # we should never consume more characters
+                # than we have left to append to the string!
+                assert not (consumed > remaining)
+
+                new_range = _Range(r.origin, start + r.start, stop_at)
                 ranges.append(new_range)
                 strings.append(r.origin.s[start + r.start:stop_at])
 
-                if last_one:
+                if stop <= r_length:
                     break
                 start = 0
                 stop -= r_length
-                length -= r_length
+                remaining -= consumed
+
+        if not ranges:
+            # zero-length slice pointing just past the end
+            # e.g. abcde.partition('x') returns (abcde, abcde[5:5], abcde[5:5])
+            # the above loop doesn't produce any range objects for abcde[5:5],
+            # so this is a last resort to fix just this one boundary case.
+            r = self._ranges[-1]
+            ranges = [_Range(r.origin, r.stop, r.stop)]
+            strings = ['']
 
         range0 = ranges[0]
         origin = range0.origin
@@ -500,12 +528,12 @@ class string(str):
                 c = s[start]
 
                 new = new_call(cls, c)
-                new._ranges = [Range(origin, start, start+1)]
+                new._ranges = [_Range(origin, start, start+1)]
                 new._length = 1
 
                 # origin.compute_line_and_column is slow,
                 # only call it for tricky characters
-                if (c == '\t') or (c in _linebreaks_and_tab_set):
+                if c in _linebreaks_and_tab_set:
                     compute_line_and_column_counter = 2
 
                 if compute_line_and_column_counter:
@@ -545,7 +573,7 @@ class string(str):
         r_last = r[-1]
         r2_first = r2[0]
         if (r_last.origin == r2_first.origin) and (r_last.stop == r2_first.start):
-            contiguous = Range(r_last.origin, r_last.start, r2_first.stop)
+            contiguous = _Range(r_last.origin, r_last.start, r2_first.stop)
             r[-1] = contiguous
             if len(r2) > 1:
                 r.extend(r2[1:])
@@ -732,9 +760,9 @@ class string(str):
         if not isinstance(count, int):
             raise TypeError(f"'{type(count).__name__}' cannot be interpreted as an integer")
         if not isinstance(old, str):
-            raise TypeError(f"replace() argument 1 must be str, not {type(count).__name__}")
+            raise TypeError(f"replace() argument 1 must be str, not {type(old).__name__}")
         if not isinstance(new, str):
-            raise TypeError(f"replace() argument 2 must be str, not {type(count).__name__}")
+            raise TypeError(f"replace() argument 2 must be str, not {type(new).__name__}")
 
         if count == 0:
             return self
@@ -798,7 +826,7 @@ class string(str):
         if not isinstance(chars, (str, NoneType)):
             raise TypeError(f"rstrip arg must be str or None")
         s = str(self)
-        rstripped = s.rstrip()
+        rstripped = s.rstrip(chars)
         reverse_index = len(s) - len(rstripped)
         if not reverse_index:
             return self
@@ -828,8 +856,7 @@ class string(str):
 
     def removeprefix(self, prefix):
         "If string starts with prefix, returns a copy of the string with prefix removed, else returns string unchanged."
-        # new in Python 3.11 (I think?)
-        # but string will support it all the way back to 3.6.
+        # new in Python 3.9, but string will support it all the way back to 3.6.
         if not isinstance(prefix, str):
             raise TypeError(f"removeprefix argument must be str, not {type(prefix).__name__}")
         s = str(self)
@@ -839,10 +866,9 @@ class string(str):
 
     def removesuffix(self, suffix):
         "If string ends with suffix, returns a copy of the string with suffix removed, else returns string unchanged."
-        # new in Python 3.11 (I think?)
-        # but string will support it all the way back to 3.6.
+        # new in Python 3.9, but string will support it all the way back to 3.6.
         if not isinstance(suffix, str):
-            raise TypeError(f"removeprefix argument must be str, not {type(suffix).__name__}")
+            raise TypeError(f"removesuffix argument must be str, not {type(suffix).__name__}")
         s = str(self)
         if not s.endswith(suffix):
             return self
@@ -1022,7 +1048,7 @@ class string(str):
     ## (why do it this convoluted way? I wanted __name__ to be "isascii", not "_isascii".)
     ##
     def isascii(self):
-        "Returns True if all characters in str are representable in ASCII (orc(c) <= 127)."
+        "Returns True if all characters in str are representable in ASCII (ord(c) <= 127)."
         for c in self:
             if ord(c) > 127:
                 return False
