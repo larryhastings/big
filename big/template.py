@@ -114,7 +114,6 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
         yield s
 
     original_s = s
-    length = len(original_s)
 
     stack = []
     stack_push = stack.append
@@ -138,7 +137,6 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
 
     while s:
         before, delimiter, after = s.partition('{')
-        # print(f">> {before=} {delimiter=} {after=} {text=}")
         if before:
             text_append(before)
 
@@ -191,7 +189,6 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                 else:
                     iterator = (('', after, ''),)
                 for opening_quote, t, closing_quote in iterator:
-                    # print(f">> {opening_quote=} {t=} {closing_quote=}")
                     if opening_quote:
                         if not closing_quote:
                             # this is going to be the last thing yielded,
@@ -403,9 +400,10 @@ def eval_template_string(s, globals, locals=None, *,
 _curly_brace_delimiters = {'{': Delimiter('}')}
 
 # Characters that can't be used as the first character of a
-# format_map key: '!' and ':' are conversion/format spec markers,
-# '.' and digits are positional field syntax, '[' '{' '}' break
-# format parsing, and '"' and "'" are skipped for readability.
+# format_map key used as a prefix: '!' and ':' are conversion/format
+# spec markers, '.' digits and '[' trigger positional field or
+# attribute/index parsing, '{' and '}' break format parsing,
+# and '"' and "'" are skipped for debugger readability.
 _bad_prefix_characters = frozenset("!\"'.0123456789:[]{}")
 
 
@@ -458,9 +456,9 @@ class Formatter:
             if not isinstance(map, dict):
                 raise TypeError(f"map must be dict or None, not {type(map).__name__}")
             if "message" in map:
-                raise ValueError(f"map must not contain 'message'")
+                raise ValueError("map must not contain 'message'")
 
-            for k, v in map.items():
+            for k in map:
                 if not isinstance(k, str):
                     raise TypeError(f"map keys must be str, not {type(k).__name__}")
             map = dict(map)
@@ -617,7 +615,7 @@ class Formatter:
         """
         return self.format_map(message, kwargs)
 
-    def format_map(self, message='', map={}):
+    def format_map(self, message='', map=None):
         """
         Format the template with the given message and map.
 
@@ -634,14 +632,17 @@ class Formatter:
             raise ValueError("message is non-empty but template has no {message} lines")
 
         combined_map = self._map
-        if map:
-            if "message" in map:
-                raise ValueError(f"map must not contain 'message'")
-            combined_map = dict(combined_map)
-            for key, value in map.items():
-                if key.endswith('*'):
-                    value = str(value)
-                combined_map[key] = value
+        if map is not None:
+            if not isinstance(map, dict):
+                raise TypeError(f"map must be dict or None, not {type(map).__name__}")
+            if map:
+                if "message" in map:
+                    raise ValueError("map must not contain 'message'")
+                combined_map = dict(combined_map)
+                for key, value in map.items():
+                    if key.endswith('*'):
+                        value = str(value)
+                    combined_map[key] = value
 
         prologue_iter = ((entry, None) for entry in self._prologue)
         if not self._body:

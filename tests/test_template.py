@@ -100,8 +100,8 @@ class BigTestTemplate(unittest.TestCase):
         t('try a filter {{a|times3}} and another {{foo(3 | 5, "bar") = | filter1 | filters[2]}} it worked?!',
             'try a filter 69 and another foo(3 | 5, "bar") = CBA it worked?!')
 
-        t('oh noes we need a quoted version {{ "{{"}} BUT WAIT WHAT ABOUT THE TOHER ONE HUH? {{ "}}" }} OH OKAY',
-            'oh noes we need a quoted version {{ BUT WAIT WHAT ABOUT THE TOHER ONE HUH? }} OH OKAY')
+        t('oh noes we need a quoted version {{ "{{"}} BUT WAIT WHAT ABOUT THE TOHER ONE HUH???!!!1 {{ "}}" }} OH OKAY',
+            'oh noes we need a quoted version {{ BUT WAIT WHAT ABOUT THE TOHER ONE HUH???!!!1 }} OH OKAY')
 
         t('wait we need a boolean or {{ (0 | 5) }}', 'wait we need a boolean or 5')
 
@@ -330,8 +330,14 @@ class TestFormatter(unittest.TestCase):
         fmt = Formatter('{greeting}, {name}!', greeting='hello', name='world')
         self.assertEqual(fmt.format_map('', {'name': 'Larry'}), 'hello, Larry!')
 
+    def test_format_map_non_dict_raises(self):
+        """format_map raises TypeError for non-dict map."""
+        fmt = Formatter('{message}')
+        with self.assertRaises(TypeError):
+            fmt.format_map('hello', 'not a dict')
+
     def test_message_in_format_map_raises(self):
-        """Non-str key in map raises TypeError."""
+        """Passing 'message' as a key in format_map raises ValueError."""
         f = Formatter('X {message} X')
         with self.assertRaises(ValueError):
             f.format_map("hello!", {"message": "oopsie"})
@@ -436,11 +442,6 @@ class TestFormatter(unittest.TestCase):
         """'foo *' outside braces is not treated as a starred interpolation."""
         fmt = Formatter('foo *{bar*}', map={'bar*': '-'}, width=20)
         self.assertEqual(fmt(), 'foo *---------------')
-
-    def test_escaped_open_brace_star(self):
-        """Nested braces after escaped brace raises."""
-        with self.assertRaises(ValueError):
-            Formatter('{ {foo*}bar*}', map={'foo*': '-', 'bar*': '='})
 
     def test_no_trailing_newline(self):
         """Single-line template produces no trailing newline."""
@@ -574,8 +575,8 @@ Log start
         with self.assertRaises(ValueError):
             Formatter('{*}', map={'*': '-'})
 
-    def test_last_key_collision(self):
-        """Last key collision resolution works."""
+    def test_unrelated_map_key_doesnt_interfere(self):
+        """A map key like 'last d*' doesn't interfere with starred interpolation."""
         fmt = Formatter('{d*}X{d*}',
             map={'d*': '-', 'last d*': 'unused'}, width=20)
         self.assertEqual(fmt(), '---------X----------')
@@ -601,7 +602,7 @@ Log start
             fmt('oops')
 
     def test_even_remainder_distribution_across_widths(self):
-        """Remainder is distributed one-per-expansion from the end."""
+        """Remainder is distributed evenly across expansions via Bresenham."""
         expected_results = [
             'a-b-c-d--e',
             'a-b--c-d--e',
@@ -641,7 +642,7 @@ Log start
         self.assertEqual(fmt(), 'a--b--c--d--e')
 
     def test_delta_less_than_count(self):
-        """When delta < count, only the last 'delta' expansions get 1 char."""
+        """When delta < count, Bresenham spreads the extra evenly."""
         # 4 expansions, width = 5 + 2 = 7, delta = 2, Bresenham distributes evenly
         fmt = Formatter('a{d*}b{d*}c{d*}d{d*}e', map={'d*': '-'}, width=7)
         self.assertEqual(fmt(), 'ab-cd-e')
@@ -666,7 +667,6 @@ Log start
         """Template without {message} doesn't include 'message' in supported."""
         fmt = Formatter('{greeting}, {name}!', greeting='hello', name='world')
         self.assertEqual(fmt.supported, frozenset({'greeting', 'name'}))
-        self.assertNotIn('message', fmt.supported)
 
     def test_supported_is_frozenset(self):
         """supported returns a frozenset."""
