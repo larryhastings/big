@@ -261,6 +261,8 @@ class BigTestTemplate(unittest.TestCase):
 
 class TestFormatter(unittest.TestCase):
 
+    maxDiff = None
+
     def test_basic(self):
         """Basic template with no starred interpolation."""
         fmt = Formatter('{greeting}, {name}!', greeting='hello', name='world')
@@ -279,14 +281,12 @@ class TestFormatter(unittest.TestCase):
     def test_center(self):
         """Two starred interpolations center text."""
         fmt = Formatter('{eq*} HELLO {eq*}', map={'eq*': '='}, width=20)
-        result = fmt()
-        self.assertEqual(result, "====== HELLO =======")
+        self.assertEqual(fmt(), '====== HELLO =======')
 
     def test_thirds(self):
         """Three starred interpolations position at 1/3."""
         fmt = Formatter('{d*}{d*}X{d*}', map={'d*': '-'}, width=20)
-        result = fmt()
-        self.assertEqual(result, "------------X-------")
+        self.assertEqual(fmt(), '------------X-------')
 
     def test_message(self):
         """Template with {message}."""
@@ -374,8 +374,7 @@ class TestFormatter(unittest.TestCase):
     def test_multi_char_fill(self):
         """Fill value longer than 1 char."""
         fmt = Formatter('{d*}', map={'d*': '-='}, width=20)
-        result = fmt()
-        self.assertEqual(len(result), 20)
+        self.assertEqual(fmt(), '-=-=-=-=-=-=-=-=-=-=')
 
     def test_escaped_braces(self):
         """Escaped braces don't trigger message detection."""
@@ -436,9 +435,7 @@ class TestFormatter(unittest.TestCase):
     def test_bare_star_outside_braces(self):
         """'foo *' outside braces is not treated as a starred interpolation."""
         fmt = Formatter('foo *{bar*}', map={'bar*': '-'}, width=20)
-        result = fmt()
-        self.assertTrue(result.startswith('foo *'))
-        self.assertEqual(len(result), 20)
+        self.assertEqual(fmt(), 'foo *---------------')
 
     def test_escaped_open_brace_star(self):
         """Nested braces after escaped brace raises."""
@@ -464,37 +461,29 @@ class TestFormatter(unittest.TestCase):
         """Different starred interpolations on the same line."""
         fmt = Formatter('{line*}@{double*}@{line*}',
             map={'line*': '-', 'double*': '='}, width=18)
-        result = fmt()
-        self.assertEqual(result, "-----@=====@------")
+        self.assertEqual(fmt(), '-----@=====@------')
 
     def test_multiple_same_star_key_last_unique(self):
-        """Multiple same starred interpolation, last gets remainder."""
-        fmt = Formatter('{d*}{d*}{d*}', map={'d*': '-'}, width=20)
-        result = fmt()
-        self.assertEqual(len(result), 20)
-        self.assertEqual(result, '-' * 20)
+        """Multiple starred interpolations, last key is different."""
+        fmt = Formatter('{d*}{double*}{d*}', map={'d*': '-', 'double*': '='}, width=20)
+        self.assertEqual(fmt(), '------=======-------')
 
     def test_multiple_same_star_key_last_not_unique(self):
         """Two of the same starred interpolation."""
         fmt = Formatter('{d*}X{d*}', map={'d*': '-'}, width=11)
-        result = fmt()
-        self.assertEqual(len(result), 11)
-        self.assertIn('X', result)
+        self.assertEqual(fmt(), '-----X-----')
 
     def test_single_star_key(self):
         """Single starred interpolation on a line."""
         fmt = Formatter('hello {line*}', map={'line*': '.'}, width=20)
-        result = fmt()
-        self.assertEqual(len(result), 20)
-        self.assertTrue(result.startswith('hello '))
+        self.assertEqual(fmt(), 'hello ..............')
 
     def test_pretty_mixed_star_keys(self):
         """Pretty format with mixed starred interpolations on different lines."""
         pretty = Formatter(
             "{line*}@{line*}\n{message}\n{line*}@{double*}@{line*}",
             {'line*': '-', 'double*': '='}, width=18)
-        result = pretty("hello there!")
-        self.assertEqual(result, """
+        self.assertEqual(pretty("hello there!"), """
 --------@---------
 hello there!
 -----@=====@------
@@ -587,11 +576,9 @@ Log start
 
     def test_last_key_collision(self):
         """Last key collision resolution works."""
-        # 'last d*' is already a key, so collision resolution kicks in
         fmt = Formatter('{d*}X{d*}',
             map={'d*': '-', 'last d*': 'unused'}, width=20)
-        result = fmt()
-        self.assertEqual(result, '---------X----------')
+        self.assertEqual(fmt(), '---------X----------')
 
     def test_body_more_lines_than_message(self):
         """Body has more template lines than message lines: zip truncates."""
@@ -612,6 +599,161 @@ Log start
         # but non-empty message should raise since there are no body lines
         with self.assertRaises(ValueError):
             fmt('oops')
+
+    def test_even_remainder_distribution_across_widths(self):
+        """Remainder is distributed one-per-expansion from the end."""
+        expected_results = [
+            'a-b-c-d--e',
+            'a-b--c-d--e',
+            'a-b--c--d--e',
+            'a--b--c--d--e',
+            'a--b--c--d---e',
+            'a--b---c--d---e',
+            'a--b---c---d---e',
+            'a---b---c---d---e',
+            'a---b---c---d----e',
+            'a---b----c---d----e',
+        ]
+        for width, expected in zip(range(10, 20), expected_results):
+            with self.subTest(width=width, expected=expected):
+                fmt = Formatter('a{line*}b{line*}c{line*}d{line*}e',
+                    map={'line*': '-'}, width=width)
+                self.assertEqual(fmt(), expected)
+
+    def test_many_starred_interpolations_balanced(self):
+        """15 starred interpolations distribute remainder evenly."""
+        fmt = Formatter(
+            '{line*}{line*}{line*}{line*}{line*}{line*}{line*}our{line*}heading{line*}{line*}{line*}{line*}{line*}{line*}{line*}',
+            map={'line*': '-'}, width=84)
+        self.assertEqual(fmt(),
+            '----------------------------------our-----heading-----------------------------------')
+
+    def test_starred_interpolation_override_at_call_time(self):
+        """Overriding a starred interpolation value at call time changes the fill."""
+        fmt = Formatter('{line*} hello {line*}', map={'line*': '-'}, width=20)
+        self.assertEqual(fmt(), '------ hello -------')
+        self.assertEqual(fmt.format_map('', {'line*': '='}), '====== hello =======')
+
+    def test_zero_remainder(self):
+        """When delta divides evenly, all expansions get equal portion."""
+        # 4 expansions, width = 5 + 8 = 13, delta = 8, portion = 2, remainder = 0
+        fmt = Formatter('a{d*}b{d*}c{d*}d{d*}e', map={'d*': '-'}, width=13)
+        self.assertEqual(fmt(), 'a--b--c--d--e')
+
+    def test_delta_less_than_count(self):
+        """When delta < count, only the last 'delta' expansions get 1 char."""
+        # 4 expansions, width = 5 + 2 = 7, delta = 2, Bresenham distributes evenly
+        fmt = Formatter('a{d*}b{d*}c{d*}d{d*}e', map={'d*': '-'}, width=7)
+        self.assertEqual(fmt(), 'ab-cd-e')
+
+    def test_different_star_keys_remainder_distribution(self):
+        """Different star keys still get even remainder distribution."""
+        fmt = Formatter('{a*}{b*}{a*}{b*}{a*}', map={'a*': '-', 'b*': '='}, width=12)
+        self.assertEqual(fmt(), '--==---==---')
+
+    def test_supported(self):
+        """supported returns frozenset of all interpolation keys."""
+        fmt = Formatter('{line*}\n{prefix}{message:>20}\n{line*}',
+            map={'line*': '-'}, prefix='>> ')
+        self.assertEqual(fmt.supported, frozenset({'line*', 'prefix', 'message'}))
+
+    def test_supported_empty_template(self):
+        """Empty template has empty supported set."""
+        fmt = Formatter('')
+        self.assertEqual(fmt.supported, frozenset())
+
+    def test_supported_no_message(self):
+        """Template without {message} doesn't include 'message' in supported."""
+        fmt = Formatter('{greeting}, {name}!', greeting='hello', name='world')
+        self.assertEqual(fmt.supported, frozenset({'greeting', 'name'}))
+        self.assertNotIn('message', fmt.supported)
+
+    def test_supported_is_frozenset(self):
+        """supported returns a frozenset."""
+        fmt = Formatter('{message}')
+        self.assertIsInstance(fmt.supported, frozenset)
+
+    def test_empty_interpolation_raises(self):
+        """Empty interpolation {} raises."""
+        with self.assertRaises(ValueError):
+            Formatter('{}')
+
+    def test_positional_argument_raises(self):
+        """Positional argument {0} raises."""
+        with self.assertRaises(ValueError):
+            Formatter('{0}')
+
+    def test_empty_template_lines_preserved(self):
+        """Empty lines in the template are preserved."""
+        fmt = Formatter('hello\n\nworld')
+        self.assertEqual(fmt(), 'hello\n\nworld')
+
+    def test_prefix_character_is_hash_by_default(self):
+        """When no interpolation starts with #, the prefix character is #."""
+        fmt = Formatter('{line*} {name}', map={'line*': '-'}, name='hello', width=20)
+        prefix_char = fmt._prologue[0][1][0][0][0]
+        self.assertEqual(prefix_char, '#')
+
+    def test_prefix_character_skips_collision(self):
+        """When a key starts with #, prefix advances to $."""
+        fmt = Formatter('{#1} {line*}', map={'#1': 'hello', 'line*': '-'}, width=20)
+        self.assertEqual(fmt(), 'hello --------------')
+        prefix_char = fmt._prologue[0][1][0][0][0]
+        self.assertEqual(prefix_char, '$')
+
+    def test_prefix_character_probes_to_question_mark(self):
+        """Prefix probes past all ASCII from # to > to land on ?."""
+        keys = {}
+        template_parts = []
+        value = ord('a')
+        for c in range(0x23, 0x3F):  # # through >
+            ch = chr(c)
+            if ch in '.:':
+                continue
+            key = f'{ch}x'
+            keys[key] = chr(value)
+            template_parts.append('{' + key + '}')
+            value += 1
+        keys['line*'] = '-'
+        template_parts.insert(1, '{line*}')
+        template = ''.join(template_parts)
+        fmt = Formatter(template, map=keys, width=40)
+        self.assertEqual(fmt(), 'a--------------bcdefghijklmnopqrstuvwxyz')
+        prefix_char = fmt._prologue[0][1][0][0][0]
+        self.assertEqual(prefix_char, '?')
+
+    def test_dotted_expression_detected_as_message(self):
+        """{message.foo} is still detected as a {message} interpolation."""
+        fmt = Formatter('{message.upper}')
+        self.assertIn('message', fmt.supported)
+        self.assertTrue(bool(fmt._body))
+
+    def test_indexed_expression_detected_as_message(self):
+        """{message[0]} is still detected as a {message} interpolation."""
+        fmt = Formatter('{message[0]}')
+        self.assertIn('message', fmt.supported)
+        self.assertTrue(bool(fmt._body))
+
+    def test_dotted_and_indexed_expression(self):
+        """{message.foo[0]} is still detected as a {message} interpolation."""
+        fmt = Formatter('{message.foo[0]}')
+        self.assertIn('message', fmt.supported)
+        self.assertTrue(bool(fmt._body))
+
+    def test_starred_with_dot_raises(self):
+        """Starred interpolation with dot raises."""
+        with self.assertRaises(ValueError):
+            Formatter('{line*.foo}', map={'line*': '-'})
+
+    def test_starred_with_bracket_raises(self):
+        """Starred interpolation with bracket raises."""
+        with self.assertRaises(ValueError):
+            Formatter('{line*[0]}', map={'line*': '-'})
+
+    def test_supported_with_dotted_key(self):
+        """Dotted expression has the base key in supported, not the full expression."""
+        fmt = Formatter('{foo.bar} {baz[0]}', foo='x', baz='y')
+        self.assertEqual(fmt.supported, frozenset({'foo', 'baz'}))
 
 
 def run_tests():

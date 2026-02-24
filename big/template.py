@@ -402,6 +402,12 @@ def eval_template_string(s, globals, locals=None, *,
 
 _curly_brace_delimiters = {'{': Delimiter('}')}
 
+# Characters that can't be used as the first character of a
+# format_map key: '!' and ':' are conversion/format spec markers,
+# '.' and digits are positional field syntax, '[' '{' '}' break
+# format parsing, and '"' and "'" are skipped for readability.
+_bad_prefix_characters = frozenset("!\"'.0123456789:[]{}")
+
 
 @export
 class Formatter:
@@ -434,10 +440,12 @@ class Formatter:
     template line.
 
     Substitution values in the template use str.format_map syntax.
-    Values whose keys end with * (e.g. "{line*}") are "starred
-    interpolations": their value is repeated to fill the line to
-    the target width.  Starred interpolations must not use a
-    conversion or format spec.
+    Values whose keys end with * (e.g. "{line*}") are special:
+    they are "starred interpolations", and their value is repeated
+    zero or more times and truncated until the line is at least
+    "width" characters.  Starred interpolations must not use
+    dotted expressions ({line.foo*}), indexing ({line[3]*}), a
+    conversion ({line*!r}), or a format spec ({line*:5}).
     """
 
     def __init__(self, template, map=None, *, width=79, **kwargs):
@@ -469,10 +477,13 @@ class Formatter:
         self._width = width
         self._map = map
 
-        prologue = []
-        body = []
-        epilogue = []
-        state = prologue
+        # First pass: scan all interpolation expressions to find a unique
+        # prefix character.  We collect the set of first characters of all
+        # interpolation names, then find a codepoint starting at '#' (0x23)
+        # that doesn't appear.
+        bad_prefix_chars = set(_bad_prefix_characters)
+        supported = set()
+        template_entries = []
 
         for template_line in template.split('\n'):
             cleaned = template_line.replace('{{', '').replace('}}', '')
@@ -481,80 +492,90 @@ class Formatter:
             starred_interpolations = []
 
             for text, open, close, change in split_delimiters(cleaned, _curly_brace_delimiters, yields=4):
-                if open and in_interpolation:
-                    raise ValueError("template does not support nested curly braces")
-                if close:
-                    # strip conversion and format spec first
-                    bare, _, _ = text.partition('!')
-                    bare, _, _ = bare.partition(':')
-                    if bare.endswith('*'):
-                        # it's a starred interpolation
-                        if bare != text:
-                            raise ValueError(f"starred interpolation {{{text}}} must not use a conversion or format spec")
-                        if bare == '*':
-                            raise ValueError(f"starred interpolation {{{text}}} must have a name")
-                        if text not in map:
-                            raise ValueError(f"template uses {{{text}}} but {text!r} is not defined in map")
-                        starred_interpolations.append(text)
-                    else:
-                        if bare == 'message':
-                            contains_message = True
-                in_interpolation = bool(open)
+                if open:
+                    if in_interpolation:
+                        raise ValueError(f"template does not support nested curly braces (near {{{text}}})")
+                    in_interpolation = True
+                    continue
+                in_interpolation = False
+                if not close:
+                    continue
+                # strip format spec, conversion, attribute access, and indexing
+                key, sep_colon, _ = text.partition(':')
+                key, sep_bang, _ = key.partition('!')
+                key, sep_dot, _ = key.partition('.')
+                key, sep_bracket, _ = key.partition('[')
+                if not key:
+                    raise ValueError(f"interpolation lacks an initial identifier: {{{text}}}")
+                if key.isdecimal():
+                    raise ValueError(f"Formatter doesn't support positional arguments: {{{text}}}")
+                if key.endswith('*'):
+                    # it's a starred interpolation
+                    if sep_dot or sep_bracket:
+                        raise ValueError(f"starred interpolation {{{text}}} must not use a dotted or indexed expression")
+                    if sep_bang or sep_colon:
+                        raise ValueError(f"starred interpolation {{{text}}} must not use a conversion or format spec")
+                    if key == '*':
+                        raise ValueError(f"starred interpolation {{{text}}} must have a name")
+                    if key not in map:
+                        raise ValueError(f"template uses {{{key}}} but {key!r} is not defined in map")
+                    starred_interpolations.append(key)
+                elif key == 'message':
+                    contains_message = True
+                supported.add(key)
+                bad_prefix_chars.add(key[0])
 
-            if state is prologue:
-                if contains_message:
+            template_entries.append((template_line, contains_message, starred_interpolations))
+
+        # Find a unique prefix character not used by any interpolation.
+        # Start at '#' (0x23): it's visible for debugging, and it's safe
+        # to use as a format_map key prefix.
+        unique_prefix = '#'
+        while unique_prefix in bad_prefix_chars:
+            unique_prefix = chr(ord(unique_prefix) + 1)
+
+        # Second pass: rewrite template lines, replacing starred interpolations
+        # with unique per-occurrence keys using the prefix character.
+        # Classify lines into prologue, body, and epilogue.
+        prologue = []
+        body = []
+        epilogue = []
+        state = prologue
+        test_starred_interpolations_map = {}
+        max_test_index = 0
+
+        for template_line, contains_message, starred_interpolations in template_entries:
+            if contains_message:
+                if state is prologue:
                     state = body
-            elif state is body:
-                if not contains_message:
-                    state = epilogue
-            else:
-                assert state is epilogue
-                if contains_message:
+                elif state is epilogue:
                     raise ValueError("all {message} lines in template must be contiguous")
+            else:
+                if state is body:
+                    state = epilogue
 
-            if not starred_interpolations:
-                if template_line:
-                    state.append((template_line, 0, (), None, None))
-                continue
+            starred_interpolation_names = []
+            if starred_interpolations:
+                # replace each {key*} with {<prefix><i>} in order
+                for i, original_key in enumerate(starred_interpolations, 1):
+                    prefix_key = f"{unique_prefix}{i}"
+                    starred_interpolation_names.append((prefix_key, original_key))
+                    if i > max_test_index:
+                        test_starred_interpolations_map[prefix_key] = ''
+                        max_test_index = i
 
-            original_last_key = starred_interpolations[-1]
-            count = len(starred_interpolations)
+                    # replace the first remaining occurrence of {original_key}
+                    before, sep, after = template_line.partition(f'{{{original_key}}}')
+                    assert sep
+                    template_line = f'{before}{{{prefix_key}}}{after}'
 
-            # Generate a unique key for the last starred interpolation
-            # on each line, so it can expand to share + remainder characters
-            # while all other occurrences expand to share characters.
-            # Maybe a little silly, but: try "last line*",
-            # then "last line* 2", "last line* 3", etc.
-            all_keys = set(starred_interpolations) | set(map)
-            last_key = "last " + original_last_key
-            if last_key in all_keys:
-                n = 2
-                base = last_key
-                while last_key in all_keys:
-                    last_key = f"{base} {n}"
-                    n += 1
-
-            starred_interpolations[-1] = last_key
-
-            before, sep, after = template_line.rpartition(f'{{{original_last_key}}}')
-            assert sep
-            template_line = f'{before}{{{last_key}}}{after}'
-
-            # unique_keys: deduplicated list preserving order, last_key always last
-            seen = set()
-            unique_keys = []
-            for key in starred_interpolations:
-                if key not in seen:
-                    seen.add(key)
-                    unique_keys.append(key)
-
-            test_starred_interpolations_map = dict.fromkeys(starred_interpolations, '')
-
-            state.append((template_line, count, unique_keys, original_last_key, test_starred_interpolations_map))
+            state.append((template_line, starred_interpolation_names))
 
         self._prologue = prologue
         self._body = body
         self._epilogue = epilogue
+        self._test_starred_interpolations_map = test_starred_interpolations_map
+        self._supported = frozenset(supported)
 
     @property
     def template(self):
@@ -570,6 +591,11 @@ class Formatter:
     def map(self):
         """A copy of the substitution dict."""
         return dict(self._map)
+
+    @property
+    def supported(self):
+        """A frozenset of all interpolation keys used by this template."""
+        return self._supported
 
     def __repr__(self):
         return f"Formatter({self._template!r}, {self._map!r}, width={self._width!r})"
@@ -607,61 +633,57 @@ class Formatter:
         if message and not self._body:
             raise ValueError("message is non-empty but template has no {message} lines")
 
-        extra = self._map
+        combined_map = self._map
         if map:
             if "message" in map:
                 raise ValueError(f"map must not contain 'message'")
-            extra = dict(extra)
+            combined_map = dict(combined_map)
             for key, value in map.items():
                 if key.endswith('*'):
                     value = str(value)
-                extra[key] = value
-
-        message_lines = message.split('\n')
-        width = self._width
-
-        if not self._body:
-            body_iter = ()
-        elif len(self._body) > len(message_lines):
-            body_iter = zip(self._body, message_lines)
-        else:
-            body_iter = itertools.zip_longest(self._body, message_lines, fillvalue=self._body[-1])
+                combined_map[key] = value
 
         prologue_iter = ((entry, None) for entry in self._prologue)
+        if not self._body:
+            body_iter = ()
+        else:
+            message_lines = message.split('\n')
+            if len(self._body) > len(message_lines):
+                body_iter = zip(self._body, message_lines)
+            else:
+                body_iter = itertools.zip_longest(self._body, message_lines, fillvalue=self._body[-1])
         epilogue_iter = ((entry, None) for entry in self._epilogue)
 
         buffer = []
         append = buffer.append
+        width = self._width
 
-        for template_entry, message_line in itertools.chain(prologue_iter, body_iter, epilogue_iter):
-            template, starred_interpolations, unique_keys, original_last_key, test_starred_interpolations_map = template_entry
-
-            line_map = dict(extra)
+        for (template_line, starred_interpolation_names), message_line in itertools.chain(prologue_iter, body_iter, epilogue_iter):
+            map_line = dict(combined_map)
             if message_line is not None:
-                line_map['message'] = message_line
+                map_line['message'] = message_line
 
             line = None
-            if starred_interpolations:
-                line_map.update(test_starred_interpolations_map)
-                test_line = template.format_map(line_map)
+            if starred_interpolation_names:
+                map_line.update(self._test_starred_interpolations_map)
+                test_line = template_line.format_map(map_line)
                 delta = width - len(test_line)
                 if delta <= 0:
                     line = test_line
                 else:
-                    share, remainder = divmod(delta, starred_interpolations)
+                    count = len(starred_interpolation_names)
+                    cumulative = 0
 
-                    last_key = unique_keys[-1]
-                    for key in unique_keys:
-                        if key is not last_key:
-                            fill_value = extra[key]
-                        else:
-                            share += remainder
-                            fill_value = extra[original_last_key]
-                        repeated = fill_value * ((share // len(fill_value)) + 1)
-                        line_map[key] = repeated[:share]
+                    for i, (prefix_key, original_key) in enumerate(starred_interpolation_names, 1):
+                        fill_value = combined_map[original_key]
+                        target = int((delta * i) / count)
+                        length = target - cumulative
+                        repeated = fill_value * ((length // len(fill_value)) + 1)
+                        map_line[prefix_key] = repeated[:length]
+                        cumulative = target
 
             if line is None:
-                line = template.format_map(line_map)
+                line = template_line.format_map(map_line)
             append(line)
 
         return "\n".join(buffer)
