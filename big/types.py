@@ -394,13 +394,13 @@ class string(str):
 
     class _string_context_line(tuple):
         """
-        A 4-tuple of (before, span, after, newline) representing
+        A 4-tuple of (before, span, after, linebreak) representing
         either a line of source text or a line of highlight carets.
         """
         __slots__ = ()
 
-        def __new__(cls, before, span, after, newline):
-            return tuple.__new__(cls, (before, span, after, newline))
+        def __new__(cls, before, span, after, linebreak):
+            return tuple.__new__(cls, (before, span, after, linebreak))
 
         @property
         def before(self):
@@ -415,11 +415,11 @@ class string(str):
             return self[2]
 
         @property
-        def newline(self):
+        def linebreak(self):
             return self[3]
 
         def __repr__(self):
-            return f"_string_context_line(before={self[0]!r}, span={self[1]!r}, after={self[2]!r}, newline={self[3]!r})"
+            return f"_string_context_line(before={self[0]!r}, span={self[1]!r}, after={self[2]!r}, linebreak={self[3]!r})"
 
 
     class _string_context_parts(tuple):
@@ -428,8 +428,8 @@ class string(str):
         """
         __slots__ = ()
 
-        def __new__(cls, string_line, highlight):
-            return tuple.__new__(cls, (string_line, highlight))
+        def __new__(cls, string, highlight):
+            return tuple.__new__(cls, (string, highlight))
 
         @property
         def string(self):
@@ -467,8 +467,8 @@ class string(str):
 
         _no_context_message = "no context available, string contains slices from multiple other strings"
 
-        def __init__(self, s):
-            self._string = s
+        def __init__(self, string):
+            self._string = string
             self._parts = None
             self._all_parts = None
 
@@ -481,7 +481,7 @@ class string(str):
             s = self._string
             r = s._ranges[0]
             origin = r.origin
-            origin_s = origin.s
+            origin_string = origin.string
             tab_width = origin.tab_width
             range_start = r.start
             range_stop = r.stop
@@ -501,6 +501,9 @@ class string(str):
             all_parts = []
             n_lines = stop_line_idx - start_line_idx + 1
 
+            string_context_line = self._string._string_context_line
+            string_context_parts = self._string._string_context_parts
+
             for i, line_idx in enumerate(range(start_line_idx, stop_line_idx + 1)):
                 # find line boundaries in the origin
                 line_start = linebreak_offsets[line_idx - 1] if line_idx else 0
@@ -509,23 +512,23 @@ class string(str):
                     line_end_with_break = linebreak_offsets[line_idx]
                     # find where linebreak starts
                     # all linebreaks are length 1 except \r\n which is length 2
-                    if line_end_with_break >= 2 and origin_s[line_end_with_break - 2:line_end_with_break] == '\r\n':
+                    if line_end_with_break >= 2 and origin_string[line_end_with_break - 2:line_end_with_break] == '\r\n':
                         lb_start = line_end_with_break - 2
                     else:
                         lb_start = line_end_with_break - 1
-                    linebreak = origin_s[lb_start:line_end_with_break]
+                    linebreak = origin_string[lb_start:line_end_with_break]
                 else:
-                    # last line with no trailing newline
-                    lb_start = len(origin_s)
+                    # last line with no trailing linebreak
+                    lb_start = len(origin_string)
                     linebreak = ''
 
                 # compute before/span/after on this line
                 span_start = max(range_start, line_start)
                 span_stop = min(range_stop, lb_start)
 
-                before = origin_s[line_start:span_start]
-                span = origin_s[span_start:span_stop]
-                after = origin_s[span_stop:lb_start]
+                before = origin_string[line_start:span_start]
+                span = origin_string[span_start:span_stop]
+                after = origin_string[span_stop:lb_start]
 
                 # compute visual widths accounting for tabs
                 # sentinel ensures expandtabs doesn't collapse trailing tabs
@@ -544,14 +547,22 @@ class string(str):
 
                 is_last = (i == n_lines - 1)
 
-                string_context_line = self._string._string_context_line
                 s_line = string_context_line(before, span, after, linebreak)
                 h_line = string_context_line(indent, highlight, trailing, '' if is_last else '\n')
 
-                all_parts.append(self._string._string_context_parts(s_line, h_line))
+                all_parts.append(string_context_parts(s_line, h_line))
 
             self._all_parts = tuple(all_parts)
-            self._parts = all_parts[0]
+            if len(all_parts) == 1:
+                self._parts = all_parts[0]
+            else:
+                string0, highlight0 = all_parts[0]
+                highlight0_after = highlight0.after
+                highlight0_after_length = len(highlight0_after)
+                highlight0_linebreak = highlight0_after[highlight0_after_length:highlight0_after_length]
+                highlight0_without_linebreak = string_context_line(highlight0.before, highlight0.span, highlight0_after, highlight0_linebreak)
+                all_parts_0_without_linebreak = string_context_parts(string0, highlight0_without_linebreak)
+                self._parts = all_parts_0_without_linebreak
 
         # delegate provenance properties to the underlying string
         @property
@@ -590,24 +601,22 @@ class string(str):
                 self._compute()
             return self._all_parts
 
-        @staticmethod
-        def _render_parts(parts_iter):
-            result = []
+        def _render_parts(self, parts_iter):
+            parts = []
+            append = parts.append
             for part in parts_iter:
                 s_line = part.string
                 h_line = part.highlight
-                result.append(s_line.before)
-                result.append(s_line.span)
-                result.append(s_line.after)
-                # ensure there's always a newline between source and highlight,
-                # even if the source line has no trailing newline
-                result.append(s_line.newline or '\n')
-                result.append(h_line.before)
-                result.append(h_line.span)
-                # don't include trailing spaces in rendered output
-                if h_line.newline:
-                    result.append(h_line.newline)
-            return ''.join(result)
+                append(s_line.before)
+                append(s_line.span)
+                append(s_line.after)
+                # ensure there's always a linebreak between source and highlight,
+                # even if the source line has no trailing linebreak
+                append(s_line.linebreak or '\n')
+                append(h_line.before)
+                append(h_line.span)
+                append(h_line.linebreak)
+            return self._string._cat(parts)
 
         def __str__(self):
             return self._render_parts((self.parts,))
