@@ -873,8 +873,7 @@ def multistrip(s, separators, left=True, right=True):
     multistrip first removes leading separators, until the
     string does not start with a separator (or is empty).
     Then it removes trailing separators, until the string
-    until the string does not end with a separator (or is
-    empty).
+    string does not end with a separator (or is empty).
 
     multistrip is "greedy"; if more than one separator
     matches, multistrip will strip the longest one.
@@ -964,7 +963,7 @@ PROGRESSIVE = "PROGRESSIVE"
 export(PROGRESSIVE)
 
 def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators):
-    if maxsplit == None:
+    if maxsplit is None:
         maxsplit = -1
     elif maxsplit == 0:
         if keep == ALTERNATING:
@@ -987,7 +986,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
 
         separators = tuple(separators)
         s2 = _reversed_builtin_separators.get(separators, None)
-        if s2 != None:
+        if s2 is not None:
             separators = s2
         else:
             separators = _multisplit_reversed(separators, 'separators')
@@ -1041,7 +1040,6 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
         if desired_length > (last_non_empty_nonsep + 2):
             # strip!
             l = l[:last_non_empty_nonsep + 1]
-            desired_length = length = last_non_empty_nonsep
 
         if not keep:
             for i in range(len(l) - 2, 0, -2):
@@ -1303,7 +1301,8 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     the earliest separator, the separator, and the portion of "s" after
     that separator.  Example:
 
-        multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
+        >>> multipartition('aXbYz', ('X', 'Y'))
+        ('a', 'X', 'bYz')
 
     If none of the separators are found in the string, returns
     a tuple containing `s` unchanged followed by two empty strings.
@@ -1312,18 +1311,24 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     the leftmost location in `s`, multipartition partitions using
     the longest matching separator.  For example:
 
-        big.multipartition('wxabcyz', ('a', 'abc')) => ('wx', 'abc', 'yz')
+        >>> multipartition('wxabcyz', ('a', 'abc'))
+        ('wx', 'abc', 'yz')
 
     Passing in an explicit "count" lets you control how many times
     multipartition partitions the string.  multipartition will always
     return a tuple containing (2*count)+1 elements.  Passing in a
     count of 0 will always return a tuple containing s.
 
-    If `separate` is true, multiple adjacent separator strings behave
-    like one separator.  Example:
+    If `separate` is false, multiple adjacent separator strings get joined
+    together, behaving like one big separator.  If `separate` is true,
+    they're kept separate.  Example:
 
-        big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False) => ('a', 'XY', 'b', 'YX', 'c')
-        big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True ) => ('a', 'X', '', 'Y', 'bYXc')
+        >>> multipartition('aXYbYXc', ('X', 'Y',),          separate=False)
+        ('a', 'XY', 'b', 'YX', 'c')
+        >>> multipartition('aXYbYXc', ('X', 'Y',),          separate=True )
+        ('a', 'X', '', 'Y', 'b', 'Y', '', 'X', 'c')
+        >>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True )
+        ('a', 'X', '', 'Y', 'bYXc')
 
     If reverse is true, multipartition behaves like str.rpartition.
     It partitions starting on the right, scanning backwards through
@@ -1358,6 +1363,7 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 
 @export
 def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
+    "Like big.multipartition, but partitions from the right by default, like str.rpartition."
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
 @export
@@ -3485,22 +3491,22 @@ class LineInfo:
         if not isinstance(indent, int):
             raise TypeError("indent must be int")
 
-        if leading == None:
+        if leading is None:
             leading = empty
         elif not isinstance(leading, line_type):
             raise TypeError(f"leading must be same type as line or None, not {leading!r}")
 
-        if trailing == None:
+        if trailing is None:
             trailing = empty
         elif not isinstance(trailing, line_type):
             raise TypeError(f"trailing must be same type as line or None, not {trailing!r}")
 
-        if end == None:
+        if end is None:
             end = empty
         elif not isinstance(end, line_type):
             raise TypeError(f"end must be same type as line or None, not {end!r}")
 
-        if not ((match == None) or isinstance_re_pattern(match)):
+        if not ((match is None) or isinstance_re_pattern(match)):
             raise TypeError("match must be None or re.Pattern")
 
         self.lines = lines
@@ -4044,7 +4050,7 @@ def lines_sort(li, *, key=None, reverse=False):
     no sooner than March 2027.
     """
     lines = list(li)
-    if key == None:
+    if key is None:
         fn = lambda t: t[1]
     else:
         fn = lambda t: key(t)

@@ -4024,8 +4024,9 @@ returns a tuple of three strings: the portion of `s` leading up to
 the earliest separator, the separator, and the portion of `s` after
 that separator.  Example:
 
-```
-multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
+```Python
+>>> multipartition('aXbYz', ('X', 'Y'))
+('a', 'X', 'bYz')
 ```
 
 If none of the separators are found in the string, returns
@@ -4035,8 +4036,9 @@ a tuple containing `s` unchanged followed by two empty strings.
 the leftmost location in `s`, `multipartition` partitions using
 the longest matching separator.  For example:
 
-```
-multipartition('wxabcyz', ('a', 'abc')) => `('wx', 'abc', 'yz')`
+```Python
+>>> multipartition('wxabcyz', ('a', 'abc'))
+('wx', 'abc', 'yz')
 ```
 
 Passing in an explicit `count` lets you control how many times
@@ -4044,12 +4046,17 @@ Passing in an explicit `count` lets you control how many times
 return a tuple containing `(2*count)+1` elements.
 Passing in a `count` of 0 will always return a tuple containing `s`.
 
-If `separate` is true, multiple adjacent separator strings behave
-like one separator.  Example:
+If `separate` is false, multiple adjacent separator strings get joined
+together, behaving like one big separator.  If `separate` is true,
+they're kept separate.  Example:
 
-```
-big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False) => ('a', 'XY', 'b', 'YX', 'c')
-big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True ) => ('a', 'X', '', 'Y', 'bYXc')
+```Python
+>>> multipartition('aXYbYXc', ('X', 'Y',),          separate=False)
+('a', 'XY', 'b', 'YX', 'c')
+>>> multipartition('aXYbYXc', ('X', 'Y',),          separate=True )
+('a', 'X', '', 'Y', 'b', 'Y', '', 'X', 'c')
+>>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True )
+('a', 'X', '', 'Y', 'bYXc')
 ```
 
 If `reverse` is true, multipartition behaves like `str.rpartition`.
