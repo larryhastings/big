@@ -32,6 +32,7 @@ import big.all as big
 from big.template import Interpolation, Statement
 from big.template import parse_template_string, eval_template_string
 from big.template import Formatter
+import sys
 import unittest
 
 
@@ -269,16 +270,53 @@ class BigTestTemplate(unittest.TestCase):
             ["Unterminated quote in statement {% 'beep boop %}",],
             parse_statements=False)
 
-        # regression: turn TokenError into SyntaxError
+        # regression: turn TokenError into SyntaxError.
+        # these only raise
         try:
-            t("{{      'unterminated }}", None)
+            t('{{   """ }}', None)
+        except SyntaxError as e:
+            self.assertEqual('line 1 column 6', str(e).partition(':')[0])
+
+        try:
+            t('{{\n\n """ }}', None)
+        except SyntaxError as e:
+            self.assertEqual('line 3 column 2', str(e).partition(':')[0])
+
+    @unittest.skipIf(sys.version_info < (3, 11), "old tokenizer doesn't raise for these")
+    def tests_syntax_errors_on_new_peg_parser(self):
+        # old Python parser raises a lot fewer token errors.
+        # only run these tests on the new PEG parser, 3.11+.
+
+        def t(s, *,
+            parse_expressions=True,
+            parse_comments=True,
+            parse_statements=True,
+            parse_whitespace_eater=True,
+            quotes=('"', "'"),
+            multiline_quotes=(),
+            escape="\\",
+            ):
+
+            list(parse_template_string(s,
+                parse_expressions=parse_expressions,
+                parse_comments=parse_comments,
+                parse_statements=parse_statements,
+                parse_whitespace_eater=parse_whitespace_eater,
+                quotes=quotes,
+                multiline_quotes=multiline_quotes,
+                escape=escape,
+                ))
+
+        try:
+            t("{{      'unterminated }}")
         except SyntaxError as e:
             self.assertEqual('line 1 column 9', str(e).partition(':')[0])
 
         try:
-            t('{{ 0x }}', None)
+            t('{{ 0x }}')
         except SyntaxError as e:
-            self.assertEqual('line 1 column 4', str(e).partition(':')[0])
+            # yup, Python reports the error as happening at the 'x'
+            self.assertEqual('line 1 column 5', str(e).partition(':')[0])
 
 
 

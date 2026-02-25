@@ -28,6 +28,7 @@ import builtins
 import itertools
 import token
 import tokenize
+import sys
 
 from .types import string
 from .text import split_quoted_strings, split_delimiters, Delimiter
@@ -283,12 +284,15 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
             message, (line, column) = e.args
             message = message.partition(" (detected at")[0]
             line -= 1
-            column -= 1
-            lines = s.splitlines()
+            # the old Python parser used 0 as the first column here,
+            # the new one uses 1 as the first column.
+            if _new_peg_parser:
+                column -= 1
+
+            lines = after.splitlines()
             offending_to_eol = lines[line][column:]
             offending = offending_to_eol.split()[0]
             raise SyntaxError(f"{offending.where}: {message} ({offending!r})") from None
-            sys.exit()
 
     # flush text
     if text:
@@ -423,6 +427,8 @@ _curly_brace_delimiters = {'{': Delimiter('}')}
 # and '"' and "'" are skipped for debugger readability.
 _bad_prefix_characters = frozenset("!\"'.0123456789:[]{}")
 
+
+_new_peg_parser = ((sys.version_info.major, sys.version_info.minor) >= (3, 11))
 
 @export
 class Formatter:
