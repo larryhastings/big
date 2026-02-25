@@ -280,6 +280,7 @@ class string(str):
         '_source',
         '_origin',
         '_offset',
+        '_context',
         )
 
     def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
@@ -330,6 +331,8 @@ class string(str):
 
         self._origin = self
         self._offset = 0
+
+        self._context = None
 
         origin.string = self
 
@@ -387,6 +390,251 @@ class string(str):
         else:
             prefix = ''
         return f'{prefix}line {self._line_number} column {self._column_number}'
+
+
+    class _string_context_line(tuple):
+        """
+        A 4-tuple of (before, span, after, newline) representing
+        either a line of source text or a line of highlight carets.
+        """
+        __slots__ = ()
+
+        def __new__(cls, before, span, after, newline):
+            return tuple.__new__(cls, (before, span, after, newline))
+
+        @property
+        def before(self):
+            return self[0]
+
+        @property
+        def span(self):
+            return self[1]
+
+        @property
+        def after(self):
+            return self[2]
+
+        @property
+        def newline(self):
+            return self[3]
+
+        def __repr__(self):
+            return f"_string_context_line(before={self[0]!r}, span={self[1]!r}, after={self[2]!r}, newline={self[3]!r})"
+
+
+    class _string_context_parts(tuple):
+        """
+        A 2-tuple of (string, highlight) where each is a _string_context_line.
+        """
+        __slots__ = ()
+
+        def __new__(cls, string_line, highlight):
+            return tuple.__new__(cls, (string_line, highlight))
+
+        @property
+        def string(self):
+            return self[0]
+
+        @property
+        def highlight(self):
+            return self[1]
+
+        def __repr__(self):
+            return f"_string_context_parts(string={self[0]!r}, highlight={self[1]!r})"
+
+
+    class _string_context:
+        """
+        Context information for a big.string, showing the source line(s)
+        and highlight caret(s) indicating where the string appears.
+
+        If the string is a simple contiguous slice (single range), context
+        is valid (bool(context) is True) and all properties work.
+
+        If the string contains slices from multiple ranges (e.g. concatenated
+        from different sources), bool(context) is False, and accessing parts,
+        all_parts, __str__, or all will raise ValueError.
+
+        Properties:
+            parts:     A _string_context_parts for the first line only.
+            all_parts: A tuple of _string_context_parts for all lines.
+            all:       A string rendering of all lines with highlights.
+
+        Also delegates line_number, column_number, source, offset, origin,
+        and where to the underlying string.
+        """
+        __slots__ = ('_string', '_parts', '_all_parts')
+
+        _no_context_message = "no context available, string contains slices from multiple other strings"
+
+        def __init__(self, s):
+            self._string = s
+            self._parts = None
+            self._all_parts = None
+
+        def __bool__(self):
+            return len(self._string._ranges) == 1
+
+        def _compute(self):
+            if not self:
+                raise ValueError(self._no_context_message)
+            s = self._string
+            r = s._ranges[0]
+            origin = r.origin
+            origin_s = origin.s
+            tab_width = origin.tab_width
+            range_start = r.start
+            range_stop = r.stop
+
+            linebreak_offsets = origin.linebreak_offsets
+            if linebreak_offsets is None:
+                linebreak_offsets = origin.compute_linebreak_offsets()
+
+            # which lines does our range span?
+            start_line_idx = bisect_right(linebreak_offsets, range_start)
+            if range_stop > range_start:
+                stop_line_idx = bisect_right(linebreak_offsets, range_stop - 1)
+            else:
+                # zero-length string: same line
+                stop_line_idx = start_line_idx
+
+            all_parts = []
+            n_lines = stop_line_idx - start_line_idx + 1
+
+            for i, line_idx in enumerate(range(start_line_idx, stop_line_idx + 1)):
+                # find line boundaries in the origin
+                line_start = linebreak_offsets[line_idx - 1] if line_idx else 0
+
+                if line_idx < len(linebreak_offsets):
+                    line_end_with_break = linebreak_offsets[line_idx]
+                    # find where linebreak starts
+                    # all linebreaks are length 1 except \r\n which is length 2
+                    if line_end_with_break >= 2 and origin_s[line_end_with_break - 2:line_end_with_break] == '\r\n':
+                        lb_start = line_end_with_break - 2
+                    else:
+                        lb_start = line_end_with_break - 1
+                    linebreak = origin_s[lb_start:line_end_with_break]
+                else:
+                    # last line with no trailing newline
+                    lb_start = len(origin_s)
+                    linebreak = ''
+
+                # compute before/span/after on this line
+                span_start = max(range_start, line_start)
+                span_stop = min(range_stop, lb_start)
+
+                before = origin_s[line_start:span_start]
+                span = origin_s[span_start:span_stop]
+                after = origin_s[span_stop:lb_start]
+
+                # compute visual widths accounting for tabs
+                # sentinel ensures expandtabs doesn't collapse trailing tabs
+                sentinel = '.'
+                before_width = len((before + sentinel).expandtabs(tab_width)) - 1
+                if span:
+                    span_width = len((before + span + sentinel).expandtabs(tab_width)) - 1 - before_width
+                else:
+                    # zero-length string: single caret as insertion point
+                    span_width = 1
+                after_width = len((before + span + after + sentinel).expandtabs(tab_width)) - 1 - before_width - span_width
+
+                indent = ' ' * before_width
+                highlight = '^' * span_width
+                trailing = ' ' * after_width
+
+                is_last = (i == n_lines - 1)
+
+                string_context_line = self._string._string_context_line
+                s_line = string_context_line(before, span, after, linebreak)
+                h_line = string_context_line(indent, highlight, trailing, '' if is_last else '\n')
+
+                all_parts.append(self._string._string_context_parts(s_line, h_line))
+
+            self._all_parts = tuple(all_parts)
+            self._parts = all_parts[0]
+
+        # delegate provenance properties to the underlying string
+        @property
+        def line_number(self):
+            return self._string.line_number
+
+        @property
+        def column_number(self):
+            return self._string.column_number
+
+        @property
+        def source(self):
+            return self._string.source
+
+        @property
+        def offset(self):
+            return self._string.offset
+
+        @property
+        def origin(self):
+            return self._string.origin
+
+        @property
+        def where(self):
+            return self._string.where
+
+        @property
+        def parts(self):
+            if self._parts is None:
+                self._compute()
+            return self._parts
+
+        @property
+        def all_parts(self):
+            if self._all_parts is None:
+                self._compute()
+            return self._all_parts
+
+        @staticmethod
+        def _render_parts(parts_iter):
+            result = []
+            for part in parts_iter:
+                s_line = part.string
+                h_line = part.highlight
+                result.append(s_line.before)
+                result.append(s_line.span)
+                result.append(s_line.after)
+                # ensure there's always a newline between source and highlight,
+                # even if the source line has no trailing newline
+                result.append(s_line.newline or '\n')
+                result.append(h_line.before)
+                result.append(h_line.span)
+                # don't include trailing spaces in rendered output
+                if h_line.newline:
+                    result.append(h_line.newline)
+            return ''.join(result)
+
+        def __str__(self):
+            return self._render_parts((self.parts,))
+
+        @property
+        def all(self):
+            return self._render_parts(self.all_parts)
+
+        def __repr__(self):
+            invalid = ' invalid' if not self else ''
+            return f"<_string_context {self._string.where}{invalid}>"
+
+    @property
+    def context(self):
+        """
+        Returns a _string_context object showing the source line
+        and highlight carets for this string.
+
+        If this string is a simple contiguous slice of a single
+        source string, the context is valid (bool(ctx) is True).
+        Otherwise, accessing parts/all_parts/__str__/all will
+        raise ValueError.
+        """
+        if self._context is None:
+            self._context = self._string_context(self)
+        return self._context
+
 
     def _clamp_index(self, index, default, name):
         if index is None:
@@ -548,6 +796,8 @@ class string(str):
         new._offset = range0.start
         new._origin = origin.string
 
+        new._context = None
+
         return new
 
     def __iter__(self):
@@ -591,6 +841,8 @@ class string(str):
 
                 new._offset = start
                 new._origin = origin_string
+
+                new._context = None
 
                 yield new
 
@@ -654,6 +906,8 @@ class string(str):
 
         new._offset = range0.start
         new._origin = origin.string
+
+        new._context = None
 
         return new
 
