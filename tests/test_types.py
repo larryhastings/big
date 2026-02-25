@@ -1444,6 +1444,434 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(s, line1 + line2)
 
 
+    def test_context_single_line(self):
+        s = string('elif funky_socks in blast:\n  pass\n', source='foo.py')
+        sub = s[20:25]  # 'blast'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+        self.assertEqual(str(ctx),
+            'elif funky_socks in blast:\n'
+            '                    ^^^^^')
+
+        # single-line: parts == all_parts[0], str(ctx) == ctx.all
+        self.assertEqual(len(ctx.all_parts), 1)
+        self.assertEqual(ctx.parts, ctx.all_parts[0])
+        self.assertEqual(str(ctx), ctx.all)
+
+        p = ctx.parts
+        self.assertIsInstance(p.string.before, string)
+        self.assertIsInstance(p.string.span, string)
+        self.assertIsInstance(p.string.after, string)
+        self.assertIsInstance(p.string.linebreak, string)
+
+        self.assertEqual(p.string.before, 'elif funky_socks in ')
+        self.assertEqual(p.string.span, 'blast')
+        self.assertEqual(p.string.after, ':')
+        self.assertEqual(p.string.linebreak, '\n')
+
+        self.assertEqual(p.highlight.before, '                    ')
+        self.assertEqual(p.highlight.span, '^^^^^')
+        self.assertEqual(p.highlight.after, ' ')
+        self.assertEqual(p.highlight.linebreak, '')
+
+    def test_context_multi_line(self):
+        s = string('hello world\nsecond line\nthird line\n', source='test.py')
+        sub = s[14:25]  # 'cond line\nt'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        # __str__ shows first line only
+        self.assertEqual(str(ctx),
+            'second line\n'
+            '  ^^^^^^^^^')
+
+        # .all shows all lines
+        self.assertEqual(ctx.all,
+            'second line\n'
+            '  ^^^^^^^^^\n'
+            'third line\n'
+            '^')
+
+        self.assertEqual(len(ctx.all_parts), 2)
+
+        # parts has highlight linebreak forced to ''
+        self.assertEqual(ctx.parts.highlight.linebreak, '')
+        self.assertEqual(ctx.all_parts[0].highlight.linebreak, '\n')
+        # but the string lines match
+        self.assertEqual(ctx.parts.string, ctx.all_parts[0].string)
+        # and parts != all_parts[0] because of the linebreak difference
+        self.assertNotEqual(ctx.parts, ctx.all_parts[0])
+
+        # first line
+        p0 = ctx.all_parts[0]
+        self.assertEqual(p0.string.before, 'se')
+        self.assertEqual(p0.string.span, 'cond line')
+        self.assertEqual(p0.string.after, '')
+        self.assertEqual(p0.string.linebreak, '\n')
+        self.assertEqual(p0.highlight.before, '  ')
+        self.assertEqual(p0.highlight.span, '^^^^^^^^^')
+        self.assertEqual(p0.highlight.after, '')
+        self.assertEqual(p0.highlight.linebreak, '\n')
+
+        # second line
+        p1 = ctx.all_parts[1]
+        self.assertEqual(p1.string.before, '')
+        self.assertEqual(p1.string.span, 't')
+        self.assertEqual(p1.string.after, 'hird line')
+        self.assertEqual(p1.string.linebreak, '\n')
+        self.assertEqual(p1.highlight.before, '')
+        self.assertEqual(p1.highlight.span, '^')
+        self.assertEqual(p1.highlight.after, '         ')
+        self.assertEqual(p1.highlight.linebreak, '')
+
+    def test_context_three_lines(self):
+        s = string('aaa\nbbb\nccc\nddd\n', source='test.py')
+        sub = s[2:11]  # 'a\nbbb\nccc'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'aaa\n'
+            '  ^')
+
+        self.assertEqual(ctx.all,
+            'aaa\n'
+            '  ^\n'
+            'bbb\n'
+            '^^^\n'
+            'ccc\n'
+            '^^^')
+
+        self.assertEqual(len(ctx.all_parts), 3)
+
+    def test_context_zero_length(self):
+        s = string('hello world\n', source='test.py')
+        sub = s[5:5]
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        # zero-length string gets a single ^ as insertion point
+        self.assertEqual(str(ctx),
+            'hello world\n'
+            '     ^')
+
+        p = ctx.parts
+        self.assertEqual(p.string.before, 'hello')
+        self.assertEqual(p.string.span, '')
+        self.assertEqual(p.string.after, ' world')
+        self.assertEqual(p.highlight.span, '^')
+
+    def test_context_zero_length_at_start(self):
+        s = string('hello world\n', source='test.py')
+        sub = s[0:0]
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'hello world\n'
+            '^')
+
+        self.assertEqual(ctx.parts.string.before, '')
+        self.assertEqual(ctx.parts.string.span, '')
+        self.assertEqual(ctx.parts.string.after, 'hello world')
+
+    def test_context_zero_length_at_end_of_line(self):
+        s = string('hello world\n', source='test.py')
+        sub = s[11:11]
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'hello world\n'
+            '           ^')
+
+        self.assertEqual(ctx.parts.string.before, 'hello world')
+        self.assertEqual(ctx.parts.string.span, '')
+        self.assertEqual(ctx.parts.string.after, '')
+
+    def test_context_invalid_multi_range(self):
+        a = string('abc', source='x')
+        b = string('xyz', source='y')
+        chimera = a + b
+        ctx = chimera.context
+
+        self.assertFalse(ctx)
+
+        with self.assertRaises(ValueError):
+            str(ctx)
+        with self.assertRaises(ValueError):
+            ctx.parts
+        with self.assertRaises(ValueError):
+            ctx.all_parts
+        with self.assertRaises(ValueError):
+            ctx.all
+
+    def test_context_invalid_multi_range_same_origin(self):
+        # two non-contiguous ranges from the same origin
+        s = string('abcdef', source='x')
+        chimera = s[:2] + s[4:]  # 'ab' + 'ef', skipping 'cd'
+        ctx = chimera.context
+        self.assertFalse(ctx)
+
+    def test_context_with_tabs(self):
+        s = string('\t\thello world\n', source='test.py')
+        sub = s[2:7]  # 'hello'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            '\t\thello world\n'
+            '                ^^^^^')
+
+        # two tabs at width 8 = 16 spaces indent
+        self.assertEqual(ctx.parts.highlight.before, ' ' * 16)
+        self.assertEqual(ctx.parts.highlight.span, '^^^^^')
+
+    def test_context_with_tab_in_span(self):
+        s = string('before\tspan\tafter\n', source='test.py')
+        sub = s[6:12]  # '\tspan\t'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'before\tspan\tafter\n'
+            '      ^^^^^^^^^^')
+
+        # 'before' = 6 chars visual width
+        self.assertEqual(ctx.parts.highlight.before, '      ')
+        # '\tspan\t' from visual col 6: tab to 8 (2), 'span' (4), tab to 16 (4) = 10
+        self.assertEqual(len(ctx.parts.highlight.span), 10)
+
+    def test_context_custom_tab_width(self):
+        s = string('\thello', tab_width=4)
+        sub = s[1:6]  # 'hello'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            '\thello\n'
+            '    ^^^^^')
+
+        self.assertEqual(ctx.parts.highlight.before, '    ')
+        self.assertEqual(ctx.parts.highlight.span, '^^^^^')
+
+    def test_context_no_trailing_linebreak(self):
+        s = string('no newline here')
+        sub = s[3:10]  # 'newline'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        # __str__ inserts a \n even though the source has none
+        self.assertEqual(str(ctx),
+            'no newline here\n'
+            '   ^^^^^^^')
+
+        # but the parts accurately report no linebreak
+        self.assertEqual(ctx.parts.string.linebreak, '')
+
+    def test_context_crlf_linebreak(self):
+        s = string('first line\r\nsecond line\r\n', source='dos.txt')
+        sub = s[12:18]  # 'second'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'second line\r\n'
+            '^^^^^^')
+
+        self.assertEqual(ctx.parts.string.linebreak, '\r\n')
+        self.assertEqual(ctx.parts.string.span, 'second')
+        self.assertEqual(ctx.parts.string.after, ' line')
+
+    def test_context_entire_line_is_span(self):
+        s = string('first\nsecond\nthird\n')
+        sub = s[6:12]  # 'second'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'second\n'
+            '^^^^^^')
+
+        p = ctx.parts
+        self.assertEqual(p.string.before, '')
+        self.assertEqual(p.string.span, 'second')
+        self.assertEqual(p.string.after, '')
+        self.assertEqual(p.highlight.before, '')
+        self.assertEqual(p.highlight.span, '^^^^^^')
+        self.assertEqual(p.highlight.after, '')
+
+    def test_context_first_character(self):
+        s = string('hello world\n')
+        sub = s[0:1]  # 'h'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'hello world\n'
+            '^')
+
+        self.assertEqual(ctx.parts.string.before, '')
+        self.assertEqual(ctx.parts.string.span, 'h')
+        self.assertEqual(ctx.parts.string.after, 'ello world')
+
+    def test_context_last_character_before_linebreak(self):
+        s = string('hello world\n')
+        sub = s[10:11]  # 'd'
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+
+        self.assertEqual(str(ctx),
+            'hello world\n'
+            '          ^')
+
+        self.assertEqual(ctx.parts.string.before, 'hello worl')
+        self.assertEqual(ctx.parts.string.span, 'd')
+        self.assertEqual(ctx.parts.string.after, '')
+
+    def test_context_delegated_properties(self):
+        s = string('hello\nworld\n', source='test.py', line_number=5)
+        sub = s[6:11]  # 'world'
+        ctx = sub.context
+
+        self.assertEqual(ctx.line_number, 6)
+        self.assertEqual(ctx.column_number, 1)
+        self.assertEqual(ctx.source, 'test.py')
+        self.assertEqual(ctx.where, 'test.py line 6 column 1')
+        self.assertEqual(ctx.offset, 6)
+
+    def test_context_string_property(self):
+        s = string('hello world\n')
+        sub = s[6:11]  # 'world'
+        ctx = sub.context
+
+        self.assertIs(ctx.string, sub)
+        self.assertEqual(str(ctx.string), 'world')
+
+    def test_context_is_cached(self):
+        s = string('hello\n')
+        sub = s[0:5]
+        ctx1 = sub.context
+        ctx2 = sub.context
+        self.assertIs(ctx1, ctx2)
+
+    def test_context_repr(self):
+        s = string('hello\n', source='test.py')
+        sub = s[0:5]
+        ctx = sub.context
+        self.assertIn('test.py', repr(ctx))
+
+        # invalid context
+        a = string('abc', source='x')
+        b = string('xyz', source='y')
+        chimera = a + b
+        ctx = chimera.context
+        self.assertIn('invalid', repr(ctx))
+
+    def test_context_tuple_structure(self):
+        s = string('hello world\n')
+        sub = s[6:11]  # 'world'
+        ctx = sub.context
+        p = ctx.parts
+
+        # parts is a 2-tuple
+        self.assertEqual(len(p), 2)
+        s_line, h_line = p
+        self.assertIs(s_line, p.string)
+        self.assertIs(h_line, p.highlight)
+
+        # each line is a 4-tuple
+        self.assertEqual(len(s_line), 4)
+        before, span, after, linebreak = s_line
+        self.assertEqual(before, s_line.before)
+        self.assertEqual(span, s_line.span)
+        self.assertEqual(after, s_line.after)
+        self.assertEqual(linebreak, s_line.linebreak)
+
+        self.assertEqual(len(h_line), 4)
+        h_before, h_span, h_after, h_linebreak = h_line
+        self.assertEqual(h_before, h_line.before)
+        self.assertEqual(h_span, h_line.span)
+        self.assertEqual(h_after, h_line.after)
+        self.assertEqual(h_linebreak, h_line.linebreak)
+
+    def test_context_provenance_preserved(self):
+        # the string parts in context should be big.string objects
+        # with correct provenance back to the origin
+        s = string('hello world\n', source='test.py', line_number=5, column_number=3)
+        sub = s[6:11]  # 'world'
+        ctx = sub.context
+        p = ctx.parts
+
+        self.assertIsInstance(p.string.before, string)
+        self.assertEqual(p.string.before.source, 'test.py')
+        self.assertEqual(p.string.before, 'hello ')
+
+        self.assertIsInstance(p.string.span, string)
+        self.assertEqual(p.string.span.source, 'test.py')
+        self.assertEqual(p.string.span.line_number, 5)
+        self.assertEqual(p.string.span.column_number, 9)  # 3 + len('hello ')
+
+        self.assertIsInstance(p.string.after, string)
+        self.assertIsInstance(p.string.linebreak, string)
+
+    def test_context_multi_line_provenance(self):
+        s = string('hello world\nsecond line\nthird line\n', source='test.py')
+        sub = s[14:25]  # 'cond line\nt' spanning lines 2-3
+        ctx = sub.context
+
+        for part in ctx.all_parts:
+            self.assertIsInstance(part.string.before, string)
+            self.assertIsInstance(part.string.span, string)
+            self.assertIsInstance(part.string.after, string)
+            self.assertEqual(part.string.span.source, 'test.py')
+
+    def test_context_str_and_all_return_string_type(self):
+        # str(ctx) and ctx.all use _cat, so they return big.string objects
+        s = string('hello world\n', source='test.py')
+        sub = s[6:11]
+        ctx = sub.context
+
+        result_str = str(ctx)
+        self.assertIsInstance(result_str, string)
+
+        result_all = ctx.all
+        self.assertIsInstance(result_all, string)
+
+    def test_context_coverage(self):
+        s = string('hello world\n', source='test.py')
+        sub = s[6:11]
+        ctx = sub.context
+        p = ctx.parts
+
+        # _string_context_line.__repr__
+        repr(p.string)
+        # _string_context_parts.__repr__
+        repr(p)
+        # ctx.origin
+        self.assertIs(ctx.origin, sub.origin)
+
+    def test_context_weakref_expired(self):
+        s = string('hello world\n', source='test.py')
+        sub = s[6:11]
+        ctx = sub.context
+        del s, sub
+        with self.assertRaises(ReferenceError):
+            ctx.string
 
 class BigLinkedListTests(unittest.TestCase):
 
