@@ -332,6 +332,7 @@ class BigStringTests(unittest.TestCase):
             '__radd__',
             '__reversed__',
             '__slots__',
+            '__weakref__',
             '_append_ranges',
             '_cat',
             '_clamp_index',

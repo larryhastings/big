@@ -34,9 +34,11 @@ import sys
 import threading
 import types
 try:
+    # new in Python 3.10
     from types import NoneType
 except ImportError: # pragma: nocover
     NoneType = type(None)
+import weakref
 
 
 try: # pragma nocover
@@ -118,7 +120,7 @@ class _Origin:
     An _Origin object is the building block of big.string objects.
     It contains an original Python string with some extra metadata.
     """
-    __slots__ = ('s', 'string', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets', )
+    __slots__ = ('s', 'string', 'source', 'line_number', 'column_number', 'first_column_number', 'tab_width', 'linebreak_offsets')
 
     def __init__(self, s, source, line_number, column_number, first_column_number, tab_width):
         self.s = s
@@ -281,6 +283,7 @@ class string(str):
         '_origin',
         '_offset',
         '_context',
+        '__weakref__',
         )
 
     def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
@@ -463,22 +466,29 @@ class string(str):
         Also delegates line_number, column_number, source, offset, origin,
         and where to the underlying string.
         """
-        __slots__ = ('_string', '_parts', '_all_parts')
+        __slots__ = ('_weakref', '_parts', '_all_parts')
 
         _no_context_message = "no context available, string contains slices from multiple other strings"
 
         def __init__(self, string):
-            self._string = string
+            self._weakref = weakref.ref(string)
             self._parts = None
             self._all_parts = None
 
+        def _string(self):
+            string = self._weakref()
+            if string is None:
+                raise ReferenceError('string has been destroyed')
+            return string
+
+
         def __bool__(self):
-            return len(self._string._ranges) == 1
+            return len(self._string()._ranges) == 1
 
         def _compute(self):
             if not self:
                 raise ValueError(self._no_context_message)
-            s = self._string
+            s = self._string()
             r = s._ranges[0]
             origin = r.origin
             origin_string = origin.string
@@ -501,8 +511,8 @@ class string(str):
             all_parts = []
             n_lines = stop_line_idx - start_line_idx + 1
 
-            string_context_line = self._string._string_context_line
-            string_context_parts = self._string._string_context_parts
+            string_context_line = s._string_context_line
+            string_context_parts = s._string_context_parts
 
             for i, line_idx in enumerate(range(start_line_idx, stop_line_idx + 1)):
                 # find line boundaries in the origin
@@ -564,30 +574,34 @@ class string(str):
                 all_parts_0_without_linebreak = string_context_parts(string0, highlight0_without_linebreak)
                 self._parts = all_parts_0_without_linebreak
 
+        @property
+        def string(self):
+            return self._string()
+
         # delegate provenance properties to the underlying string
         @property
         def line_number(self):
-            return self._string.line_number
+            return self._string().line_number
 
         @property
         def column_number(self):
-            return self._string.column_number
+            return self._string().column_number
 
         @property
         def source(self):
-            return self._string.source
+            return self._string().source
 
         @property
         def offset(self):
-            return self._string.offset
+            return self._string().offset
 
         @property
         def origin(self):
-            return self._string.origin
+            return self._string().origin
 
         @property
         def where(self):
-            return self._string.where
+            return self._string().where
 
         @property
         def parts(self):
@@ -616,7 +630,7 @@ class string(str):
                 append(h_line.before)
                 append(h_line.span)
                 append(h_line.linebreak)
-            return self._string._cat(parts)
+            return string._cat(parts)
 
         def __str__(self):
             return self._render_parts((self.parts,))
@@ -627,7 +641,7 @@ class string(str):
 
         def __repr__(self):
             invalid = ' invalid' if not self else ''
-            return f"<_string_context {self._string.where}{invalid}>"
+            return f"<_string_context {self._string().where}{invalid}>"
 
     @property
     def context(self):
