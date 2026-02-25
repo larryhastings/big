@@ -222,10 +222,21 @@ class BigTestTemplate(unittest.TestCase):
         t("Closing curly {", ["Closing curly {"])
 
         with self.assertRaises(SyntaxError):
+            t("empty expression {{}}", None)
+
+        with self.assertRaises(SyntaxError):
+            t("empty expression except for whitespace {{  }}", None)
+
+        with self.assertRaises(SyntaxError):
             t("Unterminated comment {# argle bargle", None)
         t("Unterminated comment {# argle bargle",
             ["Unterminated comment {# argle bargle",],
             parse_comments=False)
+        # regression test: improved 'where' printing for unterminated comment
+        try:
+            t("Unterminated comment {# argle bargle", None)
+        except SyntaxError as e:
+            self.assertIn("line 1 column 22", str(e))
 
         with self.assertRaises(SyntaxError):
             t("Unterminated expansion {{ jibber_jabber ", None)
@@ -257,6 +268,18 @@ class BigTestTemplate(unittest.TestCase):
         t("Unterminated quote in statement {% 'beep boop %}",
             ["Unterminated quote in statement {% 'beep boop %}",],
             parse_statements=False)
+
+        # regression: turn TokenError into SyntaxError
+        try:
+            t("{{      'unterminated }}", None)
+        except SyntaxError as e:
+            self.assertEqual('line 1 column 9', str(e).partition(':')[0])
+
+        try:
+            t('{{ 0x }}', None)
+        except SyntaxError as e:
+            self.assertEqual('line 1 column 4', str(e).partition(':')[0])
+
 
 
 class TestFormatter(unittest.TestCase):

@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import builtins
 import itertools
 import token
+import tokenize
 
 from .types import string
 from .text import split_quoted_strings, split_delimiters, Delimiter
@@ -112,6 +113,7 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
     "internal iterator for public big.parse_template_string"
     if not s:
         yield s
+        return
 
     original_s = s
 
@@ -152,9 +154,10 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
 
         if parse_comments and (after0 == '#'):
             # comment
+            where = delimiter.where
             comment, delimiter, s2 = after.partition('#}')
             if not delimiter:
-                raise SyntaxError(f"{delimiter.where}: unterminated comment")
+                raise SyntaxError(f"{where}: unterminated comment")
             s = s2
             continue
 
@@ -221,57 +224,71 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
         tos = previous_was_rcurly = None
         start_offset = after.offset
 
-        for t in after.generate_tokens():
-            if t.type != _TOKEN_OP:
-                continue
-            t_string = t.string
-            offset = t_string.offset
-            is_rcurly = t_string == '}'
-            if is_rcurly:
-                if previous_was_rcurly:
-                    s = original_s[offset + 1:]
-                    offset -= 1
-                    break
-            else:
-                previous_was_rcurly = None
+        try:
+            for t in after.generate_tokens():
+                if t.type != _TOKEN_OP:
+                    continue
+                t_string = t.string
+                offset = t_string.offset
+                is_rcurly = t_string == '}'
+                if is_rcurly:
+                    if previous_was_rcurly:
+                        s = original_s[offset + 1:]
+                        offset -= 1
+                        break
+                else:
+                    previous_was_rcurly = None
 
-            right = _delimiter_map.get(t_string)
-            if right:
+                right = _delimiter_map.get(t_string)
+                if right:
+                    if tos:
+                        stack_push(tos)
+                    tos = right
+                    continue
                 if tos:
-                    stack_push(tos)
-                tos = right
-                continue
-            if tos:
-                if t_string == tos:
-                    tos = stack_pop() if stack else None
-                continue
-            if t_string == '|':
-                x = original_s[start_offset:offset]
-                if not x.strip():
-                    noun = 'filter' if expression else 'expression'
-                    raise SyntaxError(f'empty {noun} at {x.where}')
-                expression_append(x)
-                start_offset = offset + 1
-                continue
-            previous_was_rcurly = is_rcurly
-        else:
-            noun = 'filter' if expression else 'expression'
-            raise SyntaxError(f'unterminated {noun} at {after.where}')
-        expression_append(original_s[start_offset:offset])
+                    if t_string == tos:
+                        tos = stack_pop() if stack else None
+                    continue
+                if t_string == '|':
+                    x = original_s[start_offset:offset]
+                    if not x.strip():
+                        noun = 'filter' if expression else 'expression'
+                        raise SyntaxError(f'empty {noun} at {x.where}')
+                    expression_append(x)
+                    start_offset = offset + 1
+                    continue
+                previous_was_rcurly = is_rcurly
+            else:
+                noun = 'filter' if expression else 'expression'
+                raise SyntaxError(f'unterminated {noun} at {after.where}')
+            final_expression = original_s[start_offset:offset]
+            if not final_expression.strip():
+                raise SyntaxError(f'empty expression at {after.where}')
+            expression_append(final_expression)
 
-        # handle trailing =
-        x = expression[0]
-        before, equals, after = x.partition('=')
-        if equals and (not after.rstrip()):
-            debug = x
-            expression[0] = before
-        else:
-            l = len(x)
-            debug = x[l:l]
-        stripped = [x.strip() for x in expression]
-        yield Interpolation(*stripped, debug=debug)
-        expression_clear()
-        debug = None
+            # handle trailing =
+            x = expression[0]
+            before, equals, after = x.partition('=')
+            if equals and (not after.rstrip()):
+                debug = x
+                expression[0] = before
+            else:
+                l = len(x)
+                debug = x[l:l]
+            stripped = [x.strip() for x in expression]
+            yield Interpolation(*stripped, debug=debug)
+            expression_clear()
+            debug = None
+        except tokenize.TokenError as e:
+            message, (line, column) = e.args
+            message = message.partition(" (detected at")[0]
+            line -= 1
+            column -= 1
+            lines = s.splitlines()
+            offending_to_eol = lines[line][column:]
+            offending = offending_to_eol.split()[0]
+            raise SyntaxError(f"{offending.where}: {message} ({offending!r})") from None
+            sys.exit()
 
     # flush text
     if text:
@@ -324,8 +341,8 @@ def parse_template_string(s, *,
           either a non-whitespace character or the end of the string.
 
     Each of these delimiters can be individually enabled or disabled
-    with boolean keyword-only parameters, e.g. "parse_expression",
-    "parse_whitespace_eater".  By default only parse_expression is true.
+    with boolean keyword-only parameters, e.g. "parse_expressions",
+    "parse_whitespace_eater".  By default only parse_expressions is true.
 
     Returns a generator yielding the components of s.  These components
     can be:
