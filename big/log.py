@@ -591,6 +591,7 @@ class Log:
     def __init__(self, *destinations,
             name='Log',
             threading=True,
+            start_active=True,
 
             indent=4,
             width=79,
@@ -615,6 +616,7 @@ class Log:
 
         self._name = name
         self._threading = threading
+        self.active = self.start_active = start_active
 
         self._clock = clock
         self._timestamp_clock = timestamp_clock
@@ -1272,6 +1274,9 @@ class Log:
         ns2 = clock()
         ns = (ns1 + ns2) // 2
 
+        # do this immediately
+        self.active = self.start_active
+
         self._dispatch( [(self._ensure_state, ('initial', ns, epoch)),] )
 
     def _flush(self, blocker=None):
@@ -1281,7 +1286,7 @@ class Log:
                 destination.flush()
             self._dirty = False
 
-    def flush(self, block=True):
+    def flush(self, wait=True):
         """
         Flushes the log, if it's open and dirty.
 
@@ -1290,12 +1295,12 @@ class Log:
         to the log since either the log was started
         or since the last flush), flushes the log.
 
-        If block=True (the default), flush won't
-        return until the log is flushed.  If block=False,
+        If wait=True (the default), flush won't
+        return until the log is flushed.  If wait=False,
         the log may be flushed asynchronously.
         """
         try:
-            if not block:
+            if not wait:
                 notify = None
             else:
                 blocker = Lock()
@@ -1308,7 +1313,7 @@ class Log:
             if notify:
                 blocker.acquire()
 
-    def close(self, block=True):
+    def close(self, wait=True):
         """
         Closes the log, if it's open.
 
@@ -1327,8 +1332,8 @@ class Log:
         If the log is currently in "initial" state,
         opens then closes the log.
 
-        If block=True (the default), close won't
-        return until the log is closed.  If block=False,
+        If wait=True (the default), close won't
+        return until the log is closed.  If wait=False,
         the log may be closed asynchronously.
         """
         try:
@@ -1337,7 +1342,7 @@ class Log:
             ns2 = self._clock()
             ns = (ns1 + ns2) // 2
 
-            if not block:
+            if not wait:
                 notify = None
             else:
                 blocker = Lock()
@@ -1379,7 +1384,7 @@ class Log:
         if not isinstance(formatted, str):
             raise TypeError('formatted must be str')
 
-        if formatted:
+        if formatted and self.active:
             self._dispatch( [(self._write, (time, thread, formatted)),] )
 
     def _log(self, time, thread, format, message):
@@ -1460,7 +1465,8 @@ class Log:
         if format in ('start', 'end', 'enter', 'exit'):
             raise ValueError(f"system format {format!r} can't be used with log.print or log.__call__")
 
-        self._dispatch([(self._print, (time, thread, str_args, sep, end, flush, format))])
+        if self.active:
+            self._dispatch([(self._print, (time, thread, str_args, sep, end, flush, format))])
 
     def print(self, *args, end=_end, sep=_sep, flush=False, format='print'):
         """
@@ -1491,7 +1497,7 @@ class Log:
         formatted_is_nonempty = bool(formatted)
 
         if self._state == 'initial':
-            if not formatted_is_nonempty:
+            if (not formatted_is_nonempty):
                 initial_events = self._initial_events
                 assert initial_events
                 initial_events.append(self._enter, (time, thread, message))
@@ -1515,8 +1521,12 @@ class Log:
         time = self._clock()
         thread = current_thread()
 
-        self._dispatch([(self._enter, (time, thread, str(message)))])
-        return self.LogEnterAndExitContextManager(self)
+        if self.active:
+            self._dispatch([(self._enter, (time, thread, str(message)))])
+            log = self
+        else:
+            log = None
+        return self.LogEnterAndExitContextManager(log)
 
     def _exit(self, time, thread):
         initial_message = None
@@ -1556,20 +1566,22 @@ class Log:
         time = self._clock()
         thread = current_thread()
 
-        self._dispatch([(self._exit, (time, thread))])
+        if self.active:
+            self._dispatch([(self._exit, (time, thread))])
 
     class LogEnterAndExitContextManager:
         """
         The context manage returned by Log.enter().  Calls Log.exit() on exit.
         """
         def __init__(self, log):
-            self.exit = log.exit
+            self.exit = log.exit if log else None
 
         def __enter__(self):
             pass
 
         def __exit__(self, exc_type, exc_value, traceback):
-            self.exit()
+            if self.exit:
+                self.exit()
 
 
     class Destination:
