@@ -782,7 +782,9 @@ END
         log = testing_log(s, formats={'enter': None, 'exit': None})
         log.enter('subsystem')
         log.exit()
-        with log.enter('subsystem 2'):
+        o = log.enter('subsystem 2')
+        self.assertIsInstance(o, big.Log._ExitContextManager)
+        with o:
             with log.enter('subsystem 3'):
                 log('finally!')
         log.close()
@@ -795,8 +797,12 @@ END
         log.close()
         log.box("nope")
         log.write("nope\n")
-        with log.enter("nope"):
+        o = log.enter("nope")
+        self.assertIsInstance(o, big.Log._InertContextManager)
+        with o:
             log("nope")
+        log.pause()
+        log.resume()
         log.reset()
         log("wonderful!")
         self.assertEqual(s.getvalue(), "kooky!\nwonderful!\n")
@@ -932,77 +938,186 @@ END
 """.lstrip()
         self.assertEqual(s.getvalue(), expected)
 
-class TestLogActive(unittest.TestCase):
-    """Tests for managing log.active."""
-    def test_log_active(self):
+class TestLogPaused(unittest.TestCase):
+    """Tests for managing log.paused."""
+    def test_log_paused(self):
         s = io.StringIO()
         log = testing_log(s)
-        self.assertTrue(log.start_active)
-        self.assertTrue(log.active)
-        log.active = False
+        self.assertFalse(log.paused_on_reset)
+        self.assertFalse(log.paused)
+        log.pause()
         log('howdy')
+        log.enter('hey you')
+        with log.enter('yoo-hoo'):
+            log.box('hey there')
+        log.exit()
         log.close()
-        self.assertTrue(log.start_active)
-        self.assertFalse(log.active)
+        self.assertFalse(log.paused_on_reset)
+        self.assertIsNone(log.paused)
         self.assertEqual(s.getvalue(), '')
 
-        log = testing_log(s, start_active=False)
-        self.assertFalse(log.start_active)
-        self.assertFalse(log.active)
+        log = testing_log(s, paused=True)
+        self.assertTrue(log.paused_on_reset)
+        self.assertTrue(log.paused)
         log('howdy')
         log.close()
-        self.assertFalse(log.start_active)
-        self.assertFalse(log.active)
+        self.assertTrue(log.paused_on_reset)
+        self.assertIsNone(log.paused)
         self.assertEqual(s.getvalue(), '')
 
-        log = testing_log(s, start_active=False)
-        self.assertFalse(log.start_active)
-        self.assertFalse(log.active)
-        log.active = True
+        log = testing_log(s, paused=True)
+        self.assertTrue(log.paused_on_reset)
+        self.assertTrue(log.paused)
+        log.resume()
         log.reset()
-        self.assertFalse(log.active)
+        self.assertTrue(log.paused_on_reset)
+        self.assertTrue(log.paused)
         log('howdy')
         log.close()
-        self.assertFalse(log.start_active)
-        self.assertFalse(log.active)
+        self.assertTrue(log.paused_on_reset)
+        self.assertIsNone(log.paused)
         self.assertEqual(s.getvalue(), '')
 
-        log = testing_log(s, start_active=False)
-        self.assertFalse(log.start_active)
-        self.assertFalse(log.active)
-        log.active = True
+        log = testing_log(s, paused=False)
+        self.assertFalse(log.paused_on_reset)
+        self.assertFalse(log.paused)
+        log.resume()
         log('howdy')
         log.close()
-        self.assertFalse(log.start_active)
-        self.assertTrue(log.active)
+        self.assertFalse(log.paused_on_reset)
+        self.assertIsNone(log.paused)
         self.assertEqual(s.getvalue(), 'howdy\n')
+        log.reset()
+        self.assertFalse(log.paused_on_reset)
+        self.assertFalse(log.paused)
 
         s = io.StringIO()
         log = testing_log(s)
-        log.active = False
+        log.pause()
         log('doody')
         log.reset()
         log('howdy')
         log.close()
-        self.assertTrue(log.start_active)
-        self.assertTrue(log.active)
+        self.assertFalse(log.paused_on_reset)
+        self.assertIsNone(log.paused)
         self.assertEqual(s.getvalue(), 'howdy\n')
 
-    def test_log_active_enter(self):
+        o = log.pause()
+        self.assertIsNone(log.paused)
+        self.assertIsInstance(o, big.Log._InertContextManager)
+
+    def test_log_paused_vs_enter(self):
         "with log.enter(): doesn't call log.exit() when you outdent from the with block."
         s = io.StringIO()
         log = testing_log(s)
-        log.active = False
-        with log.enter('ignored'):
+        log.pause()
+        o = log.enter('ignored')
+        self.assertIsInstance(o, big.Log._InertContextManager)
+        with o:
             log('also ignored')
-            log.active = True
+            log.resume()
             log('doody')
         log('howdy')
+        self.assertFalse(log.paused)
         log.close()
-        self.assertTrue(log.start_active)
-        self.assertTrue(log.active)
+        self.assertFalse(log.paused_on_reset)
+        self.assertIsNone(log.paused)
         self.assertEqual(s.getvalue(), 'doody\nhowdy\n')
 
+    def test_log_paused_journey(self):
+        # wrote this in an email to demonstrate all the features;
+        # figured it'd work fine as a test.
+        # by default, log objects aren't paused.
+        log = big.Log()
+        self.assertIs(log.paused, False)
+
+        # this log starts out in paused state
+        log = big.Log(paused=True)
+        self.assertIs(log.paused, True)
+        self.assertEqual(log._paused_counter, 1)
+
+        # log is no longer paused
+        log.resume()
+
+        # paused is a read-only property, always a bool
+        self.assertEqual(log._paused_counter, 0)
+        self.assertIs(log.paused, False)
+
+        # log is now paused
+        log.pause()
+        self.assertIs(log.paused, True)
+        self.assertEqual(log._paused_counter, 1)
+
+        # context manager calls resume on exit
+        o = log.pause()
+        self.assertIsInstance(o, big.Log._ResumeContextManager)
+
+        with o:
+            # actual pause value is an internal counter.
+            # pause increments, resume decrements.
+            # internal pause counter is now 2.
+
+            log("this is totes ignored")
+
+            # but user never sees the integer value of the pause counter.
+            self.assertIs(log.paused, True)
+            self.assertEqual(log._paused_counter, 2)
+
+        # automatic log.resume() when we exit the "with log.pause():" block,
+        # internal pause counter is now 1 again.
+        self.assertIs(log.paused, True)
+        self.assertEqual(log._paused_counter, 1)
+
+        # internal pause counter is now 0.
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+
+        # still 0--we clamp at 0.
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+
+        # internal pause counter is now 1.
+        log.pause()
+        self.assertIs(log.paused, True)
+        self.assertEqual(log._paused_counter, 1)
+
+        # back to zero--
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+
+        # reset *resets* paused state.
+        # after reset, internal pause counter = int(self.pause_on_resume)
+        # just like it was immediately after construction.
+        log.reset()
+        self.assertIs(log.paused, True)
+        self.assertEqual(log._paused_counter, 1)
+
+        log.paused_on_reset = False
+        log.reset()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+
+        log.paused_on_reset = 35
+        log.reset()
+        self.assertIs(log.paused, True)
+        self.assertEqual(log._paused_counter, 1)
+        log.resume()
+        self.assertIs(log.paused, False)
+        self.assertEqual(log._paused_counter, 0)
+
+        # you can't change pause state while
 
 
 class TestLogContextManager(unittest.TestCase):

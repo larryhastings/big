@@ -283,7 +283,7 @@ class BigTestTemplate(unittest.TestCase):
             self.assertEqual('line 3 column 2', str(e).partition(':')[0])
 
     @unittest.skipIf(sys.version_info < (3, 11), "old tokenizer doesn't raise for these")
-    def tests_syntax_errors_on_new_peg_parser(self):
+    def tests_syntax_errors_on_new_peg_parser(self): # pragma: nocover
         # old Python parser raises a lot fewer token errors.
         # only run these tests on the new PEG parser, 3.11+.
 

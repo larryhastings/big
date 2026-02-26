@@ -286,7 +286,7 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
             line -= 1
             # the old Python parser used 0 as the first column here,
             # the new one uses 1 as the first column.
-            if _new_peg_parser:
+            if _new_peg_parser: # pragma: nocover
                 column -= 1
 
             lines = after.splitlines()

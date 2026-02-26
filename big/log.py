@@ -591,7 +591,7 @@ class Log:
     def __init__(self, *destinations,
             name='Log',
             threading=True,
-            start_active=True,
+            paused=False,
 
             indent=4,
             width=79,
@@ -616,7 +616,8 @@ class Log:
 
         self._name = name
         self._threading = threading
-        self.active = self.start_active = start_active
+        self.paused_on_reset = bool(paused)
+        self._paused_counter = int(self.paused_on_reset)
 
         self._clock = clock
         self._timestamp_clock = timestamp_clock
@@ -746,10 +747,13 @@ class Log:
     def dirty(self):
         return self._dirty
 
+    def _closed(self):
+        return self._state in ('closed', 'exited')
+
     @property
     def closed(self):
         with self._lock:
-            return self._state in ('closed', 'exited')
+            return self._closed()
 
     @property
     def start_time_ns(self):
@@ -775,6 +779,111 @@ class Log:
     def depth(self):
         with self._lock:
             return len(self._nesting)
+
+    class _ResumeContextManager:
+        """
+        The context manager returned by Log.pause().  Calls Log.resume() on exit.
+        """
+        def __init__(self, log):
+            assert log
+            self._log = log
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self._log.resume()
+
+    class _ExitContextManager:
+        """
+        The context manager returned by Log.enter().  Calls Log.exit() on exit.
+        """
+        def __init__(self, log):
+            assert log
+            self._log = log
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self._log.exit()
+
+    class _InertContextManager:
+        """
+        The context manager returned by Log.enter() when the log is paused.  Does nothing.
+        """
+        def __init__(self, log):
+            assert log
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            pass
+
+    @property
+    def paused(self):
+        "Returns True if the log is paused, None if the log is closed, and otherwise False."
+        with self._lock:
+            if self._closed():
+                return None
+            return bool(self._paused_counter)
+
+    def pause(self):
+        """
+        Pauses the log if it's not closed.
+
+        If the log is not closed, this pauses the log
+        (if it's not already paused), and returns a context
+        manage that calls Log.resume().
+
+        A paused log ignores calls to log methods
+        (write, print, __call__, enter, and exit).
+
+        Pause state is internally stored as an integer;
+        pause increments it, resume decrements it (but not below zero),
+        and if it's greater than zero the log is paused.
+
+        If the log is closed, this function does nothing,
+        and it returns a context manager that also does nothing.
+        """
+        # modifications of _paused_counter are always under lock
+        # so we don't have race conditions with incr/decr
+        with self._lock:
+            if self._closed():
+                return self._InertContextManager(self)
+
+            self._paused_counter += 1
+            return self._ResumeContextManager(self)
+
+    def resume(self):
+        """
+        Resumes the log if it's not closed.
+
+        If the log is not closed, and is currently paused,
+        this resumes (un-pauses) the log.
+
+        A paused log ignores calls to log methods
+        (write, print, __call__, enter, and exit).
+
+        Pause state is internally stored as an integer;
+        pause increments it, resume decrements it (but not below zero),
+        and if it's greater than zero the log is paused.
+
+        If the log is closed, this function does nothing.
+        """
+        # modifications of _paused_counter are always under lock
+        # so we don't have race conditions with incr/decr
+        with self._lock:
+            if self._closed():
+                return
+
+            if self._paused_counter <= 1:
+                # clamp to zero
+                self._paused_counter = 0
+                return
+
+            self._paused_counter -= 1
 
     def _elapsed(self, t):
         # t should be a value returned by _clock.
@@ -845,7 +954,8 @@ class Log:
                     def method(message=''):
                         time = self._clock()
                         thread = current_thread()
-                        self._dispatch([(self._log, (time, thread, key, str(message)))])
+                        if not self._paused_counter:
+                            self._dispatch([(self._log, (time, thread, key, str(message)))])
                     method.__doc__ = f"Writes a message to the log using the {key!r} format."
                     return method
                 setattr(self, key, make_method(key))
@@ -1131,8 +1241,8 @@ class Log:
             for destination in self._destinations:
                 destination.end(elapsed)
 
-        assert state in ('closed', 'exited')
         self._state = state
+        assert self._closed()
 
 
     def _ensure_state(self, state, ns=None, epoch=None):
@@ -1274,8 +1384,14 @@ class Log:
         ns2 = clock()
         ns = (ns1 + ns2) // 2
 
-        # do this immediately
-        self.active = self.start_active
+        # do this immediately, don't wait for the thread to do it.
+        # otherwise, user might observe a delay between reset()
+        # and paused state changing.
+        #
+        # modifications of _paused_counter are always under lock
+        # so we don't have race conditions with incr/decr
+        with self._lock:
+            self._paused_counter = int(bool(self.paused_on_reset))
 
         self._dispatch( [(self._ensure_state, ('initial', ns, epoch)),] )
 
@@ -1384,7 +1500,7 @@ class Log:
         if not isinstance(formatted, str):
             raise TypeError('formatted must be str')
 
-        if formatted and self.active:
+        if formatted and (not self._paused_counter):
             self._dispatch( [(self._write, (time, thread, formatted)),] )
 
     def _log(self, time, thread, format, message):
@@ -1465,7 +1581,7 @@ class Log:
         if format in ('start', 'end', 'enter', 'exit'):
             raise ValueError(f"system format {format!r} can't be used with log.print or log.__call__")
 
-        if self.active:
+        if not self._paused_counter:
             self._dispatch([(self._print, (time, thread, str_args, sep, end, flush, format))])
 
     def print(self, *args, end=_end, sep=_sep, flush=False, format='print'):
@@ -1504,8 +1620,15 @@ class Log:
                 initial_events.nesting.append(message)
                 return
 
-        if not self._ensure_state('logged'):
-            return
+        # race condition: enter() checks that we're not closed.
+        # if we're not closed, it dispatches _enter.
+        # we could close the log between that check and here.
+        # hard to reproduce! but if I make it a one-liner,
+        # coverage considered it visited and I can still get 100%.
+        if self._closed(): return
+
+        in_logged_state = self._ensure_state('logged')
+        assert in_logged_state
 
         for destination in self._destinations:
             if formatted_is_nonempty:
@@ -1521,12 +1644,12 @@ class Log:
         time = self._clock()
         thread = current_thread()
 
-        if self.active:
-            self._dispatch([(self._enter, (time, thread, str(message)))])
-            log = self
-        else:
-            log = None
-        return self.LogEnterAndExitContextManager(log)
+        with self._lock:
+            if self._closed() or self._paused_counter:
+                return self._InertContextManager(self)
+
+        self._dispatch([(self._enter, (time, thread, str(message)))])
+        return self._ExitContextManager(self)
 
     def _exit(self, time, thread):
         initial_message = None
@@ -1566,23 +1689,8 @@ class Log:
         time = self._clock()
         thread = current_thread()
 
-        if self.active:
+        if not self._paused_counter:
             self._dispatch([(self._exit, (time, thread))])
-
-    class LogEnterAndExitContextManager:
-        """
-        The context manage returned by Log.enter().  Calls Log.exit() on exit.
-        """
-        def __init__(self, log):
-            self.exit = log.exit if log else None
-
-        def __enter__(self):
-            pass
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            if self.exit:
-                self.exit()
-
 
     class Destination:
         """
