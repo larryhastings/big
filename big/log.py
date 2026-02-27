@@ -1965,6 +1965,8 @@ class Log:
             if is_str:
                 path = Path(path)
 
+            path = path.resolve()
+
             if not isinstance(initial_mode, str):
                 raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
             if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
