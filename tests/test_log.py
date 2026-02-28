@@ -1792,7 +1792,13 @@ class TestMutableDestinations(LogTestBase):
     def test_log_add_destination_while_entered(self):
         initial = io.StringIO()
         log = testing_log(initial,
-            formats={'enter': {'template': '{prefix}//enter {message}//'}, 'exit': {'template': '{prefix}//exit {message}//'}},
+            name='Juniper',
+            formats={
+                'enter': {'template': '{prefix}//enter {message}//'},
+                'exit':  {'template': '{prefix}//exit {message}//'},
+                'start': {'template': '{prefix}//start {name}//'},
+                'end':   {'template': '{prefix}//end {name}//'},
+                },
             )
 
         log("first")
@@ -1808,20 +1814,70 @@ class TestMutableDestinations(LogTestBase):
         log.close()
 
         self.assertEqual(initial.getvalue(), """
+//start Juniper//
 first
 //enter jumpers//
     second
     third
 //exit jumpers//
 fourth
+//end Juniper//
 """.lstrip())
 
         self.assertEqual(secondary.getvalue(), """
+//start Juniper//
 //enter jumpers//
     third
 //exit jumpers//
 fourth
+//end Juniper//
 """.lstrip())
+
+    def test_log_unregister(self):
+        a = io.StringIO()
+        b = io.StringIO()
+
+        buffer = big.log.Log.Buffer(b)
+        self.assertIs(buffer.owner, None)
+        log = testing_log(a, buffer,
+            name='Ambergris',
+            formats={
+                'enter': {'template': '{prefix}//enter {message}//'},
+                'exit':  {'template': '{prefix}//exit {message}//'},
+                'start': {'template': '{prefix}//start {name}//'},
+                'end':   {'template': '{prefix}//end {name}//'},
+                },
+            )
+        self.assertIs(buffer.owner, log)
+        log("howdy")
+        with log.enter("rooty toot"):
+            log('zzz...')
+            log.destinations = [a]
+            self.assertIs(buffer.owner, None)
+            log('afterwards')
+        log('final')
+        log.close()
+
+        self.assertEqual(a.getvalue(), """
+//start Ambergris//
+howdy
+//enter rooty toot//
+    zzz...
+    afterwards
+//exit rooty toot//
+final
+//end Ambergris//
+""".lstrip())
+
+        self.assertEqual(b.getvalue(), """
+//start Ambergris//
+howdy
+//enter rooty toot//
+    zzz...
+//exit rooty toot//
+//end Ambergris//
+""".lstrip())
+
 
 def run_tests():
     bigtestlib.run(name="big.log", module=__name__)

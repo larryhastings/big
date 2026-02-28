@@ -656,7 +656,7 @@ class Log:
         # if threading is True, _lock is only used for close and reset (and shutdown)
         self._lock = Lock()
 
-        self._reroute(destinations)
+        self._reroute(start_time_ns, None, destinations)
 
         self._manage_thread()
 
@@ -706,7 +706,7 @@ class Log:
 
         return cls.base_destination_mapper(o)
 
-    def _reroute(self, destinations):
+    def _reroute(self, time, thread, destinations):
         old = set(self._destinations)
 
         original_destinations = list(destinations)
@@ -730,20 +730,36 @@ class Log:
             destinations_append(wrapped)
 
         added = new - old
-        for d in wrapped_destinations:
-            if d in added:
-                d.register(self)
-        self._dormant.update(added)
+        if added:
+            for d in wrapped_destinations:
+                if d in added:
+                    d.register(self)
+            self._dormant.update(added)
+
+        unregister_queue = []
 
         removed = old - new
-        # not ready yet!
-        assert not removed
+        if removed:
+            work_cache = []
+
+            for d in old:
+                if d in removed:
+                    self._ensure_dormant(d, time, thread, cache=work_cache)
+                    assert d not in self._dirty
+                    assert d not in self._logging
+                    assert d in self._dormant
+                    self._dormant.remove(d)
+                    unregister_queue.append(d)
 
         unchanged = old & new
 
         self._original_destinations = original_destinations
         self._unwrapped_destinations = unwrapped_destinations
         self._destinations = wrapped_destinations
+
+        for d in unregister_queue:
+            d.unregister()
+
 
     @property
     def destinations(self):
@@ -752,6 +768,9 @@ class Log:
 
     @destinations.setter
     def destinations(self, destinations):
+        time = self._clock()
+        thread = current_thread()
+
         if not isinstance(destinations, (list, tuple)):
             raise TypeError(f"destinations must be list or tuple, not {type(destinations).__name__}")
 
@@ -760,7 +779,7 @@ class Log:
             blocker.acquire()
             notify = blocker.release
 
-            self._dispatch([(self._reroute, (destinations,))], notify=notify)
+            self._dispatch([(self._reroute, (time, thread, destinations,))], notify=notify)
 
         finally:
             if notify:
