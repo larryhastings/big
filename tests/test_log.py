@@ -407,7 +407,8 @@ class TestLogBasics(LogTestBase):
         epoch = time.time()
         time.sleep(0.001)
 
-        log = big.Log(None)
+        a = []
+        log = big.Log(a)
 
         self.assertEqual(log.clock, big.log.default_clock)
         self.assertEqual(log.indent, 4)
@@ -472,24 +473,17 @@ class TestLogBasics(LogTestBase):
         log.close()
         self.assertEqual(results, ['callable test\n'])
 
-    def test_log_with_none_destination(self):
-        # None destinations should be skipped
-        array = []
-        log = big.Log(None, array, None, threading=False, formats={"start": None, "end": None}, prefix='')
-        log("test")
-        log.close()
-        self.assertEqual(array, ['test\n'])
-
-    def test_log_with_none_destination(self):
-        a = []
-        destinations = [print, None, a, None]
-        log = big.Log(*destinations, threading=False)
-        self.assertEqual(log.destinations, destinations)
-
-    def test_log_with_invalid_destination(self):
+    def test_log_with_invalid_destinations(self):
         with self.assertRaises(TypeError) as cm:
             log = big.Log(12345, threading=False)
         self.assertIn("don't know how to log to destination", str(cm.exception))
+
+        # None destinations raise too
+        array = []
+        try:
+            log = testing_log(None, array)
+        except TypeError as e:
+            self.assertEqual(str(e), "don't know how to log to destination None")
 
 
     def test_extensible_destination_mapper(self):
@@ -984,6 +978,19 @@ END
 
 class TestLogPaused(LogTestBase):
     """Tests for managing log.paused."""
+    def test_log_permanently_paused(self):
+        sink = big.Log.Sink()
+        log = big.Log(sink, threading=False)
+        log.pause()
+        log('howdy')
+        log.enter('hey you')
+        with log.enter('yoo-hoo'):
+            log("over here")
+            log.box('hey there')
+        log.close()
+        events = list(sink)
+        self.assertEqual(len(events), 0)
+
     def test_log_paused(self):
         s = io.StringIO()
         log = testing_log(s)
@@ -1344,7 +1351,8 @@ class TestLogFormatting(LogTestBase):
         self.assertEqual(s.getvalue(), expected)
 
     def test_system_formats_are_disallowed(self):
-        log = big.Log(None, threading=False)
+        a =[]
+        log = big.Log(a, threading=False)
 
         with self.assertRaises(ValueError):
             log("w", format='start')

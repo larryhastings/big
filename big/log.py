@@ -636,14 +636,10 @@ class Log:
 
         # "_original_destinations" is literally what the user passed in.
         # (if they didn't pass in any, it behaves like they passed in [print].)
-        # this contains None if they specified None.
-        #
-        # "_unwrapped_destinations" is just "original" with None stripped out.
         #
         # "_destinations" is "original", but any non-Destination value
         #     has been map_destination'd.  It's "wrapped destinations".
         self._original_destinations = []
-        self._unwrapped_destinations = []
         self._destinations = []
         self._dormant = set()
         self._logging = set()
@@ -667,8 +663,6 @@ class Log:
     def base_destination_mapper(cls, o):
         "Implements the default mapping of objects to Destination objects."
 
-        if o is None:
-            return None
         if isinstance(o, cls.Destination):
             return o
         if o is print:
@@ -712,17 +706,17 @@ class Log:
         original_destinations = list(destinations)
 
         print = builtins.print
-        if not destinations:
-            unwrapped_destinations = [print]
+        if destinations:
+            unwrapped_destinations = list(destinations)
         else:
-            unwrapped_destinations = [o for o in original_destinations if o is not None]
+            unwrapped_destinations = [print]
+
         wrapped_destinations = []
         destinations_append = wrapped_destinations.append
         new = set()
         new_add = new.add
 
         for d in unwrapped_destinations:
-            assert d is not None
             wrapped = Log.map_destination(d)
             if wrapped in new:
                 raise ValueError(f"duplicate destination {d!r}")
@@ -754,7 +748,6 @@ class Log:
         # unchanged = old & new
 
         self._original_destinations = original_destinations
-        self._unwrapped_destinations = unwrapped_destinations
         self._destinations = wrapped_destinations
 
         for d in unregister_queue:
