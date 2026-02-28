@@ -712,6 +712,7 @@ class Log:
         destinations_append = wrapped_destinations.append
         new = set()
         new_add = new.add
+
         for d in original_destinations:
             if d is None:
                 continue
@@ -744,7 +745,7 @@ class Log:
 
     @property
     def destinations(self):
-        return list(self._destinations)
+        return list(self._original_destinations)
 
     @property
     def indent(self):
@@ -998,18 +999,24 @@ class Log:
         self._formats = result
 
 
-    def _format_message(self, elapsed, thread, format, message):
+    def _format_message(self, elapsed, thread, format, message, *, nesting=None):
         epoch = elapsed + self._start_time_epoch
+
+        if nesting is None:
+            spaces = self._spaces
+        else:
+            spaces = self._compute_spaces(nesting)
 
         map = {
             "elapsed": self._ns_to_float(elapsed),
             "name": self._name,
+            "spaces": spaces,
             "thread": thread if thread is not None else _empty_thread,
             "time": epoch,
             "timestamp": self._timestamp_format(epoch),
             }
 
-        prefix = self._prefix.format_map(map) + self._spaces
+        prefix = self._prefix.format_map(map) + spaces
         map['prefix'] = prefix
 
         format = self._formats[format]
@@ -1020,8 +1027,11 @@ class Log:
         return "\n".join(s.rstrip() for s in formatted.split('\n')) + "\n"
 
 
+    def _compute_spaces(self, nesting):
+        return _spaces[:len(nesting) * self._indent]
+
     def _cache_spaces(self):
-        self._spaces = _spaces[:len(self._nesting) * self._indent]
+        self._spaces = self._compute_spaces(self._nesting)
 
     def _append_nesting(self, message):
         self._nesting.append(message)
@@ -1280,23 +1290,32 @@ class Log:
         else:
             work = cache
         append = work.append
-        def append(x):
-            work.append(x)
+
+        faux_nesting = list(self._nesting)
 
         if not work:
             elapsed = self._elapsed(time)
+            force_flush = False
 
-            for message in reversed(self._nesting):
+            while faux_nesting:
                 # exit out of all entered subsystems
                 append(( 'exit', (elapsed, thread) ))
 
+                message = faux_nesting.pop()
+
+                formatted = self._format_message(elapsed, thread, 'exit', message, nesting=faux_nesting)
+                if formatted:
+                    append(( 'log', (elapsed, thread, 'exit', message, formatted) ))
+                    force_flush = True
+
+
             # send end banner
-            formatted = self._format_message(elapsed, None, 'end', '')
+            formatted = self._format_message(elapsed, None, 'end', '', nesting=faux_nesting)
             if formatted:
                 append(( 'log', (elapsed, thread, 'end', '', formatted) ))
+                force_flush = True
 
             # we'll handle the optionality when we run the work
-            force_flush = bool(formatted)
             append(( force_flush, () ))
 
             append(( 'end', (elapsed,) ))
@@ -1344,6 +1363,8 @@ class Log:
         if self._logging:
             for destination in self._destinations:
                 self._ensure_dormant(destination, self._end_time_ns, None, work_cache)
+
+        self._clear_nesting()
 
         self._state = state
         assert self._closed()
@@ -2272,7 +2293,7 @@ class Log:
 
         def start(self, start_time_ns, start_time_epoch):
             assert self._owner
-            log_timestamp = self.owner._timestamp_format(start_time_epoch)
+            log_timestamp = self._owner._timestamp_format(start_time_epoch)
             log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
             thread = current_thread()
             tmpfile = f"{self._rendered_prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"

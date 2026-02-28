@@ -222,19 +222,19 @@ class TestFile(LogTestBase):
         # so we don't have to clean up here
         s = '/tmp/x'
         log = big.Log(s)
-        d_s = log.destinations[0]
+        d_s = log._destinations[0]
         log.close()
         self.assertEqual(d_s.path, s)
 
         p = pathlib.Path('/tmp/x')
         log = big.Log(p)
-        d_p = log.destinations[0]
+        d_p = log._destinations[0]
         log.close()
         self.assertEqual(d_p.path, p)
 
         b = b'/tmp/x'
         log = big.Log(b)
-        d_b = log.destinations[0]
+        d_b = log._destinations[0]
         log.close()
         self.assertEqual(d_b.path, b)
 
@@ -500,7 +500,7 @@ class TestLogBasics(LogTestBase):
 
             big.Log.destination_mappers.append(custom_destination_mapper)
             log = testing_log(12345, [], print)
-            destinations = list(log.destinations)
+            destinations = list(log._destinations)
             self.assertIsInstance(destinations[0], EventSink)
             self.assertIsInstance(destinations[1], big.Log.List)
             self.assertIsInstance(destinations[2], big.Log.Print)
@@ -824,6 +824,25 @@ END
         log.reset()
         log("wonderful!")
         self.assertEqual(s.getvalue(), "kooky!\nwonderful!\n")
+
+    def test_log_unwinds_enters_at_close(self):
+        s = io.StringIO()
+        log = testing_log(s,
+            formats={'enter': {'template': '{prefix}//enter {message}//'}, 'exit': {'template': '{prefix}//exit {message}//'}})
+        log("miasma")
+        log.enter('verrifast')
+        log.enter('boodle boy')
+        log('and here we are.')
+        log.close()
+        self.assertEqual(s.getvalue(), """
+miasma
+//enter verrifast//
+    //enter boodle boy//
+        and here we are.
+    //exit boodle boy//
+//exit verrifast//
+""".lstrip())
+
 
     def test_formats_exceptions(self):
         with self.assertRaises(ValueError):
