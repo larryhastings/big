@@ -722,8 +722,7 @@ class Log:
         new_add = new.add
 
         for d in unwrapped_destinations:
-            if d is None:
-                continue
+            assert d is not None
             wrapped = Log.map_destination(d)
             if wrapped in new:
                 raise ValueError(f"duplicate destination {d!r}")
@@ -1300,9 +1299,9 @@ class Log:
             work = cache
         append = work.append
 
-        faux_nesting = list(self._nesting)
-
         if not work:
+            faux_nesting = list(self._nesting)
+
             elapsed = self._elapsed(time)
             force_flush = False
 
@@ -1325,28 +1324,21 @@ class Log:
                 force_flush = True
 
             # we'll handle the optionality when we run the work
-            append(( force_flush, () ))
+            append( force_flush )
 
             append(( 'end', (elapsed,) ))
 
         for job in work:
+            if (job is False) or (job is True):
+                if job or (destination in self._dirty):
+                    destination.flush()
+                    self._dirty.discard(destination)
+                continue
+
             name, args = job
-            # hacky support for optional flush
-            if not ((name is False) or (name is True)):
-                method = getattr(destination, name)
-                method(*args)
-                continue
-
-            if name is False:
-                name = destination in self._dirty
-            if not name:
-                continue
-
-            destination.flush()
-            # discard, not remove
-            # maybe the only thing that dirtied destination
-            # was the end banner log above, and we didn't dirty it
-            self._dirty.discard(destination)
+            method = getattr(destination, name)
+            method(*args)
+            continue
 
         return True
 
