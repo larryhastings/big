@@ -745,15 +745,31 @@ class Log:
         self._unwrapped_destinations = unwrapped_destinations
         self._destinations = wrapped_destinations
 
-
-    @property
-    def clock(self):
-        return self._clock
-
     @property
     def destinations(self):
         with self._lock:
             return list(self._original_destinations)
+
+    @destinations.setter
+    def destinations(self, destinations):
+        if not isinstance(destinations, (list, tuple)):
+            raise TypeError(f"destinations must be list or tuple, not {type(destinations).__name__}")
+
+        try:
+            blocker = Lock()
+            blocker.acquire()
+            notify = blocker.release
+
+            self._dispatch([(self._reroute, (destinations,))], notify=notify)
+
+        finally:
+            if notify:
+                blocker.acquire()
+
+
+    @property
+    def clock(self):
+        return self._clock
 
     @property
     def indent(self):
@@ -1338,7 +1354,6 @@ class Log:
             name, args = job
             method = getattr(destination, name)
             method(*args)
-            continue
 
         return True
 

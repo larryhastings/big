@@ -1746,6 +1746,83 @@ class TestExport(LogTestBase):
             self.assertIn(name, log_module.__all__)
 
 
+class TestMutableDestinations(LogTestBase):
+    def test_duplicate_destinations(self):
+        a = []
+        log = testing_log(a, print)
+        with self.assertRaises(ValueError):
+            log.destinations = [a, print, a]
+        with self.assertRaises(ValueError):
+            log.destinations = [print, a, print]
+        with self.assertRaises(ValueError):
+            log.destinations = ['/tmp/x', b'/tmp/x']
+        with self.assertRaises(ValueError):
+            log.destinations = ['/tmp/x', pathlib.Path('/tmp/x')]
+        with self.assertRaises(ValueError):
+            log.destinations = ['/tmp/x', '/tmp/../tmp/x']
+
+    def test_log_wrong_type_for_destinations(self):
+        a = []
+        b = []
+        log = testing_log(a, print)
+        with self.assertRaises(TypeError):
+            log.destinations = print
+        with self.assertRaises(TypeError):
+            log.destinations = '/tmp/x'
+        with self.assertRaises(TypeError):
+            log.destinations = {a, print, b}
+
+    def test_log_with_added_destination(self):
+        initial = io.StringIO()
+        log = testing_log(initial)
+        log("first")
+        log("second")
+
+        secondary = io.StringIO()
+        d = log.destinations
+        d.append(secondary)
+        log.destinations = d
+
+        log("third")
+        log.close()
+
+        self.assertEqual(initial.getvalue(), "first\nsecond\nthird\n")
+        self.assertEqual(secondary.getvalue(), "third\n")
+
+    def test_log_add_destination_while_entered(self):
+        initial = io.StringIO()
+        log = testing_log(initial,
+            formats={'enter': {'template': '{prefix}//enter {message}//'}, 'exit': {'template': '{prefix}//exit {message}//'}},
+            )
+
+        log("first")
+        with log.enter("jumpers"):
+            log("second")
+            secondary = io.StringIO()
+            d = log.destinations
+            d.append(secondary)
+            log.destinations = d
+
+            log("third")
+        log("fourth")
+        log.close()
+
+        self.assertEqual(initial.getvalue(), """
+first
+//enter jumpers//
+    second
+    third
+//exit jumpers//
+fourth
+""".lstrip())
+
+        self.assertEqual(secondary.getvalue(), """
+//enter jumpers//
+    third
+//exit jumpers//
+fourth
+""".lstrip())
+
 def run_tests():
     bigtestlib.run(name="big.log", module=__name__)
 
