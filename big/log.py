@@ -1693,11 +1693,10 @@ class Log:
             write(elapsed, thread, formatted)
 
         In addition, Destination subclasses may optionally override
-        the following seven events / methods:
+        the following six events / methods:
 
             log(self, elapsed, thread, format, message, formatted)
             flush()
-            reset()
             start(start_time_ns, start_time_epoch)
             end(elapsed)
             enter(elapsed, thread, message)
@@ -1714,15 +1713,16 @@ class Log:
         If you don't want this behavior, simply override log
         and *don't* super().log.
 
-        Finally, Destination subclasses may also override this method:
+        Finally, Destination subclasses may also override these methods:
 
             register(owner)
+            unregister()
 
-        For this method, Destination subclasses are *required*
-        to call the base class implementation
-        ("super().register(owner)").  Destination subclasses that
-        implement __super__ must also call the base class __init__;
-        the base class __init__ takes no arguments.
+        But for these two methods, Destination subclasses are *required*
+        to call the base class implementation ("super().register(owner)",
+        "super().unregister()"). Destination subclasses that implement
+        __super__ must also call the base class __init__; the base class
+        __init__ takes no arguments.
 
         The meaning of each argument to the above Destination methods:
 
@@ -1783,14 +1783,14 @@ class Log:
         started in this way, it can send any number of "write",
         "log", "enter", "exit", or "flush" events, in any order.
 
-        When the user closes the log, it will send an "end" event.
-        If the log is "dirty" at the time it's closed, Log
-        automatically sends a "flush" before the "end".
+        When the user closes the log, it will send an "end" event
+        to the destination.  If the destination is "dirty", Log
+        will send the destination a "flush" before the "end".
 
-        If the log is reset, and the log is not in "initial" state,
-        it will close the log (sending an optional "flush" event,
-        followed by an "end" event), then send a "reset" event,
-        at which time the log will be back in "initial" state.
+        If the log is reset, and the destination has been sent
+        "start", it will close the destination ("end" optionally
+        preceded by "flush").  The destination should be prepared
+        for a second "start" event and the resumption of logging.
 
         If a Log object is created, and literally never logged
         to before it's closed, it won't send *any* events to its
@@ -1901,10 +1901,10 @@ class Log:
             return self._list
 
         def __eq__(self, other):
-            return isinstance(other, Log.Print) and (other._list is self._list)
+            return isinstance(other, Log.List) and (other._list is self._list)
 
         def __hash__(self):
-            return hash(Log.Print) ^ id(self._list)
+            return hash(Log.List) ^ id(self._list)
 
         def write(self, elapsed, thread, formatted):
             self._list.append(formatted)
@@ -1968,7 +1968,7 @@ class Log:
             if self._buffer:
                 contents = "".join(self._buffer)
                 self._buffer.clear()
-                self._destination.write(self.last_elapsed, self.last_thread, contents)
+                self._destination.write(self._last_elapsed, self._last_thread, contents)
                 self._destination.flush()
 
 
@@ -1996,7 +1996,7 @@ class Log:
         "initial_mode" passed in, by default "at".  After the first
         time, File always uses mode "at".
         """
-        def __init__(self, path, initial_mode="at", *, encoding=None, buffering=True):
+        def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None):
             super().__init__()
 
             original_path = path
@@ -2055,7 +2055,7 @@ class Log:
 
         def start(self, start_time_ns, start_time_epoch):
             super().start(start_time_ns, start_time_epoch)
-            self._f = None if self._buffering else self._path.open(self._mode)
+            self._f = None if self._buffering else self._path.open(self._mode, encoding=self._encoding)
 
         def end(self, elapsed):
             super().end(elapsed)
@@ -2084,7 +2084,7 @@ class Log:
             assert not self._f
             contents = "".join(self._buffer)
             self._buffer.clear()
-            with self._path.open(self._mode) as f:
+            with self._path.open(self._mode, encoding=self._encoding) as f:
                 f.write(contents)
             self._mode = "at"
 
@@ -2106,11 +2106,11 @@ class Log:
         log with a freshly recalculated name.
         """
 
-        def __init__(self, prefix='{name}', *, buffering=True):
+        def __init__(self, prefix='{name}', *, buffering=True, encoding=None):
             # use a fake path for now,
-            # we'll compute a proper one when they call reset()
+            # we'll compute a proper one when we get the "start" event
             path = Path(tempfile.gettempdir()) / f"Log-init.{os.getpid()}.tmp"
-            super().__init__(path, buffering=buffering)
+            super().__init__(path, buffering=buffering, encoding=encoding)
             if not (isinstance(prefix, str) and prefix):
                 raise TypeError("prefix must be str, and cannot be empty")
             self._prefix = prefix
@@ -2155,9 +2155,9 @@ class Log:
         write to it, and flush it.
 
         Every time a formatted log message is received,
-        FileHandle writes it immediately to the file handle.
-        If flush=True, FileHandle will immediately flush the
-        file handle after writing; by default flush is False.
+        FileHandle writes it immediately to the file handle,.
+        If autoflush=True, FileHandle will immediately flush the
+        file handle after writing; by default autoflush is False.
         """
         def __init__(self, handle, *, autoflush=False):
             super().__init__()
@@ -2234,15 +2234,15 @@ class Log:
             self._number += 1
 
             configuration = {
-                "name" : self.owner.name,
-                "threading" : self.owner.threading,
-                "indent" : self.owner.indent,
-                "width" : self.owner.width,
-                "clock" : self.owner.clock,
-                "timestamp_clock" : self.owner.timestamp_clock,
-                "timestamp_format" : self.owner.timestamp_format,
-                "prefix" : self.owner.prefix,
-                "formats" : dict(self.owner.formats),
+                "name" : self.owner._name,
+                "threading" : self.owner._threading,
+                "indent" : self.owner._indent,
+                "width" : self.owner._width,
+                "clock" : self.owner._clock,
+                "timestamp_clock" : self.owner._timestamp_clock,
+                "timestamp_format" : self.owner._timestamp_format,
+                "prefix" : self.owner._prefix,
+                "formats" : dict(self.owner._formats),
             }
             self._event(SinkStartEvent(self._number, start_time_ns, start_time_epoch, configuration))
 
