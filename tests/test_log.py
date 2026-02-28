@@ -113,13 +113,13 @@ class TestDestination(unittest.TestCase):
 
     def test_destination_register(self):
         destination = big.Log.Destination()
-        destination.owner = None  # Reset to allow re-registration
+        destination._owner = None  # Reset to allow re-registration
         destination.register("test_owner")
         self.assertEqual(destination.owner, "test_owner")
 
     def test_destination_register_already_registered(self):
         destination = big.Log.Destination()
-        destination.owner = None
+        destination._owner = None
         destination.register("owner1")
         with self.assertRaises(RuntimeError) as cm:
             destination.register("owner2")
@@ -137,10 +137,6 @@ class TestDestination(unittest.TestCase):
     def test_destination_close_does_nothing(self):
         destination = big.Log.Destination()
         destination.end(12345)  # Should not raise
-
-    def test_destination_reset(self):
-        destination = big.Log.Destination()
-        destination.reset()
 
 
 class TestCallable(unittest.TestCase):
@@ -192,9 +188,9 @@ class TestBuffer(unittest.TestCase):
             buffer = big.Log.Buffer()
             buffer.write(0, None, "hello ")
             buffer.write(0, None, "world")
-            self.assertEqual(buffer.array, ["hello ", "world"])
+            self.assertEqual(buffer._buffer, ["hello ", "world"])
             buffer.flush()
-            self.assertEqual(buffer.array, [])
+            self.assertEqual(buffer._buffer, [])
         finally:
             builtins.print = original_print
         self.assertEqual(len(captured), 1)
@@ -211,18 +207,27 @@ class TestFile(unittest.TestCase):
     def test_map_destination_support(self):
         # if we never start logging, we don't open the file,
         # so we don't have to clean up here
-        expected = pathlib.Path('/tmp/x')
-        log = big.Log('/tmp/x')
+        s = '/tmp/x'
+        log = big.Log(s)
+        d_s = log.destinations[0]
         log.close()
-        self.assertEqual(log.destinations[0].path, expected)
+        self.assertEqual(d_s.path, s)
 
-        log = big.Log(b'/tmp/x')
+        p = pathlib.Path('/tmp/x')
+        log = big.Log(p)
+        d_p = log.destinations[0]
         log.close()
-        self.assertEqual(log.destinations[0].path, expected)
+        self.assertEqual(d_p.path, p)
 
-        log = big.Log(pathlib.Path('/tmp/x'))
+        b = b'/tmp/x'
+        log = big.Log(b)
+        d_b = log.destinations[0]
         log.close()
-        self.assertEqual(log.destinations[0].path, expected)
+        self.assertEqual(d_b.path, b)
+
+        self.assertEqual(d_s, d_p)
+        self.assertEqual(d_s, d_b)
+        self.assertEqual(d_p, d_b)
 
     def test_file_type_checks(self):
         with self.assertRaises(TypeError):
@@ -258,14 +263,14 @@ class TestFile(unittest.TestCase):
             file_destination = big.Log.File(path, initial_mode='wt')
             file_destination.write(0, None, "line1\n")
             file_destination.write(0, None, "line2\n")
-            self.assertEqual(file_destination.array, ["line1\n", "line2\n"])
+            self.assertEqual(file_destination._buffer, ["line1\n", "line2\n"])
 
             # File should be empty before flush
             with open(path, 'r') as f:
                 self.assertEqual(f.read(), "")
 
             file_destination.flush()
-            self.assertEqual(file_destination.array, [])
+            self.assertEqual(file_destination._buffer, [])
 
             with open(path, 'r') as f:
                 content = f.read()
@@ -276,12 +281,12 @@ class TestFile(unittest.TestCase):
         finally:
             os.unlink(path)
 
-    def test_file_immediate_mode(self):
+    def test_file_without_buffering(self):
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
             path = f.name
 
         try:
-            fd = big.Log.File(path, initial_mode='wt', flush=True)
+            fd = big.Log.File(path, initial_mode='wt', buffering=False)
             log = big.Log(fd, threading=False)
 
             log.write("immediate\n")
@@ -317,7 +322,7 @@ class TestFile(unittest.TestCase):
     def test_TmpFile(self):
         path = None
         try:
-            tmpfile = big.log.Log.TmpFile()
+            tmpfile = big.log.TMPFILE
             log = testing_log(tmpfile, name="LogName", timestamp_format=lambda x:"ABACAB /DEADBEEF")
             log("xyz")
             path = tmpfile.path.name
@@ -369,9 +374,9 @@ class TestFileHandle(unittest.TestCase):
         fh_destination.write(0, None, "test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
-    def test_filehandle_write_with_flush(self):
+    def test_filehandle_write_without_autoflush(self):
         buffer = io.StringIO()
-        fh_destination = big.Log.FileHandle(buffer, flush=True)
+        fh_destination = big.Log.FileHandle(buffer, autoflush=False)
         fh_destination.write(0, None, "test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
@@ -1503,7 +1508,7 @@ class TestEventSink(unittest.TestCase):
         log.print('hey now')
         log.close()
 
-        self.assertEqual(esink.value, "start log write log log enter log exit log log flush end reset start log log log flush end")
+        self.assertEqual(esink.value, "start log write log log enter log exit log log flush end start log log log flush end")
 
 
 

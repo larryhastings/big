@@ -1304,19 +1304,9 @@ class Log:
                 assert ns is not None
                 assert epoch is not None
 
-                # we should send reset only if we ever logged.
-                # if we went straight from initial to closed,
-                # we deliberately don't clear self._initial_events,
-                # *precisely* so we can suppress the destination.reset
-                # calls here.
-                should_send_reset = self._initial_events is None
                 if self._state == 'logged':
                     self._ensure_closed(ns, epoch, 'closed')
                 self._reset(ns, epoch)
-
-                if should_send_reset:
-                    for destination in self._destinations:
-                        destination.reset()
                 return True
 
             # we're not in the correct state,
@@ -1759,21 +1749,25 @@ class Log:
               +
               |
               v
-            start
-              |
-              +<---------------------------------+
-              |                                  |
-              v                                  |
-            write | log | enter | exit | flush   |
-              |                                  |
-              |                                  |
-              +----------------------------------+
-              |
+            start<- - - - - - - - - - - - - - - - - - +
+              |                                       :
+              +<---------------------------------+    :
+              |                                  |    :
+              v                                  |    :
+            write | log | enter | exit | flush   |    :
+              |                                  |    :
+              |                                  |    :
+              +----------------------------------+    :
+              |                                       :
+              v                                       :
+           [flush]                                    :
+              |                                       :
+              v                                       :
+             end- - - - - - - - - - - - - - - - - - - +
+              :
+              :
               v
-           [flush]
-              |
-              v
-             end
+          unregister
 
         The "register" event is sent while the log is still in
         its "initial" state; all other events are sent while the
@@ -1805,23 +1799,24 @@ class Log:
         and there were never any events to send to the destinations.)
         """
         def __init__(self):
-            self.owner = None
+            self._owner = None
+
+        @property
+        def owner(self):
+            return self._owner
+
+        def __eq__(self, other):
+            raise NotImplementedError()
+
+        def __hash__(self):
+            raise NotImplementedError()
 
         def register(self, owner):
             if self.owner is not None:
                 raise RuntimeError(f"can't register owner {owner}, already registered with {self.owner}")
-            self.owner = owner
-
-        def reset(self):
-            pass
-
-        def flush(self):
-            pass
+            self._owner = owner
 
         def start(self, start_time_ns, start_time_epoch):
-            pass
-
-        def end(self, elapsed):
             pass
 
         def write(self, elapsed, thread, formatted):
@@ -1836,6 +1831,15 @@ class Log:
         def exit(self, elapsed, thread):
             pass
 
+        def flush(self):
+            pass
+
+        def end(self, elapsed):
+            pass
+
+        def unregister(self):
+            self._owner = None
+
 
 
     class Callable(Destination):
@@ -1846,10 +1850,20 @@ class Log:
         """
         def __init__(self, callable):
             super().__init__()
-            self.callable = callable
+            self._callable = callable
+
+        @property
+        def callable(self):
+            return self._callable
+
+        def __eq__(self, other):
+            return isinstance(other, Log.Callable) and (other._callable is self._callable)
+
+        def __hash__(self):
+            return hash(Log.Callable) ^ hash(self._callable)
 
         def write(self, elapsed, thread, formatted):
-            self.callable(formatted)
+            self._callable(formatted)
 
 
 
@@ -1861,12 +1875,14 @@ class Log:
             builtins.print(formatted, end='', flush=True)
         for every formatted log message.
         """
-        def __init__(self):
-            super().__init__()
-            self.print = builtins.print
+        def __eq__(self, other):
+            return isinstance(other, Log.Print)
+
+        def __hash__(self):
+            return hash(Log.Print) ^ hash(object)
 
         def write(self, elapsed, thread, formatted):
-            self.print(formatted, end='', flush=True)
+            builtins.print(formatted, end='', flush=True)
 
 
 
@@ -1878,10 +1894,20 @@ class Log:
         """
         def __init__(self, list):
             super().__init__()
-            self.array = list
+            self._list = list
+
+        @property
+        def list(self):
+            return self._list
+
+        def __eq__(self, other):
+            return isinstance(other, Log.Print) and (other._list is self._list)
+
+        def __hash__(self):
+            return hash(Log.Print) ^ id(self._list)
 
         def write(self, elapsed, thread, formatted):
-            self.array.append(formatted)
+            self._list.append(formatted)
 
 
 
@@ -1894,7 +1920,7 @@ class Log:
         Destination.
 
         Every time a formatted log message is logged,
-        it's stored in an internal buffer (a Python list).
+        Buffer appends it to an internal buffer (a Python list).
         When the log is flushed, Buffer will concatentate
         all the log messages into one giant string, then
         writes that string to the underlying Destination,
@@ -1906,21 +1932,44 @@ class Log:
         """
         def __init__(self, destination=None):
             super().__init__()
-            self.array = []
-            self.destination = Log.map_destination(destination) if destination is not None else Log.Print()
-            self.last_elapsed = self.last_thread = None
+            self._buffer = []
+            self._original_destination = destination
+            self._destination = Log.map_destination(destination) if destination is not None else Log.Print()
+            self._last_elapsed = self._last_thread = None
+
+        @property
+        def buffer(self):
+            return self._buffer
+
+        @property
+        def destination(self):
+            return self._original_destination
+
+        @property
+        def last_elapsed(self):
+            return self._last_elapsed
+
+        @property
+        def last_thread(self):
+            return self._last_thread
+
+        def __eq__(self, other):
+            return isinstance(other, Log.Buffer) and (other._destination == self._destination)
+
+        def __hash__(self):
+            return hash(Log.Buffer) ^ hash(self._destination)
 
         def write(self, elapsed, thread, formatted):
-            self.last_elapsed = elapsed
-            self.last_thread = thread
-            self.array.append(formatted)
+            self._last_elapsed = elapsed
+            self._last_thread = thread
+            self._buffer.append(formatted)
 
         def flush(self):
-            if self.array:
-                contents = "".join(self.array)
-                self.array.clear()
-                self.destination.write(self.last_elapsed, self.last_thread, contents)
-                self.destination.flush()
+            if self._buffer:
+                contents = "".join(self._buffer)
+                self._buffer.clear()
+                self._destination.write(self.last_elapsed, self.last_thread, contents)
+                self._destination.flush()
 
 
     class File(Destination):
@@ -1947,8 +1996,10 @@ class Log:
         "initial_mode" passed in, by default "at".  After the first
         time, File always uses mode "at".
         """
-        def __init__(self, path, initial_mode="at", *, flush=False):
+        def __init__(self, path, initial_mode="at", *, encoding=None, buffering=True):
             super().__init__()
+
+            original_path = path
 
             is_bytes = isinstance(path, bytes)
             is_str = isinstance(path, str)
@@ -1972,42 +2023,70 @@ class Log:
             if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
                 raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
 
-            self.array = array = []
-            self.path = path
-            self.mode = initial_mode
-            self._flush = flush
-            self.f = None
+            self._buffer = buffer = []
+            self._buffering = buffering
+            self._original_path = original_path
+            self._path = path
+            self._mode = initial_mode
+            self._encoding = encoding
+            self._f = None
+
+        @property
+        def path(self):
+            return self._original_path
+
+        @property
+        def mode(self):
+            return self._mode
+
+        @property
+        def encoding(self):
+            return self._encoding
+
+        @property
+        def buffering(self):
+            return self._buffering
+
+        def __eq__(self, other):
+            return isinstance(other, Log.File) and (other._path == self._path)
+
+        def __hash__(self):
+            return hash(Log.File) ^ hash(self._path)
 
         def start(self, start_time_ns, start_time_epoch):
             super().start(start_time_ns, start_time_epoch)
-            self.f = self.path.open(self.mode) if self._flush else None
+            self._f = None if self._buffering else self._path.open(self._mode)
 
         def end(self, elapsed):
             super().end(elapsed)
-            assert not self.array
-            if self.f:
-                f = self.f
-                self.f = None
+            assert not self._buffer
+            if self._f:
+                assert not self._buffering
+                f = self._f
+                self._f = None
                 f.close()
-                self.mode = "at"
+                self._mode = "at"
 
         def write(self, elapsed, thread, formatted):
-            if self._flush:
-                self.f.write(formatted)
-                self.f.flush()
-            elif formatted:
-                self.array.append(formatted)
+            if not formatted:
+                return
+            if self._buffering:
+                self._buffer.append(formatted)
+                return
+
+            self._f.write(formatted)
+            self._f.flush()
 
         def flush(self):
-            if self.array:
-                assert not self._flush
-                assert not self.f
-                contents = "".join(self.array)
-                self.array.clear()
-                with self.path.open(self.mode) as f:
-                    f.write(contents)
-                self.mode = "at"
+            if not (self._buffering and self._buffer):
+                return
 
+            assert not self._f
+            contents = "".join(self._buffer)
+            self._buffer.clear()
+            with self._path.open(self._mode) as f:
+                f.write(contents)
+            self._mode = "at"
 
 
 
@@ -2027,29 +2106,43 @@ class Log:
         log with a freshly recalculated name.
         """
 
-        def __init__(self, prefix='', *, flush=False):
+        def __init__(self, prefix='{name}', *, buffering=True):
             # use a fake path for now,
             # we'll compute a proper one when they call reset()
-            path = Path(tempfile.gettempdir()) / f"tmpfile-init.{os.getpid()}.tmp"
-            super().__init__(path, flush=flush)
-            if not isinstance(prefix, str):
-                raise TypeError("prefix must be str")
-            self.prefix = prefix
+            path = Path(tempfile.gettempdir()) / f"Log-init.{os.getpid()}.tmp"
+            super().__init__(path, buffering=buffering)
+            if not (isinstance(prefix, str) and prefix):
+                raise TypeError("prefix must be str, and cannot be empty")
+            self._prefix = prefix
+            self._rendered_prefix = None
+
+        @property
+        def prefix(self):
+            return self._prefix
+
+        @property
+        def path(self):
+            return self._path
+
+        def __eq__(self, other):
+            return isinstance(other, Log.TmpFile) and (other._prefix == self._prefix)
+
+        def __hash__(self):
+            return hash(Log.TmpFile) ^ hash(self._prefix)
 
         def register(self, owner):
             super().register(owner)
-            if not self.prefix:
-                self.prefix = owner.name
+            self._rendered_prefix = self._prefix.format(name=owner._name)
 
         def start(self, start_time_ns, start_time_epoch):
             assert self.owner
-            log_timestamp = self.owner.timestamp_format(self.owner.start_time_epoch)
+            log_timestamp = self.owner._timestamp_format(start_time_epoch)
             log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
             thread = current_thread()
-            tmpfile = f"{self.prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
+            tmpfile = f"{self._rendered_prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
             tmpfile = big_file.translate_filename_to_exfat(tmpfile)
             tmpfile = tmpfile.replace(" ", '_')
-            self.path = Path(tempfile.gettempdir()) / tmpfile
+            self._path = Path(tempfile.gettempdir()) / tmpfile
             super().start(start_time_ns, start_time_epoch)
 
 
@@ -2066,20 +2159,34 @@ class Log:
         If flush=True, FileHandle will immediately flush the
         file handle after writing; by default flush is False.
         """
-        def __init__(self, handle, *, flush=False):
+        def __init__(self, handle, *, autoflush=False):
             super().__init__()
             if not isinstance(handle, TextIOBase):
                 raise TypeError(f"invalid file handle {handle}")
-            self.handle = handle
-            self._flush = flush
+            self._handle = handle
+            self._autoflush = autoflush
+
+        @property
+        def handle(self):
+            return self._handle
+
+        @property
+        def autoflush(self):
+            return self._autoflush
+
+        def __eq__(self, other):
+            return isinstance(other, Log.FileHandle) and (other._handle is self._handle)
+
+        def __hash__(self):
+            return hash(Log.FileHandle) ^ hash(self._handle)
 
         def write(self, elapsed, thread, formatted):
-            self.handle.write(formatted)
-            if self._flush:
-                self.handle.flush()
+            self._handle.write(formatted)
+            if self._autoflush:
+                self._handle.flush()
 
         def flush(self):
-            self.handle.flush()
+            self._handle.flush()
 
 
     class Sink(Destination):
@@ -2099,34 +2206,33 @@ class Log:
 
         def __init__(self):
             super().__init__()
-            self.number = 1
-            self.events = []
-            self.longest_message = 0
-            self._reset()
+            self._number = 0
+            self._events = []
+            self._longest_message = 0
+            self._depth = 0
 
-        def _reset(self):
-            self.depth = 0
+        def __eq__(self, other):
+            return other is self
+
+        def __hash__(self):
+            return hash(Log.Sink) ^ id(self)
 
         def _event(self, event):
             if hasattr(event, 'message') and (event.message is not None):
-                self.longest_message = max(self.longest_message, len(event.message))
+                self._longest_message = max(self._longest_message, len(event.message))
 
-            if self.events:
-                previous = self.events[-1]
+            if self._events:
+                previous = self._events[-1]
                 if not isinstance(previous, SinkEndEvent):
                     assert event.elapsed >= previous.elapsed, \
                         f"duration should be >= 0 but it's {event.elapsed - previous.elapsed} ({previous})"
-                    self.events[-1] = previous._calculate_duration(event)
+                    self._events[-1] = previous._calculate_duration(event)
 
-            self.events.append(event)
-
-        def reset(self):
-            assert self.owner
-            super().reset()
-            self.number += 1
-            self._reset()
+            self._events.append(event)
 
         def start(self, start_time_ns, start_time_epoch):
+            self._number += 1
+
             configuration = {
                 "name" : self.owner.name,
                 "threading" : self.owner.threading,
@@ -2138,28 +2244,29 @@ class Log:
                 "prefix" : self.owner.prefix,
                 "formats" : dict(self.owner.formats),
             }
-            self._event(SinkStartEvent(self.number, start_time_ns, start_time_epoch, configuration))
+            self._event(SinkStartEvent(self._number, start_time_ns, start_time_epoch, configuration))
+
 
         def end(self, elapsed):
-            self._event(SinkEndEvent(self.number, elapsed))
-            self.depth = 0
+            self._event(SinkEndEvent(self._number, elapsed))
+            self._depth = 0
 
         def write(self, elapsed, thread, formatted):
-            self._event(SinkWriteEvent(self.number, self.depth, elapsed, thread, formatted))
+            self._event(SinkWriteEvent(self._number, self._depth, elapsed, thread, formatted))
 
         def log(self, elapsed, thread, format, message, formatted):
-            self._event(SinkLogEvent(self.number, self.depth, elapsed, thread, format, message, formatted))
+            self._event(SinkLogEvent(self._number, self._depth, elapsed, thread, format, message, formatted))
 
         def enter(self, elapsed, thread, message):
-            self._event(SinkEnterEvent(self.number, self.depth, elapsed, thread, message))
-            self.depth += 1
+            self._event(SinkEnterEvent(self._number, self._depth, elapsed, thread, message))
+            self._depth += 1
 
         def exit(self, elapsed, thread):
-            self.depth -= 1
-            self._event(SinkExitEvent(self.number, self.depth, elapsed, thread))
+            self._depth -= 1
+            self._event(SinkExitEvent(self._number, self._depth, elapsed, thread))
 
         def __iter__(self):
-            for e in self.events:
+            for e in self._events:
                 yield e
 
         def print(self, *,
@@ -2171,19 +2278,30 @@ class Log:
                 timestamp=big_time.timestamp_human,
                 width=None,
                 ):
+            if not self._events:
+                return
+
+            # start_time_epoch will always have a valid value
+            assert isinstance(self._events[0], SinkStartEvent)
+
             if not print:
                 print = builtins.print
 
             if width is None:
-                width = self.longest_message
+                width = self._longest_message
 
-            for e in self.events:
+            start_time_epoch = None
+
+            for e in self._events:
+                if isinstance(e, SinkStartEvent):
+                    start_time_epoch = e.epoch
+
                 elapsed = e.elapsed / 1_000_000_000.0
                 duration = getattr(e, 'duration', 0) / 1_000_000_000.0
-                epoch = elapsed + self.owner._start_time_epoch
+                epoch = elapsed + start_time_epoch
                 ts = timestamp(epoch)
                 indent_str = ' ' * (e.depth * indent)
-                thread = getattr(e, 'thread', current_thread())
+                thread = getattr(e, 'thread', _empty_thread)
 
                 fields = {
                     'elapsed': elapsed,
@@ -2218,8 +2336,13 @@ class OldDestination(Log.Destination):
         self.longest_event = 0
         self.reset()
 
+    def __eq__(self, other):
+        return other is self
+
+    def __hash__(self):
+        return hash(OldDestination) ^ id(self)
+
     def reset(self):
-        super().reset()
         self.stack = []
         self.events = []
         self.previous_event = None
@@ -2233,15 +2356,16 @@ class OldDestination(Log.Destination):
 
         self.longest_event = max(self.longest_event, len(event))
 
+    def start(self, start_time_ns, start_time_epoch):
+        self.reset()
+        self._event(0, "log start")
+
     def write(self, elapsed, thread, formatted):
         self._event(elapsed, formatted.rstrip('\n'))
 
     def log(self, elapsed, thread, format, message, formatted):
         if format not in ('start', 'end', 'enter', 'exit'):
             self._event(elapsed, formatted.rstrip('\n'))
-
-    def start(self, start_time_ns, start_time_epoch):
-        self._event(0, "log start")
 
     def enter(self, elapsed, thread, message):
         self._event(elapsed, message + " start")
