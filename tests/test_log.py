@@ -39,6 +39,12 @@ import time
 import unittest
 
 
+class LogTestBase(unittest.TestCase):
+    maxDiff = 2**30
+
+
+
+
 class FakeClock:
     def __init__(self):
         self.time = 0
@@ -58,6 +64,12 @@ class EventSink(big.Log.Destination):
     def __init__(self):
         super().__init__()
         self.value = ''
+
+    def __eq__(self, other):
+        return other is self
+
+    def __hash__(self):
+        return hash(EventSink) ^ id(self)
 
     def _event(self, s):
         if self.value:
@@ -104,7 +116,8 @@ def wait_for_job(log):
     return event.wait
 
 
-class TestDestination(unittest.TestCase):
+
+class TestDestination(LogTestBase):
     """Tests for the base Destination class."""
 
     def test_destination_init(self):
@@ -139,7 +152,7 @@ class TestDestination(unittest.TestCase):
         destination.end(12345)  # Should not raise
 
 
-class TestCallable(unittest.TestCase):
+class TestCallable(LogTestBase):
     """Tests for the Callable destination."""
 
     def test_callable_write(self):
@@ -149,7 +162,7 @@ class TestCallable(unittest.TestCase):
         self.assertEqual(results, ["test string"])
 
 
-class TestPrint(unittest.TestCase):
+class TestPrint(LogTestBase):
     """Tests for the Print destination."""
 
     def test_print_write(self):
@@ -166,7 +179,7 @@ class TestPrint(unittest.TestCase):
         self.assertEqual(captured[0][1], {"end": "", "flush": True})
 
 
-class TestList(unittest.TestCase):
+class TestList(LogTestBase):
     """Tests for the List destination."""
 
     def test_list_write(self):
@@ -177,7 +190,7 @@ class TestList(unittest.TestCase):
         self.assertEqual(array, ["line1\n", "line2\n"])
 
 
-class TestBuffer(unittest.TestCase):
+class TestBuffer(LogTestBase):
     """Tests for the Buffer destination."""
 
     def test_buffer_write_and_flush(self):
@@ -201,7 +214,7 @@ class TestBuffer(unittest.TestCase):
         buffer.flush()  # Should not raise or print
 
 
-class TestFile(unittest.TestCase):
+class TestFile(LogTestBase):
     """Tests for the File destination."""
 
     def test_map_destination_support(self):
@@ -361,7 +374,7 @@ class TestFile(unittest.TestCase):
 
 
 
-class TestFileHandle(unittest.TestCase):
+class TestFileHandle(LogTestBase):
     """Tests for the FileHandle destination."""
 
     def test_invalid_filehandle(self):
@@ -386,7 +399,7 @@ class TestFileHandle(unittest.TestCase):
         fh_destination.flush()  # Should not raise
 
 
-class TestLogBasics(unittest.TestCase):
+class TestLogBasics(LogTestBase):
     """Basic tests for the Log class."""
 
     def test_log_properties(self):
@@ -581,7 +594,7 @@ class TestLogBasics(unittest.TestCase):
 
 
 
-class TestLogMethods(unittest.TestCase):
+class TestLogMethods(LogTestBase):
     """Tests for Log methods."""
 
     def test_print(self):
@@ -793,7 +806,7 @@ END
             with log.enter('subsystem 3'):
                 log('finally!')
         log.close()
-        self.assertEqual(s.getvalue(), 'finally!\n')
+        self.assertEqual(s.getvalue(), '        finally!\n')
 
     def test_log_messages_after_close(self):
         s = io.StringIO()
@@ -858,7 +871,7 @@ has spacings
 
 
 
-class TestLogLazyStartAndEnd(unittest.TestCase):
+class TestLogLazyStartAndEnd(LogTestBase):
 
     def test_no_log_means_no_banners(self):
         s = io.StringIO()
@@ -941,9 +954,10 @@ START
 [PREFIX] +-----+----
 END
 """.lstrip()
+
         self.assertEqual(s.getvalue(), expected)
 
-class TestLogPaused(unittest.TestCase):
+class TestLogPaused(LogTestBase):
     """Tests for managing log.paused."""
     def test_log_paused(self):
         s = io.StringIO()
@@ -1125,7 +1139,7 @@ class TestLogPaused(unittest.TestCase):
         # you can't change pause state while
 
 
-class TestLogContextManager(unittest.TestCase):
+class TestLogContextManager(LogTestBase):
     """Tests for Log as a context manager."""
 
     def test_log_context_manager(self):
@@ -1136,7 +1150,7 @@ class TestLogContextManager(unittest.TestCase):
         self.assertTrue(any("inside with block" in s for s in array))
 
 
-class TestLogThreading(unittest.TestCase):
+class TestLogThreading(LogTestBase):
     """Tests for Log with threading enabled."""
 
     def test_log_threaded(self):
@@ -1233,7 +1247,7 @@ class TestLogThreading(unittest.TestCase):
         log.flush()
 
 
-class TestLogFormatting(unittest.TestCase):
+class TestLogFormatting(LogTestBase):
     """Tests for Log formatting options."""
 
     def test_log_with_prefix(self):
@@ -1319,7 +1333,7 @@ class TestLogFormatting(unittest.TestCase):
 
 
 
-class TestSink(unittest.TestCase):
+class TestSink(LogTestBase):
     """Tests for Sink."""
 
     def test_sink_basic(self):
@@ -1344,7 +1358,7 @@ class TestSink(unittest.TestCase):
             self.assertIn('message', e.formatted)
             self.assertTrue(e.message.startswith('message'))
             self.assertTrue(e.message.endswith(str(i)))
-            self.assertEqual(e.number, 1)
+            self.assertEqual(e.session, 1)
             self.assertEqual(e.thread, threading.current_thread())
 
         e = events[0]
@@ -1356,8 +1370,8 @@ class TestSink(unittest.TestCase):
         with self.assertRaises(TypeError):
             e < 3.1415
 
-        sse = big.SinkStartEvent(0, 5, 10, {})
-        self.assertEqual(repr(sse), "SinkStartEvent(number=0, ns=5, epoch=10, configuration={}, duration=0)")
+        sse = big.SinkStartEvent(1, 5, 10, {})
+        self.assertEqual(repr(sse), "SinkStartEvent(session=1, ns=5, epoch=10, configuration={}, duration=0)")
 
     def test_sink_event_types(self):
         sink = big.Log.Sink()
@@ -1385,12 +1399,12 @@ class TestSink(unittest.TestCase):
         # coverage stuff
         # exercise __hash__ on every sink event type
         events_map = dict.fromkeys(events, None)
-        number = 1
+        session = 1
         for e in events:
             with self.subTest(e=e):
-                self.assertEqual(e.number, number)
+                self.assertEqual(e.session, session)
                 if isinstance(e, big.log.SinkEndEvent):
-                    number += 1
+                    session += 1
                 else:
                     self.assertGreaterEqual(e.duration, 0)
 
@@ -1484,7 +1498,7 @@ class TestSink(unittest.TestCase):
 
 
 
-class TestEventSink(unittest.TestCase):
+class TestEventSink(LogTestBase):
     """Tests for our custom EventSink."""
 
     def test_sink_events_without_any_logging(self):
@@ -1512,7 +1526,7 @@ class TestEventSink(unittest.TestCase):
 
 
 
-class TestOldDestination(unittest.TestCase):
+class TestOldDestination(LogTestBase):
     """Tests for OldDestination."""
 
     def test_old_destination_basic(self):
@@ -1586,7 +1600,7 @@ class TestOldDestination(unittest.TestCase):
         self.assertIn("raw write content", event_strs)
 
 
-class TestOldLog(unittest.TestCase):
+class TestOldLog(LogTestBase):
     """Tests for OldLog backwards compatibility class."""
 
     maxDiff = None
@@ -1648,7 +1662,7 @@ class TestOldLog(unittest.TestCase):
         self.assertIn("after", event_strs)
 
 
-class TestLogWithTextIOBase(unittest.TestCase):
+class TestLogWithTextIOBase(LogTestBase):
     """Tests for Log with TextIOBase objects."""
 
     def test_log_with_stringio(self):
@@ -1660,7 +1674,7 @@ class TestLogWithTextIOBase(unittest.TestCase):
         self.assertIn("stringio test", content)
 
 
-class TestLogWithPath(unittest.TestCase):
+class TestLogWithPath(LogTestBase):
     """Tests for Log with Path objects."""
 
     def test_log_with_path_object(self):
@@ -1680,7 +1694,7 @@ class TestLogWithPath(unittest.TestCase):
             os.unlink(path)
 
 
-class TestLogWithCustomClock(unittest.TestCase):
+class TestLogWithCustomClock(LogTestBase):
     """Tests for Log with custom clock."""
 
     def test_custom_clock(self):
@@ -1696,7 +1710,7 @@ class TestLogWithCustomClock(unittest.TestCase):
         self.assertIn("1", output)
 
 
-class TestExport(unittest.TestCase):
+class TestExport(LogTestBase):
     """Test that all expected symbols are exported."""
 
     def test_all_exports(self):
