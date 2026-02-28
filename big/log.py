@@ -634,10 +634,16 @@ class Log:
 
         self._nesting = []
 
-        # "original" means "what the user passed in".
+        # "_original_destinations" is literally what the user passed in.
         # (if they didn't pass in any, it behaves like they passed in [print].)
-        # non-"original" means the wrapped versions.
+        # this contains None if they specified None.
+        #
+        # "_unwrapped_destinations" is just "original" with None stripped out.
+        #
+        # "_destinations" is "original", but any non-Destination value
+        #     has been map_destination'd.  It's "wrapped destinations".
         self._original_destinations = []
+        self._unwrapped_destinations = []
         self._destinations = []
         self._dormant = set()
         self._logging = set()
@@ -649,10 +655,6 @@ class Log:
 
         # if threading is True, _lock is only used for close and reset (and shutdown)
         self._lock = Lock()
-
-        print = builtins.print
-        if not destinations:
-            destinations = [print]
 
         self._reroute(destinations)
 
@@ -708,12 +710,18 @@ class Log:
         old = set(self._destinations)
 
         original_destinations = list(destinations)
+
+        print = builtins.print
+        if not destinations:
+            unwrapped_destinations = [print]
+        else:
+            unwrapped_destinations = [o for o in original_destinations if o is not None]
         wrapped_destinations = []
         destinations_append = wrapped_destinations.append
         new = set()
         new_add = new.add
 
-        for d in original_destinations:
+        for d in unwrapped_destinations:
             if d is None:
                 continue
             wrapped = Log.map_destination(d)
@@ -735,8 +743,8 @@ class Log:
         unchanged = old & new
 
         self._original_destinations = original_destinations
+        self._unwrapped_destinations = unwrapped_destinations
         self._destinations = wrapped_destinations
-
 
 
     @property
@@ -745,7 +753,8 @@ class Log:
 
     @property
     def destinations(self):
-        return list(self._original_destinations)
+        with self._lock:
+            return list(self._original_destinations)
 
     @property
     def indent(self):

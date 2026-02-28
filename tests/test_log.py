@@ -480,6 +480,12 @@ class TestLogBasics(LogTestBase):
         log.close()
         self.assertEqual(array, ['test\n'])
 
+    def test_log_with_none_destination(self):
+        a = []
+        destinations = [print, None, a, None]
+        log = big.Log(*destinations, threading=False)
+        self.assertEqual(log.destinations, destinations)
+
     def test_log_with_invalid_destination(self):
         with self.assertRaises(TypeError) as cm:
             log = big.Log(12345, threading=False)
