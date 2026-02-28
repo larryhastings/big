@@ -729,13 +729,6 @@ class Log:
             new_add(wrapped)
             destinations_append(wrapped)
 
-        added = new - old
-        if added:
-            for d in wrapped_destinations:
-                if d in added:
-                    d.register(self)
-            self._dormant.update(added)
-
         unregister_queue = []
 
         removed = old - new
@@ -751,7 +744,14 @@ class Log:
                     self._dormant.remove(d)
                     unregister_queue.append(d)
 
-        unchanged = old & new
+        added = new - old
+        if added:
+            for d in wrapped_destinations:
+                if d in added:
+                    d.register(self)
+            self._dormant.update(added)
+
+        # unchanged = old & new
 
         self._original_destinations = original_destinations
         self._unwrapped_destinations = unwrapped_destinations
