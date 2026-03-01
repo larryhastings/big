@@ -478,12 +478,11 @@ class TestLogBasics(LogTestBase):
             log = big.Log(12345, threading=False)
         self.assertIn("don't know how to log to destination", str(cm.exception))
 
-        # None destinations raise too
-        array = []
-        try:
-            log = testing_log(None, array)
-        except TypeError as e:
-            self.assertEqual(str(e), "don't know how to log to destination None")
+    def test_log_with_none_destination(self):
+        log = testing_log(None)
+        log('where did it go?')
+        self.assertEqual(log.destinations, [None])
+        log.close()
 
 
     def test_extensible_destination_mapper(self):
