@@ -675,6 +675,8 @@ class Log:
             return cls.FileHandle(o)
         if callable(o):
             return cls.Callable(o)
+        if o is None:
+            return cls.NoneType(o)
         raise TypeError(f"don't know how to log to destination {o!r}")
 
     destination_mappers = []
@@ -2021,6 +2023,25 @@ class Log:
 
 
 
+    class NoneType(Destination):
+        "A Destination wrapping None.  Does nothing."
+        def __init__(self, none):
+            super().__init__()
+            assert none is None
+
+        def __eq__(self, other):
+            return isinstance(other, Log.NoneType)
+
+        def _hash(self):
+            return hash(Log.NoneType) ^ hash(None)
+        __hash__ = base.destination_hash
+
+        def write(self, elapsed, thread, formatted):
+            pass
+
+
+
+
     class Callable(Destination):
         """
         A Destination wrapping a callable.
@@ -2488,7 +2509,7 @@ class Log:
                 epoch = elapsed + start_time_epoch
                 ts = timestamp(epoch)
                 indent_str = ' ' * (e.depth * indent)
-                thread = getattr(e, 'thread', _empty_thread)
+                thread = getattr(e, 'thread', None) or _empty_thread
 
                 fields = {
                     'elapsed': elapsed,
