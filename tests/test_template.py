@@ -816,6 +816,28 @@ Log start
         fmt = Formatter('{foo.bar} {baz[0]}', foo='x', baz='y')
         self.assertEqual(fmt.supported, frozenset({'foo', 'baz'}))
 
+    def test_stretch(self):
+        """Dotted expression has the base key in supported, not the full expression."""
+        template = '+-before-{line*}+\n| {message} |\n+-after--{line*}+\n'
+
+        fmt = Formatter(template, {'line*': '-'}, stretch=False, width=12)
+        expected = """
++-before---+
+| long message |
++-after----+
+""".lstrip()
+        got = fmt("long message")
+        self.assertEqual(expected, got)
+
+        fmt = Formatter(template, {'line*': '-'}, stretch=True,  width=12)
+        expected = """
++-before-------+
+| long message |
++-after--------+
+""".lstrip()
+        got = fmt("long message")
+        self.assertEqual(expected, got)
+
 
 def run_tests():
     bigtestlib.run(name="big.template", module=__name__)

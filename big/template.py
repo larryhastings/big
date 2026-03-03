@@ -467,13 +467,23 @@ class Formatter:
     "width" characters.  Starred interpolations must not use
     dotted expressions ({line.foo*}), indexing ({line[3]*}), a
     conversion ({line*!r}), or a format spec ({line*:5}).
+
+    If 'stretch' is True, the width used for a specific call to
+    format / format_map is the minimum of 'width' and the length
+    of the longest formatted line where all "starred interpolations"
+    are set to zero length.  In other words: if you have one long
+    "message" line, all the lines in the output will stretch to be
+    the same width.
     """
 
-    def __init__(self, template, map=None, *, width=79, **kwargs):
+    def __init__(self, template, map=None, *, stretch=True, width=79, **kwargs):
         if not isinstance(template, str):
             raise TypeError(f"template must be str, not {type(template).__name__}")
+
         if not isinstance(width, int):
             raise TypeError(f"width must be int, not {type(width).__name__}")
+        if width <= 0:
+            raise ValueError(f"width must be greater than zero")
 
         if map is not None:
             if not isinstance(map, dict):
@@ -494,9 +504,10 @@ class Formatter:
             if key.endswith('*'):
                 map[key] = str(value)
 
+        self._map = map
+        self._stretch = bool(stretch)
         self._template = template
         self._width = width
-        self._map = map
 
         # First pass: scan all interpolation expressions to find a unique
         # prefix character.  We collect the set of first characters of all
@@ -667,48 +678,62 @@ class Formatter:
                         value = str(value)
                     combined_map[key] = value
 
-        prologue_iter = ((entry, None) for entry in self._prologue)
-        if not self._body:
-            body_iter = ()
-        else:
-            message_lines = message.split('\n')
-            if len(self._body) > len(message_lines):
-                body_iter = zip(self._body, message_lines)
-            else:
-                body_iter = itertools.zip_longest(self._body, message_lines, fillvalue=self._body[-1])
-        epilogue_iter = ((entry, None) for entry in self._epilogue)
-
         buffer = []
         append = buffer.append
         width = self._width
+        longest_base_line = 0
 
-        for (template_line, starred_interpolation_names), message_line in itertools.chain(prologue_iter, body_iter, epilogue_iter):
-            map_line = dict(combined_map)
-            if message_line is not None:
-                map_line['message'] = message_line
 
-            line = None
-            if starred_interpolation_names:
-                map_line.update(self._test_starred_interpolations_map)
-                test_line = template_line.format_map(map_line)
-                delta = width - len(test_line)
-                if delta <= 0:
-                    line = test_line
+        while True:
+            prologue_iter = ((entry, None) for entry in self._prologue)
+            if not self._body:
+                body_iter = ()
+            else:
+                message_lines = message.split('\n')
+                if len(self._body) > len(message_lines):
+                    body_iter = zip(self._body, message_lines)
                 else:
-                    count = len(starred_interpolation_names)
-                    cumulative = 0
+                    body_iter = itertools.zip_longest(self._body, message_lines, fillvalue=self._body[-1])
+            epilogue_iter = ((entry, None) for entry in self._epilogue)
 
-                    for i, (prefix_key, original_key) in enumerate(starred_interpolation_names, 1):
-                        fill_value = combined_map[original_key]
-                        target = int((delta * i) / count)
-                        length = target - cumulative
-                        repeated = fill_value * ((length // len(fill_value)) + 1)
-                        map_line[prefix_key] = repeated[:length]
-                        cumulative = target
+            for (template_line, starred_interpolation_names), message_line in itertools.chain(prologue_iter, body_iter, epilogue_iter):
+                map_line = dict(combined_map)
+                if message_line is not None:
+                    map_line['message'] = message_line
 
-            if line is None:
-                line = template_line.format_map(map_line)
-            append(line)
+                line = None
+                if starred_interpolation_names:
+                    map_line.update(self._test_starred_interpolations_map)
+                    test_line = template_line.format_map(map_line)
+                    len_test_line = len(test_line)
+                    longest_base_line = len_test_line if len_test_line > longest_base_line else longest_base_line
+                    delta = width - len_test_line
+                    if delta <= 0:
+                        line = test_line
+                    else:
+                        count = len(starred_interpolation_names)
+                        cumulative = 0
+
+                        for i, (prefix_key, original_key) in enumerate(starred_interpolation_names, 1):
+                            fill_value = combined_map[original_key]
+                            target = int((delta * i) / count)
+                            length = target - cumulative
+                            repeated = fill_value * ((length // len(fill_value)) + 1)
+                            map_line[prefix_key] = repeated[:length]
+                            cumulative = target
+
+                if line is None:
+                    line = template_line.format_map(map_line)
+                    if not starred_interpolation_names:
+                        len_line = len(line)
+                        longest_base_line = len_line if len_line > longest_base_line else longest_base_line
+
+                append(line)
+            if self._stretch and (width < longest_base_line):
+                width = longest_base_line
+                buffer.clear()
+                continue
+            break
 
         return "\n".join(buffer)
 
