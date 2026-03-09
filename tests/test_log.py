@@ -56,7 +56,7 @@ class FakeClock:
         self.time += ns
 
 
-class EventSink(big.Log.Destination):
+class EventSink(big.log.Formatter):
     """
     A custom destination that just logs event names.
     """
@@ -121,17 +121,17 @@ class TestDestination(LogTestBase):
     """Tests for the base Destination class."""
 
     def test_destination_init(self):
-        destination = big.Log.Destination()
+        destination = big.log.Destination()
         self.assertIsNone(destination.owner)
 
     def test_destination_register(self):
-        destination = big.Log.Destination()
+        destination = big.log.Destination()
         destination._owner = None  # Reset to allow re-registration
         destination.register("test_owner")
         self.assertEqual(destination.owner, "test_owner")
 
     def test_destination_register_already_registered(self):
-        destination = big.Log.Destination()
+        destination = big.log.Destination()
         destination._owner = None
         destination.register("owner1")
         with self.assertRaises(RuntimeError) as cm:
@@ -139,16 +139,16 @@ class TestDestination(LogTestBase):
         self.assertIn("already registered", str(cm.exception))
 
     def test_destination_virtual_write(self):
-        destination = big.Log.Destination()
+        destination = big.log.Destination()
         with self.assertRaises(RuntimeError):
             destination.write(0, None, "test")
 
     def test_destination_flush_does_nothing(self):
-        destination = big.Log.Destination()
+        destination = big.log.Destination()
         destination.flush()  # Should not raise
 
     def test_destination_close_does_nothing(self):
-        destination = big.Log.Destination()
+        destination = big.log.Destination()
         destination.end(12345)  # Should not raise
 
 
@@ -157,7 +157,7 @@ class TestCallable(LogTestBase):
 
     def test_callable_write(self):
         results = []
-        c = big.Log.Callable(results.append)
+        c = big.log.Callable(results.append)
         c.write(0, None, "test string")
         self.assertEqual(results, ["test string"])
 
@@ -184,7 +184,7 @@ class TestList(LogTestBase):
 
     def test_list_write(self):
         array = []
-        list_destination = big.Log.List(array)
+        list_destination = big.log.List(array)
         list_destination.write(0, None, "line1\n")
         list_destination.write(0, None, "line2\n")
         self.assertEqual(array, ["line1\n", "line2\n"])
@@ -198,7 +198,7 @@ class TestBuffer(LogTestBase):
         original_print = builtins.print
         builtins.print = lambda *args, **kwargs: captured.append((args, kwargs))
         try:
-            buffer = big.Log.Buffer()
+            buffer = big.log.Buffer()
             buffer.write(0, None, "hello ")
             buffer.write(0, None, "world")
             self.assertEqual(buffer._buffer, ["hello ", "world"])
@@ -210,7 +210,7 @@ class TestBuffer(LogTestBase):
         self.assertEqual(captured[0][0], ("hello world",))
 
     def test_buffer_flush_empty(self):
-        buffer = big.Log.Buffer()
+        buffer = big.log.Buffer()
         buffer.flush()  # Should not raise or print
 
 
@@ -244,36 +244,36 @@ class TestFile(LogTestBase):
 
     def test_file_type_checks(self):
         with self.assertRaises(TypeError):
-            big.Log.File(3456)
+            big.log.File(3456)
         with self.assertRaises(TypeError):
-            big.Log.File(3.14159)
+            big.log.File(3.14159)
         with self.assertRaises(TypeError):
-            big.Log.File([1, 2, 3])
+            big.log.File([1, 2, 3])
         with self.assertRaises(TypeError):
-            big.Log.File({'a': 'b'})
+            big.log.File({'a': 'b'})
 
         with self.assertRaises(ValueError):
-            big.Log.File('')
+            big.log.File('')
         with self.assertRaises(ValueError):
-            big.Log.File(b'')
+            big.log.File(b'')
 
         with self.assertRaises(TypeError):
-            big.Log.File('xyz', b'at')
+            big.log.File('xyz', b'at')
         with self.assertRaises(TypeError):
-            big.Log.File('xyz', [1, 2, 3])
+            big.log.File('xyz', [1, 2, 3])
         with self.assertRaises(TypeError):
-            big.Log.File('xyz', 8475)
+            big.log.File('xyz', 8475)
         with self.assertRaises(ValueError):
-            big.Log.File('xyz', '')
+            big.log.File('xyz', '')
         with self.assertRaises(ValueError):
-            big.Log.File('xyz', 'marjoram')
+            big.log.File('xyz', 'marjoram')
 
     def test_file_buffered_mode(self):
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
             path = f.name
 
         try:
-            file_destination = big.Log.File(path, initial_mode='wt')
+            file_destination = big.log.File(path, initial_mode='wt')
             file_destination.write(0, None, "line1\n")
             file_destination.write(0, None, "line2\n")
             self.assertEqual(file_destination._buffer, ["line1\n", "line2\n"])
@@ -299,7 +299,7 @@ class TestFile(LogTestBase):
             path = f.name
 
         try:
-            fd = big.Log.File(path, initial_mode='wt', buffering=False)
+            fd = big.log.File(path, initial_mode='wt', buffering=False)
             log = big.Log(fd, threading=False)
 
             log.write("immediate\n")
@@ -320,7 +320,7 @@ class TestFile(LogTestBase):
             f.write("existing\n")
 
         try:
-            fd = big.Log.File(path, initial_mode='at')
+            fd = big.log.File(path, initial_mode='at')
             log = big.Log(fd, threading=False)
             log.write("appended\n")
             log.close()
@@ -349,7 +349,7 @@ class TestFile(LogTestBase):
 
         path = None
         try:
-            tmpfile = big.log.Log.TmpFile(prefix='wackadoodle')
+            tmpfile = big.log.TmpfIle(prefix='wackadoodle')
             log = testing_log(tmpfile, name="LogName", timestamp_format=lambda x:"ABACAB /DEADBEEF")
             log("xyz")
             path = tmpfile.path.name
@@ -362,15 +362,15 @@ class TestFile(LogTestBase):
                 os.unlink(path)
 
         with self.assertRaises(TypeError):
-            big.log.Log.TmpFile(prefix=345)
+            big.log.TmpfIle(prefix=345)
         with self.assertRaises(TypeError):
-            big.log.Log.TmpFile(prefix=3.1415)
+            big.log.TmpfIle(prefix=3.1415)
         with self.assertRaises(TypeError):
-            big.log.Log.TmpFile(prefix=[1, 2, 3])
+            big.log.TmpfIle(prefix=[1, 2, 3])
         with self.assertRaises(TypeError):
-            big.log.Log.TmpFile(prefix={'a': 'b'})
+            big.log.TmpfIle(prefix={'a': 'b'})
         with self.assertRaises(TypeError):
-            big.log.Log.TmpFile(prefix=b'foo bar')
+            big.log.TmpfIle(prefix=b'foo bar')
 
 
 
@@ -379,23 +379,23 @@ class TestFileHandle(LogTestBase):
 
     def test_invalid_filehandle(self):
         with self.assertRaises(TypeError):
-            big.Log.FileHandle(None)
+            big.log.FileHandle(None)
 
     def test_filehandle_write(self):
         buffer = io.StringIO()
-        fh_destination = big.Log.FileHandle(buffer)
+        fh_destination = big.log.FileHandle(buffer)
         fh_destination.write(0, None, "test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
     def test_filehandle_write_without_autoflush(self):
         buffer = io.StringIO()
-        fh_destination = big.Log.FileHandle(buffer, autoflush=False)
+        fh_destination = big.log.FileHandle(buffer, autoflush=False)
         fh_destination.write(0, None, "test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
     def test_filehandle_flush(self):
         buffer = io.StringIO()
-        fh_destination = big.Log.FileHandle(buffer)
+        fh_destination = big.log.FileHandle(buffer)
         fh_destination.flush()  # Should not raise
 
 
@@ -497,14 +497,14 @@ class TestLogBasics(LogTestBase):
                     return EventSink()
                 return None
 
-            big.Log.destination_mappers.append(custom_destination_mapper)
+            big.log.Destination_mappers.append(custom_destination_mapper)
             log = testing_log(12345, [], print)
             destinations = list(log._destinations)
             self.assertIsInstance(destinations[0], EventSink)
-            self.assertIsInstance(destinations[1], big.Log.List)
+            self.assertIsInstance(destinations[1], big.log.List)
             self.assertIsInstance(destinations[2], big.Log.Print)
         finally:
-            big.Log.destination_mappers.clear()
+            big.log.Destination_mappers.clear()
 
     def test_exit_without_logging_or_enter(self):
         sink = EventSink()
@@ -1248,7 +1248,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_blocking_flush(self):
         array = []
-        buffer = big.Log.Buffer(array)
+        buffer = big.log.Buffer(array)
         log = testing_log(array, threading=True)
         log("message")
         text = "\n".join(array)
@@ -1259,7 +1259,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_asynchronous_flush(self):
         array = []
-        buffer = big.Log.Buffer(array)
+        buffer = big.log.Buffer(array)
         log = testing_log(array, threading=True)
         log("message")
         text = "\n".join(array)
