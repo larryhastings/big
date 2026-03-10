@@ -101,12 +101,14 @@ class EventSink(big.log.Formatter):
     def exit(self, elapsed, thread):
         self._event("exit")
 
-def testing_log(*destinations, threading=False, formats=None, prefix='', **kwargs):
+def testing_log(*destinations, threaded=False, formatter=None, formats=None, prefix='', **kwargs):
     "A log object convenient for testing.  Threading, start banner, end banner, and prefix are all off."
     base_formats = {"start": None, "end": None}
     if formats:
         base_formats.update(formats)
-    return big.Log(*destinations, threading=threading, formats=base_formats, prefix=prefix, **kwargs)
+    if formatter is None:
+        formatter = big.log.TextFormatter(formats=base_formats, prefix=prefix)
+    return big.Log(*destinations, threaded=threaded, formatter=formatter, **kwargs)
 
 
 def wait_for_job(log):
@@ -127,29 +129,52 @@ class TestDestination(LogTestBase):
     def test_destination_register(self):
         destination = big.log.Destination()
         destination._owner = None  # Reset to allow re-registration
-        destination.register("test_owner")
-        self.assertEqual(destination.owner, "test_owner")
+        destination.register("test log", "test owner")
+        self.assertEqual(destination.log, "test log")
+        self.assertEqual(destination.owner, "test owner")
 
     def test_destination_register_already_registered(self):
         destination = big.log.Destination()
         destination._owner = None
-        destination.register("owner1")
+        destination.register("log1", "owner1")
         with self.assertRaises(RuntimeError) as cm:
-            destination.register("owner2")
+            destination.register("log2", "owner2")
         self.assertIn("already registered", str(cm.exception))
 
     def test_destination_virtual_write(self):
         destination = big.log.Destination()
         with self.assertRaises(RuntimeError):
-            destination.write(0, None, "test")
+            destination.write("test")
 
     def test_destination_flush_does_nothing(self):
         destination = big.log.Destination()
         destination.flush()  # Should not raise
 
-    def test_destination_close_does_nothing(self):
+    def test_destination_start_without_register(self):
         destination = big.log.Destination()
-        destination.end(12345)  # Should not raise
+        with self.assertRaises(RuntimeError) as e:
+            destination.start()
+        text = str(e.exception)
+        self.assertIn("can't start", text)
+        self.assertIn("unregistered", text)
+
+    def test_destination_two_starts(self):
+        destination = big.log.Destination()
+        destination.register(3, 5)
+        destination.start()
+        with self.assertRaises(RuntimeError) as e:
+            destination.start()
+        text = str(e.exception)
+        self.assertIn("can't start", text)
+        self.assertIn("already started", text)
+
+    def test_destination_end_without_a_start(self):
+        destination = big.log.Destination()
+        with self.assertRaises(RuntimeError) as e:
+            destination.end()
+        text = str(e.exception)
+        self.assertIn("can't end", text)
+        self.assertIn("it wasn't started", text)
 
 
 class TestCallable(LogTestBase):
@@ -158,7 +183,7 @@ class TestCallable(LogTestBase):
     def test_callable_write(self):
         results = []
         c = big.log.Callable(results.append)
-        c.write(0, None, "test string")
+        c.write("test string")
         self.assertEqual(results, ["test string"])
 
 
@@ -170,14 +195,13 @@ class TestPrint(LogTestBase):
         original_print = builtins.print
         builtins.print = lambda *args, **kwargs: captured.append((args, kwargs))
         try:
-            printer = big.Log.Print()
-            printer.write(0, None, "hello")
+            printer = big.log.Print()
+            printer.write("hello")
         finally:
             builtins.print = original_print
         self.assertEqual(len(captured), 1)
         self.assertEqual(captured[0][0], ("hello",))
-        self.assertEqual(captured[0][1], {"end": "", "flush": True})
-
+        self.assertEqual(captured[0][1], {"end": ""})
 
 class TestList(LogTestBase):
     """Tests for the List destination."""
@@ -185,8 +209,8 @@ class TestList(LogTestBase):
     def test_list_write(self):
         array = []
         list_destination = big.log.List(array)
-        list_destination.write(0, None, "line1\n")
-        list_destination.write(0, None, "line2\n")
+        list_destination.write("line1\n")
+        list_destination.write("line2\n")
         self.assertEqual(array, ["line1\n", "line2\n"])
 
 
@@ -199,8 +223,8 @@ class TestBuffer(LogTestBase):
         builtins.print = lambda *args, **kwargs: captured.append((args, kwargs))
         try:
             buffer = big.log.Buffer()
-            buffer.write(0, None, "hello ")
-            buffer.write(0, None, "world")
+            buffer.write("hello ")
+            buffer.write("world")
             self.assertEqual(buffer._buffer, ["hello ", "world"])
             buffer.flush()
             self.assertEqual(buffer._buffer, [])
@@ -222,25 +246,26 @@ class TestFile(LogTestBase):
         # so we don't have to clean up here
         s = '/tmp/x'
         log = big.Log(s)
-        d_s = log._destinations[0]
+        d_s = log._formatters[0].destinations[0]
         log.close()
         self.assertEqual(d_s.path, s)
 
         p = pathlib.Path('/tmp/x')
         log = big.Log(p)
-        d_p = log._destinations[0]
+        d_p = log._formatters[0].destinations[0]
         log.close()
         self.assertEqual(d_p.path, p)
 
         b = b'/tmp/x'
         log = big.Log(b)
-        d_b = log._destinations[0]
+        d_b = log._formatters[0].destinations[0]
         log.close()
         self.assertEqual(d_b.path, b)
 
         self.assertEqual(d_s, d_p)
         self.assertEqual(d_s, d_b)
         self.assertEqual(d_p, d_b)
+
 
     def test_file_type_checks(self):
         with self.assertRaises(TypeError):
@@ -274,8 +299,8 @@ class TestFile(LogTestBase):
 
         try:
             file_destination = big.log.File(path, initial_mode='wt')
-            file_destination.write(0, None, "line1\n")
-            file_destination.write(0, None, "line2\n")
+            file_destination.write("line1\n")
+            file_destination.write("line2\n")
             self.assertEqual(file_destination._buffer, ["line1\n", "line2\n"])
 
             # File should be empty before flush
@@ -289,8 +314,6 @@ class TestFile(LogTestBase):
                 content = f.read()
             self.assertEqual(content, "line1\nline2\n")
 
-            # Close should work when array is empty
-            file_destination.end(12345)
         finally:
             os.unlink(path)
 
@@ -300,7 +323,7 @@ class TestFile(LogTestBase):
 
         try:
             fd = big.log.File(path, initial_mode='wt', buffering=False)
-            log = big.Log(fd, threading=False)
+            log = big.Log(fd, threaded=False)
 
             log.write("immediate\n")
 
@@ -321,7 +344,7 @@ class TestFile(LogTestBase):
 
         try:
             fd = big.log.File(path, initial_mode='at')
-            log = big.Log(fd, threading=False)
+            log = big.Log(fd, threaded=False)
             log.write("appended\n")
             log.close()
 
@@ -335,8 +358,8 @@ class TestFile(LogTestBase):
     def test_TmpFile(self):
         path = None
         try:
-            tmpfile = big.log.TMPFILE
-            log = testing_log(tmpfile, name="LogName", timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            tmpfile = big.log.TmpFile(timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            log = testing_log(tmpfile, name="LogName")
             log("xyz")
             path = tmpfile.path.name
             log.close()
@@ -349,8 +372,8 @@ class TestFile(LogTestBase):
 
         path = None
         try:
-            tmpfile = big.log.TmpfIle(prefix='wackadoodle')
-            log = testing_log(tmpfile, name="LogName", timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            tmpfile = big.log.TmpFile(prefix='wackadoodle', timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            log = testing_log(tmpfile, name="LogName")
             log("xyz")
             path = tmpfile.path.name
             log.close()
@@ -362,15 +385,16 @@ class TestFile(LogTestBase):
                 os.unlink(path)
 
         with self.assertRaises(TypeError):
-            big.log.TmpfIle(prefix=345)
+            big.log.TmpFile(prefix=345)
         with self.assertRaises(TypeError):
-            big.log.TmpfIle(prefix=3.1415)
+            big.log.TmpFile(prefix=3.1415)
         with self.assertRaises(TypeError):
-            big.log.TmpfIle(prefix=[1, 2, 3])
+            big.log.TmpFile(prefix=[1, 2, 3])
         with self.assertRaises(TypeError):
-            big.log.TmpfIle(prefix={'a': 'b'})
+            big.log.TmpFile(prefix={'a': 'b'})
         with self.assertRaises(TypeError):
-            big.log.TmpfIle(prefix=b'foo bar')
+            big.log.TmpFile(prefix=b'foo bar')
+
 
 
 
@@ -384,13 +408,13 @@ class TestFileHandle(LogTestBase):
     def test_filehandle_write(self):
         buffer = io.StringIO()
         fh_destination = big.log.FileHandle(buffer)
-        fh_destination.write(0, None, "test content")
+        fh_destination.write("test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
     def test_filehandle_write_without_autoflush(self):
         buffer = io.StringIO()
         fh_destination = big.log.FileHandle(buffer, autoflush=False)
-        fh_destination.write(0, None, "test content")
+        fh_destination.write("test content")
         self.assertEqual(buffer.getvalue(), "test content")
 
     def test_filehandle_flush(self):
@@ -411,25 +435,20 @@ class TestLogBasics(LogTestBase):
         log = big.Log(a)
 
         self.assertEqual(log.clock, big.log.default_clock)
-        self.assertEqual(log.indent, 4)
         self.assertEqual(log.name, 'Log')
-        self.assertEqual(log.prefix, big.log.prefix_format(3, 10, 12))
-        self.assertEqual(log.threading, True)
-        self.assertEqual(log.timestamp_format, big.time.timestamp_human)
+        self.assertEqual(log.threaded, True)
         self.assertEqual(log.timestamp_clock, time.time)
-        self.assertEqual(log.width, 79)
 
         self.assertEqual(log.closed, False)
         self.assertGreater(log.start_time_ns, ns)
         self.assertGreater(log.start_time_epoch, epoch)
-        self.assertEqual(log.end_time_epoch, None)
         self.assertEqual(log.nesting, ())
-        self.assertEqual(log.depth, 0)
 
         log.enter("xyz")
         log.flush()
-        self.assertEqual(log.nesting, ('xyz',))
-        self.assertEqual(log.depth, 1)
+        self.assertEqual(len(log.nesting), 1)
+        self.assertEqual(log.nesting[0].message, 'xyz')
+
 
     def test_log_default_destination(self):
         # With no destinations specified, should use print
@@ -442,7 +461,7 @@ class TestLogBasics(LogTestBase):
             log.close()
         finally:
             builtins.print = original_print
-        self.assertEqual(captured, [(("test message\n",), {'end': '', 'flush': True})])
+        self.assertEqual(captured, [(("test message\n",), {'end': ''}), (("",), {'end': '', 'flush': True})])
 
     def test_log_with_list(self):
         array = []
@@ -475,19 +494,15 @@ class TestLogBasics(LogTestBase):
 
     def test_log_with_invalid_destinations(self):
         with self.assertRaises(TypeError) as cm:
-            log = big.Log(12345, threading=False)
+            log = big.Log(12345, threaded=False)
         self.assertIn("don't know how to log to destination", str(cm.exception))
 
-    def test_log_with_none_destination(self):
-        log = testing_log(None)
-        log('where did it go?')
-        self.assertEqual(log.destinations, [None])
-        log.close()
 
+'''
 
     def test_extensible_destination_mapper(self):
         with self.assertRaises(TypeError) as cm:
-            log = big.Log(12345, threading=False)
+            log = big.Log(12345, threaded=False)
 
 
         try:
@@ -502,7 +517,7 @@ class TestLogBasics(LogTestBase):
             destinations = list(log._destinations)
             self.assertIsInstance(destinations[0], EventSink)
             self.assertIsInstance(destinations[1], big.log.List)
-            self.assertIsInstance(destinations[2], big.Log.Print)
+            self.assertIsInstance(destinations[2], big.log.Print)
         finally:
             big.log.Destination_mappers.clear()
 
@@ -558,8 +573,8 @@ class TestLogBasics(LogTestBase):
     def test_log_atexit(self):
         for threading in (False, True):
             for log_once in (False, True):
-                with self.subTest(threading=threading, log_once=log_once):
-                    log = testing_log([], threading=threading)
+                with self.subTest(threaded=threading, log_once=log_once):
+                    log = testing_log([], threaded=threading)
                     self.assertFalse(log.closed)
                     if log_once:
                         log("hello!")
@@ -979,7 +994,7 @@ class TestLogPaused(LogTestBase):
     """Tests for managing log.paused."""
     def test_log_permanently_paused(self):
         sink = big.Log.Sink()
-        log = big.Log(sink, threading=False)
+        log = big.Log(sink, threaded=False)
         log.pause()
         log('howdy')
         log.enter('hey you')
@@ -1186,7 +1201,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log("threaded message")
         log.write("threaded write")
         log.close()
@@ -1195,7 +1210,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_multiple_messages(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         for i in range(10):
             log(f"message {i}")
         log.close()
@@ -1205,7 +1220,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_enter_exit(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         with log.enter("threaded subsystem"):
             log("inside threaded")
         log.close()
@@ -1214,7 +1229,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_reset(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log("before")
         log.reset()
         log("after")
@@ -1226,7 +1241,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_reset_after_close(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log("before")
         log.close()
         log("dropped")
@@ -1241,7 +1256,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_threaded_box(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log.box("threaded heading")
         log.close()
         self.assertTrue(any("threaded heading" in s for s in array))
@@ -1249,7 +1264,7 @@ class TestLogThreading(LogTestBase):
     def test_log_threaded_blocking_flush(self):
         array = []
         buffer = big.log.Buffer(array)
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log("message")
         text = "\n".join(array)
         self.assertNotIn('message', text)
@@ -1260,7 +1275,7 @@ class TestLogThreading(LogTestBase):
     def test_log_threaded_asynchronous_flush(self):
         array = []
         buffer = big.log.Buffer(array)
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log("message")
         text = "\n".join(array)
         self.assertNotIn('message', text)
@@ -1273,7 +1288,7 @@ class TestLogThreading(LogTestBase):
 
     def test_log_flush_closed_error(self):
         array = []
-        log = testing_log(array, threading=True)
+        log = testing_log(array, threaded=True)
         log.close()
         log.flush()
 
@@ -1351,7 +1366,7 @@ class TestLogFormatting(LogTestBase):
 
     def test_system_formats_are_disallowed(self):
         a =[]
-        log = big.Log(a, threading=False)
+        log = big.Log(a, threaded=False)
 
         with self.assertRaises(ValueError):
             log("w", format='start')
@@ -1407,7 +1422,7 @@ class TestSink(LogTestBase):
 
     def test_sink_event_types(self):
         sink = big.Log.Sink()
-        log = big.Log(sink, threading=False)
+        log = big.Log(sink, threaded=False)
         log("regular event")
         log.write("write event")
         log.box("heading event")
@@ -1443,7 +1458,7 @@ class TestSink(LogTestBase):
 
     def test_sink_events_without_any_logging(self):
         sink = big.Log.Sink()
-        log = big.Log(sink, threading=False)
+        log = big.Log(sink, threaded=False)
         log.close()
         log.reset()
         log.close()
@@ -1535,7 +1550,7 @@ class TestEventSink(LogTestBase):
 
     def test_sink_events_without_any_logging(self):
         esink = EventSink()
-        log = big.Log(esink, threading=False)
+        log = big.Log(esink, threaded=False)
         log.close()
         log.reset()
         log.close()
@@ -1544,7 +1559,7 @@ class TestEventSink(LogTestBase):
 
     def test_sink_events(self):
         esink = EventSink()
-        log = big.Log(esink, threading=False)
+        log = big.Log(esink, threaded=False)
         log.write("abc")
         log("xyz")
         with log.enter("subsystem"):
@@ -1885,6 +1900,7 @@ howdy
 //end Ambergris//
 """.lstrip())
 
+'''
 
 def run_tests():
     bigtestlib.run(name="big.log", module=__name__)

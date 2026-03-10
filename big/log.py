@@ -376,15 +376,32 @@ class EnterContext(tuple):
 class Scheduler:
     def __init__(self, log, *, atexit=False, drain=False, first=False, wait=False):
         """
-        * atexit - sets wait=True, and in threaded mode
-            also schedules a None so the worker thread will exit
-        * drain - if true, and in in non-threaded mode, flush the work queue
-        * first - if true, insert these jobs on the front of the work queue,
-            default is to add them to the end
-        * wait - wait until all this scheduled work is completed
-            * in non-threaded mode, this is the same as drain
+        Manages creating "jobs" iterables and scheduling the work.  To use:
+
+            s = Scheduler()
+            s(fn, arg1, arg2) # adds fn(arg1, arg2) to our local job list
+            s()               # schedules all the work on the local job list
+
+        Scheduler takes four keyword-only boolean parameters
+        which guide its behavior:
+
+        * atexit - if true, and Log is in threaded mode,
+            schedules a final None so the worker thread will exit.
+            also, passes in a "blocker" so we can wait
+            until the worker thread has finished.
+
+        * drain - if true, and Log is in non-threaded mode,
+            flush the work queue.
+
+        * first - if true,
+            insert these jobs on the front of the work queue (in order).
+            default is to append them to the end.
+
+        * wait - if true,
+            wait until all this scheduled work is completed:
+            * in non-threaded mode, this is the same as drain.
             * in threaded mode, this blocks until the worker thread
-              processes every job queued by the scheduler
+              processes every job queued by the scheduler.
         """
         self.log = log
         self.jobs = []
@@ -393,10 +410,11 @@ class Scheduler:
 
         wait = wait or atexit
         threaded = log._threaded
-        self.block = wait and threaded
+        self.block = wait and threaded and (not atexit)
         self.drain = (drain or wait) and (not threaded)
 
         assert not (self.block and self.drain)
+        assert not (self.block and self.atexit)
 
     def __bool__(self):
         return bool(self.jobs)
@@ -407,20 +425,22 @@ class Scheduler:
             locker = None
             threaded = self.log._threaded
 
+            if self.block or self.atexit:
+                blocker = threading.Lock()
+                blocker.acquire()
+
             if self.block:
-                locker = threading.Lock()
-                locker.acquire()
-                jobs.append(((locker,), locker.release, ()))
+                jobs.append(((blocker,), blocker.release, ()))
 
             if self.atexit:
-                jobs.append(((), None, (locker.release,)))
+                jobs.append(((), None, (blocker.release,)))
 
             if jobs:
                 self.log._schedule(jobs, first=self.first)
                 self.jobs = jobs = []
 
             if self.block:
-                locker.acquire()
+                blocker.acquire()
 
             if self.drain:
                 self.log._drain()
@@ -823,7 +843,7 @@ class TextFormatter(Formatter):
                 if key not in ("start", "end", 'enter', 'exit'):
                     raise ValueError("None is only a valid value for 'start', 'end', 'enter', and 'exit' formats")
                 formats.pop(key, None)
-                formatters[key] = _none_format
+                # formatters[key] = _none_format
             else:
                 if not isinstance(value, dict):
                     raise TypeError(f"format values must be dict or None, but formats[{key!r}] is type {type(value).__name__}")
@@ -1143,8 +1163,8 @@ class Sink(Formatter):
 @export
 class Destination:
     def __init__(self):
-        self._owner = self._log = None
-        self._active = False
+        self.owner = self.log = None
+        self.active = False
 
     def __eq__(self, other):
         raise NotImplementedError()
@@ -1153,30 +1173,32 @@ class Destination:
         raise NotImplementedError()
 
     def __repr__(self):
-        registered = 'registered' if self._owner is not None else 'unregistered'
-        active = 'active' if self._active else 'inactive'
+        registered = 'registered' if self.owner is not None else 'unregistered'
+        active = 'active' if self.active else 'inactive'
         return f'<{type(self).__name__} {registered}>'
 
     def register(self, log, owner):
-        assert self._log is None
-        assert self._owner is None
-        assert log is not None
-        assert owner is not None
-        self._log = log
-        self._owner = owner
+        if (self.log is not None) or (self.owner is not None):
+            raise RuntimeError(f"{self} is already registered")
+        self.log = log
+        self.owner = owner
 
     def unregister(self):
-        assert self._log is not None
-        assert self._owner is not None
-        self._log = self._owner = None
+        if (self.log is None) or (self.owner is None):
+            raise RuntimeError(f"{self} isn't registered")
+        self.log = self.owner = None
 
     def start(self):
-        assert not self._active
-        self._active = True
+        if (self.log is None) or (self.owner is None):
+            raise RuntimeError(f"can't start {self}, it's unregistered")
+        if self.active:
+            raise RuntimeError(f"can't start {self}, it was already started")
+        self.active = True
 
     def end(self):
-        assert self._active
-        self._active = False
+        if not self.active:
+            raise RuntimeError(f"can't end {self}, it wasn't started")
+        self.active = False
 
     def write(self, formatted):
         raise NotImplementedError()
@@ -1332,6 +1354,8 @@ class File(Destination):
 class FileHandle(Destination):
     def __init__(self, handle, *, autoflush=False):
         super().__init__()
+        if not isinstance(handle, io.TextIOBase):
+            raise TypeError(f"invalid file handle {handle}")
         self._handle = handle
         self._autoflush = autoflush
 
@@ -1415,7 +1439,7 @@ class Buffer(Destination):
         super().__init__()
         self._buffer = []
         self._original_destination = destination
-        self._destination = Log.map_destination(destination) if destination is not None else Log.Print()
+        self._destination = map_destination(destination) if destination is not None else Print()
         self._last_elapsed = self._last_thread = None
 
 
@@ -1507,13 +1531,13 @@ class TmpFile(File):
 
     def register(self, log, owner):
         super().register(log, owner)
-        self._name = self._log.name
+        self._name = log.name
         self._rendered_prefix = self._prefix.format(name=self._name)
 
     def start(self):
         super().start()
-        assert self._owner
-        log = self._log
+        assert self.owner
+        log = self.log
 
         log_timestamp = self._timestamp_format(log.start_time_epoch)
         log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
@@ -1673,6 +1697,33 @@ class Log:
     def _stop_thread(self):
         pass
 
+    def _reset(self, start_time_ns, start_time_epoch):
+        self._state = 'initial'
+
+        self._start_time_ns = start_time_ns
+        self._start_time_epoch = start_time_epoch
+        self._end_time_ns = None
+        self._end_time_epoch = None
+
+        self._ever_wrote_anything = False
+
+        self._nesting_tokens = []
+        self._nesting_contexts = []
+
+        # do this immediately, don't wait for the thread to do it.
+        # otherwise, user might observe a delay between reset()
+        # and paused state changing.
+        #
+        # modifications of _paused_counter are always under lock
+        # so we don't have race conditions with incr/decr
+
+        if self._configuration_lock:
+            paused = self._paused_counter = int(bool(self.paused_on_reset))
+
+        self._send_start_banner = not paused
+        self._ever_logged_anything = set()
+
+
     def _atexit(self):
         clock = self._clock
         timestamp_clock = self._timestamp_clock
@@ -1681,6 +1732,11 @@ class Log:
         ns2 = clock()
         ns = (ns1 + ns2) // 2
 
+        # if the main program took < sys.getswitchinterval() seconds to run,
+        # the worker thread may have been completely starved and no jobs
+        # may have run yet.  so: call block.  in non-threaded mode,
+        # it's a no-op.  in threaded mode it will flush the job queue.
+        self._block()
         s = self._scheduler(atexit=True)
         self._ensure_state('exited', ns=ns, epoch=epoch, s=s)
         s(self._stop_thread)
@@ -1702,6 +1758,23 @@ class Log:
     @property
     def start_time_epoch(self):
         return self._start_time_epoch
+
+    @property
+    def threaded(self):
+        return self._threaded
+
+    @property
+    def timestamp_clock(self):
+        return self._timestamp_clock
+
+    @property
+    def closed(self):
+        return self._state in ('closed', 'exited')
+
+    @property
+    def nesting(self):
+        with self._configuration_lock:
+            return tuple(self._nesting_contexts)
 
 
     @classmethod
@@ -1748,32 +1821,6 @@ class Log:
                 return result
 
         return cls.base_destination_mapper(o)
-
-    def _reset(self, start_time_ns, start_time_epoch):
-        self._state = 'initial'
-
-        self._start_time_ns = start_time_ns
-        self._start_time_epoch = start_time_epoch
-        self._end_time_ns = None
-        self._end_time_epoch = None
-
-        self._ever_wrote_anything = False
-
-        self._nesting_tokens = []
-        self._nesting_contexts = []
-
-        # do this immediately, don't wait for the thread to do it.
-        # otherwise, user might observe a delay between reset()
-        # and paused state changing.
-        #
-        # modifications of _paused_counter are always under lock
-        # so we don't have race conditions with incr/decr
-
-        if self._configuration_lock:
-            paused = self._paused_counter = int(bool(self.paused_on_reset))
-
-        self._send_start_banner = not paused
-        self._ever_logged_anything = set()
 
 
 
@@ -1859,27 +1906,30 @@ class Log:
         self._end_time_epoch = epoch
         elapsed = self._elapsed(ns)
 
-        if self._threaded:
-            # force some synchronization:
-            # if we have any formatters that have never seen anything logged,
-            # it might be because the worker thread has been starved for CPU
-            # and hasn't been allowed to run their jobs yet.
-            # so, block until the worker thread clears the job queue.
-            #
-            # this will only happen if
-            #    * the Log object is unused, in which case the job queue
-            #      will be empty anyway, so this'll be quick.
-            #    * the program ran and finished super quick, less than
-            #      sys.getsysinterval() seconds.  if the program did any
-            #      logging, those jobs might be stuck in the queue,
-            #      and this will fix it.
-            #
-            # if all formatters have ever logged anything, we don't bother
-            # to block here.
-            all_f_ids = set(id(f) for f in self._formatters)
-            if self._ever_logged_anything != all_f_ids:
-                self._block()
+        # print(f"ES 1 {state=}")
 
+        # if self._threaded and (state == 'exited'):
+        #     # force some synchronization:
+        #     # if we have any formatters that have never seen anything logged,
+        #     # it might be because the worker thread has been starved for CPU
+        #     # and hasn't been allowed to run their jobs yet.
+        #     # so, block until the worker thread clears the job queue.
+        #     #
+        #     # this will only happen if
+        #     #    * the Log object is unused, in which case the job queue
+        #     #      will be empty anyway, so this'll be quick.
+        #     #    * the program ran and finished super quick, less than
+        #     #      sys.getsysinterval() seconds.  if the program did any
+        #     #      logging, those jobs might be stuck in the queue,
+        #     #      and this will fix it.
+        #     #
+        #     # if all formatters have ever logged anything, we don't bother
+        #     # to block here.
+        #     all_f_ids = set(id(f) for f in self._formatters)
+        #     if self._ever_logged_anything != all_f_ids:
+        #         self._block()
+
+        # print(f"ES 2 {state=}")
 
         for f in self._formatters:
             if f in self._active:
