@@ -2321,6 +2321,7 @@ class BigLinkedListTests(unittest.TestCase):
             rremove
 
             cut rcut
+            move rmove
             splice rsplice
 
             ##
@@ -5165,6 +5166,103 @@ class BigLinkedListTests(unittest.TestCase):
         t, it = setup()
         t2 = it.rcut(lock=_lock())
         self.assertEqual(it.linked_list, t2)
+
+
+    def test_move_and_rmove(self):
+        for _lock in self.lock_fns():
+            self.move_and_rmove_tests(_lock)
+
+    def move_and_rmove_tests(self, _lock):
+        def setup():
+            t = linked_list(range(1, 8), lock=_lock())
+            return t, t.head(), t.tail()
+
+        t, head, tail = setup()
+        t.move(t.find(6), t.find(2), t.find(5))
+        self.assertLinkedListEqual(t, [1, 5, 6, 2, 3, 4, 7])
+
+        t, head, tail = setup()
+        start = t.find(2)
+        stop = t.find(5)
+        where = t.find(6)
+        start.move(where, stop)
+        self.assertLinkedListEqual(t, [1, 5, 6, 2, 3, 4, 7])
+        self.assertEqual(start[0], 2)
+        self.assertIs(start.linked_list, t)
+
+        t, head, tail = setup()
+        t.move(t.tail(), t.find(2), t.find(4))
+        self.assertLinkedListEqual(t, [1, 4, 5, 6, 7, 2, 3])
+
+        t, head, tail = setup()
+        t.rmove(t.head(), t.find(5), t.find(2))
+        self.assertLinkedListEqual(t, [3, 4, 5, 1, 2, 6, 7])
+
+        t, head, tail = setup()
+        t.rmove(t.find(2), t.find(6), t.find(3))
+        self.assertLinkedListEqual(t, [1, 4, 5, 6, 2, 3, 7])
+
+        t, head, tail = setup()
+        start = t.find(6)
+        stop = t.find(3)
+        where = t.find(2)
+        start.rmove(where, stop)
+        self.assertLinkedListEqual(t, [1, 4, 5, 6, 2, 3, 7])
+        self.assertEqual(start[0], 6)
+        self.assertIs(start.linked_list, t)
+
+        t, head, tail = setup()
+        rit_start = reversed(t.find(6))
+        rit_stop = reversed(t.find(3))
+        where = t.find(2)
+        t.move(where, rit_start, rit_stop)
+        self.assertLinkedListEqual(t, [1, 4, 5, 6, 2, 3, 7])
+        self.assertEqual(rit_start[0], 6)
+        self.assertIs(rit_start.linked_list, t)
+
+        t, head, tail = setup()
+        rit_start = reversed(t.find(6))
+        rit_stop = reversed(t.find(3))
+        where = t.find(2)
+        rit_start.move(where, rit_stop)
+        self.assertLinkedListEqual(t, [1, 4, 5, 6, 2, 3, 7])
+        self.assertEqual(rit_start[0], 6)
+        self.assertIs(rit_start.linked_list, t)
+
+        t, head, tail = setup()
+        rit_start = reversed(t.find(2))
+        rit_stop = reversed(t.find(5))
+        where = t.find(6)
+        rit_start.rmove(where, rit_stop)
+        self.assertLinkedListEqual(t, [1, 5, 6, 2, 3, 4, 7])
+        self.assertEqual(rit_start[0], 2)
+        self.assertIs(rit_start.linked_list, t)
+
+        t, head, tail = setup()
+        unchanged = list(t)
+        t.move(t.find(6), t.find(4), t.find(4))
+        self.assertLinkedListEqual(t, unchanged)
+
+        t, head, tail = setup()
+        with self.assertRaises(ValueError):
+            t.move(t.find(3), t.find(2), t.find(5))
+        with self.assertRaises(ValueError):
+            t.rmove(t.find(5), t.find(6), t.find(3))
+
+        t, head, tail = setup()
+        with self.assertRaises(SpecialNodeError):
+            t.move(head, head, head)
+        with self.assertRaises(SpecialNodeError):
+            t.rmove(tail, tail, tail)
+
+        # move special nodes too.
+        t = linked_list([1, 2, 3, 4], lock=_lock())
+        it_2 = t.find(2)
+        del it_2[0]
+        t.move(t.head(), it_2, t.find(4))
+        self.assertLinkedListEqual(t, [3, 1, 4])
+        self.assertIsSpecial(it_2)
+        self.assertEqual(it_2.after()[0], 3)
 
 
     def test_reverse_iterators(self):
