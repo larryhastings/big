@@ -4086,11 +4086,15 @@ class BigLinkedListTests(unittest.TestCase):
         #
         # The fix: only "demote" previous to "special"
         # if it's a data node.
-        ll = linked_list([1, 2, 3], lock=_lock())
-        head = ll.head()
-        it = ll.find(1)
-        ll.clear()
-        self.assertEqual(head.special, 'head')
+        for value in (1, 2, 3):
+            with self.subTest(value=value):
+                ll = linked_list([1, 2, 3], lock=_lock())
+                head = ll.head()
+                it = ll.find(value)
+                ll.clear()
+                self.assertEqual(head.special, 'head')
+                self.assertLinkedListEqual(ll, [])
+                self.assertIsSpecial(it)
 
 
         ##################################
@@ -4106,9 +4110,250 @@ class BigLinkedListTests(unittest.TestCase):
         # the fix: bail out earlier if self._length < 2.
         # (if zero nodes: nothing to rotate:
         #  if one node: nothing changes.)
+
         ll = linked_list()
         ll.rotate(1)
 
+
+    def test_regression_reset_and_exhaust_relocate_iterators(self):
+        for _lock in self.lock_fns():
+            with self.subTest(_lock=_lock):
+                ll = linked_list([1, 2, 3], lock=_lock())
+                it = ll.find(2)
+                it_copy = it.copy()
+                it_copy.pop()
+                it_copy._del()
+                self.assertIsSpecial(it)
+                it.reset()
+                self.assertIsHead(it)
+                self.assertNoSpecialNodes(ll)
+                self.assertEqual(ll._head.iterator_refcount, 1)
+                it._del()
+                self.assertEqual(ll._head.iterator_refcount, 0)
+
+                ll = linked_list([1, 2, 3], lock=_lock())
+                it = ll.find(2)
+                it_copy = it.copy()
+                it_copy.pop()
+                it_copy._del()
+                self.assertIsSpecial(it)
+                it.exhaust()
+                self.assertIsTail(it)
+                self.assertNoSpecialNodes(ll)
+                self.assertEqual(ll._tail.iterator_refcount, 1)
+                it._del()
+                self.assertEqual(ll._tail.iterator_refcount, 0)
+
+                ll = linked_list([1, 2, 3], lock=_lock())
+                dit = ll.find(2)
+                dit_copy = dit.copy()
+                dit_copy.pop()
+                dit_copy._del()
+                rit = reversed(dit)
+                dit._del()
+                self.assertIsSpecial(rit)
+                rit.reset()
+                self.assertIsTail(rit)
+                self.assertNoSpecialNodes(ll)
+                self.assertEqual(ll._tail.iterator_refcount, 1)
+                rit._del()
+                self.assertEqual(ll._tail.iterator_refcount, 0)
+
+                ll = linked_list([1, 2, 3], lock=_lock())
+                dit = ll.find(2)
+                dit_copy = dit.copy()
+                dit_copy.pop()
+                dit_copy._del()
+                rit = reversed(dit)
+                dit._del()
+                self.assertIsSpecial(rit)
+                rit.exhaust()
+                self.assertIsHead(rit)
+                self.assertNoSpecialNodes(ll)
+                self.assertEqual(ll._head.iterator_refcount, 1)
+                rit._del()
+                self.assertEqual(ll._head.iterator_refcount, 0)
+
+    def test_regression_imul_uses_private_extend_inside_lock(self):
+        class NoReenterLock:
+            def __init__(self):
+                self._lock = Lock()
+                self._held = False
+
+            def acquire(self):
+                if self._held:
+                    raise RuntimeError('recursive acquire attempted')
+                self._lock.acquire()
+                self._held = True
+                return True
+
+            def release(self):
+                self._held = False
+                self._lock.release()
+
+            def __enter__(self):
+                self.acquire()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.release()
+                return False
+
+            def __bool__(self):
+                return True
+
+        ll = linked_list([1, 2, 3], lock=NoReenterLock())
+        ll *= 2
+        self.assertLinkedListEqual(ll, [1, 2, 3, 1, 2, 3])
+
+    def test_regression_reverse_short_lists_return_none_without_iterators(self):
+        for _lock in self.lock_fns():
+            with self.subTest(_lock=_lock):
+                ll = linked_list(lock=_lock())
+                self.assertIsNone(ll.reverse())
+                self.assertEqual(ll._head.iterator_refcount, 0)
+                self.assertEqual(ll._tail.iterator_refcount, 0)
+
+                ll = linked_list([1], lock=_lock())
+                self.assertIsNone(ll.reverse())
+                self.assertLinkedListEqual(ll, [1])
+                self.assertEqual(ll._head.iterator_refcount, 0)
+                self.assertEqual(ll._tail.iterator_refcount, 0)
+
+    def test_regression_cut_and_splice_refresh_iterator_lock_caches(self):
+        class RecordingLock:
+            def __init__(self, name, events):
+                self.name = name
+                self.events = events
+                self._lock = Lock()
+
+            def acquire(self):
+                self.events.append(f'acquire {self.name}')
+                self._lock.acquire()
+                return True
+
+            def release(self):
+                self.events.append(f'release {self.name}')
+                self._lock.release()
+
+            def __enter__(self):
+                self.acquire()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.release()
+                return False
+
+            def __bool__(self):
+                return True
+
+        events = []
+        old_lock = RecordingLock('old', events)
+        new_lock = RecordingLock('new', events)
+        ll = linked_list([1, 2, 3, 4, 5], lock=old_lock)
+        start = ll.find(2)
+        mid = ll.find(3)
+        stop = ll.find(4)
+
+        snippet = ll.cut(start, stop, lock=new_lock)
+        self.assertLinkedListEqual(ll, [1, 4, 5])
+        self.assertLinkedListEqual(snippet, [2, 3])
+        self.assertIs(start._lock, new_lock)
+        self.assertIs(stop._lock, old_lock)
+        self.assertIs(mid._lock, old_lock)
+
+        events.clear()
+        probe = mid.after(0)
+        probe._del()
+        self.assertIn('acquire new', events)
+        self.assertIn('release new', events)
+        self.assertIs(mid._lock, new_lock)
+
+        events.clear()
+        probe = stop.after(0)
+        probe._del()
+        self.assertEqual(events, ['acquire old', 'release old'])
+
+        lock_a = RecordingLock('A', events)
+        lock_b = RecordingLock('B', events)
+        lock_c = RecordingLock('C', events)
+        source = linked_list([1, 2, 3, 4], lock=lock_a)
+        start = source.find(1)
+        middle = source.find(2)
+        stop = source.find(4)
+        snippet = source.cut(start, stop, lock=lock_b)
+        other = linked_list([9], lock=lock_c)
+
+        events.clear()
+        middle.splice(other)
+        self.assertIn('acquire B', events)
+        self.assertIn('acquire C', events)
+        self.assertIs(middle._lock, lock_b)
+        self.assertLinkedListEqual(snippet, [1, 2, 9, 3])
+        self.assertLinkedListEqual(other, [])
+
+    def test_regression_extendleft_accepts_plain_iterators(self):
+        for _lock in self.lock_fns():
+            with self.subTest(_lock=_lock):
+                ll = linked_list([1, 2, 3], lock=_lock())
+                ll.extendleft(iter('abc'))
+                self.assertLinkedListEqual(ll, ['c', 'b', 'a', 1, 2, 3])
+
+    def test_regression_reverse_and_sort_move_nodes_not_values(self):
+        for _lock in self.lock_fns():
+            with self.subTest(operation='reverse', _lock=_lock):
+                ll = linked_list([1, 'X', 2, 3], lock=_lock())
+                it1 = ll.find(1)
+                it2 = ll.find(2)
+                it3 = ll.find(3)
+                special = ll.find('X')
+                special_copy = special.copy()
+                special_copy.pop()
+                special_copy._del()
+                node1 = it1._cursor
+                node2 = it2._cursor
+                node3 = it3._cursor
+
+                self.assertIsNone(ll.reverse())
+                self.assertLinkedListEqual(ll, [3, 2, 1])
+                self.assertIs(it1._cursor, node1)
+                self.assertEqual(it1[0], 1)
+                self.assertIs(it2._cursor, node2)
+                self.assertEqual(it2[0], 2)
+                self.assertIs(it3._cursor, node3)
+                self.assertEqual(it3[0], 3)
+                self.assertEqual(special.before()[0], 2)
+                self.assertEqual(special.after()[0], 1)
+
+            with self.subTest(operation='sort', _lock=_lock):
+                ll = linked_list([2, 'X', 'Y', 3, 1], lock=_lock())
+                it1 = ll.find(1)
+                it2 = ll.find(2)
+                it3 = ll.find(3)
+                special_x = ll.find('X')
+                special_y = ll.find('Y')
+                special_x_copy = special_x.copy()
+                special_x_copy.pop()
+                special_x_copy._del()
+                special_y_copy = special_y.copy()
+                special_y_copy.pop()
+                special_y_copy._del()
+                node1 = it1._cursor
+                node2 = it2._cursor
+                node3 = it3._cursor
+
+                self.assertIsNone(ll.sort())
+                self.assertLinkedListEqual(ll, [1, 2, 3])
+                self.assertIs(it1._cursor, node1)
+                self.assertEqual(it1[0], 1)
+                self.assertIs(it2._cursor, node2)
+                self.assertEqual(it2[0], 2)
+                self.assertIs(it3._cursor, node3)
+                self.assertEqual(it3[0], 3)
+                self.assertEqual(special_x.before()[0], 2)
+                self.assertEqual(special_x.after()[0], 3)
+                self.assertEqual(special_y.before()[0], 2)
+                self.assertEqual(special_y.after()[0], 3)
 
 
     def test_misc_methods(self):

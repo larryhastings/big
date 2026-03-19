@@ -2201,10 +2201,10 @@ class linked_list:
         with self._lock or _inert_context_manager:
             if multiplicand <= 0:
                 self._clear()
-            else:
-                elements = list((node.value for node in self._internal_iter()))
+            elif multiplicand > 1:
+                elements = [node.value for node in self._internal_iter()]
                 for _ in range(multiplicand - 1):
-                    self.extend(elements)
+                    self._extend(elements)
         return self
 
     def __iter__(self):
@@ -2669,10 +2669,10 @@ class linked_list:
         while cursor != tail:
             next = cursor.next
             if cursor.iterator_refcount:
-                if not previous.special:
+                if cursor.special is None:
                     # keep node, but demote to 'special'
-                    previous.special = 'special'
-                    previous.value = None
+                    cursor.special = 'special'
+                    cursor.value = None
 
                 previous.next = cursor
                 cursor.previous = previous
@@ -2780,40 +2780,88 @@ class linked_list:
             return value
 
     def reverse(self):
-        "Reverses all values in the linked_list."
+        "Reverses all nodes in the linked_list."
         with self._lock or _inert_context_manager:
-            if self._length < 2:
-                # reverse is a no-op for lists of length 0 or 1
-                return self.__iter__()
+            head = self._head
+            tail = self._tail
 
-            previous_r = None
-            fit = self._internal_iter()
-            rit = self._internal_reversed()
+            first = head.next
+            if first is tail:
+                return None
 
-            while True:
-                f = next(fit)
-                r = next(rit)
-                if ((f == r) # odd number of nodes
-                    or (f == previous_r)): # even number of nodes (or no nodes)
-                    break
+            last = tail.previous
+            if first is last:
+                return None
 
-                tmp = f.value
-                f.value = r.value
-                r.value = tmp
+            cursor = first
+            while cursor is not tail:
+                next = cursor.next
+                cursor.next = cursor.previous
+                cursor.previous = next
+                cursor = next
 
-                previous_r = r
+            head.next = last
+            last.previous = head
+            tail.previous = first
+            first.next = tail
+
+        return None
 
     def sort(self, key=None, reverse=False):
         "Sorts the list in ascending order.  Arguments are the same as list.sort."
-        # copy to list, sort, then write back in-place
-        # if the list has special nodes, this might be very exciting!
-
         with self._lock or _inert_context_manager:
-            values = list((node.value for node in self._internal_iter()))
-            values.sort(key=key, reverse=reverse)
+            if self._length < 2:
+                return None
 
-            for node, value in zip(self._internal_iter(), values):
-                node.value = value
+            head = self._head
+            tail = self._tail
+
+            nodes = []
+            specials = []
+
+            cursor = head.next
+            while cursor is not tail:
+                if cursor.special == 'special':
+                    first = cursor
+                    while (cursor.next is not tail) and (cursor.next.special == 'special'):
+                        cursor = cursor.next
+                    last = cursor
+                    anchor = last.next
+                    specials.append((anchor, first, last))
+                    cursor = anchor
+                    continue
+
+                nodes.append(cursor)
+                cursor = cursor.next
+
+            if key is not None:
+                k = lambda node: key(node.value)
+            else:
+                k = lambda node: node.value
+            nodes.sort(key=k, reverse=reverse)
+
+            for anchor, first, last in specials:
+                before = first.previous
+                after = last.next
+                before.next = after
+                after.previous = before
+
+            previous = head
+            for node in nodes:
+                previous.next = node
+                node.previous = previous
+                previous = node
+            previous.next = tail
+            tail.previous = previous
+
+            for anchor, first, last in specials:
+                before = anchor.previous
+                before.next = first
+                first.previous = before
+                last.next = anchor
+                anchor.previous = last
+
+        return None
 
 
     def _cut(self, start, stop, lock, _lock, is_rcut):
@@ -2997,8 +3045,6 @@ class linked_list:
 
             if not start_is_none:
                 start_iterator._lock = t2._lock
-            if not stop_is_none:
-                stop_iterator._lock = t2._lock
 
             return t2
         finally:
@@ -3116,7 +3162,7 @@ class linked_list:
             cursor = cursor.next
 
         if (where is not None) and (special is not None):
-            where._cursor = special
+            where._relocate(special)
 
     def _splice_check_other(self, other):
         if not isinstance(other, linked_list):
@@ -3231,13 +3277,21 @@ class linked_list:
     ##
     ## special deque compatibility layer
     ##
+    def _extendleft(self, iterable):
+        first = self._head.next
+        for value in iterable:
+            first = first.insert_before(value)
+
     def extendleft(self, iterable):
         """
         Prepend the elements from the iterable to the linked_list, helpfully in reverse order.
         """
         if iterable is self:
             raise ValueError("can't extendleft self with self")
-        self.rextend(reversed(iterable))
+        if not self._lock:
+            return self._extendleft(iterable)
+        with self._lock:
+            return self._extendleft(iterable)
 
     def rotate(self, n):
         "Rotate the linked_list n steps to the right.  If n is negative, rotate left."
@@ -3362,7 +3416,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._cursor.linked_list
         finally:
@@ -3382,7 +3437,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._repr()
         finally:
@@ -3407,6 +3463,20 @@ class linked_list_base_iterator:
             if unlink is not None:
                 unlink()
 
+    def _relocate(self, destination):
+        cursor = self._cursor
+        if destination is cursor:
+            self._lock = destination.linked_list._lock
+            return
+
+        cursor.iterator_refcount = iterator_refcount = cursor.iterator_refcount - 1
+        if (not iterator_refcount) and (cursor.special == 'special'):
+            cursor.unlink()
+
+        self._cursor = destination
+        destination.iterator_refcount += 1
+        self._lock = destination.linked_list._lock
+
     def __del__(self):
         # drop our reference to the current node.
         # that means decrementing node.iterator_refcount.
@@ -3415,10 +3485,23 @@ class linked_list_base_iterator:
         lock = None
         try:
             while True:
-                lock = getattr(self, '_lock', None)
+                cursor = getattr(self, '_cursor', None)
+                if cursor is None:
+                    return
+                linked_list = getattr(cursor, 'linked_list', None)
+                lock = getattr(linked_list, '_lock', None)
                 if lock:
                     lock.acquire()
-                    if lock is not getattr(self, '_lock', None): lock.release() ; continue
+                cursor = getattr(self, '_cursor', None)
+                if cursor is None:
+                    if lock:
+                        lock.release()
+                    lock = None
+                    return
+                linked_list = getattr(cursor, 'linked_list', None)
+                lock2 = getattr(linked_list, '_lock', None)
+                if lock is not lock2: lock and lock.release() ; self._lock = lock2 ; lock = lock2 ; continue
+                self._lock = lock2
                 break
             self._del()
         finally:
@@ -3451,7 +3534,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             tail = cursor.linked_list._tail
@@ -3473,7 +3557,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return (
                 (self.__class__ == other.__class__)
@@ -3495,7 +3580,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return _secret_iterator_fun_factory(self.__class__, self._cursor)
         finally:
@@ -3512,7 +3598,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             length = 0
             cursor = self._cursor
@@ -3556,7 +3643,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._next()
         finally:
@@ -3583,7 +3671,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             next = self._next
 
@@ -3650,7 +3739,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             previous = self._previous
             if default == _undefined:
@@ -3681,7 +3771,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             if not hasattr(count, '__index__'):
                 raise TypeError(f'count must be an int, not {type(count).__name__}')
@@ -3713,7 +3804,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             if not hasattr(count, '__index__'):
                 raise TypeError(f'count must be an int, not {type(count).__name__}')
@@ -3740,9 +3832,10 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
-            self._cursor = self._cursor.linked_list._head
+            self._relocate(self._cursor.linked_list._head)
         finally:
             if _lock:
                 _lock.release()
@@ -3754,9 +3847,10 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
-            self._cursor = self._cursor.linked_list._tail
+            self._relocate(self._cursor.linked_list._tail)
         finally:
             if _lock:
                 _lock.release()
@@ -3768,7 +3862,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._cursor.special
         finally:
@@ -3782,7 +3877,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._cursor.special is not None
         finally:
@@ -3849,7 +3945,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
 
             if isinstance(key, slice):
@@ -3871,7 +3968,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
 
             if not isinstance(key, slice):
@@ -3936,7 +4034,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             if not isinstance(key, slice):
                 cursor = self._cursor_at_iterator_index(key)
@@ -3965,7 +4064,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor_at_iterator_index(index, allow_head_and_tail=True)
             if cursor.special == 'head':
@@ -3982,7 +4082,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             tail = cursor.linked_list._tail
@@ -4003,7 +4104,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             head = cursor.linked_list._head
@@ -4041,7 +4143,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             if index != 0:
                 cursor = self._cursor_at_iterator_index(index)
@@ -4076,7 +4179,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             if index != 0:
                 cursor = self._cursor_at_iterator_index(index)
@@ -4112,7 +4216,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._remove(value, default)
         finally:
@@ -4136,7 +4241,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return self._rremove(value, default)
         finally:
@@ -4150,7 +4256,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             # -- handle self pointing at tail, or not --
             cursor = self._cursor
@@ -4170,7 +4277,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             # -- handle self pointing at head, or not --
             cursor = self._cursor
@@ -4190,7 +4298,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             if other is cursor.linked_list:
@@ -4217,7 +4326,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             if other is cursor.linked_list:
@@ -4255,7 +4365,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._find(value)
             if not cursor:
@@ -4284,7 +4395,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._rfind(value)
             if cursor is None:
@@ -4301,7 +4413,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
 
@@ -4325,7 +4438,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
 
@@ -4353,7 +4467,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
 
             cursor = self._cursor
@@ -4385,7 +4500,7 @@ class linked_list_base_iterator:
             tail.previous = previous
             previous.next = tail
 
-            self._cursor = tail
+            self._relocate(tail)
             t._length -= count
 
         finally:
@@ -4403,7 +4518,8 @@ class linked_list_base_iterator:
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             t = cursor.linked_list
@@ -4434,7 +4550,7 @@ class linked_list_base_iterator:
             head.next = next
             next.previous = head
 
-            self._cursor = head
+            self._relocate(head)
             t._length -= count
 
         finally:
@@ -4527,21 +4643,22 @@ class linked_list_base_iterator:
 
         try:
             other_lock = other._lock
+            self_lock = self._lock
 
             while True:
-                self_lock = self._lock
-
                 if self_lock is None:
-                    if other_lock is None:
-                        break
-                    other_lock.acquire()
-                    append(other_lock)
+                    if other_lock is not None:
+                        other_lock.acquire()
+                        append(other_lock)
+                    self_lock2 = self._cursor.linked_list._lock
+                    if self_lock is not self_lock2: clear_locks(locks) ; self_lock = self._lock = self_lock2 ; continue
                     break
 
                 if (other_lock is self_lock) or (other_lock is None):
                     self_lock.acquire()
                     append(self_lock)
-                    if self_lock is not self._lock: clear_locks(locks) ; continue
+                    self_lock2 = self._cursor.linked_list._lock
+                    if self_lock is not self_lock2: clear_locks(locks) ; self_lock = self._lock = self_lock2 ; continue
                     break
 
                 lock_other_first = id(other_lock) < id(self_lock)
@@ -4551,7 +4668,8 @@ class linked_list_base_iterator:
 
                 self_lock.acquire()
                 append(self_lock)
-                if self_lock is not self._lock: clear_locks(locks) ; continue
+                self_lock2 = self._cursor.linked_list._lock
+                if self_lock is not self_lock2: clear_locks(locks) ; self_lock = self._lock = self_lock2 ; continue
 
                 if not lock_other_first:
                     other_lock.acquire()
@@ -4615,7 +4733,8 @@ class linked_list_iterator(linked_list_base_iterator):
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return _secret_iterator_fun_factory(linked_list_reverse_iterator, self._cursor)
 
@@ -4656,7 +4775,8 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             return _secret_iterator_fun_factory(linked_list_iterator, self._cursor)
         finally:
@@ -4708,9 +4828,10 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
-            self._cursor = self._cursor.linked_list._tail
+            self._relocate(self._cursor.linked_list._tail)
         finally:
             if _lock:
                 _lock.release()
@@ -4722,9 +4843,10 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
-            self._cursor = self._cursor.linked_list._head
+            self._relocate(self._cursor.linked_list._head)
         finally:
             if _lock:
                 _lock.release()
@@ -4755,7 +4877,8 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             cursor = self._cursor
             head = cursor.linked_list._head
@@ -4858,7 +4981,8 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock = self._lock
                 if _lock:
                     _lock.acquire()
-                    if _lock is not self._lock: _lock.release() ; continue
+                _lock2 = self._cursor.linked_list._lock
+                if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             length = 0
             cursor = self._cursor
