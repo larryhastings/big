@@ -218,6 +218,23 @@ class BigStringTests(unittest.TestCase):
         self.assertString(slice, "bcd")
         self.assertString(slice.origin, s)
 
+    def test_regression_constructor_accepts_index_types(self):
+        class Indexable:
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        s = string('abc', line_number=Indexable(2), column_number=Indexable(3), first_column_number=Indexable(1), tab_width=Indexable(4))
+        self.assertEqual(s.line_number, 2)
+        self.assertEqual(s.column_number, 3)
+        self.assertEqual(s.first_column_number, 1)
+        self.assertEqual(s.tab_width, 4)
+
+        same = string(s, line_number=Indexable(1), column_number=Indexable(1), first_column_number=Indexable(1), tab_width=Indexable(8))
+        self.assertIs(same, s)
+
+
     def test___add__(self):
         self.assertString(l + " xyz", 'abcde xyz')
         self.assertString("boogie " + alphabet[22:], 'boogie wxyz')
@@ -276,6 +293,39 @@ class BigStringTests(unittest.TestCase):
         self.assertEqual(x[9].line_number, s_line_number)
         self.assertEqual(x[8].column_number, s_column_number)
         self.assertEqual(x[8].source, s_source)
+
+
+    def test_regression_string_new_respects_exact_class(self):
+        class S(string):
+            pass
+
+        base = string('abc')
+        sub = S('abc')
+
+        self.assertIs(string(base), base)
+        self.assertIs(S(sub), sub)
+
+        sub_from_base = S(base)
+        self.assertIs(type(sub_from_base), S)
+        self.assertEqual(sub_from_base, 'abc')
+        self.assertEqual(sub_from_base._ranges, base._ranges)
+        self.assertEqual(sub_from_base._length, base._length)
+        self.assertEqual(sub_from_base._line_number, base._line_number)
+        self.assertEqual(sub_from_base._column_number, base._column_number)
+        self.assertEqual(sub_from_base._source, base._source)
+        self.assertEqual(sub_from_base._origin, base._origin)
+        self.assertEqual(sub_from_base._offset, base._offset)
+
+        base_from_sub = string(sub)
+        self.assertIs(type(base_from_sub), string)
+        self.assertEqual(base_from_sub, 'abc')
+        self.assertEqual(base_from_sub._ranges, sub._ranges)
+        self.assertEqual(base_from_sub._length, sub._length)
+        self.assertEqual(base_from_sub._line_number, sub._line_number)
+        self.assertEqual(base_from_sub._column_number, sub._column_number)
+        self.assertEqual(base_from_sub._source, sub._source)
+        self.assertEqual(base_from_sub._origin, sub._origin)
+        self.assertEqual(base_from_sub._offset, sub._offset)
 
 
     def test___class__(self):
@@ -347,9 +397,6 @@ class BigStringTests(unittest.TestCase):
             '_partition',
             '_ranges',
             '_source',
-            '_string_context',
-            '_string_context_line',
-            '_string_context_parts',
             '_split',
             'bisect',
             'cat',
@@ -441,6 +488,20 @@ class BigStringTests(unittest.TestCase):
         last_zero = abcde[len(abcde):len(abcde)]
         self.assertEqual(last_zero.line_number, 1)
         self.assertEqual(last_zero.column_number, abcde.first_column_number + len(abcde))
+
+        # regression: negative-step slicing with far out-of-range bounds
+        for value_name, value in values.items():
+            s = str(value)
+            with self.subTest(value=value_name):
+                self.assertString(value[:-100:-1], s[:-100:-1])
+                self.assertString(value[-100::-1], s[-100::-1])
+                self.assertString(value[100::-1], s[100::-1])
+                self.assertString(value[::-3], s[::-3])
+                self.assertString(value[-3::-3], s[-3::-3])
+
+        empty = string('')
+        self.assertString(empty[-3::-3], '')
+        self.assertString(empty[:-100:-1], '')
 
         # index must be slice or int
         with self.assertRaises(TypeError):
@@ -871,6 +932,11 @@ class BigStringTests(unittest.TestCase):
         result = a.join(list(abcde))
         self.assertString(result, 'aabacadae')
 
+        for sep in (empty, a, abcde):
+            with self.subTest(sep=sep):
+                self.assertString(sep.join([]), str(sep).join([]))
+                self.assertString(sep.join(iter(())), str(sep).join(iter(())))
+
     def test_center(self):
         for value_name, value in values.items():
             with self.subTest(value=value_name):
@@ -889,6 +955,34 @@ class BigStringTests(unittest.TestCase):
             abcde.center(5.5)
         with self.assertRaises(TypeError):
             abcde.center([3], 'x')
+
+
+    def test_regression_indexable_integer_arguments(self):
+        class Indexable:
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        idx5 = Indexable(5)
+        idx1 = Indexable(1)
+        idx2 = Indexable(2)
+        idxm1 = Indexable(-1)
+
+        self.assertString(abcde.ljust(idx5), str(abcde).ljust(idx5))
+        self.assertString(abcde.rjust(idx5), str(abcde).rjust(idx5))
+        self.assertString(abcde.center(idx5), str(abcde).center(idx5))
+        self.assertString(string('+42').zfill(Indexable(5)), '+0042')
+
+        self.assertString(abcde.replace('a', 'x', idx1), str(abcde).replace('a', 'x', idx1))
+
+        self.assertEqual(abcde.partition('b', idx2), abcde.partition('b', 2))
+        self.assertEqual(abcde.rpartition('b', idx2), abcde.rpartition('b', 2))
+
+        self.assertEqual(abcde.split('b', idx1), str(abcde).split('b', idx1))
+        self.assertEqual(abcde.rsplit('b', idx1), str(abcde).rsplit('b', idx1))
+        self.assertEqual(abcde.split('b', idxm1), str(abcde).split('b', idxm1))
+        self.assertEqual(abcde.rsplit('b', idxm1), str(abcde).rsplit('b', idxm1))
 
 
     def test_ljust(self):
@@ -1075,6 +1169,18 @@ class BigStringTests(unittest.TestCase):
             )
         self.assertEqual(string.cat(*partitions), l)
 
+        for count in (1, 0, 2, -1):
+            with self.subTest(count=count):
+                with self.assertRaises(ValueError):
+                    abcde.partition('', count)
+                with self.assertRaises(ValueError):
+                    abcde.rpartition('', count)
+
+        with self.assertRaises(TypeError):
+            abcde.partition('', 33.5)
+        with self.assertRaises(TypeError):
+            abcde.rpartition('', 33.5)
+
         with self.assertRaises(TypeError):
             abcde.partition(33.5)
         with self.assertRaises(TypeError):
@@ -1114,6 +1220,29 @@ class BigStringTests(unittest.TestCase):
         except TypeError as e:
             self.assertTrue(str(e).startswith("removesuffix"))
 
+    @unittest.skipIf(sys.version_info < (3, 9), "str.removesuffix is 3.9+")
+    def test_regression_removesuffix_empty_string(self):
+        values_to_test = (
+            '',
+            'a',
+            'abc',
+            'abcabc',
+        )
+
+        suffixes = (
+            '',
+            'a',
+            'bc',
+            'x',
+        )
+
+        for raw in values_to_test:
+            s = string(raw)
+            for suffix in suffixes:
+                with self.subTest(s=raw, suffix=suffix):
+                    self.assertString(s.removesuffix(suffix), raw.removesuffix(suffix))
+
+
     def test_replace(self):
         for value_name, value in values.items():
             for src in "abcde":
@@ -1145,6 +1274,42 @@ class BigStringTests(unittest.TestCase):
             abcde.replace('x', 456)
         except TypeError as e:
             self.assertIn("int", str(e))
+
+    def test_regression_replace_empty_old_matches_str(self):
+        cases = (
+            ('', '-', 0),
+            ('', '-', 1),
+            ('', '-', -1),
+            ('a', '-', 0),
+            ('a', '-', 1),
+            ('a', '-', 2),
+            ('a', '-', -1),
+            ('ab', '-', 1),
+            ('ab', '-', 2),
+            ('ab', '-', 3),
+            ('ab', '-', -1),
+            ('ab', '', 2),
+            ('ab', '', -1),
+        )
+
+        for raw, new, count in cases:
+            s = string(raw)
+            with self.subTest(s=s, new=new, count=count):
+                string_result = s.replace('', new, count)
+                str_result = raw.replace('', new, count)
+
+                self.assertEqual(string_result, str_result)
+
+                if not count:
+                    self.assertIsInstance(string_result, type(s))
+                elif not s:
+                    if (count > 0) and (python_version < Version('3.9')):
+                        self.assertIsInstance(string_result, type(s))
+                    else:
+                        self.assertIsInstance(string_result, type(new))
+                else:
+                    self.assertIsInstance(string_result, string)
+
 
     def test_reversed(self):
         for i, (s, c) in enumerate(zip(reversed(abcde), reversed(str(abcde)))):
@@ -1248,6 +1413,19 @@ class BigStringTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             abcde.rsplit('x', 33.5)
 
+        class Indexable:
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        idx1 = Indexable(1)
+        idxm1 = Indexable(-1)
+        self.assertEqual(abcde.split('b', idx1), str(abcde).split('b', idx1))
+        self.assertEqual(abcde.rsplit('b', idx1), str(abcde).rsplit('b', idx1))
+        self.assertEqual(abcde.split('b', idxm1), str(abcde).split('b', idxm1))
+        self.assertEqual(abcde.rsplit('b', idxm1), str(abcde).rsplit('b', idxm1))
+
 
     def test_splitlines(self):
         # splitlines_demo = string(' a \n b \r c \r\n d \n\r e ', source='Z')
@@ -1302,6 +1480,22 @@ class BigStringTests(unittest.TestCase):
     def test_zfill(self):
         self.assertEqual(himem.zfill(8), "000QEMM\n")
         self.assertString(himem.zfill(5), "QEMM\n")
+
+        values_to_test = (
+            '',
+            '42',
+            '+42',
+            '-42',
+            '+',
+            '-',
+            '--42',
+        )
+
+        for raw in values_to_test:
+            for width in range(-1, 8):
+                with self.subTest(s=raw, width=width):
+                    s = string(raw)
+                    self.assertString(s.zfill(width), raw.zfill(width))
 
     #######
     ## our additions
@@ -1852,15 +2046,66 @@ class BigStringTests(unittest.TestCase):
         result_all = ctx.all
         self.assertIsInstance(result_all, string)
 
+    def test_regression_stateless_string_subclasses(self):
+        class S(string):
+            pass
+
+        class T(string):
+            pass
+
+        s = S('abc')
+        t = T('xyz')
+
+        result = S.cat()
+        self.assertIs(type(result), S)
+        self.assertEqual(result, '')
+
+        result = S.cat('abc')
+        self.assertIs(type(result), S)
+        self.assertEqual(result, 'abc')
+
+        result = S.cat(t)
+        self.assertIs(type(result), S)
+        self.assertEqual(result, 'xyz')
+        self.assertIs(result.origin, t)
+
+        result = S('') + 'abc'
+        self.assertIs(type(result), S)
+        self.assertEqual(result, 'abc')
+
+        result = 'abc' + S('')
+        self.assertIs(type(result), S)
+        self.assertEqual(result, 'abc')
+
+        result = S(',').join([])
+        self.assertIs(type(result), S)
+        self.assertEqual(result, '')
+
+        result = S('').join(['a'])
+        self.assertIs(type(result), S)
+        self.assertEqual(result, 'a')
+
+        result = S('').join([t])
+        self.assertIs(type(result), S)
+        self.assertEqual(result, 'xyz')
+        self.assertIs(result.origin, t)
+
+        sub = S('hello')[1:4]
+        ctx = sub.context
+        rendered = ctx.all
+        self.assertIs(type(rendered), S)
+        self.assertIn('ell', rendered)
+
+
     def test_context_coverage(self):
         s = string('hello world\n', source='test.py')
         sub = s[6:11]
         ctx = sub.context
         p = ctx.parts
 
-        # _string_context_line.__repr__
+        # string_context_line.__repr__
         repr(p.string)
-        # _string_context_parts.__repr__
+        # string_context_parts.__repr__
         repr(p)
         # ctx.origin
         self.assertIs(ctx.origin, sub.origin)

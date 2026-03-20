@@ -29,6 +29,7 @@ from bisect import bisect_right
 from collections import deque
 import copy
 from itertools import zip_longest
+import operator
 import re
 import sys
 import threading
@@ -61,6 +62,9 @@ export = mm.export
 
 
 _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
+_python_3_9_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 9))
+
+_index = operator.index
 
 
 
@@ -204,6 +208,259 @@ class _Range:
 
 
 @export
+class string_context_line(tuple):
+    """
+    A 4-tuple of (before, span, after, linebreak) representing
+    either a line of source text or a line of highlight carets.
+    """
+    __slots__ = ()
+
+    def __new__(cls, before, span, after, linebreak):
+        return tuple.__new__(cls, (before, span, after, linebreak))
+
+    @property
+    def before(self):
+        return self[0]
+
+    @property
+    def span(self):
+        return self[1]
+
+    @property
+    def after(self):
+        return self[2]
+
+    @property
+    def linebreak(self):
+        return self[3]
+
+    def __repr__(self):
+        return f"string_context_line(before={self[0]!r}, span={self[1]!r}, after={self[2]!r}, linebreak={self[3]!r})"
+
+
+@export
+class string_context_parts(tuple):
+    """
+    A 2-tuple of (string, highlight) where each is a string_context_line.
+    """
+    __slots__ = ()
+
+    def __new__(cls, string, highlight):
+        return tuple.__new__(cls, (string, highlight))
+
+    @property
+    def string(self):
+        return self[0]
+
+    @property
+    def highlight(self):
+        return self[1]
+
+    def __repr__(self):
+        return f"string_context_parts(string={self[0]!r}, highlight={self[1]!r})"
+
+
+@export
+class string_context:
+    """
+    Context information for a big.string, showing the source line(s)
+    and highlight caret(s) indicating where the string appears.
+
+    If the string is a simple contiguous slice (single range), context
+    is valid (bool(context) is True) and all properties work.
+
+    If the string contains slices from multiple ranges (e.g. concatenated
+    from different sources), bool(context) is False, and accessing parts,
+    all_parts, __str__, or all will raise ValueError.
+
+    Properties:
+        parts:     A string_context_parts for the first line only.
+        all_parts: A tuple of string_context_parts for all lines.
+        all:       A string rendering of all lines with highlights.
+
+    Also delegates line_number, column_number, source, offset, origin,
+    and where to the underlying string.  Only retains a weakref to the
+    underlying string; if the original string is destroyed, these
+    attributes will raise ReferenceError.
+    """
+    __slots__ = ('_weakref', '_parts', '_all_parts')
+
+    _no_context_message = "no context available, string contains slices from multiple other strings"
+
+    def __init__(self, string):
+        self._weakref = weakref.ref(string)
+        self._parts = None
+        self._all_parts = None
+
+    def _string(self):
+        string = self._weakref()
+        if string is None:
+            raise ReferenceError('string has been destroyed')
+        return string
+
+
+    def __bool__(self):
+        return len(self._string()._ranges) == 1
+
+    def _compute(self):
+        if not self:
+            raise ValueError(self._no_context_message)
+        s = self._string()
+        r = s._ranges[0]
+        origin = r.origin
+        origin_string = origin.string
+        tab_width = origin.tab_width
+        range_start = r.start
+        range_stop = r.stop
+
+        linebreak_offsets = origin.linebreak_offsets
+        if linebreak_offsets is None:
+            linebreak_offsets = origin.compute_linebreak_offsets()
+
+        # which lines does our range span?
+        start_line_idx = bisect_right(linebreak_offsets, range_start)
+        if range_stop > range_start:
+            stop_line_idx = bisect_right(linebreak_offsets, range_stop - 1)
+        else:
+            # zero-length string: same line
+            stop_line_idx = start_line_idx
+
+        all_parts = []
+        n_lines = stop_line_idx - start_line_idx + 1
+
+        for i, line_idx in enumerate(range(start_line_idx, stop_line_idx + 1)):
+            # find line boundaries in the origin
+            line_start = linebreak_offsets[line_idx - 1] if line_idx else 0
+
+            if line_idx < len(linebreak_offsets):
+                line_end_with_break = linebreak_offsets[line_idx]
+                # find where linebreak starts
+                # all linebreaks are length 1 except \r\n which is length 2
+                if line_end_with_break >= 2 and origin_string[line_end_with_break - 2:line_end_with_break] == '\r\n':
+                    lb_start = line_end_with_break - 2
+                else:
+                    lb_start = line_end_with_break - 1
+                linebreak = origin_string[lb_start:line_end_with_break]
+            else:
+                # last line with no trailing linebreak
+                lb_start = len(origin_string)
+                linebreak = ''
+
+            # compute before/span/after on this line
+            span_start = max(range_start, line_start)
+            span_stop = min(range_stop, lb_start)
+
+            before = origin_string[line_start:span_start]
+            span = origin_string[span_start:span_stop]
+            after = origin_string[span_stop:lb_start]
+
+            # compute visual widths accounting for tabs
+            # sentinel ensures expandtabs doesn't collapse trailing tabs
+            sentinel = '.'
+            before_width = len((before + sentinel).expandtabs(tab_width)) - 1
+            if span:
+                span_width = len((before + span + sentinel).expandtabs(tab_width)) - 1 - before_width
+            else:
+                # zero-length string: single caret as insertion point
+                span_width = 1
+            after_width = len((before + span + after + sentinel).expandtabs(tab_width)) - 1 - before_width - span_width
+
+            indent = ' ' * before_width
+            highlight = '^' * span_width
+            trailing = ' ' * after_width
+
+            is_last = (i == n_lines - 1)
+
+            s_line = string_context_line(before, span, after, linebreak)
+            h_line = string_context_line(indent, highlight, trailing, '' if is_last else '\n')
+
+            all_parts.append(string_context_parts(s_line, h_line))
+
+        self._all_parts = tuple(all_parts)
+        if len(all_parts) == 1:
+            self._parts = all_parts[0]
+        else:
+            string0, highlight0 = all_parts[0]
+            highlight0_after = highlight0.after
+            highlight0_after_length = len(highlight0_after)
+            highlight0_linebreak = highlight0_after[highlight0_after_length:highlight0_after_length]
+            highlight0_without_linebreak = string_context_line(highlight0.before, highlight0.span, highlight0_after, highlight0_linebreak)
+            all_parts_0_without_linebreak = string_context_parts(string0, highlight0_without_linebreak)
+            self._parts = all_parts_0_without_linebreak
+
+    @property
+    def string(self):
+        return self._string()
+
+    # delegate provenance properties to the underlying string
+    @property
+    def line_number(self):
+        return self._string().line_number
+
+    @property
+    def column_number(self):
+        return self._string().column_number
+
+    @property
+    def source(self):
+        return self._string().source
+
+    @property
+    def offset(self):
+        return self._string().offset
+
+    @property
+    def origin(self):
+        return self._string().origin
+
+    @property
+    def where(self):
+        return self._string().where
+
+    @property
+    def parts(self):
+        if self._parts is None:
+            self._compute()
+        return self._parts
+
+    @property
+    def all_parts(self):
+        if self._all_parts is None:
+            self._compute()
+        return self._all_parts
+
+    def _render_parts(self, parts_iter):
+        parts = []
+        append = parts.append
+        for part in parts_iter:
+            s_line = part.string
+            h_line = part.highlight
+            append(s_line.before)
+            append(s_line.span)
+            append(s_line.after)
+            # ensure there's always a linebreak between source and highlight,
+            # even if the source line has no trailing linebreak
+            append(s_line.linebreak or '\n')
+            append(h_line.before)
+            append(h_line.span)
+            append(h_line.linebreak)
+        cls = self._string().__class__
+        return cls._cat(parts)
+
+    def __str__(self):
+        return self._render_parts((self.parts,))
+
+    @property
+    def all(self):
+        return self._render_parts(self.all_parts)
+
+    def __repr__(self):
+        invalid = ' invalid' if not self else ''
+        return f"<string_context {self._string().where}{invalid}>"
+
+
+
+@export
 class string(str):
     """
     A subclass of str that maintains line, column, and offset information.
@@ -243,6 +500,9 @@ class string(str):
     * s.origin is the original big.string object this string was extracted from.
     * s.offset is the index of the first character of this string from where it
       came from in the s.offset string.  (s.origin[s.offset] == s[0])
+    * s.source, s.first_column_number, and s.tab_width are the values passed
+      in to big.string when this string was created.  (s.origin.source == s.source,
+      etc.)
     * s.where is a string designed for error messages.  If the original string
       was initialized with a source, this will be in the format
           "<source> line <line_number> column <column_number>"
@@ -252,9 +512,15 @@ class string(str):
       and you hit a syntax error.  token is a big.string containing the bad
       token.  Simply raise
           SyntaxError(f"{token.where}: {token}")
-    * s.source, s.first_column_number, and s.tab_width are the values passed
-      in to big.string when this string was created.  (s.origin.source == s.source,
-      etc.)
+    * s.context is a "string_context" object; str() of this object returns
+      a str showing the string object in context from the line it was sliced
+      from, and adds a subsequent line containing "^" marks calling attention
+      to the slice.  if x is a string object containing "blast" from a line
+      "elif attempt(blast):", str(x.context) would be
+
+            elif attempt(blast):
+                         ^^^^^
+
 
     If you pass a big.string into certain Python modules (implemented in C),
     it will return substrings as str objects and not big.string objects.
@@ -288,41 +554,62 @@ class string(str):
 
     def __new__(cls, s='', *, source=None, line_number=1, column_number=1, first_column_number=1, tab_width=8):
         if isinstance(s, string):
-            if (source is not None) or (line_number != 1) or (column_number != 1) or (first_column_number != 1) or (tab_width != 8):
+            def is_default_index(value, default):
+                try:
+                    return _index(value) == default
+                except TypeError:
+                    return False
+
+            if not (
+                (source is None)
+                and is_default_index(line_number, 1)
+                and is_default_index(column_number, 1)
+                and is_default_index(first_column_number, 1)
+                and is_default_index(tab_width, 8)
+            ):
                 raise ValueError("can't change metadata on an existing string object; use string(str(s), ...) to rewrite metadata")
-            return s
 
-        if not isinstance(s, str):
-            raise TypeError(f"unhandled type {type(s).__name__} for initializer s")
+            if type(s) is cls:
+                return s
 
-        if not ((source is None) or isinstance(source, str)):
-            raise TypeError(f"source must be str, not {type(source).__name__}")
+            ranges = list(s._ranges)
+            length = s._length
+            line_number = s._line_number
+            column_number = s._column_number
+            source = s._source
+            s_origin = s._origin
+            offset = s._offset
+            origin = None
 
-        if not isinstance(line_number, int):
-            raise TypeError(f"line_number must be int, not {type(line_number).__name__}")
-        if line_number < 0:
-            raise ValueError(f"line_number must be >= 0, not {line_number}")
+        else:
+            if not isinstance(s, str):
+                raise TypeError(f"unhandled type {type(s).__name__} for initializer s")
 
-        if not isinstance(column_number, int):
-            raise TypeError(f"column_number must be int, not {type(column_number).__name__}")
-        if column_number < 0:
-            raise ValueError(f"column_number must be >= 0, not {column_number}")
+            if not ((source is None) or isinstance(source, str)):
+                raise TypeError(f"source must be str, not {type(source).__name__}")
 
-        if not isinstance(first_column_number, int):
-            raise TypeError(f"first_column_number must be int, not {type(first_column_number).__name__}")
-        if first_column_number < 0:
-            raise ValueError(f"first_column_number must be >= 0, not {first_column_number}")
-        if column_number < first_column_number:
-            raise ValueError(f"column_number is {column_number}, must be >= first_column_number which is {first_column_number}")
+            def to_index(value, name, minimum):
+                try:
+                    index = _index(value)
+                    if index < minimum:
+                        raise ValueError(f"{name} must be >= {minimum}, not {index}")
+                    return index
+                except TypeError:
+                    raise TypeError(f"{name} must be int, not {type(value).__name__}") from None
 
-        if not isinstance(tab_width, int):
-            raise TypeError(f"tab_width must be int, not {type(tab_width).__name__}")
-        if tab_width < 1:
-            raise ValueError(f"tab_width must be >= 1, not {tab_width}")
+            line_number = to_index(line_number, 'line_number', 0)
+            column_number = to_index(column_number, 'column_number', 0)
+            first_column_number = to_index(first_column_number, 'first_column_number', 0)
+            if column_number < first_column_number:
+                raise ValueError(f"column_number is {column_number}, must be >= first_column_number which is {first_column_number}")
 
-        origin = _Origin(s, source, line_number, column_number, first_column_number, tab_width)
-        length = len(s)
-        ranges = [_Range(origin, 0, length)]
+            tab_width = to_index(tab_width, 'tab_width', 1)
+
+            origin = _Origin(s, source, line_number, column_number, first_column_number, tab_width)
+            length = len(s)
+            ranges = [_Range(origin, 0, length)]
+            offset = 0
+            s_origin = None
 
         self = super().__new__(cls, s)
         self._ranges = ranges
@@ -332,12 +619,13 @@ class string(str):
         self._column_number = column_number
         self._source = source
 
-        self._origin = self
-        self._offset = 0
+        self._origin = self if (s_origin is None) else s_origin
+        self._offset = offset
 
         self._context = None
 
-        origin.string = self
+        if origin is not None:
+            origin.string = self
 
         return self
 
@@ -395,258 +683,10 @@ class string(str):
         return f'{prefix}line {self._line_number} column {self._column_number}'
 
 
-    class _string_context_line(tuple):
-        """
-        A 4-tuple of (before, span, after, linebreak) representing
-        either a line of source text or a line of highlight carets.
-        """
-        __slots__ = ()
-
-        def __new__(cls, before, span, after, linebreak):
-            return tuple.__new__(cls, (before, span, after, linebreak))
-
-        @property
-        def before(self):
-            return self[0]
-
-        @property
-        def span(self):
-            return self[1]
-
-        @property
-        def after(self):
-            return self[2]
-
-        @property
-        def linebreak(self):
-            return self[3]
-
-        def __repr__(self):
-            return f"_string_context_line(before={self[0]!r}, span={self[1]!r}, after={self[2]!r}, linebreak={self[3]!r})"
-
-
-    class _string_context_parts(tuple):
-        """
-        A 2-tuple of (string, highlight) where each is a _string_context_line.
-        """
-        __slots__ = ()
-
-        def __new__(cls, string, highlight):
-            return tuple.__new__(cls, (string, highlight))
-
-        @property
-        def string(self):
-            return self[0]
-
-        @property
-        def highlight(self):
-            return self[1]
-
-        def __repr__(self):
-            return f"_string_context_parts(string={self[0]!r}, highlight={self[1]!r})"
-
-
-    class _string_context:
-        """
-        Context information for a big.string, showing the source line(s)
-        and highlight caret(s) indicating where the string appears.
-
-        If the string is a simple contiguous slice (single range), context
-        is valid (bool(context) is True) and all properties work.
-
-        If the string contains slices from multiple ranges (e.g. concatenated
-        from different sources), bool(context) is False, and accessing parts,
-        all_parts, __str__, or all will raise ValueError.
-
-        Properties:
-            parts:     A _string_context_parts for the first line only.
-            all_parts: A tuple of _string_context_parts for all lines.
-            all:       A string rendering of all lines with highlights.
-
-        Also delegates line_number, column_number, source, offset, origin,
-        and where to the underlying string.
-        """
-        __slots__ = ('_weakref', '_parts', '_all_parts')
-
-        _no_context_message = "no context available, string contains slices from multiple other strings"
-
-        def __init__(self, string):
-            self._weakref = weakref.ref(string)
-            self._parts = None
-            self._all_parts = None
-
-        def _string(self):
-            string = self._weakref()
-            if string is None:
-                raise ReferenceError('string has been destroyed')
-            return string
-
-
-        def __bool__(self):
-            return len(self._string()._ranges) == 1
-
-        def _compute(self):
-            if not self:
-                raise ValueError(self._no_context_message)
-            s = self._string()
-            r = s._ranges[0]
-            origin = r.origin
-            origin_string = origin.string
-            tab_width = origin.tab_width
-            range_start = r.start
-            range_stop = r.stop
-
-            linebreak_offsets = origin.linebreak_offsets
-            if linebreak_offsets is None:
-                linebreak_offsets = origin.compute_linebreak_offsets()
-
-            # which lines does our range span?
-            start_line_idx = bisect_right(linebreak_offsets, range_start)
-            if range_stop > range_start:
-                stop_line_idx = bisect_right(linebreak_offsets, range_stop - 1)
-            else:
-                # zero-length string: same line
-                stop_line_idx = start_line_idx
-
-            all_parts = []
-            n_lines = stop_line_idx - start_line_idx + 1
-
-            string_context_line = s._string_context_line
-            string_context_parts = s._string_context_parts
-
-            for i, line_idx in enumerate(range(start_line_idx, stop_line_idx + 1)):
-                # find line boundaries in the origin
-                line_start = linebreak_offsets[line_idx - 1] if line_idx else 0
-
-                if line_idx < len(linebreak_offsets):
-                    line_end_with_break = linebreak_offsets[line_idx]
-                    # find where linebreak starts
-                    # all linebreaks are length 1 except \r\n which is length 2
-                    if line_end_with_break >= 2 and origin_string[line_end_with_break - 2:line_end_with_break] == '\r\n':
-                        lb_start = line_end_with_break - 2
-                    else:
-                        lb_start = line_end_with_break - 1
-                    linebreak = origin_string[lb_start:line_end_with_break]
-                else:
-                    # last line with no trailing linebreak
-                    lb_start = len(origin_string)
-                    linebreak = ''
-
-                # compute before/span/after on this line
-                span_start = max(range_start, line_start)
-                span_stop = min(range_stop, lb_start)
-
-                before = origin_string[line_start:span_start]
-                span = origin_string[span_start:span_stop]
-                after = origin_string[span_stop:lb_start]
-
-                # compute visual widths accounting for tabs
-                # sentinel ensures expandtabs doesn't collapse trailing tabs
-                sentinel = '.'
-                before_width = len((before + sentinel).expandtabs(tab_width)) - 1
-                if span:
-                    span_width = len((before + span + sentinel).expandtabs(tab_width)) - 1 - before_width
-                else:
-                    # zero-length string: single caret as insertion point
-                    span_width = 1
-                after_width = len((before + span + after + sentinel).expandtabs(tab_width)) - 1 - before_width - span_width
-
-                indent = ' ' * before_width
-                highlight = '^' * span_width
-                trailing = ' ' * after_width
-
-                is_last = (i == n_lines - 1)
-
-                s_line = string_context_line(before, span, after, linebreak)
-                h_line = string_context_line(indent, highlight, trailing, '' if is_last else '\n')
-
-                all_parts.append(string_context_parts(s_line, h_line))
-
-            self._all_parts = tuple(all_parts)
-            if len(all_parts) == 1:
-                self._parts = all_parts[0]
-            else:
-                string0, highlight0 = all_parts[0]
-                highlight0_after = highlight0.after
-                highlight0_after_length = len(highlight0_after)
-                highlight0_linebreak = highlight0_after[highlight0_after_length:highlight0_after_length]
-                highlight0_without_linebreak = string_context_line(highlight0.before, highlight0.span, highlight0_after, highlight0_linebreak)
-                all_parts_0_without_linebreak = string_context_parts(string0, highlight0_without_linebreak)
-                self._parts = all_parts_0_without_linebreak
-
-        @property
-        def string(self):
-            return self._string()
-
-        # delegate provenance properties to the underlying string
-        @property
-        def line_number(self):
-            return self._string().line_number
-
-        @property
-        def column_number(self):
-            return self._string().column_number
-
-        @property
-        def source(self):
-            return self._string().source
-
-        @property
-        def offset(self):
-            return self._string().offset
-
-        @property
-        def origin(self):
-            return self._string().origin
-
-        @property
-        def where(self):
-            return self._string().where
-
-        @property
-        def parts(self):
-            if self._parts is None:
-                self._compute()
-            return self._parts
-
-        @property
-        def all_parts(self):
-            if self._all_parts is None:
-                self._compute()
-            return self._all_parts
-
-        def _render_parts(self, parts_iter):
-            parts = []
-            append = parts.append
-            for part in parts_iter:
-                s_line = part.string
-                h_line = part.highlight
-                append(s_line.before)
-                append(s_line.span)
-                append(s_line.after)
-                # ensure there's always a linebreak between source and highlight,
-                # even if the source line has no trailing linebreak
-                append(s_line.linebreak or '\n')
-                append(h_line.before)
-                append(h_line.span)
-                append(h_line.linebreak)
-            return string._cat(parts)
-
-        def __str__(self):
-            return self._render_parts((self.parts,))
-
-        @property
-        def all(self):
-            return self._render_parts(self.all_parts)
-
-        def __repr__(self):
-            invalid = ' invalid' if not self else ''
-            return f"<_string_context {self._string().where}{invalid}>"
-
     @property
     def context(self):
         """
-        Returns a _string_context object showing the source line
+        Returns a string_context object showing the source line
         and highlight carets for this string.
 
         If this string is a simple contiguous slice of a single
@@ -655,7 +695,7 @@ class string(str):
         raise ValueError.
         """
         if self._context is None:
-            self._context = self._string_context(self)
+            self._context = string_context(self)
         return self._context
 
 
@@ -680,13 +720,7 @@ class string(str):
         self_length = self._length
 
         if isinstance(index, slice):
-            start = index.start
-            stop = index.stop
             step = index.step
-
-            default_start = 0
-            default_stop = self_length
-
             if step is None:
                 step = 1
             else:
@@ -696,19 +730,11 @@ class string(str):
                 if not step:
                     raise ValueError('slice step cannot be zero')
 
-                if step < 0:
-                    default_start = self_length - 1
-                    default_stop = -1
-
-            # slice clamps >:(
-            clamp = self._clamp_index
-            start = clamp(index.start, default_start, 'start')
-            stop = clamp(index.stop, default_stop, 'stop')
-
-            if (stop < start) if (step > 0) else (start < stop):
-                stop = start
+            start, stop, step = index.indices(self_length)
 
             if step == 1:
+                if stop < start:
+                    stop = start
                 start_stops = ((start, stop),)
                 length = stop - start
             else:
@@ -903,10 +929,14 @@ class string(str):
         if not other:
             return self
 
-        if other_is_str:
-            other = string(other)
+        cls = self.__class__
+
+        if not other_is_string:
+            other = cls(other)
         if not self._length:
-            return other
+            if type(other) is cls:
+                return other
+            return cls(other)
 
         s = str(self) + str(other)
 
@@ -942,7 +972,8 @@ class string(str):
         # if other were a string, then we'd be in other.__add__, not self.__radd__
         assert not isinstance(other, string)
 
-        left = string(other)
+        cls = self.__class__
+        left = cls(other)
         if not self:
             return left
         return left.__add__(self)
@@ -957,8 +988,7 @@ class string(str):
         if len(fillchar) != 1:
             # why is it TypeError?  blame str.
             raise TypeError("The fill character must be exactly one character long")
-        if not isinstance(width, int):
-            raise TypeError(f"'{type(width).__name__}' cannot be interpreted as an integer")
+        width = _index(width)
 
         length = len(self)
         if length >= width:
@@ -975,8 +1005,7 @@ class string(str):
         if len(fillchar) != 1:
             # why is it TypeError?  blame str.
             raise TypeError("The fill character must be exactly one character long")
-        if not isinstance(width, int):
-            raise TypeError(f"'{type(width).__name__}' cannot be interpreted as an integer")
+        width = _index(width)
 
         length = len(self)
         if length >= width:
@@ -988,7 +1017,21 @@ class string(str):
         return spacer + self
 
     def zfill(self, width):
-        return self.rjust(width, '0')
+        width = _index(width)
+
+        length = len(self)
+        if length >= width:
+            return self
+
+        needed = width - length
+        fill = '0' * needed
+
+        if self:
+            leading = self[0]
+            if leading in '+-':
+                return leading + fill + self[1:]
+
+        return fill + self
 
     def center(self, width, fillchar=' '):
         if not isinstance(fillchar, str):
@@ -996,8 +1039,7 @@ class string(str):
         if len(fillchar) != 1:
             # why is it TypeError?  blame str.
             raise TypeError("The fill character must be exactly one character long")
-        if not isinstance(width, int):
-            raise TypeError(f"'{type(width).__name__}' cannot be interpreted as an integer")
+        width = _index(width)
 
         if self._length >= width:
             return self
@@ -1073,8 +1115,7 @@ class string(str):
         # big.string++!
         # preserve the substrings of the original.
 
-        if not isinstance(count, int):
-            raise TypeError(f"'{type(count).__name__}' cannot be interpreted as an integer")
+        count = _index(count)
         if not isinstance(old, str):
             raise TypeError(f"replace() argument 1 must be str, not {type(old).__name__}")
         if not isinstance(new, str):
@@ -1082,9 +1123,33 @@ class string(str):
 
         if count == 0:
             return self
+
         s = str(self)
         if s.find(old) == -1:
             return self
+
+        if not old:
+            if not s:
+                # python 3.9 changed the behavior of ''.replace('', 'x', 1) :
+                #     3.8-: returns ''
+                #     3.9+: returns 'x'
+                # the 3.9+ behavior is better!
+                # but we should behave the same as str on every version.
+                if (count > 0) and (not _python_3_9_plus):
+                    return self
+                return new
+
+            result = [new]
+            append = result.append
+            count -= 1
+
+            for c in self:
+                append(c)
+                if count:
+                    append(new)
+                    count -= 1
+
+            return self._cat(result)
 
         old_length = len(old)
         start = 0
@@ -1175,8 +1240,7 @@ class string(str):
         # new in Python 3.9, but string will support it all the way back to 3.6.
         if not isinstance(prefix, str):
             raise TypeError(f"removeprefix argument must be str, not {type(prefix).__name__}")
-        s = str(self)
-        if not s.startswith(prefix):
+        if not (prefix and str(self).startswith(prefix)):
             return self
         return self[len(prefix):]
 
@@ -1185,8 +1249,7 @@ class string(str):
         # new in Python 3.9, but string will support it all the way back to 3.6.
         if not isinstance(suffix, str):
             raise TypeError(f"removesuffix argument must be str, not {type(suffix).__name__}")
-        s = str(self)
-        if not s.endswith(suffix):
+        if not (suffix and str(self).endswith(suffix)):
             return self
         return self[:-len(suffix)]
 
@@ -1194,8 +1257,9 @@ class string(str):
     def _partition(self, sep, count, reversed):
         if not isinstance(sep, str):
             raise TypeError(f"sep must be str, not {type(sep).__name__}")
-        if not isinstance(count, int):
-            raise TypeError(f"count must be int, not {type(count).__name__}")
+        count = _index(count)
+        if not sep:
+            raise ValueError("empty separator")
 
         self_length = len(self)
 
@@ -1301,8 +1365,7 @@ class string(str):
 
         if not isinstance(sep, (str, NoneType)):
             raise TypeError(f"sep must be str, not {type(sep).__name__}")
-        if not isinstance(maxsplit, int):
-            raise TypeError(f"'{type(maxsplit).__name__}' object cannot be interpreted as an integer")
+        maxsplit = _index(maxsplit)
 
         result = []
         append = result.append
@@ -1346,16 +1409,19 @@ class string(str):
         return l
 
     def join(self, iterable):
+        cls = self.__class__
         l = list(iterable)
+        if not l:
+            return cls()
         if not self:
-            return string._cat(l)
+            return cls._cat(l)
         l2 = list()
         append = l2.append
         for o in l:
             append(o)
             append(self)
         l2.pop()
-        return string._cat(l2)
+        return cls._cat(l2)
 
     ##
     ## isascii was added in 3.7.
@@ -1388,7 +1454,7 @@ class string(str):
     @classmethod
     def _cat(cls, strings):
         if not strings:
-            return string()
+            return cls()
 
         for s in strings:
             if not isinstance(s, str):
@@ -1396,9 +1462,9 @@ class string(str):
 
         if len(strings) == 1:
             s = strings[0]
-            if not isinstance(s, string):
-                s = string(s)
-            return s
+            if type(s) is cls:
+                return s
+            return cls(s)
 
         ranges = None
         length = 0
@@ -1408,8 +1474,8 @@ class string(str):
         for s in strings:
             if not s:
                 continue
-            if isinstance(s, str):
-                s = string(s)
+            if not isinstance(s, string):
+                s = cls(s)
             length += len(s)
             r = s._ranges
             if ranges is None:
@@ -1421,7 +1487,7 @@ class string(str):
                 cls._append_ranges(ranges, r)
 
         if not length:
-            return string()
+            return cls()
 
         s = ''.join(str(_) for _ in strings)
 
@@ -1436,14 +1502,16 @@ class string(str):
         new._offset = first_range.start
         new._origin = first_origin.string
 
+        new._context = None
+
         return new
 
     @classmethod
     def cat(cls, *strings):
         """
         Concatenates the string objects passed in.
-        Roughly equivalent to big.string('').join().
-        Always returns a big.string.
+        Roughly equivalent to cls('').join().
+        Always returns an instance of cls.
         """
         return cls._cat(strings)
 
