@@ -103,7 +103,14 @@ class StateManager:
             * You're permitted to modify the list of observers
               at any time.  If you modify the list of observers
               from an observer call, StateManager will still use
-              the old list for the remainder of that transition.
+              a snapshot of the old list for the remainder of that
+              transition.
+            * If an observer raises an exception, StateManager
+              remembers the first exception, continues calling the
+              remaining observers, completes the state transition,
+              and then re-raises that first exception.  (If more
+              than one observer raises an exception, onlythe first
+              exception is retained and re-raised.)
 
     The constructor takes the following parameters:
 
@@ -158,6 +165,15 @@ class StateManager:
         arguments immediately after we have transitioned to that
         state.
 
+        If the current state object's on_exit raises an exception,
+        the transition is aborted, self.state remains unchanged,
+        and self.next is restored to None.
+
+        If an observer raises an exception, the transition still
+        completes, self.next is restored to None, and StateManager
+        re-raises the first observer exception after completing the
+        transition.
+
     If you have an StateManager instance called "state_manager",
     and you transition it to "new_state":
 
@@ -170,13 +186,19 @@ class StateManager:
               "transitioning" to the new state.
         * If self.state has an attribute called 'on_exit',
           call self.state.on_exit().
-        * For every object 'o' in the observer list, call o(self).
-        * Set self.next to None.
+        * For every object 'o' in a snapshot of the observer list,
+          call o(self).
+            * If an observer raises an exception, StateManager
+              remembers the first exception, then keeps calling the
+              remaining observers.
         * Set self.state to 'new_state'.
             * As of this moment, the transition is complete, and
               your StateManager instance is now "in" the new state.
+        * Set self.next to None.
         * If self.state has an attribute called 'on_enter',
           call self.state.on_enter().
+        * If an observer raised an exception, re-raise the first
+          observer exception now.
 
     You may also be interested in the `accessor` and `dispatch`
     decorators in this module.
@@ -220,19 +242,23 @@ class StateManager:
         self.__next = state
         # as of this moment we are "transitioning" to a new state.
 
-        if self.on_exit:
-            on_exit = getattr(self.__state, self.on_exit, None)
-            if on_exit is not None:
-                on_exit()
-        if self.observers:
-            if self.observers != self._observers_copy:
-                self._observers_copy = list(self.observers)
-                self._observers_tuple = tuple(self.observers)
-            for o in self._observers_tuple:
-                o(self)
+        observer_exception = None
+        try:
+            if self.on_exit:
+                on_exit = getattr(self.__state, self.on_exit, None)
+                if on_exit is not None:
+                    on_exit()
 
-        self.__state = state
-        self.__next = None
+            for o in tuple(self.observers):
+                try:
+                    o(self)
+                except Exception as e:
+                    if observer_exception is None:
+                        observer_exception = e
+
+            self.__state = state
+        finally:
+            self.__next = None
         # as of this moment we are "in" our new state, the transition is over.
         # (it's explicitly permitted to start a new state transition from inside enter().)
 
@@ -240,6 +266,9 @@ class StateManager:
             on_enter = getattr(self.__state, self.on_enter, None)
             if on_enter is not None:
                 on_enter()
+
+        if observer_exception is not None:
+            raise observer_exception
 
     __next = None
     @property
@@ -270,8 +299,6 @@ class StateManager:
         self.on_exit = on_exit
 
         self.observers = []
-        self._observers_copy = []
-        self._observers_tuple = ()
         self.state = state
 
     def __repr__(self):

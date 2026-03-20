@@ -3233,7 +3233,14 @@ observers to the list as needed.
   at any time--even from inside an observer callback.
   Note that this won't modify the list of observers called
   until the *next* state transition.
-  (`StateManager` uses a copy of the observer list.)
+  (`StateManager` uses a snapshot of the observer list.)
+* If an observer raises an exception,
+  `StateManager` remembers the first exception,
+  continues calling the remaining observers,
+  completes the state transition,
+  and then re-raises that first exception.
+  (If more than one observer raises an exception, only
+  the first exception is retained and re-raised.)
 
 </dd></dl>
 
@@ -3272,7 +3279,7 @@ Passing in a false value for `on_enter` disables this behavior.
 which means you're expressly permitted to make a state transition
 inside an `on_enter` call.
 
-If defined, `on_exit` will be called on
+If defined, `on_enter` will be called on
 the initial state object, from inside the `StateManager` constructor.
 
 
@@ -3323,6 +3330,14 @@ attribute.
   arguments) immediately *after* we have transitioned to that
   state.  This means it's permitted to initiate a state
   transition inside an `on_enter` call.
+* If the current state object's `on_exit` raises an exception,
+  the transition is aborted, `state` remains unchanged,
+  and `next` is restored to `None`.
+* If an observer raises an exception,
+  the transition still completes,
+  `next` is restored to `None`,
+  and `StateManager` re-raises the first observer exception
+  after completing the transition.
 * It's illegal to attempt to transition to the current
   state.  If `state_manager.state` is already `foo`,
   `state_manager.state = foo` will raise an exception.
@@ -3343,14 +3358,20 @@ and you transition it to `new_state`:
       to the new state.
 * If `state_manager.state` has an `on_exit` attribute,
   call `state_manager.state.on_exit()`.
-* For every object `o` in the `state_manager.observers` list,
+* For every object `o` in a snapshot of the
+  `state_manager.observers` list,
   call `o(self)`.
-* Set `state_manager.next` to `None`.
+    * If an observer raises an exception,
+      `StateManager` remembers the first exception,
+      then keeps calling the remaining observers.
 * Set `state_manager.state` to `new_state`.
     * As of this moment, the transition is complete, and
       `state_manager` is now "in" the new state.
+* Set `state_manager.next` to `None`.
 * If `state_manager.state` has an `on_enter` attribute,
   call `state_manager.state.on_enter()`.
+* If an observer raised an exception,
+  re-raise the first observer exception now.
 </dd></dl>
 
 

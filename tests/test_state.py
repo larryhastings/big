@@ -106,6 +106,106 @@ class StateManagerTests(unittest.TestCase):
         self.assertEqual(seen, [1, 2, 3, 4, 5])
 
 
+    def test_on_exit_exception_aborts_transition_and_clears_next(self):
+        class Stateoroonie(big.State):
+            def on_exit(self):
+                raise RuntimeError("boom")
+
+        initial = Stateoroonie()
+        state_manager = StateManager(initial)
+
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            state_manager.state = 2
+
+        self.assertIs(state_manager.state, initial)
+        self.assertIsNone(state_manager.next)
+
+        state_manager.on_exit = None
+        state_manager.state = 3
+        self.assertEqual(state_manager.state, 3)
+        self.assertIsNone(state_manager.next)
+
+
+    def test_observer_exception_does_not_cancel_transition(self):
+        seen = []
+
+        state_manager = StateManager('old')
+
+        class NewState(big.State):
+            def on_enter(self):
+                seen.append(('enter', state_manager.state, state_manager.next))
+
+        def observer1(state_manager):
+            seen.append(('observer1', state_manager.state, state_manager.next))
+            raise RuntimeError('observer1')
+
+        def observer2(state_manager):
+            seen.append(('observer2', state_manager.state, state_manager.next))
+
+        def observer3(state_manager):
+            seen.append(('observer3', state_manager.state, state_manager.next))
+            raise ValueError('observer3')
+
+        new_state = NewState()
+        state_manager.observers.extend((observer1, observer2, observer3))
+
+        with self.assertRaisesRegex(RuntimeError, 'observer1'):
+            state_manager.state = new_state
+
+        self.assertIs(state_manager.state, new_state)
+        self.assertIsNone(state_manager.next)
+        self.assertEqual(seen,
+            [
+            ('observer1', 'old', new_state),
+            ('observer2', 'old', new_state),
+            ('observer3', 'old', new_state),
+            ('enter', new_state, None),
+            ])
+
+
+    def test_observer_list_is_snapshotted(self):
+        seen = []
+
+        def observer1(state_manager):
+            seen.append('observer1')
+            state_manager.observers.append(observer2)
+
+        def observer2(state_manager):
+            seen.append('observer2')
+
+        state_manager = StateManager(...)
+        state_manager.observers.append(observer1)
+        state_manager.state = 1
+        self.assertEqual(seen, ['observer1'])
+        state_manager.state = 2
+        self.assertEqual(seen, ['observer1', 'observer1', 'observer2'])
+
+
+    def test_replacing_equal_observer_uses_new_observer(self):
+        seen = []
+
+        class Observer:
+            def __init__(self, name):
+                self.name = name
+
+            def __call__(self, state_manager):
+                seen.append(self.name)
+
+            def __eq__(self, other):
+                return isinstance(other, Observer)
+
+        observer1 = Observer('observer1')
+        observer2 = Observer('observer2')
+
+        state_manager = StateManager(...)
+        state_manager.observers.append(observer1)
+        state_manager.state = 1
+        state_manager.observers[0] = observer2
+        state_manager.state = 2
+
+        self.assertEqual(seen, ['observer1', 'observer2'])
+
+
     def test_methods_as_states(self):
         @accessor()
         class StateMachine:
