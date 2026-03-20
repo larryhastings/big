@@ -679,35 +679,75 @@ class Formatter:
 
 
 
+_ascii_translation_table = ''.maketrans({
+    '│': '|',
+    '─': '-',
+
+    '┌': '+',
+    '┐': '+',
+    '└': '+',
+    '┘': '+',
+
+
+    '║': '|',
+    '═': '-',
+
+    '╔': '+',
+    '╗': '+',
+    '╚': '+',
+    '╝': '+',
+
+
+    '┃': '|',
+    '━': '-',
+
+    '┏': '+',
+    '┓': '+',
+    '┗': '+',
+    '┛': '+',
+
+    '┱': '+',
+    '┡': '+',
+    '┹': '+',
+    '┢': '+',
+    '┱': '+',
+    '┹': '+',
+    })
+
+
+@export
+def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, indent=True, ascii=False):
+    """
+    Formats a "prefix" string for use with a Log object.
+
+    The format it returns is in the form:
+        "[{elapsed} {thread.name}] "
+    formatted with these widths:
+         "[{time_seconds_width}.{time_fractional_width} {thread_name_width}]"
+    For example, the default value for Log.prefix is prefix_format(3, 10, 12),
+    which looks like this in the final log:
+        "[003.0706368860   MainThread]"
+
+    If the indent parameter is true (the default), the prefix generated
+    is followed by {indent}, which inserts the current indent string.
+
+    (The actual value of "indent" supplied by TextFormatter will be
+    the string passed in to its 'indent' parameter, multipled by the
+    current "enter" nesting depth.)
+    """
+    # the +1 is for the dot between seconds and fractional seconds
+    time_width = time_seconds_width + 1 + time_fractional_width
+    indent = '{indent}' if indent else ''
+    prefix = f'{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}│ {indent}'
+    if ascii:
+        prefix = prefix.translate(_ascii_translation_table)
+    return prefix
+
+
 @export
 class TextFormatter(Formatter):
     # supported_formats = frozenset({...})
     # owns formats dict, prefix, nesting stack, indentation
-
-    @staticmethod
-    def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, indent=True):
-        """
-        Formats a "prefix" string for use with a Log object.
-
-        The format it returns is in the form:
-            "[{elapsed} {thread.name}] "
-        formatted with these widths:
-             "[{time_seconds_width}.{time_fractional_width} {thread_name_width}]"
-        For example, the default value for Log.prefix is prefix_format(3, 10, 12),
-        which looks like this in the final log:
-            "[003.0706368860   MainThread]"
-
-        If the indent parameter is true (the default), the prefix generated
-        is followed by {indent}, which inserts the current indent string.
-
-        (The actual value of "indent" supplied by TextFormatter will be
-        the string passed in to its 'indent' parameter, multipled by the
-        current "enter" nesting depth.)
-        """
-        # the +1 is for the dot between seconds and fractional seconds
-        time_width = time_seconds_width + 1 + time_fractional_width
-        indent = '{indent}' if indent else ''
-        return f'{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}│ {indent}'
 
     def __init__(self,
         *,
@@ -936,41 +976,6 @@ class TextFormatter(Formatter):
 
 
 
-_ascii_translation_table = ''.maketrans({
-    '│': '|',
-    '─': '-',
-
-    '┌': '+',
-    '┐': '+',
-    '└': '+',
-    '┘': '+',
-
-
-    '║': '|',
-    '═': '-',
-
-    '╔': '+',
-    '╗': '+',
-    '╚': '+',
-    '╝': '+',
-
-
-    '┃': '|',
-    '━': '-',
-
-    '┏': '+',
-    '┓': '+',
-    '┗': '+',
-    '┛': '+',
-
-    '┱': '+',
-    '┡': '+',
-    '┹': '+',
-    '┢': '+',
-    '┱': '+',
-    '┹': '+',
-    })
-
 @export
 class ASCIIFormatter(TextFormatter):
 
@@ -986,35 +991,11 @@ class ASCIIFormatter(TextFormatter):
     del make_base_formats
 
 
-    @staticmethod
-    def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, indent=True):
-        """
-        Formats a "prefix" string for use with a Log object.
-
-        The format it returns is in the form:
-            "[{elapsed} {thread.name}] "
-        formatted with these widths:
-             "[{time_seconds_width}.{time_fractional_width} {thread_name_width}]"
-        For example, the default value for Log.prefix is prefix_format(3, 10, 12),
-        which looks like this in the final log:
-            "[003.0706368860   MainThread]"
-
-        If the indent parameter is true (the default), the prefix generated
-        is followed by {indent}, which inserts the current indent string.
-
-        (The actual value of "indent" supplied by TextFormatter will be
-        the string passed in to its 'indent' parameter, multipled by the
-        current "enter" nesting depth.)
-        """
-        # the +1 is for the dot between seconds and fractional seconds
-        s = TextFormatter.prefix_format(time_seconds_width=time_seconds_width, time_fractional_width=time_fractional_width, thread_name_width=thread_name_width, indent=indent)
-        return s.translate(_ascii_translation_table)
-
     def __init__(self,
         *,
         formats=None,
         indent='    ',
-        prefix=prefix_format(3, 10, 12),
+        prefix=prefix_format(3, 10, 12, ascii=True),
         timestamp_format=timestamp_human,
         width=79,
         ):
