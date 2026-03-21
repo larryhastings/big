@@ -31,7 +31,7 @@ import builtins
 import big.all as big
 import big.log as log_module
 import io
-import os
+import os.path
 import tempfile
 import threading
 import time
@@ -48,6 +48,45 @@ class FakeClock:
     def advance(self, ns=12_000_000):
         self.time += ns
 
+
+class EventSink(big.Log.Destination):
+    """
+    A custom destination that just logs event names.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.value = ''
+
+    def _event(self, s):
+        if self.value:
+            s = f"{self.value} {s}"
+
+        self.value = s
+
+    def reset(self):
+        self._event("reset")
+
+    def flush(self):
+        self._event("flush")
+
+    def start(self, start_time_ns, start_time_epoch):
+        self._event("start")
+
+    def end(self, elapsed):
+        self._event("end")
+
+    def write(self, elapsed, thread, formatted):
+        self._event("write")
+
+    def log(self, elapsed, thread, format, message, formatted):
+        self._event("log")
+
+    def enter(self, elapsed, thread, message):
+        self._event("enter")
+
+    def exit(self, elapsed, thread):
+        self._event("exit")
 
 
 
@@ -83,7 +122,7 @@ class TestDestination(unittest.TestCase):
 
     def test_destination_close_does_nothing(self):
         destination = big.Log.Destination()
-        destination.close()  # Should not raise
+        destination.end(12345)  # Should not raise
 
     def test_destination_reset(self):
         destination = big.Log.Destination()
@@ -177,7 +216,7 @@ class TestFile(unittest.TestCase):
             self.assertEqual(content, "line1\nline2\n")
 
             # Close should work when array is empty
-            file_destination.close()
+            file_destination.end(12345)
         finally:
             os.unlink(path)
 
@@ -220,9 +259,17 @@ class TestFile(unittest.TestCase):
             os.unlink(path)
 
     def test_TmpFile(self):
-        log = big.Log(big.log.TMPFILE, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
-        expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.txt"
-        self.assertEqual(big.log.TMPFILE.path.name, expected)
+        tmpfile = None
+        try:
+            log = big.Log(big.log.TMPFILE, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
+            log("xyz")
+            tmpfile = big.log.TMPFILE.path.name
+            expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.txt"
+            log.close()
+            self.assertEqual(big.log.TMPFILE.path.name, expected)
+        finally:
+            if tmpfile and os.path.exists(tmpfile): # pragma: nocover
+                os.unlink(tmpfile)
 
 
 
@@ -359,6 +406,12 @@ class TestLogBasics(unittest.TestCase):
         finally:
             big.Log.destination_mappers.clear()
 
+    def test_exit_without_logging_or_enter(self):
+        sink = EventSink()
+        log = big.Log(sink, threading=False, formats={"start": None, "end": None}, prefix='')
+        log.exit()
+        log.close()
+        self.assertFalse(sink.value)
 
     def test_log_after_closed(self):
         array = []
@@ -403,14 +456,21 @@ class TestLogBasics(unittest.TestCase):
         self.assertFalse(log.dirty)
 
     def test_log_atexit(self):
-        # simulate atexit calls
-        log = big.Log([], threading=True)
-        self.assertFalse(log.closed)
-        log._atexit()
-        self.assertTrue(log.closed)
-        # log ignores reset after atexit
-        log.reset()
-        self.assertTrue(log.closed)
+        for threading in (False, True):
+            for log_once in (False, True):
+                with self.subTest(threading=threading, log_once=log_once):
+                    log = big.Log([], threading=threading)
+                    self.assertFalse(log.closed)
+                    if log_once:
+                        log("hello!")
+                        log.flush()
+                    log._atexit()
+                    self.assertTrue(log.closed)
+                    # log ignores reset after atexit
+                    log.reset()
+                    self.assertTrue(log.closed)
+
+
 
 
 class TestLogMethods(unittest.TestCase):
@@ -572,6 +632,18 @@ class TestLogMethods(unittest.TestCase):
         self.assertIn("flushed message!\n", s.getvalue())
         log.close()
 
+    def test_blank_enter_and_exit_before_formatted_logging(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": None, "end": None, 'enter': None, 'exit': None}, prefix='')
+        log.enter('subsystem')
+        log.exit()
+        with log.enter('subsystem 2'):
+            with log.enter('subsystem 3'):
+                log('finally!')
+        log.close()
+        self.assertEqual(s.getvalue(), 'finally!\n')
+
+
     def test_log_messages_after_close(self):
         s = io.StringIO()
         log = big.Log(s, threading=False, formats={"start": None, "end": None}, prefix='')
@@ -590,11 +662,9 @@ class TestLogMethods(unittest.TestCase):
 
     def test_formats_exceptions(self):
         with self.assertRaises(ValueError):
-            big.Log(formats={"enter": None})
+            big.Log(formats={"mixmox": None})
         with self.assertRaises(TypeError):
             big.Log(formats={83: {"template": "abc", "line": "-"}})
-        with self.assertRaises(ValueError):
-            big.Log(formats={"not an id": {"template": "abc", "line": "-"}})
         with self.assertRaises(TypeError):
             # formats value must be dict
             big.Log(formats={"splunk": 55})
@@ -604,18 +674,54 @@ class TestLogMethods(unittest.TestCase):
         with self.assertRaises(TypeError):
             # format dict line value is optional, but if specified must be str
             big.Log(formats={"splunk": {"template": "abc", "line": 77}})
-        with self.assertRaises(ValueError):
-            # can't name a format "reset", Log already has a "reset" method
-            big.Log(formats={"reset": {"template": "abc", "line": "-"}})
 
         l = big.Log(formats={"start": None, "end": None})
         with self.assertRaises(ValueError):
             l.print("abc", format="spooky")
         l.close()
 
+        # you're allowed to use format names that collide with Log methods,
+        # as well as format names containing spaces.
+        # you just won't get the prebound method (a la "box", "peanut", etc).
+        s = io.StringIO()
+        l = big.Log(s, formats={"start": None, "end": None, "reset": {"template": "_reset_{line}\n{message}\n{line}", "line": "_"}, "has two spaces": {"template": "#has two spaces#{line}\n{message}\n{line}", "line": "#"}}, width=20)
+        l('dis is rasat', format='reset')
+        l('has spacings', format='has two spaces')
+        l.close()
+        self.assertEqual(s.getvalue(), """
+_reset______________
+dis is rasat
+____________________
+#has two spaces#####
+has spacings
+####################
+""".lstrip())
+
 
 
 class TestLogLazyStartAndEnd(unittest.TestCase):
+
+    def test_no_log_means_no_banners(self):
+        s = io.StringIO()
+        sink = EventSink()
+        log = big.Log(s, sink, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='[PREFIX] ', width=20)
+        log.close()
+
+        expected = ''
+        self.assertEqual(s.getvalue(), expected)
+        self.assertEqual(sink.value, "")
+
+
+    def test_empty_log_means_no_banners(self):
+        s = io.StringIO()
+        sink = EventSink()
+        log = big.Log(s, sink, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}, "print": {"template": ''}}, prefix='', width=20)
+        log('')
+        log.close()
+
+        expected = ''
+        self.assertEqual(s.getvalue(), expected)
+        self.assertEqual(sink.value, "")
 
     def test_lazy_start_from_log(self):
         s = io.StringIO()
@@ -627,8 +733,8 @@ class TestLogLazyStartAndEnd(unittest.TestCase):
 START
 [PREFIX] howdy!
 END
-        """.strip()
-        self.assertEqual(s.getvalue().strip(), expected)
+""".lstrip()
+        self.assertEqual(s.getvalue(), expected)
 
     def test_lazy_start_from_write(self):
         s = io.StringIO()
@@ -640,8 +746,8 @@ END
 START
 howdy!
 END
-        """.strip()
-        self.assertEqual(s.getvalue().strip(), expected)
+""".lstrip()
+        self.assertEqual(s.getvalue(), expected)
 
     def test_lazy_start_from_heading(self):
         s = io.StringIO()
@@ -655,8 +761,8 @@ START
 [PREFIX] | howdy!
 [PREFIX] +----------
 END
-        """.strip()
-        self.assertEqual(s.getvalue().strip(), expected)
+""".lstrip()
+        self.assertEqual(s.getvalue(), expected)
 
     def test_lazy_start_from_enter(self):
         s = io.StringIO()
@@ -675,8 +781,8 @@ START
 [PREFIX] |exit | howdy!
 [PREFIX] +-----+----
 END
-        """.strip()
-        self.assertEqual(s.getvalue().strip(), expected)
+""".lstrip()
+        self.assertEqual(s.getvalue(), expected)
 
 
 class TestLogContextManager(unittest.TestCase):
@@ -798,7 +904,7 @@ class TestLogFormatting(unittest.TestCase):
         log.close()
         self.assertTrue(any("[PREFIX]" in s for s in array))
 
-    def test_log_with_initial_and_final(self):
+    def test_log_with_start_and_end(self):
         array = []
         log = big.Log(array, threading=False, formats={"start": {"template": "START"}, "end": {"template": "END"}}, prefix='')
         log("middle")
@@ -832,6 +938,46 @@ class TestLogFormatting(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.Log(formats={"peanut": {"template": "foo\n{message}\nbar\n{message}"}})
 
+    def test_empty_banner_template_suppresses_banners(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": {"template": ""}, "end": {"template": ""}}, prefix='[PREFIX] ', width=20)
+        log("z")
+        log.close()
+
+        expected = '[PREFIX] z\n'
+        self.assertEqual(s.getvalue(), expected)
+
+    def test_empty_start_banner_template_end_still_works(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": {"template": ""}, "end": {"template": "END"}}, prefix='[PREFIX] ', width=20)
+        log("z")
+        log.close()
+
+        expected = '[PREFIX] z\nEND\n'
+        self.assertEqual(s.getvalue(), expected)
+
+
+    def test_empty_end_banner_template(self):
+        s = io.StringIO()
+        log = big.Log(s, threading=False, formats={"start": {"template": "START"}, "end": {"template": ""}}, prefix='[PREFIX] ', width=20)
+        log("z")
+        log.close()
+
+        expected = 'START\n[PREFIX] z\n'
+        self.assertEqual(s.getvalue(), expected)
+
+    def test_system_formats_are_disallowed(self):
+        log = big.Log(None, threading=False)
+
+        with self.assertRaises(ValueError):
+            log("w", format='start')
+        with self.assertRaises(ValueError):
+            log("x", format='end')
+        with self.assertRaises(ValueError):
+            log("y", format='enter')
+        with self.assertRaises(ValueError):
+            log("z", format='exit')
+        log.close()
 
 
 
@@ -883,8 +1029,8 @@ class TestSink(unittest.TestCase):
         with self.assertRaises(TypeError):
             e < 3.1415
 
-        sse = big.SinkStartEvent(0, 5, 10, '', {})
-        self.assertEqual(repr(sse), "SinkStartEvent(configuration={}, epoch=10, formatted='', ns=5)")
+        sse = big.SinkStartEvent(0, 5, 10, {})
+        self.assertEqual(repr(sse), "SinkStartEvent(configuration={}, epoch=10, ns=5)")
 
     def test_sink_event_types(self):
         sink = big.Log.Sink()
@@ -910,7 +1056,6 @@ class TestSink(unittest.TestCase):
         self.assertIn(SinkEvent.TYPE_EXIT, types)
 
 
-
     def test_sink_events_without_any_logging(self):
         sink = big.Log.Sink()
         log = big.Log(sink, threading=False)
@@ -919,11 +1064,7 @@ class TestSink(unittest.TestCase):
         log.close()
 
         events = list(sink)
-        self.assertEqual(len(events), 4)
-        self.assertIsInstance(events[0], log_module.SinkStartEvent)
-        self.assertIsInstance(events[1], log_module.SinkEndEvent)
-        self.assertIsInstance(events[2], log_module.SinkStartEvent)
-        self.assertIsInstance(events[3], log_module.SinkEndEvent)
+        self.assertEqual(len(events), 0)
 
 
     def test_sink_print(self):
@@ -976,11 +1117,12 @@ class TestSink(unittest.TestCase):
 
     def test_sink_with_banners(self):
         sink = big.Log.Sink()
-        log = big.Log(sink, threading=False, name='Sink', formats={"start": {"template": "{name} START\n"}, "end": {"template": "{name} END\n"}}, prefix='[PREFIX] ')
+        log = big.Log(sink, threading=False, name='Sink', formats={"start": {"template": "{name} START"}, "end": {"template": "{name} END"}}, prefix='[PREFIX] ')
         log("message")
         log.close()
+
         events = list(sink)
-        self.assertEqual(len(events), 3)
+        self.assertEqual(len(events), 5)
 
         SinkEvent = log_module.SinkEvent
         self.assertIsInstance(events[0], big.SinkStartEvent)
@@ -989,53 +1131,17 @@ class TestSink(unittest.TestCase):
         self.assertGreater(events[0].epoch, 0)
 
         self.assertIsInstance(events[1], big.SinkLogEvent)
-        self.assertEqual(events[1].message, 'message')
+        self.assertEqual(events[1].formatted, 'Sink START\n')
 
-        self.assertIsInstance(events[2], big.SinkEndEvent)
-        self.assertGreater(events[2].elapsed, 0)
+        self.assertIsInstance(events[2], big.SinkLogEvent)
+        self.assertEqual(events[2].message, 'message')
 
+        self.assertIsInstance(events[3], big.SinkLogEvent)
+        self.assertEqual(events[3].formatted, 'Sink END\n')
 
-class EventSink(big.Log.Destination):
-    """
-    A custom destination that just logs event names.
-    """
+        self.assertIsInstance(events[4], big.SinkEndEvent)
+        self.assertGreater(events[4].elapsed, 0)
 
-    def __init__(self):
-        super().__init__()
-        self.value = ''
-
-    def _event(self, s):
-        if self.value:
-            s = f"{self.value} {s}"
-
-        self.value = s
-
-    def reset(self):
-        self._event("reset")
-
-    def flush(self):
-        self._event("flush")
-
-    def close(self):
-        self._event("close")
-
-    def start(self, start_time_ns, start_time_epoch, formatted):
-        self._event("start")
-
-    def end(self, elapsed, formatted):
-        self._event("end")
-
-    def write(self, elapsed, thread, formatted):
-        self._event("write")
-
-    def log(self, elapsed, thread, format, message, formatted):
-        self._event("log")
-
-    def enter(self, elapsed, thread, message, formatted):
-        self._event("enter")
-
-    def exit(self, elapsed, thread, message, formatted):
-        self._event("exit")
 
 
 
@@ -1049,7 +1155,7 @@ class TestEventSink(unittest.TestCase):
         log.reset()
         log.close()
 
-        self.assertEqual(esink.value, "start end flush close reset start end flush close")
+        self.assertEqual(esink.value, "")
 
     def test_sink_events(self):
         esink = EventSink()
@@ -1059,8 +1165,12 @@ class TestEventSink(unittest.TestCase):
         with log.enter("subsystem"):
             log.box("xyz")
         log.close()
+        log.reset()
+        log.print('hey now')
+        log.close()
 
-        self.assertEqual(esink.value, "start write log enter log exit end flush close")
+        self.assertEqual(esink.value, "start log write log log enter log exit log log flush end reset start log log log flush end")
+
 
 
 class TestOldDestination(unittest.TestCase):
@@ -1069,12 +1179,19 @@ class TestOldDestination(unittest.TestCase):
     def test_old_destination_basic(self):
         old = big.OldDestination()
         log = big.Log(old, threading=False, formats={"start": None, "end": None}, prefix='')
-        log("event")
+        log("smedley")
         log.close()
 
         events = list(old)
-        # Should have "log start" and "event"
-        self.assertTrue(len(events) >= 2)
+        self.assertEqual(len(events), 2)
+        e = events[0]
+        self.assertEqual(e[0], 0)
+        self.assertEqual(e[2], 'log start')
+        self.assertEqual(e[3], 0)
+        e = events[1]
+        self.assertGreater(e[0], 0)
+        self.assertEqual(e[2], 'smedley')
+        self.assertEqual(e[3], 0)
 
     def test_old_destination_enter_exit(self):
         old = big.OldDestination()
@@ -1249,6 +1366,8 @@ class TestExport(unittest.TestCase):
         ]
         for name in expected:
             self.assertIn(name, log_module.__all__)
+
+
 def run_tests():
     bigtestlib.run(name="big.log", module=__name__)
 
