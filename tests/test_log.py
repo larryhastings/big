@@ -263,12 +263,13 @@ class TestFile(unittest.TestCase):
         try:
             log = big.Log(big.log.TMPFILE, name="LogName", threading=False, formats={"start": None, "end": None}, prefix='', timestamp_format=lambda x:"ABACAB /DEADBEEF")
             log("xyz")
-            tmpfile = big.log.TMPFILE.path.name
+            tmpfile = big.log.TMPFILE.path
+            got = tmpfile.name
             expected = f"LogName.ABACAB.-DEADBEEF.{os.getpid()}.txt"
             log.close()
-            self.assertEqual(big.log.TMPFILE.path.name, expected)
+            self.assertEqual(got, expected)
         finally:
-            if tmpfile and os.path.exists(tmpfile): # pragma: nocover
+            if (tmpfile is not None) and os.path.exists(tmpfile): # pragma: nocover
                 os.unlink(tmpfile)
 
 
