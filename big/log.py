@@ -34,7 +34,7 @@ import os
 from pathlib import Path
 from queue import Queue
 import tempfile
-from threading import current_thread, Lock, RLock, Thread
+from threading import current_thread, Lock, Thread
 from .boundinnerclass import BoundInnerClass
 from . import time as big_time
 from . import file as big_file
@@ -559,7 +559,7 @@ class Log:
         self._state = 'initial'
 
         # if threading is True, _lock is only used for close and reset (and shutdown)
-        self._lock = RLock()
+        self._lock = Lock()
 
         self._parse_formats(formats)
 
