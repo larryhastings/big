@@ -4053,6 +4053,10 @@ that separator.  Example:
 If none of the separators are found in the string, returns
 a tuple containing `s` unchanged followed by two empty strings.
 
+Returns a tuple of slices of `s`—including zero-length boundary slices
+when needed—so concatenating the returned values reconstitutes the
+original `s`.
+
 `multipartition` is *greedy:* if two or more separators appear at
 the leftmost location in `s`, `multipartition` partitions using
 the longest matching separator.  For example:
@@ -4106,9 +4110,13 @@ If `separators` is `None` and `s` is `bytes`,
 `multisplit` will use [`big.ascii_whitespace`](#whitespace)
 as `separators`.
 
-Returns an iterator yielding the strings split from `s`.  If `keep`
-is true (or `ALTERNATING`), and `strip` is false, joining these strings
-together will recreate `s`.
+Returns an iterator yielding values split from `s`.  The values yielded
+are slices of the original object, or in some cases adjacent slices joined
+with `+`.  All slices are yielded in left-to-right order; this even includes
+zero-length strings, which are sliced from the contextually correct spot.
+
+If `keep` is true (or `ALTERNATING`), and `strip` is false, joining these
+strings together will recreate `s`.
 
 `multisplit` is *greedy:* if two or more separators start at the same
 location in `s`, `multisplit` splits using the longest matching separator.
@@ -4303,9 +4311,8 @@ from `s`.
 Processing always stops at the first character that
 doesn't match one of the separators.
 
-Returns a copy of `s` with the leading and/or trailing
-separators stripped.  (If `left` and `right` are both
-false, returns `s` unchanged.)
+Returns `s` unchanged, or a slice of `s`, with the leading
+and/or trailing separators stripped.
 
 For more information, see the tutorial on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
@@ -7986,6 +7993,11 @@ to implement
 [`normalize_whitespace`,](#normalize_whitespaces-separatorsnone-replacementnone)
 [`lines`,](#bigtext)
 and several other functions.
+
+The values returned or yielded by these functions are slices of the original object,
+or in some cases adjacent slices joined with `+`.  All slices are returned in
+left-to-right order; this even includes zero-length strings, which are sliced
+from the contextually correct spot.
 
 ### Using `multisplit`
 

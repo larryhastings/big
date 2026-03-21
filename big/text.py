@@ -856,10 +856,6 @@ def multistrip(s, separators, left=True, right=True):
     Strips from the string "s" all leading and trailing
     instances of strings found in "separators".
 
-    Returns a copy of s with the leading and/or trailing
-    separators stripped.  (If left and right are both false,
-    the contents are unchanged.)
-
     s should be str or bytes.
     separators should be an iterable of either str or bytes
     objects matching the type of s.
@@ -880,9 +876,10 @@ def multistrip(s, separators, left=True, right=True):
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
-    for both must be the same (str or bytes).  multistrip will
-    only return str or bytes objects, even if left and right
-    are both false.
+    for both must be the same (str or bytes).
+
+    Returns s unchanged, or a slice of s, with the leading
+    and/or trailing separators stripped.
     """
 
     is_bytes = isinstance(s, bytes)
@@ -914,8 +911,6 @@ def multistrip(s, separators, left=True, right=True):
         else:
             check_separators = True
 
-    if not separators:
-        raise ValueError("separators must be an iterable of non-empty objects the same type as s")
     if check_separators:
         s2 = []
         for o in separators:
@@ -925,6 +920,8 @@ def multistrip(s, separators, left=True, right=True):
                 raise ValueError("separators must be an iterable of non-empty objects the same type as s")
             s2.append(o)
         separators = tuple(s2)
+    if not separators:
+        raise ValueError("separators must be an iterable of non-empty objects the same type as s")
 
     # deliberately do this *after* checking types,
     # so we complain about bad types even if this is a do-nothing call.
@@ -1125,9 +1122,14 @@ def multisplit(s, separators=None, *,
     If separators is None and s is bytes, multisplit will
     use big.ascii_whitespace as the list of separators.
 
-    Returns an iterator yielding the strings split from s.  If keep
-    is true (or ALTERNATING), and strip is false, joining these strings
-    together will recreate s.
+    Returns an iterator yielding values split from s.  The values
+    yielded are slices of the original object, or in some cases
+    adjacent slices joined with +.  All slices are yielded in
+    left-to-right order; this even includes zero-length strings,
+    which are sliced from the contextually correct spot.
+
+    If keep is true (or ALTERNATING), and strip is false, joining
+    these strings together will recreate s.
 
     multisplit is "greedy": if two or more separators start at the same
     location in "s", multisplit splits using the longest matching separator.
@@ -1223,8 +1225,7 @@ def multisplit(s, separators=None, *,
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
-    for both must be the same (str or bytes).  multisplit will
-    only return str or bytes objects.
+    for both must be the same (str or bytes).
     """
     is_bytes = isinstance(s, bytes)
     separators_is_bytes = isinstance(separators, bytes)
@@ -1250,25 +1251,33 @@ def multisplit(s, separators=None, *,
     if separators is None:
         separators = bytes_whitespace if is_bytes else whitespace
         check_separators = False
-    elif not separators:
-        raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
 
     # check_separators is True if separators isn't str or bytes
     # or something we split ourselves.
     if check_separators:
         if not hasattr(separators, '__iter__'):
             raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
+        s2 = []
         for o in separators:
             if not isinstance(o, s_type):
                 raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
             if not o:
                 raise TypeError(f"separators cannot contain an empty str/bytes object")
+            s2.append(o)
+        separators = tuple(s2)
+
+    if separators is not None:
+        if not separators:
+            raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
+
+    if maxsplit is not None:
+        maxsplit = operator.index(maxsplit)
 
     internally_keep_separators = keep
 
     if strip:
         if strip == PROGRESSIVE:
-            if maxsplit == -1:
+            if (maxsplit is None) or (maxsplit == -1):
                 strip = left = right = True
             else:
                 left = not reverse
@@ -1307,6 +1316,10 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     If none of the separators are found in the string, returns
     a tuple containing `s` unchanged followed by two empty strings.
 
+    Returns a tuple of slices of s—including zero-length boundary
+    slices when needed—so concatenating the returned values
+    reconstitutes the original s.
+
     multipartition is *greedy*: if two or more separators appear at
     the leftmost location in `s`, multipartition partitions using
     the longest matching separator.  For example:
@@ -1336,9 +1349,9 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
-    for both must be the same (str or bytes).  multipartition
-    will only yield str or bytes objects.
+    for both must be the same (str or bytes).
     """
+    count = operator.index(count)
     if count < 0:
         raise ValueError("count must be positive")
     result = list(multisplit(s, separators,

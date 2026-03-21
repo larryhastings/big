@@ -924,12 +924,22 @@ class BigTextTests(unittest.TestCase):
 
         # this should be covered in the loop above,
         # but we'll explicitly check it anyway:
-        # multistrip *always* returns either str or bytes
-        # objects, even when it doesn't strip anything.
+        # multistrip preserves string/bytes subclasses even
+        # when it doesn't strip anything.
         self.assertEqual(big.multistrip(StrSubclass('abcde'), StrSubclass(' ')), 'abcde')
         self.assertEqual(type(big.multistrip(StrSubclass('abcde'), StrSubclass(' '))), StrSubclass)
         self.assertEqual(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' ')), b'abcde')
         self.assertEqual(type(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' '))), BytesSubclass)
+
+        # regression: if separators is an iterator or generator,
+        # multistrip should still validate it correctly and use it.
+        self.assertEqual(big.multistrip('xaayx', iter(('x', 'y'))), 'aa')
+        self.assertEqual(big.multistrip(b'xaayx', iter((b'x', b'y'))), b'aa')
+
+        with self.assertRaises(ValueError):
+            big.multistrip('s', iter(()))
+        with self.assertRaises(ValueError):
+            big.multistrip(b's', iter(()))
 
         # regression test:
         # the old approach had a bug that had to do with overlapping separators.
@@ -1082,6 +1092,11 @@ class BigTextTests(unittest.TestCase):
             # test: progressive strip
             self.assertEqual(list_multisplit(c('   a b c   '), c((' ',)), maxsplit=1, strip=big.PROGRESSIVE), c([ 'a', 'b c   ']))
 
+            # regression: PROGRESSIVE + maxsplit=None should behave like
+            # unlimited splitting in both directions.
+            self.assertEqual(list_multisplit(c('^apple^banana_cookie_'), c(('^', '_')), maxsplit=None, strip=big.PROGRESSIVE), c(['apple', 'banana', 'cookie']))
+            self.assertEqual(list_multisplit(c('^apple^banana_cookie_'), c(('^', '_')), maxsplit=None, strip=big.PROGRESSIVE, reverse=True), c(['apple', 'banana', 'cookie']))
+
             # regression test: when there are *overlapping* separators,
             # multisplit prefers the leftmost one(s), but passing in
             # reverse=True makes it prefer the *rightmost* ones.
@@ -1113,6 +1128,21 @@ class BigTextTests(unittest.TestCase):
             self.assertEqual(list_multisplit(c('   '), reverse=True), c(['', '']))
             self.assertEqual(list_multisplit(c('   '), strip=True), c(['']))
             self.assertEqual(list_multisplit(c('   '), strip=True, reverse=True), c(['']))
+
+            # regression: if separators is an iterator or generator,
+            # multisplit should materialize it before validating and using it.
+            self.assertEqual(list_multisplit(c('a,b'), iter((c(','),))), c(['a', 'b']))
+            self.assertEqual(list_multisplit(c('a,b'), iter((c(','),)), reverse=True), c(['a', 'b']))
+            with self.assertRaises(ValueError):
+                list_multisplit(c('s'), iter(()))
+
+            class Indexable:
+                def __init__(self, value):
+                    self.value = value
+                def __index__(self):
+                    return self.value
+
+            self.assertEqual(list_multisplit(c('xaxbxc'), c('abc'), maxsplit=Indexable(2)), c(['x', 'x', 'xc']))
 
             with self.assertRaises(TypeError):
                 list_multisplit(c('s'), 3.1415)
@@ -2152,9 +2182,32 @@ class BigTextTests(unittest.TestCase):
         test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'))
         test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'), reverse=True)
 
-        # I don't bother to test the str / subclass of str / etc stuff
-        # with multipartition, because it literally uses multisplit
-        # to do the splitting.  so the multisplit tests cover it.
+        # regression: multipartition should preserve subclasses by
+        # returning slices of the original.
+        SS = StrSubclass
+        result = big.multipartition(SS('a:b:c'), (SS(':'),), 2)
+        self.assertEqual(('a', ':', 'b', ':', 'c'), result)
+        for s in result:
+            self.assertIsInstance(s, SS)
+        self.assertEqual(''.join(result), 'a:b:c')
+
+        # regression: if separators is an iterator or generator,
+        # multipartition should materialize and validate it.
+        self.assertEqual(big.multipartition('a,b', iter((',',)), 1), ('a', ',', 'b'))
+        self.assertEqual(big.multipartition(b'a,b', iter((b',',)), 1), (b'a', b',', b'b'))
+        with self.assertRaises(ValueError):
+            big.multipartition('abc', iter(()), 1)
+        with self.assertRaises(ValueError):
+            big.multipartition(b'abc', iter(()), 1)
+
+        class Indexable:
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        self.assertEqual(big.multipartition('a:b:c:d', (':',), Indexable(2)), ('a', ':', 'b', ':', 'c:d'))
+        self.assertEqual(big.multirpartition('a:b:c:d', (':',), Indexable(2)), ('a:b', ':', 'c', ':', 'd'))
 
         with self.assertRaises(ValueError):
             big.multipartition("a x x b y y c", (" x ", " y "), -1)
