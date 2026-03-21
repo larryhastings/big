@@ -616,6 +616,10 @@ Log start
         with self.assertRaises(TypeError):
             Formatter('hello', width='big')
 
+    def test_zero_width_raises(self):
+        with self.assertRaises(ValueError):
+            Formatter('hello', width=0)
+
     def test_non_dict_map_raises(self):
         """Non-dict map raises TypeError."""
         with self.assertRaises(TypeError):

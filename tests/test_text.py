@@ -1394,6 +1394,12 @@ class BigTextTests(unittest.TestCase):
         simple_test_multisplit("a,b,,,c", ",", ['a', ',', 'b', ',', '', ',', '', ',', 'c'], keep=big.ALTERNATING, separate=True)
         simple_test_multisplit("a,b,,,c", ",", ['a', ',', 'b', ',', '', ',', '', ',', 'c'], keep=big.ALTERNATING, separate=True, reverse=True)
 
+    def test_regression_unhashable_separator_iterables(self):
+        self.assertEqual(big.multistrip('xyhelloxy', ['xy']), 'hello')
+        self.assertEqual(list(big.multisplit('a,b,c', [','])), ['a', 'b', 'c'])
+        self.assertEqual(big.multipartition('a,b,c', [','], 1), ('a', ',', 'b,c'))
+        self.assertEqual(list(big.multisplit(b'a,b,c', [b','])), [b'a', b'b', b'c'])
+
     def test_reimplemented_str_split(self):
         """
         The fourth of *seven* multisplit test suites.
@@ -6086,6 +6092,18 @@ class BigPatternTests(unittest.TestCase):
                 self.assertTypedEqual(re_split(sep, ':a:b::c'), expected)
 
 
+
+
+
+    def test_regression__separators_to_re_unhashable_iterables(self):
+        direct = big.text._separators_to_re([',', ';'], False)
+        expected = big.text._separators_to_re((',', ';'), False)
+        self.assertEqual(direct, expected)
+        # direct helper coverage: unhashable iterables are normalized to tuples.
+        self.assertEqual(direct, expected)
+        direct_bytes = big.text._separators_to_re([b',', b';'], True)
+        expected_bytes = big.text._separators_to_re((b',', b';'), True)
+        self.assertEqual(direct_bytes, expected_bytes)
 
 def run_tests():
     bigtestlib.run(name="big.text", module=__name__)

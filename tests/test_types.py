@@ -258,8 +258,18 @@ class BigStringTests(unittest.TestCase):
         t = 'abcd' + s
         self.assertString(t, 'abcd')
 
+        class S(string):
+            pass
+        class T(string):
+            pass
+
+        self.assertIsInstance(S('') + T('abc'), S)
+        self.assertEqual(S('') + T('abc'), 'abc')
+
 
     def test___radd__(self):
+        self.assertIs(abcde.__radd__(123), NotImplemented)
+
         with self.assertRaises(TypeError):
             x = 1 + abcde
 
@@ -520,6 +530,13 @@ class BigStringTests(unittest.TestCase):
         self.assertString(abcde[:-8724], '')
         self.assertString(abcde[1:-50], '')
 
+        self.assertEqual(abcde._clamp_index(None, 7, 'start'), 7)
+        self.assertEqual(abcde._clamp_index(-20, 0, 'start'), 0)
+        self.assertEqual(abcde._clamp_index(2, 0, 'start'), 2)
+        self.assertEqual(abcde._clamp_index(999, 0, 'start'), len(abcde))
+        with self.assertRaises(TypeError):
+            abcde._clamp_index(1.5, 0, 'start')
+
         with self.assertRaises(TypeError):
             abcde[1.5:]
         with self.assertRaises(TypeError):
@@ -528,6 +545,19 @@ class BigStringTests(unittest.TestCase):
             abcde[::1.5]
         with self.assertRaises(ValueError):
             abcde[::0]
+
+        class Indexable:
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        self.assertString(abcde.__getitem__(slice(None, None, Indexable(-2))), str(abcde)[::-2])
+        self.assertString(abcde.__getitem__(slice(Indexable(-20), Indexable(10_000), Indexable(1))), abcde)
+        with self.assertRaises(TypeError):
+            abcde.__getitem__(slice(None, None, object()))
+        with self.assertRaises(ValueError):
+            abcde.__getitem__(slice(None, None, Indexable(0)))
 
         # regression: if the string ended with a linebreak,
         # getting the zero-length string after that linebreak
@@ -758,8 +788,8 @@ class BigStringTests(unittest.TestCase):
         self.assertNotEqual(string('3', source='x'), 3)
 
     def test___new__(self):
-        # don't need to test this
-        pass
+        with self.assertRaises(ValueError):
+            string(abcde, line_number=object())
 
     def test___reduce__(self):
         # part of the pickling machinery, don't touch it!
@@ -1021,8 +1051,15 @@ class BigStringTests(unittest.TestCase):
 
 
     def test_lstrip(self):
-        # see test_strip
-        pass
+        s = string('   xyz', source='test.py')
+        stripped = s.lstrip()
+        self.assertEqual(str(stripped), 'xyz')
+        self.assertEqual(stripped.source, 'test.py')
+        self.assertEqual(stripped.offset, 3)
+        self.assertEqual(stripped.column_number, 4)
+
+        unchanged = string('xyz', source='test.py')
+        self.assertIs(unchanged.lstrip(), unchanged)
 
     def test_maketrans(self):
         map = {'a': 'x', 'b': 'y', 'c': 'z', 'd': '1', 'e': '2'}
@@ -1303,12 +1340,17 @@ class BigStringTests(unittest.TestCase):
                 if not count:
                     self.assertIsInstance(string_result, type(s))
                 elif not s:
-                    if (count > 0) and (python_version < Version('3.9')):
-                        self.assertIsInstance(string_result, type(s))
-                    else:
-                        self.assertIsInstance(string_result, type(new))
+                    self.assertIsInstance(string_result, type(new))
                 else:
                     self.assertIsInstance(string_result, string)
+
+        old = big.types._python_3_9_plus
+        try:
+            big.types._python_3_9_plus = False
+            s = string('')
+            self.assertIs(s.replace('', '-', 1), s)
+        finally:
+            big.types._python_3_9_plus = old
 
 
     def test_reversed(self):
@@ -1496,6 +1538,36 @@ class BigStringTests(unittest.TestCase):
                 with self.subTest(s=raw, width=width):
                     s = string(raw)
                     self.assertString(s.zfill(width), raw.zfill(width))
+
+    def test___radd___notimplemented(self):
+        self.assertIs(abcde.__radd__(123), NotImplemented)
+
+    def test_lstrip_removes_prefix_characters(self):
+        s = string('   xyz', source='test.py')
+        stripped = s.lstrip()
+        self.assertString(stripped, 'xyz')
+        self.assertEqual(stripped.line_number, s.line_number)
+        self.assertEqual(stripped.column_number, s.column_number + 3)
+
+    def test_extended_slices(self):
+        samples = (
+            (abcde, slice(1, 5, 2)),
+            (abcde, slice(None, None, -1)),
+            (abcde, slice(4, 0, -2)),
+            (himem, slice(None, None, 2)),
+        )
+        for value, sl in samples:
+            with self.subTest(value=value, sl=sl):
+                self.assertString(value[sl], str(value)[sl])
+
+    def test_context_zero_length_without_linebreak(self):
+        s = string('hello world', source='test.py')
+        sub = s[5:5]
+        ctx = sub.context
+        self.assertTrue(ctx)
+        self.assertEqual(str(ctx), 'hello world\n     ^')
+        self.assertEqual(ctx.parts.string.linebreak, '')
+        self.assertEqual(ctx.parts.highlight.linebreak, '')
 
     #######
     ## our additions
@@ -1872,6 +1944,24 @@ class BigStringTests(unittest.TestCase):
 
         # but the parts accurately report no linebreak
         self.assertEqual(ctx.parts.string.linebreak, '')
+
+    def test_context_zero_length_without_trailing_linebreak(self):
+        s = string('hello world', source='test.py')
+        sub = s[5:5]
+        ctx = sub.context
+
+        self.assertTrue(ctx)
+        self.assertEqual(str(ctx), 'hello world\n     ^')
+        self.assertEqual(len(ctx.all_parts), 1)
+
+        string_line, highlight_line = ctx.parts
+        self.assertEqual(string_line.before, 'hello')
+        self.assertEqual(string_line.span, '')
+        self.assertEqual(string_line.after, ' world')
+        self.assertEqual(string_line.linebreak, '')
+        self.assertEqual(highlight_line.before, ' ' * 5)
+        self.assertEqual(highlight_line.span, '^')
+        self.assertEqual(highlight_line.after, ' ' * 5) ; self.assertEqual(highlight_line.linebreak, '')
 
     def test_context_crlf_linebreak(self):
         s = string('first line\r\nsecond line\r\n', source='dos.txt')
@@ -4452,6 +4542,14 @@ class BigLinkedListTests(unittest.TestCase):
         ll *= 2
         self.assertLinkedListEqual(ll, [1, 2, 3, 1, 2, 3])
 
+        lock = NoReenterLock()
+        lock.acquire()
+        try:
+            with self.assertRaises(RuntimeError):
+                lock.acquire()
+        finally:
+            lock.release()
+
     def test_regression_reverse_short_lists_return_none_without_iterators(self):
         for _lock in self.lock_fns():
             with self.subTest(_lock=_lock):
@@ -5647,6 +5745,95 @@ class BigLinkedListTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             t.index('empty list')
 
+    def test_index_edge_cases(self):
+        t = linked_list([1, 2, 3, 4, 5])
+        self.assertEqual(t.index(3, -999, 4), 2)
+        with self.assertRaises(ValueError):
+            t.index(3, 4, 3)
+        with self.assertRaises(ValueError):
+            t.index(5, 0, 4)
+        self.assertIs(t.__lt__(1), NotImplemented)
+        self.assertFalse(t.__lt__(t))
+        self.assertTrue(t != linked_list([1, 2, 3]))
+
+    def test_cut_mismatched_iterators_and_head_head(self):
+        t = linked_list([1, 2, 3])
+        head = t.head()
+        empty = t.cut(head, head)
+        self.assertLinkedListEqual(empty, [])
+        it = t.find(2)
+        rit = reversed(t.find(3))
+        with self.assertRaises(ValueError):
+            t.cut(it, rit)
+
+    def test_iterator_lock_refresh_paths(self):
+        t = linked_list([1, 2, 3])
+        it = t.find(2)
+
+        class ChangingLock:
+            def __init__(self, iterator, replacement):
+                self.iterator = iterator
+                self.replacement = replacement
+                self.acquired = 0
+                self.released = 0
+            def acquire(self):
+                self.acquired += 1
+                self.iterator._lock = self.replacement
+            def release(self):
+                self.released += 1
+
+        lock = ChangingLock(it, None)
+        it._lock = lock
+        it.reset()
+        self.assertEqual(lock.acquired, 1)
+        self.assertEqual(lock.released, 1)
+        self.assertIsHead(it)
+
+        it = t.find(2)
+        lock = ChangingLock(it, None)
+        it._lock = lock
+        it.exhaust()
+        self.assertEqual(lock.acquired, 1)
+        self.assertEqual(lock.released, 1)
+        self.assertIsTail(it)
+
+        it = t.find(2)
+        lock = ChangingLock(it, None)
+        it._lock = lock
+        self.assertFalse(it.is_special)
+        self.assertEqual(lock.acquired, 1)
+        self.assertEqual(lock.released, 1)
+
+    def test_iterator_after_past_tail_and_setstate(self):
+        t = linked_list([1, 2, 3], lock=True)
+        it = t.find(3)
+        with self.assertRaises(UndefinedIndexError):
+            it.after(2)
+        state = it.__getstate__()
+        it2 = object.__new__(type(it))
+        it2.__setstate__(state)
+        self.assertIs(it2._lock, t._lock)
+        self.assertEqual(it2[0], 3)
+
+    def test_rotate_and_extendleft_coverage(self):
+        t = linked_list([1])
+        self.assertIsNone(t.maxlen)
+        t.rotate(-1)
+        self.assertLinkedListEqual(t, [1])
+
+        t = linked_list([1, 2, 3, 4])
+        t.rotate(-1)
+        self.assertLinkedListEqual(t, [2, 3, 4, 1])
+        t.rotate(0)
+        self.assertLinkedListEqual(t, [2, 3, 4, 1])
+
+        class Iterable:
+            def __iter__(self):
+                return iter(('a', 'b', 'c'))
+        t = linked_list([1, 2, 3])
+        t.extendleft(Iterable())
+        self.assertLinkedListEqual(t, ['c', 'b', 'a', 1, 2, 3])
+
     def test_deque_compatibility(self):
         for _lock in self.lock_fns():
             self.deque_compatibility_tests(_lock)
@@ -5733,6 +5920,184 @@ class BigLinkedListTests(unittest.TestCase):
             linked_list([1, 2, 3], lock=FakeLock2())
 
 
+
+
+
+    def test_string_additional_coverage_cases(self):
+        self.assertIs(abcde.__radd__(123), NotImplemented)
+
+        s = string('   xyz', source='test.py')
+        stripped = s.lstrip()
+        self.assertEqual(str(stripped), 'xyz')
+        self.assertEqual(stripped.source, 'test.py')
+        self.assertEqual(stripped.offset, 3)
+
+        samples = [
+            (abcde, slice(None, None, -1)),
+            (abcde, slice(4, 0, -2)),
+            (abcde, slice(-20, None, 2)),
+            (abcde, slice(1, -1, 2)),
+        ]
+        for value, sl in samples:
+            with self.subTest(value=value, sl=sl):
+                self.assertEqual(str(value[sl]), str(value)[sl])
+
+        s = string('hello world', source='test.py')
+        sub = s[5:5]
+        ctx = sub.context
+        self.assertEqual(str(ctx), 'hello world\n     ^')
+        self.assertEqual(ctx.parts.string.linebreak, '')
+        self.assertEqual(ctx.parts.highlight.linebreak, '')
+
+    def test_linked_list_internal_reverse_and_sort_coverage(self):
+        t = linked_list([1, 'X', 2, 3])
+        special = t.find('X')
+        special_copy = special.copy()
+        special_copy.pop()
+        special_copy._del()
+        with t._lock or big.types._inert_context_manager:
+            self.assertEqual([node.value for node in t._internal_reversed()], [3, 2, 1])
+
+        empty = linked_list()
+        self.assertIsNone(empty.sort())
+        singleton = linked_list([5])
+        self.assertIsNone(singleton.sort())
+        t2 = linked_list([3, 1, 2])
+        t2.sort(key=lambda value: -value)
+        self.assertLinkedListEqual(t2, [3, 2, 1])
+
+    def test_linked_list_move_error_and_edge_coverage(self):
+        t = linked_list(range(1, 8), lock=Lock())
+        foreign = linked_list(range(10, 13), lock=Lock())
+        where = t.find(4)
+
+        with self.assertRaises(TypeError):
+            t.move(object(), t.find(2), t.find(5))
+        with self.assertRaises(ValueError):
+            t.move(foreign.find(11), t.find(2), t.find(5))
+        with self.assertRaises(TypeError):
+            t.move(where, object(), t.find(5))
+        with self.assertRaises(ValueError):
+            t.move(where, foreign.find(11), t.find(5))
+        with self.assertRaises(TypeError):
+            t.move(where, t.find(2), object())
+        with self.assertRaises(ValueError):
+            t.move(where, t.find(2), foreign.find(11))
+
+        with self.assertRaises(ValueError):
+            t.move(where, t.find(2), reversed(t.find(5)))
+
+        t2 = linked_list(range(1, 8))
+        unchanged = list(t2)
+        t2.move(t2.tail())
+        self.assertLinkedListEqual(t2, unchanged)
+
+        t3 = linked_list(range(1, 8))
+        t3.rmove(t3.head())
+        self.assertLinkedListEqual(t3, [1, 2, 3, 4, 5, 6, 7])
+
+        t4 = linked_list(range(1, 8))
+        with self.assertRaises(ValueError):
+            t4.move(t4.find(1), t4.find(5), t4.find(3))
+        with self.assertRaises(ValueError):
+            t4.move(t4.find(3), t4.find(2), t4.find(5))
+
+        t5 = linked_list(range(1, 8))
+        self.assertIsNone(t5.move(t5.tail(), t5.find(7), t5.tail()))
+        self.assertLinkedListEqual(t5, [1, 2, 3, 4, 5, 6, 7])
+
+        t6 = linked_list(range(1, 8))
+        self.assertIsNone(t6.rmove(t6.head(), t6.find(1), t6.head()))
+        self.assertLinkedListEqual(t6, [1, 2, 3, 4, 5, 6, 7])
+
+        t7 = linked_list(range(1, 8))
+        with self.assertRaises(SpecialNodeError):
+            t7.move(t7.find(3), t7.head(), t7.find(5))
+        with self.assertRaises(SpecialNodeError):
+            t7.rmove(t7.find(3), t7.tail(), t7.find(2))
+
+    def test_linked_list_iterator_cleanup_and_misc_coverage(self):
+        t = linked_list([1, 2, 3])
+        it = t.find(2)
+        state = it.__getstate__()
+        it2 = object.__new__(type(it))
+        it2.__setstate__(state)
+        self.assertIs(it2._lock, t._lock)
+        self.assertEqual(it2[0], 2)
+
+        self.assertIs(it2._internal_lock(), t._lock)
+        self.assertEqual(it2.linked_list, t)
+
+        it2._relocate(it2._cursor)
+        self.assertEqual(it2[0], 2)
+
+        it2._del()
+        it2._del()
+        self.assertIsNone(it2._cursor)
+
+        class SneakyLock:
+            def __init__(self, iterator):
+                self.iterator = iterator
+            def acquire(self):
+                self.iterator._cursor = None
+                return True
+            def release(self):
+                return None
+            def __bool__(self):
+                return True
+
+        t3 = linked_list([1])
+        it3 = t3.find(1)
+        t3._lock = SneakyLock(it3)
+        it3._lock = t3._lock
+        it3.__del__()
+        self.assertIsNone(it3._cursor)
+
+        t4 = linked_list([1, 2, 3])
+        it4 = t4.find(3)
+        self.assertTrue(bool(it4))
+        self.assertEqual(it4.special, None)
+
+        self.assertIs(linked_list([1]).__lt__(object()), NotImplemented)
+
+    def test_regression_imul_lock_coverage(self):
+        class NoReenterLock:
+            def __init__(self):
+                self._lock = Lock()
+                self._held = False
+
+            def acquire(self):
+                if self._held:
+                    raise RuntimeError('recursive acquire attempted')
+                self._lock.acquire()
+                self._held = True
+                return True
+
+            def release(self):
+                self._held = False
+                self._lock.release()
+
+            def __enter__(self):
+                self.acquire()
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.release()
+                return False
+
+            def __bool__(self):
+                return True
+
+        lock = NoReenterLock()
+        self.assertTrue(lock)
+        with lock:
+            self.assertTrue(lock._held)
+        lock.acquire()
+        try:
+            with self.assertRaises(RuntimeError):
+                lock.acquire()
+        finally:
+            lock.release()
 
 def run_tests():
     bigtestlib.run(name="big.types", module=__name__)
