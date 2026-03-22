@@ -4253,7 +4253,22 @@ class BigTextTests(unittest.TestCase):
                                     state.append(open)
                                 elif close:
                                     state.pop()
-                        self.assertFalse(state)
+
+                        # if the file ends with a line that ends with a comment,
+                        # we'll "open" a comment and not close it.  therefore,
+                        # the only time we should see junk in "state" is if it's
+                        # a terminal comment, which means it was on the last line,
+                        # which means--
+                        if state == ['#']:
+                            # the last line we saw ended with the comment.
+                            self.assertTrue( line.endswith('#' + _) )
+                            # open and close and change are all empty.
+                            # (we don't get a close='\n' because the file doesn't have one.)
+                            self.assertFalse(open)
+                            self.assertFalse(close)
+                            self.assertFalse(change)
+                        else:
+                            self.assertFalse(state)
 
                         # also, all the test files in test_encodings
                         # contain either a Unicode chipmunk or an ASCII squirrel
