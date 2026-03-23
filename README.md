@@ -4541,10 +4541,11 @@ Here's a list of all the delimiters recognized by `python_delimiters`:
   linebreak (`\n`) or a carriage return (`\r`).  (Python's
   "universal newlines" support should mean you won't normally
   see carriage returns here... unless you specifically permit them.)
-  If the file ends with a comment *without* a newline, you'll
-  see the `open='#'` yield, followed by a yield where the text is the
-  body of the comment, and the open, close, and change fields are all
-  the empty string.
+  If the text being split ends with a comment *without* a newline,
+  you'll see yield where `open` is `'#'`, followed by a
+  slightly-strange final yield: `text` will be the body of the
+  comment, and the `open`, `close`, and `change` fields will all be
+  an empty string.
 
 See also `python_delimiters_version`.
 
@@ -5744,7 +5745,7 @@ after head.  (If the list is empty, this will be tail.)
 If `stop` is `None`, it defaults to tail.  The range of nodes
 moved includes `start` but excludes `stop`.  `start` must not point
 to a node after `stop`.  `where` must be an iterator over this list.
-`where` must not point to a node in the range being moved, or tail.
+`where` must not point to a node being moved, or tail.
 
 Raises `SpecialNodeError` if `start` points to head,
 because you can't move the head of the list.

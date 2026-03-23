@@ -3305,7 +3305,7 @@ class linked_list:
         If stop is None, it defaults to tail.  The range of nodes
         moved includes start but excludes stop.  start must not point
         to a node after stop.  where must be an iterator over this list.
-        where must not point to a node in the range being moved, or tail.
+        where must not point to a node being moved, or tail.
 
         Raises SpecialNodeError if start points to head,
         because you can't move the head of the list.
