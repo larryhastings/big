@@ -5651,20 +5651,35 @@ Returns the number of occurrences of `value` in the linked list.
 
 <dl><dd>
 
-Cuts a range of nodes from the list and returns them as a
-new `linked_list`.
+Cuts nodes from this list and returns them in a new `linked_list`.
 
 `start` and `stop`, if specified, must be iterators over this
 list.  If `start` is `None`, it defaults to the first node
-after head.  If `stop` is `None`, it defaults to tail.
-The range includes `start` but excludes `stop`.  `start`
-must not point to a node after `stop`.
+after head.  (If the list is empty, this will be tail.)
+If `stop` is `None`, it defaults to tail.
+The range of nodes cut includes `start` but excludes `stop`.
+`start` must not point to a node after `stop`.
 
 `lock` is passed to the new list's constructor; if `None`,
-the new list reuses this list's lock parameter.
+the new list reuses this list's `lock` parameter.
 
-Will not cut head.  Raises `SpecialNodeError` if `start`
-points to head.
+If any nodes are cut, the `start` and `stop` iterators will
+still point at the same nodes--which means `start` will have
+been moved to the new list.
+
+Raises `SpecialNodeError` if `start` points to head,
+because you can't cut the head of the list.
+
+`start` and `stop` may be reverse iterators; however, the
+linked list resulting from a cut will have the elements
+in forward order.  If either `start` or `stop` is a reverse
+iterator, then they must both be reverse iterators (or `None`),
+and:
+
+ * `start` defaults to the last node before tail,
+ * `stop` defaults to head,
+ * `start` must not point to a node after `stop`, and
+ * raises `SpecialNodeError` if `start` points to head.
 
 See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
 </dd></dl>
@@ -5723,14 +5738,25 @@ such value exists.
 
 Moves a range of nodes to after `where`.
 
-`start` is inclusive and defaults to the first node after head.
-`stop` is exclusive and defaults to tail.  If `start` is tail,
-`move` is a no-op.  `where` must not point to a node in the
-range being moved.
+`start` and `stop`, if specified, must be iterators over this
+list.  If `start` is `None`, it defaults to the first node
+after head.  (If the list is empty, this will be tail.)
+If `stop` is `None`, it defaults to tail.  The range of nodes
+moved includes `start` but excludes `stop`.  `start` must not point
+to a node after `stop`.  `where` must be an iterator over this list.
+`where` must not point to a node in the range being moved, or tail.
 
-If `start` or `stop` is a reverse iterator, both must be
-reverse iterators, and `move` behaves like
-[`linked_list.rmove`](#linked_listrmovewhere-startnone-stopnone).
+Raises `SpecialNodeError` if `start` points to head,
+because you can't move the head of the list.
+
+`start` and `stop` may be reverse iterators.  If either `start`
+or `stop` is a reverse iterator, then they must both be reverse
+iterators (or `None`), and:
+
+ * `start` defaults to the last node before tail,
+ * `stop` defaults to head,
+ * `start` must not point to a node after `stop`, and
+ * raises `SpecialNodeError` if `start` points to head.
 
 </dd></dl>
 
@@ -5813,9 +5839,9 @@ such value exists.
 <dl><dd>
 
 Like [`linked_list.move`,](#linked_listmovewhere-startnone-stopnone)
-but `start` must come *after* `stop`.  All other behaviors
-are unchanged (e.g. `start` is inclusive, `stop` is
-exclusive).
+but `start` must come *after* `stop`, the nodes are inserted
+*before* `where`, and `where` cannot be head.  All other behaviors
+are unchanged (e.g. `start` is inclusive, `stop` is exclusive).
 
 
 </dd></dl>
@@ -5850,9 +5876,11 @@ otherwise raises `ValueError`.
 <dl><dd>
 
 Like [`linked_list.splice`](#linked_listspliceother--wherenone),
-except: if `where` is `None`, the nodes are prepended (rather
-than appended).  If `where` is not `None`, the nodes are inserted
-before (rather than after) the node pointed to by `where`.
+except: if `where` is `None`, the nodes are prepended to the list.
+If `where` is not `None`, the nodes are inserted before
+(rather than after) the node pointed to by `where`.  Raises
+`SpecialNodeError` if `where` is head, because you can't insert
+nodes before head.
 </dd></dl>
 
 #### `linked_list.sort(key=None, reverse=False)`
@@ -5876,7 +5904,8 @@ will be empty.
 `where` must be an iterator over this list, or `None`.
 If `where` is an iterator, the nodes are inserted after
 the node pointed to by `where`.  If `where` is `None`,
-the nodes are appended.
+the nodes are appended.  Raises `SpecialNodeError` if
+`where` is tail, because you can't insert nodes after tail.
 
 See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
 </dd></dl>
@@ -9872,6 +9901,11 @@ one new helper class in *big.template* and a few small APIs.
     `sort` groups special nodes with the *subsequent* data node, or tail.)
   * Fixed a number of iterator, locking, rotation, clearing, and cut/splice
     edge cases.
+  * Breaking API change: `splice` used to allow you to pass in tail for `where`,
+    and `rsplice` used to allow you to pass in head for `where`, and honestly
+    its behavior was a little weird when you did.  Those values are no longer
+    allowed.  The rule is: you can't ever add nodes before head or after tail;
+    sadly, in 0.13, `splice` and `rsplice` got it wrong.
   * The "head" and "tail" nodes are now instances of special classes that
     disallow writing to some attributes.  This would have caught an obscure
     regression bug (which is now fixed, of course) and should preclude similar

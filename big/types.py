@@ -2957,6 +2957,144 @@ class linked_list:
         return None
 
 
+    def _normalize_cut_and_move_range(self, start, stop, _lock_state, is_reverse, verb):
+        """
+        Takes start and stop as passed in to cut or move.
+        Normalizes them and returns (first, last, is_reversed).
+
+        Returns a 3-tuple:
+            * first points to the first node to be cut/moved (inclusive),
+              always in forwards order.
+            * last points to the last node to be cut/moved (inclusive),
+              always in forwards order.
+            * is_reverse is the final "is this reversed?" flag, which may
+              get flipped if start and stop are reverse iterators.
+
+        Note that _lock_state is a list containing the lock (if any).
+        This is because if we need to raise an exception, we release the lock,
+        and we need the caller's finally block to not re-release the lock.
+        (And we can't *return* state to the caller telling them so,
+        because we're raising, not returning.)
+
+        Why do we release the lock?  When we format the exception,
+        we often involve the repr of various values, and the __repr__
+        that gets called might try to acquire that same lock.
+        """
+
+        start_is_none = start is None
+        stop_is_none = stop is None
+
+        # {name}_directions is a bitfield indicating supported iterator directions:
+        #   1 means "forward"
+        #   2 means "reverse"
+        #   3 means both "forward" and "reverse"
+
+        if start_is_none:
+            start_directions = 3
+        else:
+            if not isinstance(start, linked_list_base_iterator):
+                ex_type = TypeError
+            elif not (
+                (start._internal_lock() is self._lock)
+                and (start._internal_linked_list() is self)
+                ):
+                ex_type = ValueError
+            else:
+                ex_type = None
+            if ex_type is not None:
+                if _lock_state[0]:
+                    _lock_state[0].release()
+                    _lock_state[0] = None
+                raise ex_type(f"start is not an iterator over this linked_list, start={start!r}")
+
+            start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
+
+        if stop_is_none:
+            stop_directions = 3
+        else:
+            if not isinstance(stop, linked_list_base_iterator):
+                ex_type = TypeError
+            elif not (
+                (stop._internal_lock() is self._lock)
+                and (stop._internal_linked_list() is self)
+                ):
+                ex_type = ValueError
+            else:
+                ex_type = None
+            if ex_type is not None:
+                if _lock_state[0]:
+                    _lock_state[0].release()
+                    _lock_state[0] = None
+                raise ex_type(f"stop is not an iterator over this linked_list, stop={stop!r}")
+            stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1
+
+        if not (start_directions & stop_directions):
+            if _lock_state[0]:
+                _lock_state[0].release()
+                _lock_state[0] = None
+            raise ValueError(f"mismatched forward and reverse iterators for start and stop, start={start!r}, stop={stop!r}")
+
+        if (start_directions == 2) or (stop_directions == 2):
+            # if the user specified two reverse iterators,
+            # negate is_reverse *here*
+            is_reverse = not is_reverse
+
+        if not is_reverse:
+            if start_is_none:
+                first = self._head.next
+            else:
+                if start._cursor is self._head:
+                    # start can be head, but *only* if stop is also head.
+                    # in this case, our range is empty, which is harmless.
+                    if start is stop:
+                        return (None, None, is_reverse)
+                    raise SpecialNodeError(f"can't {verb} head")
+                first = start._cursor
+
+            if stop_is_none:
+                stop_cursor = self._tail
+            else:
+                stop_cursor = stop._cursor
+
+            if first is stop_cursor:
+                return (None, None, is_reverse)
+
+            last = stop_cursor.previous
+        else:
+            if start_is_none:
+                last = self._tail.previous
+            else:
+                if start._cursor is self._tail:
+                    # start can be tail, but *only* if stop is also tail.
+                    # in this case, our range is empty, which is harmless.
+                    if start is stop:
+                        return (None, None, is_reverse)
+                    raise SpecialNodeError(f"can't {verb} tail")
+                last = start._cursor
+
+            if stop_is_none:
+                stop_cursor = self._head
+            else:
+                stop_cursor = stop._cursor
+
+            if last is stop_cursor:
+                return (None, None, is_reverse)
+
+            first = stop_cursor.next
+
+        if not (start_is_none or stop_is_none):
+            # if the user specified both ends of the range,
+            # confirm that first comes before last.
+            cursor = first
+            while cursor and (cursor is not last):
+                cursor = cursor.next
+            if not cursor:
+                direction = 'after' if is_reverse else 'before'
+                raise ValueError(f"stop points to a node {direction} start")
+
+        return (first, last, is_reverse)
+
+
     def _cut(self, start, stop, lock, _lock, is_rcut):
         """
         _cut is our mega worker function.
@@ -2969,166 +3107,50 @@ class linked_list:
         start and stop are still both inclusive.
         """
 
+        _lock_state = [_lock]
         try:
-            start_is_none = start is None
-            stop_is_none = stop is None
-
             # compute this now, before we potentially invert is_rcut
             verb = "rcut" if is_rcut else "cut"
 
-            # {name}_directions is a bitfield indicating supported iterator directions:
-            #   1 means "forward"
-            #   2 means "reverse"
-            #   3 means both "forward" and "reverse"
-
-            if start_is_none:
-                start_directions = 3
-            else:
-                if not isinstance(start, linked_list_base_iterator):
-                    ex_type = TypeError
-                elif not (
-                    (start._internal_lock() is self._lock)
-                    and (start._internal_linked_list() is self)
-                    ):
-                    ex_type = ValueError
-                else:
-                    ex_type = None
-                if ex_type is not None:
-                    if _lock:
-                        _lock.release()
-                        _lock = None
-                    raise ex_type(f"start is not an iterator over this linked_list, start={start!r}")
-
-                start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
-
-            if stop_is_none:
-                stop_directions = 3
-            else:
-                if not isinstance(stop, linked_list_base_iterator):
-                    ex_type = TypeError
-                elif not (
-                    (stop._internal_lock() is self._lock)
-                    and (stop._internal_linked_list() is self)
-                    ):
-                    ex_type = ValueError
-                else:
-                    ex_type = None
-                if ex_type is not None:
-                    if _lock:
-                        _lock.release()
-                        _lock = None
-                    raise ex_type(f"stop is not an iterator over this linked_list, stop={stop!r}")
-                stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1
-
-            if not (start_directions & stop_directions):
-                if _lock:
-                    _lock.release()
-                    _lock = None
-                raise ValueError("mismatched forward and reverse iterators for start and stop, start={start!r}, stop={stop!r}")
-
-            if (start_directions == 2) or (stop_directions == 2):
-                # if the user is cutting with reverse iterators,
-                # negate is_rcut *here*
-                is_rcut = not is_rcut
-
-            t2 = linked_list(lock=False)
-
-            start_iterator = start
-            stop_iterator = stop
-
-            if not is_rcut:
-                # cut
-                if start_is_none:
-                    start = self._head.next
-                else:
-                    if start._cursor is self._head:
-                        # only permissible if stop is also _head
-                        if start is stop:
-                            return t2
-                        raise SpecialNodeError(f"can't {verb} head")
-                    start = start._cursor
-
-                # convert stop to a cursor, and make it inclusive
-                if stop_is_none:
-                    stop = self._tail
-                else:
-                    stop = stop._cursor
-
-                if start == stop:
-                    return t2
-
-                stop = stop.previous
-            else:
-                # rcut
-                if start_is_none:
-                    start = self._tail.previous
-                else:
-                    if start._cursor is self._tail:
-                        # only permissible if stop is also _tail
-                        if start is stop:
-                            return t2
-                        raise SpecialNodeError(f"can't {verb} tail")
-                    start = start._cursor
-
-                # convert stop to a cursor, and make it inclusive
-                if stop_is_none:
-                    stop = self._head
-                else:
-                    stop = stop._cursor
-
-                if start is stop:
-                    return t2
-
-                stop = stop.next
-
-                # now swap start and stop
-                tmp = start
-                start = stop
-                stop = tmp
-
-            if not (start_is_none or stop_is_none):
-                # if the user specified both ends of the range,
-                # confirm that start comes before stop
-                cursor = start
-                while cursor and (cursor is not stop):
-                    cursor = cursor.next
-                if not cursor:
-                    raise ValueError(f"stop points to a node before start")
-
-            # everything checks out, and everything is prepared--we can cut!
-            # start and stop are now cursors (direct references to nodes),
-            # and are inclusive.
-            #
-            # and, we've already done all our memory allocation, before changing anything.
+            # do all our memory allocation before changing anything.
             # (in case an allocation fails, we won't leave the original linked list
             # in an incomplete state.)
+            t2 = linked_list(lock=False)
+
+            first, last, is_rcut = self._normalize_cut_and_move_range(start, stop, _lock_state, is_rcut, verb)
+            if first is None:
+                return t2
+
+            # everything checks out, and everything is prepared--we can cut!
+            # first and last are now cursors (direct references to nodes),
+            # and are inclusive.
 
             # "previous" points to the node in self just before the cut, and
             # "next" points to the node in self just after the cut.
-            # since start can't be head, and stop can't be tail, we know
+            # since first can't be head, and last can't be tail, we know
             # previous and next are both defined.
 
-            previous = start.previous
-            next = stop.next
+            previous = first.previous
+            next = last.next
 
             new_head = t2._head
             new_tail = t2._tail
 
-            new_head.next = start
-            start.previous = new_head
-            new_tail.previous = stop
-            stop.next = new_tail
+            new_head.next = first
+            first.previous = new_head
+            new_tail.previous = last
+            last.next = new_tail
 
             previous.next = next
             next.previous = previous
 
             count = 0
-            while start is not new_tail:
-                assert start is not None
-                start.linked_list = t2
-                if start.special is None:
+            while first is not new_tail:
+                assert first is not None
+                first.linked_list = t2
+                if first.special is None:
                     count += 1
-                start = start.next
+                first = first.next
 
             self._length -= count
             t2._length = count
@@ -3136,51 +3158,46 @@ class linked_list:
             t2._lock_parameter = lock
             t2._lock = t2._choose_lock(lock, self)
 
-            if not start_is_none:
-                start_iterator._lock = t2._lock
+            if start is not None:
+                start._lock = t2._lock
 
             return t2
         finally:
-            if _lock:
-                _lock.release()
+            if _lock_state[0]:
+                _lock_state[0].release()
 
 
     def cut(self, start=None, stop=None, *, lock=None):
         """
-        Cuts a range of nodes from start to stop.
+        Cuts nodes from this list and returns them in a new linked_list.
 
-        If specified, start and stop must be iterators
-        over the current linked list.
-
-        If start is None, it defaults to the first node
+        start and stop, if specified, must be iterators over this
+        list.  If start is None, it defaults to the first node
         after head.  (If the list is empty, this will be tail.)
-        If stop is None, it defaults to tail.  start must not
-        point to a node after stop.
+        If stop is None, it defaults to tail.  The range of nodes
+        cut includes start but excludes stop.  start must not point
+        to a node after stop.
 
-        The sequence of nodes cut includes start but excludes stop.
+        lock is passed to the new list's constructor; if None,
+        the new list reuses this list's lock parameter.
 
-        Returns a new linked_list containing the cut nodes.
-        The lock parameter is passed to the constructor for the
-        new linked_list; if lock is None, the new linked_list
-        reuses the lock parameter passed in when this list was
-        constructed.
+        If any nodes are cut, the start and stop iterators will still
+        point at the same nodes--which means start will have been moved
+        to the new list.
 
-        After the cut, the start and stop iterators
-        will still point at the same nodes, however
-        start will have been moved to the new list.
+        Raises SpecialNodeError if start points to head,
+        because you can't cut the head of the list.
 
-        This function won't cut head.  If start points to head,
-        this function raises SpecialNodeError.
-
-        start and stop may be reverse iterators, however the
+        start and stop may be reverse iterators; however, the
         linked list resulting from a cut will have the elements
         in forward order.  If either start or stop is a reverse
-        iterator, then:
+        iterator, then they must both be reverse iterators
+        (or None), and:
 
           * start defaults to the last node before tail,
           * stop defaults to head,
           * start must not point to a node after stop, and
-          * start must not point to tail.
+          * raises SpecialNodeError if start points to head.
         """
         _lock = self._lock
         if _lock:
@@ -3193,8 +3210,8 @@ class linked_list:
 
         rcut behaves like cut, except all directions are reversed:
           * start must not point to a node before stop.
-          * The nodes cut start with "stop" and go forwards
-            to "start".
+          * The first node cut is the node after stop,
+            and the last node cut is start.
           * The nodes in the new linked_list are still in forwards order.
 
         See the documentation for linked_list.cut for more.
@@ -3214,10 +3231,8 @@ class linked_list:
         start is inclusive, stop is exclusive.
         """
 
+        _lock_state = [_lock]
         try:
-            start_is_none = start is None
-            stop_is_none = stop is None
-
             verb = "rmove" if is_rmove else "move"
 
             if not isinstance(where, linked_list_base_iterator):
@@ -3230,142 +3245,46 @@ class linked_list:
             else:
                 ex_type = None
             if ex_type is not None:
-                if _lock:
-                    _lock.release()
-                    _lock = None
+                if _lock_state[0]:
+                    _lock_state[0].release()
+                    _lock_state[0] = None
                 raise ex_type(f"where is not an iterator over this linked_list, where={where!r}")
 
-            # {name}_directions is a bitfield indicating supported iterator directions:
-            #   1 means "forward"
-            #   2 means "reverse"
-            #   3 means both "forward" and "reverse"
-
-            if start_is_none:
-                start_directions = 3
-            else:
-                if not isinstance(start, linked_list_base_iterator):
-                    ex_type = TypeError
-                elif not (
-                    (start._internal_lock() is self._lock)
-                    and (start._internal_linked_list() is self)
-                    ):
-                    ex_type = ValueError
-                else:
-                    ex_type = None
-                if ex_type is not None:
-                    if _lock:
-                        _lock.release()
-                        _lock = None
-                    raise ex_type(f"start is not an iterator over this linked_list, start={start!r}")
-
-                start_directions = 2 if isinstance(start, linked_list_reverse_iterator) else 1
-
-            if stop_is_none:
-                stop_directions = 3
-            else:
-                if not isinstance(stop, linked_list_base_iterator):
-                    ex_type = TypeError
-                elif not (
-                    (stop._internal_lock() is self._lock)
-                    and (stop._internal_linked_list() is self)
-                    ):
-                    ex_type = ValueError
-                else:
-                    ex_type = None
-                if ex_type is not None:
-                    if _lock:
-                        _lock.release()
-                        _lock = None
-                    raise ex_type(f"stop is not an iterator over this linked_list, stop={stop!r}")
-                stop_directions = 2 if isinstance(stop, linked_list_reverse_iterator) else 1
-
-            if not (start_directions & stop_directions):
-                if _lock:
-                    _lock.release()
-                    _lock = None
-                raise ValueError(f"mismatched forward and reverse iterators for start and stop, start={start!r}, stop={stop!r}")
-
-            if (start_directions == 2) or (stop_directions == 2):
-                # if the user is moving with reverse iterators,
-                # negate is_rmove *here*
-                is_rmove = not is_rmove
-
             where = where._cursor
-
             if not is_rmove:
-                if start_is_none:
-                    start = self._head.next
-                else:
-                    if start._cursor is self._head:
-                        raise SpecialNodeError(f"can't {verb} head")
-                    start = start._cursor
+                if where is self._tail:
+                    raise SpecialNodeError("can't move nodes after tail")
+            elif where is self._head:
+                raise SpecialNodeError("can't move nodes before head")
 
-                if stop_is_none:
-                    stop = self._tail
-                else:
-                    stop = stop._cursor
-
-                first = start
-                after = stop
-            else:
-                if start_is_none:
-                    start = self._tail.previous
-                else:
-                    if start._cursor is self._tail:
-                        raise SpecialNodeError(f"can't {verb} tail")
-                    start = start._cursor
-
-                if stop_is_none:
-                    stop = self._head
-                else:
-                    stop = stop._cursor
-
-                first = stop.next
-                after = start.next
-
-            if first is after:
+            first, last, is_rmove = self._normalize_cut_and_move_range(start, stop, _lock_state, is_rmove, verb)
+            if first is None:
                 return
 
             cursor = first
-            while cursor and (cursor is not after):
-                cursor = cursor.next
-            if not cursor:
-                direction = 'after' if is_rmove else 'before'
-                raise ValueError(f"stop points to a node {direction} start")
-
-            cursor = first
+            after = last.next
             while cursor is not after:
                 if cursor is where:
                     raise ValueError("where points to a node in the range being moved")
                 cursor = cursor.next
 
             if not is_rmove:
-                if (where is first.previous) or ((where is self._tail) and (after is self._tail)):
+                if where is first.previous:
                     return
-            else:
-                if (where is after) or ((where is self._head) and (first is self._head.next)):
-                    return
+            elif where is after:
+                return
 
-            last = after.previous
             previous = first.previous
 
             previous.next = after
             after.previous = previous
 
             if not is_rmove:
-                if where is self._tail:
-                    previous = self._tail.previous
-                    after = self._tail
-                else:
-                    previous = where
-                    after = where.next
+                previous = where
+                after = where.next
             else:
-                if where is self._head:
-                    previous = self._head
-                    after = self._head.next
-                else:
-                    previous = where.previous
-                    after = where
+                previous = where.previous
+                after = where
 
             previous.next = first
             first.previous = previous
@@ -3373,27 +3292,37 @@ class linked_list:
             last.next = after
 
         finally:
-            if _lock:
-                _lock.release()
+            if _lock_state[0]:
+                _lock_state[0].release()
 
     def move(self, where, start=None, stop=None):
         """
-        Moves a range of nodes from start to stop to after where.
+        Moves a range of nodes to after where.
 
-        start is inclusive, stop is exclusive.
-        start defaults to the first node after head.
-        stop defaults to tail.
+        start and stop, if specified, must be iterators over this
+        list.  If start is None, it defaults to the first node
+        after head.  (If the list is empty, this will be tail.)
+        If stop is None, it defaults to tail.  The range of nodes
+        moved includes start but excludes stop.  start must not point
+        to a node after stop.  where must be an iterator over this list.
+        where must not point to a node in the range being moved, or tail.
 
-        If start is tail, move is a no-op.
-        If stop points to a node before start, move raises ValueError.
-        where must not point to a node in the range being moved.
+        Raises SpecialNodeError if start points to head,
+        because you can't move the head of the list.
 
-        If start or stop is a reverse iterator, move behaves like rmove.
+        start and stop may be reverse iterators.  If either start
+        or stop is a reverse iterator, then they must both be reverse
+        iterators (or None), and:
+
+          * start defaults to the last node before tail,
+          * stop defaults to head,
+          * start must not point to a node after stop, and
+          * raises SpecialNodeError if start points to head.
         """
         _lock = self._lock
         if _lock:
             _lock.acquire()
-        return self._move(where, start, stop, _lock, False)
+        self._move(where, start, stop, _lock, False)
 
     def rmove(self, where, start=None, stop=None):
         """
@@ -3401,21 +3330,23 @@ class linked_list:
 
         rmove behaves like move, except all directions are reversed:
           * start must not point to a node before stop.
-          * The moved nodes start with stop and go forwards to start.
+          * The first node moved is the node after stop.
+          * The last node moved is start.
+          * The nodes are moved before where.
+          * where must not point to a node being moved, or head.
 
         See the documentation for linked_list.move for more.
         """
         _lock = self._lock
         if _lock:
             _lock.acquire()
-        return self._move(where, start, stop, _lock, True)
+        self._move(where, start, stop, _lock, True)
 
     def _splice(self, other, where, is_rsplice):
         """
-        moves nodes from other (a linked list) to after cursor (a node).
+        moves nodes from other (a different linked list)
+        to after where (an iterator over self).
         """
-        special = None
-
         if is_rsplice:
             if where is None:
                 cursor = self._head
@@ -3423,10 +3354,8 @@ class linked_list:
                 self._splice_check_where(where)
                 cursor = where._cursor
                 if cursor is self._head:
-                    special = cursor.next.insert_before(None, 'special')
-                    cursor = special
-                else:
-                    cursor = cursor.previous
+                    raise SpecialNodeError("can't splice nodes before head")
+                cursor = cursor.previous
         else:
             if where is None:
                 cursor = self._tail.previous
@@ -3434,8 +3363,7 @@ class linked_list:
                 self._splice_check_where(where)
                 cursor = where._cursor
                 if cursor is self._tail:
-                    special = cursor.insert_before(None, 'special')
-                    cursor = special
+                    raise SpecialNodeError("can't splice nodes after tail")
 
         assert cursor
 
@@ -3459,9 +3387,6 @@ class linked_list:
         while cursor != after:
             cursor.linked_list = self
             cursor = cursor.next
-
-        if (where is not None) and (special is not None):
-            where._relocate(special)
 
     def _splice_check_other(self, other):
         if not isinstance(other, linked_list):
@@ -3793,6 +3718,22 @@ class linked_list_base_iterator:
                 lock = getattr(linked_list, '_lock', None)
                 if lock:
                     lock.acquire()
+
+                # re-get cursor *after* locking. why?
+                # surely if we're running __del__, there
+                # are no other references to self, so nobody
+                # could have modified self._cursor... right?
+                #
+                # oho! what if we're part of a reference cycle,
+                # and the GC is breaking the cycle by calling
+                # our __del__.  and... what if the lock is a
+                # duck-typed lock and runs arbitrary code in
+                # its .acquire(), which COULD have a reference
+                # to self, and changes self._cursor.
+                #
+                # I admit it's unlikely.  But it COULD happen.
+                # We test it in the test suite.
+                # And the probably-redundant fetch is cheap.
                 cursor = getattr(self, '_cursor', None)
                 if cursor is None:
                     if lock:

@@ -5255,8 +5255,8 @@ class BigLinkedListTests(unittest.TestCase):
         check_linked_list_was_set(snippet)
 
         for test_reversed in (False, True):
-            for splice_at_tail in (False, True):
-                with self.subTest(test_reversed=test_reversed, splice_at_tail=splice_at_tail):
+            for splice_at_the_end in (False, True):
+                with self.subTest(test_reversed=test_reversed, splice_at_the_end=splice_at_the_end):
                     t, it_5, t2 = setup()
                     it_7 = t.find(7)
 
@@ -5269,12 +5269,13 @@ class BigLinkedListTests(unittest.TestCase):
                     check_linked_list_was_set(t)
                     check_linked_list_was_set(snippet)
 
-                    if splice_at_tail:
+                    if splice_at_the_end:
                         if test_reversed:
                             splice_here = reversed(t2)
                         else:
                             splice_here = iter(t2)
                         splice_here.exhaust()
+                        splice_here.previous()
                     else:
                         splice_here = t2.find('c')
                         if test_reversed:
@@ -5284,13 +5285,11 @@ class BigLinkedListTests(unittest.TestCase):
                     splice_here.splice(snippet)
                     self.assertLinkedListEqual(snippet, [])
 
-                    if splice_at_tail:
+                    if splice_at_the_end:
                         if test_reversed:
                             self.assertLinkedListEqual(t2, [5, 6, 'a', 'b', 'c', 'd', 'e'])
                         else:
                             self.assertLinkedListEqual(t2, ['a', 'b', 'c', 'd', 'e', 5, 6])
-
-                        self.assertIsSpecial(splice_here)
                     else:
                         if test_reversed:
                             self.assertLinkedListEqual(t2, ['a', 'b', 5, 6, 'c', 'd', 'e'])
@@ -5413,6 +5412,20 @@ class BigLinkedListTests(unittest.TestCase):
             it.splice(3.14159)
 
         t, it_5, t2 = setup()
+        # you can't splice after tail
+        with self.assertRaises(SpecialNodeError):
+            t.splice(t2, where=t.tail())
+        with self.assertRaises(SpecialNodeError):
+            t.tail().splice(t2)
+
+        # you can't rsplice before head
+        with self.assertRaises(SpecialNodeError):
+            t.rsplice(t2, where=t.head())
+        with self.assertRaises(SpecialNodeError):
+            t.head().rsplice(t2)
+
+
+        t, it_5, t2 = setup()
         t2_tail = t2.tail()
         t.splice(t2)
         check_linked_list_was_set(t)
@@ -5533,12 +5546,29 @@ class BigLinkedListTests(unittest.TestCase):
         self.assertEqual(start[0], 2)
         self.assertIs(start.linked_list, t)
 
+        # always illegal to move nodes after tail
         t, head, tail = setup()
-        t.move(t.tail(), t.find(2), t.find(4))
+        with self.assertRaises(SpecialNodeError):
+            t.move(tail, t.find(1), t.find(3))
+        # ... even if the range is empty
+        with self.assertRaises(SpecialNodeError):
+            t.move(tail, t.find(1), t.find(1))
+
+        # always illegal to rmove nodes before head
+        t, head, tail = setup()
+        with self.assertRaises(SpecialNodeError):
+            t.rmove(head, t.find(3), t.find(1))
+        # ... even if the range is empty
+        with self.assertRaises(SpecialNodeError):
+            t.rmove(head, t.find(1), t.find(1))
+
+
+        t, head, tail = setup()
+        t.move(t.find(7), t.find(2), t.find(4))
         self.assertLinkedListEqual(t, [1, 4, 5, 6, 7, 2, 3])
 
         t, head, tail = setup()
-        t.rmove(t.head(), t.find(5), t.find(2))
+        t.rmove(t.find(1), t.find(5), t.find(2))
         self.assertLinkedListEqual(t, [3, 4, 5, 1, 2, 6, 7])
 
         t, head, tail = setup()
@@ -5593,10 +5623,15 @@ class BigLinkedListTests(unittest.TestCase):
             t.rmove(t.find(5), t.find(6), t.find(3))
 
         t, head, tail = setup()
-        with self.assertRaises(SpecialNodeError):
-            t.move(head, head, head)
-        with self.assertRaises(SpecialNodeError):
-            t.rmove(tail, tail, tail)
+        t2, _, _ = setup()
+        t.move(t.find(1), head, head)
+        self.assertLinkedListEqual(t, t2)
+        t.rmove(t.find(1), head, head)
+        self.assertLinkedListEqual(t, t2)
+        t.move(t.find(1), tail, tail)
+        self.assertLinkedListEqual(t, t2)
+        t.rmove(t.find(1), tail, tail)
+        self.assertLinkedListEqual(t, t2)
 
         # move special nodes too.
         t = linked_list([1, 2, 3, 4], lock=_lock())
@@ -5989,11 +6024,11 @@ class BigLinkedListTests(unittest.TestCase):
 
         t2 = linked_list(range(1, 8))
         unchanged = list(t2)
-        t2.move(t2.tail())
+        t2.move(t2.head())
         self.assertLinkedListEqual(t2, unchanged)
 
         t3 = linked_list(range(1, 8))
-        t3.rmove(t3.head())
+        t3.rmove(t3.tail())
         self.assertLinkedListEqual(t3, [1, 2, 3, 4, 5, 6, 7])
 
         t4 = linked_list(range(1, 8))
@@ -6003,11 +6038,11 @@ class BigLinkedListTests(unittest.TestCase):
             t4.move(t4.find(3), t4.find(2), t4.find(5))
 
         t5 = linked_list(range(1, 8))
-        self.assertIsNone(t5.move(t5.tail(), t5.find(7), t5.tail()))
+        t5.move(t5.find(6), t5.find(7), t5.tail())
         self.assertLinkedListEqual(t5, [1, 2, 3, 4, 5, 6, 7])
 
         t6 = linked_list(range(1, 8))
-        self.assertIsNone(t6.rmove(t6.head(), t6.find(1), t6.head()))
+        t6.rmove(t6.find(2), t6.find(1), t6.head())
         self.assertLinkedListEqual(t6, [1, 2, 3, 4, 5, 6, 7])
 
         t7 = linked_list(range(1, 8))
