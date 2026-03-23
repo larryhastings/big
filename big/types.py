@@ -730,6 +730,8 @@ class string(str):
                 if not step:
                     raise ValueError('slice step cannot be zero')
 
+            # slice clamps >:(
+            # the indices method on an int (etc) correctly clamps the range for you.
             start, stop, step = index.indices(self_length)
 
             if step == 1:
@@ -1133,8 +1135,8 @@ class string(str):
                 # python 3.9 changed the behavior of ''.replace('', 'x', 1) :
                 #     3.8-: returns ''
                 #     3.9+: returns 'x'
-                # the 3.9+ behavior is better!
-                # but we should behave the same as str on every version.
+                # the 3.9+ behavior is better!  but we should behave the same
+                # as str, which means having the old behavior on old versions.
                 if (count > 0) and (not _python_3_9_plus):
                     return self
                 return new
@@ -1237,7 +1239,7 @@ class string(str):
 
     def removeprefix(self, prefix):
         "If string starts with prefix, returns a copy of the string with prefix removed, else returns string unchanged."
-        # new in Python 3.9, but string will support it all the way back to 3.6.
+        # new in Python 3.9, but big.string supports it in Python 3.6+.
         if not isinstance(prefix, str):
             raise TypeError(f"removeprefix argument must be str, not {type(prefix).__name__}")
         if not (prefix and str(self).startswith(prefix)):
@@ -1246,7 +1248,7 @@ class string(str):
 
     def removesuffix(self, suffix):
         "If string ends with suffix, returns a copy of the string with suffix removed, else returns string unchanged."
-        # new in Python 3.9, but string will support it all the way back to 3.6.
+        # new in Python 3.9, but big.string supports it in Python 3.6+.
         if not isinstance(suffix, str):
             raise TypeError(f"removesuffix argument must be str, not {type(suffix).__name__}")
         if not (suffix and str(self).endswith(suffix)):
@@ -1257,9 +1259,9 @@ class string(str):
     def _partition(self, sep, count, reversed):
         if not isinstance(sep, str):
             raise TypeError(f"sep must be str, not {type(sep).__name__}")
-        count = _index(count)
         if not sep:
             raise ValueError("empty separator")
+        count = _index(count)
 
         self_length = len(self)
 
@@ -1786,19 +1788,23 @@ class _linked_list_node:
             special = f', special={self.special!r}'
         else:
             special = ''
-        return f"_linked_list_node({self.value!r}{special})"
+        return f"<_linked_list_node {self.value!r}{special} iterator_refcount={self.iterator_refcount}>"
 
 
 # _head_node and _tail_node are duck-typed _linked_list_node
 # replacements for just the head and tail nodes of a linked_list.
 # they *only* support operations that are valid on head and tail,
-# which means if code tries to do something illegal on a head or
-# tail node it should fail noisily.  For example:
+# which means if buggy code tries to do something illegal on a
+# head or tail node it should fail noisily.  For example:
 #
-#     * clear, unlink, and remove are all undefined on both
+#     * clear, unlink, and remove are all undefined on both head and tail
 #     * insert_before is undefined on head
-#     * special and value are read-only properties with hard-coded values
-#     * head.previous and tail.next are read-only properties, value None
+#     * some properties on a _linked_list_node are read-only properties
+#       with hard-coded values:
+#         * special, hard-coded to 'head' or 'tail' as appropriate
+#         * value, hard-coded to None
+#         * head.previous, hard-coded to None
+#         * tail.next, hard-coded to None
 #
 class _head_node:
     __slots__ = ('next', 'linked_list', 'iterator_refcount')
@@ -1820,7 +1826,7 @@ class _head_node:
     nodes = _linked_list_node.nodes
 
     def __repr__(self):
-        return f"_head_node()"
+        return f"<_head_node iterator_refcount={self.iterator_refcount}>"
 
     @property
     def special(self):
@@ -1856,7 +1862,7 @@ class _tail_node:
     nodes = _linked_list_node.nodes
 
     def __repr__(self):
-        return f"_tail_node()"
+        return f"<_tail_node iterator_refcount={self.iterator_refcount}>"
 
     @property
     def special(self):
@@ -2848,17 +2854,19 @@ class linked_list:
             return value
 
     def reverse(self):
-        "Reverses all nodes in the linked_list."
+        "Reverses all nodes in the linked_list, including special nodes."
         with self._lock or _inert_context_manager:
             head = self._head
             tail = self._tail
 
             first = head.next
             if first is tail:
+                # self is length 0, reverse is a no-op
                 return None
 
             last = tail.previous
             if first is last:
+                # self is length 1, reverse is a no-op
                 return None
 
             cursor = first
@@ -2876,7 +2884,11 @@ class linked_list:
         return None
 
     def sort(self, key=None, reverse=False):
-        "Sorts the list in ascending order.  Arguments are the same as list.sort."
+        """
+        Sorts the linked list in ascending order.  Arguments are the
+        same as list.sort.  linked_list.sort moves nodes rather than
+        swapping values, so iterators continue to point at the same nodes.
+        """
         with self._lock or _inert_context_manager:
             if self._length < 2:
                 return None
@@ -2885,6 +2897,19 @@ class linked_list:
             tail = self._tail
 
             nodes = []
+
+            # specials stores references to runs of special nodes interior
+            # to the list--proper 'special' nodes, not 'head' or 'tail'.
+            # we keep special nodes together with the first subsequent
+            # data node, or tail if there's no subsequent data node.
+            #
+            # ... - [1] - [2] - [special] - [special] - [special] - [6] - [7] - ...
+            #                       ^           ^                    ^
+            #                       |           |                    |
+            #                     first        last                anchor
+            #
+            # after sorting, those three special nodes will still be before [6].
+            #
             specials = []
 
             cursor = head.next
@@ -2895,7 +2920,7 @@ class linked_list:
                         cursor = cursor.next
                     last = cursor
                     anchor = last.next
-                    specials.append((anchor, first, last))
+                    specials.append((first, last, anchor))
                     cursor = anchor
                     continue
 
@@ -2908,7 +2933,7 @@ class linked_list:
                 k = lambda node: node.value
             nodes.sort(key=k, reverse=reverse)
 
-            for anchor, first, last in specials:
+            for first, last, anchor in specials:
                 before = first.previous
                 after = last.next
                 before.next = after
@@ -2922,7 +2947,7 @@ class linked_list:
             previous.next = tail
             tail.previous = previous
 
-            for anchor, first, last in specials:
+            for first, last, anchor in specials:
                 before = anchor.previous
                 before.next = first
                 first.previous = before
@@ -3572,16 +3597,18 @@ class linked_list:
         if not hasattr(n, '__index__'):
             raise TypeError(f'{type(n).__name__} object cannot be interpreted as integer')
 
-        if self._length < 2:
-            return
-
-        n = n.__index__()
-        n_is_negative = (n < 0)
-        n = abs(n) % self._length
-        if not n:
-            return
-
         with self._lock or _inert_context_manager:
+            length = self._length
+
+            if length < 2:
+                return
+
+            n = n.__index__()
+            n_is_negative = (n < 0)
+            n = abs(n) % length
+            if not n:
+                return
+
             if n_is_negative:
                 cursor = self._head
                 for _ in range(n + 1):
@@ -5072,7 +5099,10 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
     (e.g. extend, rextend) always inserts them into the list
     in *forward* order.  If you call
         reverse_iterator.extend([1, 2, 3])
-    you'll see [1, 2, 3] in the linked_list, not [3, 2, 1].
+    the linked_list will start with [1, 2, 3], not [3, 2, 1].
+    (Though the reverse iterator will see the reversed
+     version--so from its perspective the linked list
+     now ends with [3, 2, 1]!)
     """
 
     ##

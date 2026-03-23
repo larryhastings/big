@@ -109,7 +109,7 @@ class StateManager:
               remembers the first exception, continues calling the
               remaining observers, completes the state transition,
               and then re-raises that first exception.  (If more
-              than one observer raises an exception, onlythe first
+              than one observer raises an exception, only the first
               exception is retained and re-raised.)
 
     The constructor takes the following parameters:
@@ -239,10 +239,11 @@ class StateManager:
         if state is self.__state:
             raise TransitionError(f"can't transition to {state}, it's already the current state")
 
+        # once we set __next...
         self.__next = state
-        # as of this moment we are "transitioning" to a new state.
+        # ... we are now officially "transitioning" to a new state.
 
-        observer_exception = None
+        exception = None
         try:
             if self.on_exit:
                 on_exit = getattr(self.__state, self.on_exit, None)
@@ -253,22 +254,26 @@ class StateManager:
                 try:
                     o(self)
                 except Exception as e:
-                    if observer_exception is None:
-                        observer_exception = e
+                    if exception is None:
+                        exception = e
 
             self.__state = state
         finally:
             self.__next = None
-        # as of this moment we are "in" our new state, the transition is over.
-        # (it's explicitly permitted to start a new state transition from inside enter().)
+
+        # as of this moment we are "in" our new state.
+        # the transition is over.
 
         if self.on_enter:
+            # note: it's explicitly permitted to start
+            # a new state transition from inside enter(),
+            # because the state transition is complete at this moment.
             on_enter = getattr(self.__state, self.on_enter, None)
             if on_enter is not None:
                 on_enter()
 
-        if observer_exception is not None:
-            raise observer_exception
+        if exception is not None:
+            raise exception
 
     __next = None
     @property

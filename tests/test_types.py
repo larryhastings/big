@@ -1214,9 +1214,9 @@ class BigStringTests(unittest.TestCase):
                     abcde.rpartition('', count)
 
         with self.assertRaises(TypeError):
-            abcde.partition('', 33.5)
+            abcde.partition('x', 33.5)
         with self.assertRaises(TypeError):
-            abcde.rpartition('', 33.5)
+            abcde.rpartition('x', 33.5)
 
         with self.assertRaises(TypeError):
             abcde.partition(33.5)
@@ -2978,7 +2978,7 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it = setup()
         self.assertEqual(it[0], 3)
-        self.assertEqual(repr(it), f"<linked_list_iterator {hex(id(it))} cursor=_linked_list_node(3)>")
+        self.assertEqual(repr(it), f"<linked_list_iterator {hex(id(it))} cursor=<_linked_list_node 3 iterator_refcount=1>>")
         it_copy = it.copy()
         del(it_copy)
         self.assertEqual(it[0], 3)
@@ -3299,19 +3299,19 @@ class BigLinkedListTests(unittest.TestCase):
         it_b.pop()
 
         data_node_a = it_a._cursor
-        self.assertEqual(repr(data_node_a), "_linked_list_node('a')")
+        self.assertEqual(repr(data_node_a), "<_linked_list_node 'a' iterator_refcount=2>")
 
         special_node = it_special._cursor
-        self.assertEqual(repr(special_node), "_linked_list_node(None, special='special')")
+        self.assertEqual(repr(special_node), "<_linked_list_node None, special='special' iterator_refcount=1>")
 
         head_node = t.head()._cursor
-        self.assertEqual(repr(head_node), "_head_node()")
+        self.assertEqual(repr(head_node), "<_head_node iterator_refcount=0>")
         self.assertEqual(head_node.special, "head")
         self.assertEqual(head_node.value, None)
         self.assertEqual(head_node.previous, None)
 
         tail_node = t.tail()._cursor
-        self.assertEqual(repr(tail_node), "_tail_node()")
+        self.assertEqual(repr(tail_node), "<_tail_node iterator_refcount=0>")
         self.assertEqual(tail_node.special, "tail")
         self.assertEqual(tail_node.value, None)
         self.assertEqual(tail_node.next, None)

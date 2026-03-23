@@ -373,9 +373,12 @@ class Log:
             the last time it was flushed (or since the start of the log).
 
         Log.close()
-            Close the log, which writes an "end" event to the log.
-            When a log is closed, you can no longer write to it;
-            all writes are silently ignored, and no error is reported.
+            Close the log.  If the log has produced formatted output,
+            it flushes and writes an "end" event to the destinations.
+            If the log is still in its initial state, it closes directly
+            without starting the log or emitting banners.  When a log is
+            closed, you can no longer write to it; all writes are silently
+            ignored, and no error is reported.
 
         Log.reset()
             Resets the log to its initial state.  Log.reset() is the
@@ -435,7 +438,7 @@ class Log:
     (Log is always thread-safe, whether or not "threading" is true.)
 
     "indent" should be an integer, the number of spaces to indent by
-    when indenting the log (using Log.start).  Default is 4.
+    when indenting the log (using Log.enter).  Default is 4.
 
     "width" should be an integer, default is 79.  This is only used
     to format separator lines (see "separator" and "banner_separator").
@@ -462,7 +465,7 @@ class Log:
     supported values: "format", and optionally "line", both strings.
     "format" specifies a string that will be used to format log messages;
     if you call Log.print(foo, format="peanut"), this will use the format
-    dict specified by Log(format={"peanut": {...}}).
+    dict specified by Log(formats={"peanut": {...}}).
 
     The "format" string in the format dict is processed using the ".format"
     method on a string, with the following values defined:
@@ -507,14 +510,14 @@ class Log:
             used for the final log message when the log is closed
 
     You may also add your own user-defined formats; simply add these
-    to the dict you pass in as the format parameter.  The Log instance
+    to the dict you pass in as the formats parameter.  The Log instance
     will add a method with the name of format which logs using this
     format; this is how log.box() is implemented.
 
-    To suppress the initial and/or final log messages, pass in a dict
-    to the format parameter with "start" or "end" respectively set to
-    None.  To suppress both:
-        Log(format={"start": None, "end": None})
+    To suppress the `start`, `end`, `enter`, and `exit` banners, pass in a
+    dict to the `formats` parameter with any of those keys set to `None`.
+    To suppress the start and end banners:
+        Log(formats={"start": None, "end": None})
     """
 
     def __init__(self, *destinations,
@@ -1384,11 +1387,11 @@ class Log:
         If the log is currently in "closed" state,
         this is a no-op.
 
-        If the log is currently in "logging" state,
+        If the log is currently in "logged" state,
         closes the log.
 
         If the log is currently in "initial" state,
-        opens then closes the log.
+        closes it directly without starting it.
 
         If block=True (the default), close won't
         return until the log is closed.  If block=False,
@@ -1692,12 +1695,10 @@ class Log:
           (A Destination can't be shared between multiple Log
           objects.)
 
-        Log guarantees that the following events will be called in this
-        order:
+        If the log ever produces non-empty formatted output,
+        Destination events will be called in this order:
 
            register
-              |
-              +
               |
               v
             start
@@ -1718,32 +1719,31 @@ class Log:
 
         The "register" event is sent while the log is still in
         its "initial" state; all other events are sent while the
-        log is in "logging" state.  (The log transitions to
+        log is in "logged" state.  (The log transitions to
         "closed" state only *after* sending the "end" event.)
         "register" will only ever be sent once, and it is always
         the first event received by a Destination.
 
-        The log transitions from "initial" to "logging" only
-        after it's logged to for the first time.  It transitions
-        to its "logging" state, sends a "start" event, then
-        sends the actual logged message.  Once the log has been
+        The log transitions from "initial" to "logged" only
+        after some operation produces non-empty formatted output.
+        It sends a "start" event immediately before the first such
+        output reaches the destinations.  Once the log has been
         started in this way, it can send any number of "write",
         "log", "enter", "exit", or "flush" events, in any order.
 
-        When the user closes the log, it will send an "end" event.
-        If the log is "dirty" at the time it's closed, Log
+        When the user closes the log, it sends an "end" event.
+        If the log is dirty at the time it's closed, Log
         automatically sends a "flush" before the "end".
 
         If the log is reset, and the log is not in "initial" state,
-        it will close the log (sending end / [flush] / close),
-        then send a "reset" event, at which time the log will be
+        it closes the log (sending [flush] / end as appropriate),
+        then sends a "reset" event, at which time the log will be
         back in "initial" state.
 
-        If a Log object is created, and literally never logged
-        to before it's closed, it won't send *any* events to its
-        destinations besides the initial "register".  (If the log
-        is never started, then we never need to end it either,
-        and there were never any events to send to the destinations.)
+        If a Log object is created, and no operation ever produces
+        non-empty formatted output before it's closed, it won't send
+        *any* events to its destinations besides the initial
+        "register".
         """
         def __init__(self):
             self.owner = None

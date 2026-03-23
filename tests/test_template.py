@@ -428,6 +428,20 @@ class TestFormatter(unittest.TestCase):
         fmt.map['line*'] = 'X'
         self.assertEqual(fmt.map, {'line*': '='})
 
+        fmt = Formatter('{greeting}, {name}!')
+        self.assertEqual(fmt(greeting="hello", name="world"), 'hello, world!')
+        self.assertTrue(fmt.stretch)
+        self.assertEqual(fmt.width, 79)
+        self.assertEqual(fmt.map, {})
+        self.assertEqual(fmt.template, '{greeting}, {name}!')
+        self.assertEqual(fmt.supported, {'greeting', 'name'})
+
+        fmt = Formatter('{greeting}, {name}!', {'greeting': 'hello', 'name': 'Floyd'}, stretch=False, width=55, name='world')
+        self.assertFalse(fmt.stretch)
+        self.assertEqual(fmt.width, 55)
+        self.assertEqual(fmt.map, {'greeting': 'hello', 'name': 'world'})
+
+
     def test_wider_than_width(self):
         """Line already wider than width: starred interpolations become empty."""
         fmt = Formatter('{d*}XXXXXXXXXXXXXXXXXXXX{d*}', map={'d*': '-'}, width=10)
