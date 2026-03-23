@@ -3253,9 +3253,9 @@ class linked_list:
             where = where._cursor
             if not is_rmove:
                 if where is self._tail:
-                    raise SpecialNodeError("can't move nodes after tail")
+                    raise UndefinedIndexError("can't move nodes after tail")
             elif where is self._head:
-                raise SpecialNodeError("can't move nodes before head")
+                raise UndefinedIndexError("can't move nodes before head")
 
             first, last, is_rmove = self._normalize_cut_and_move_range(start, stop, _lock_state, is_rmove, verb)
             if first is None:
@@ -3354,7 +3354,7 @@ class linked_list:
                 self._splice_check_where(where)
                 cursor = where._cursor
                 if cursor is self._head:
-                    raise SpecialNodeError("can't splice nodes before head")
+                    raise UndefinedIndexError("can't splice nodes before head")
                 cursor = cursor.previous
         else:
             if where is None:
@@ -3363,7 +3363,7 @@ class linked_list:
                 self._splice_check_where(where)
                 cursor = where._cursor
                 if cursor is self._tail:
-                    raise SpecialNodeError("can't splice nodes after tail")
+                    raise UndefinedIndexError("can't splice nodes after tail")
 
         assert cursor
 
@@ -5142,7 +5142,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         Returns a reverse iterator pointing at the node count steps after this node.
         (This is a reverse iterator, so forwards and backwards are swapped.)
 
-        If "tail" is < count steps forward, raises SpecialNodeError.
+        If "tail" is < count steps forward, raises UndefinedIndexError.
         count must be >= 0.
         """
         return super().after(count)
@@ -5152,7 +5152,7 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         Returns a reverse iterator pointing at the node count steps before this node.
         (This is a reverse iterator, so forwards and backwards are swapped.)
 
-        If "head" is < count steps backward, raises SpecialNodeError.
+        If "head" is < count steps backward, raises UndefinedIndexError.
         count must be >= 0.
         """
         return super().before(count)

@@ -7197,6 +7197,7 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
 * As a rule, actions on iterators that act on multiple nodes include the node they're pointing at.
 * iterator[0] *always* refers to the node the iterator is currently pointing at, even if it's a special
   node.  If the index is non-zero, it skips over special nodes.
+* You can't ever insert a node *before* head.  You can't ever insert a node *after* tail.
 
 
 </dd></dl>

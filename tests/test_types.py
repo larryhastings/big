@@ -5413,15 +5413,15 @@ class BigLinkedListTests(unittest.TestCase):
 
         t, it_5, t2 = setup()
         # you can't splice after tail
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.splice(t2, where=t.tail())
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.tail().splice(t2)
 
         # you can't rsplice before head
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.rsplice(t2, where=t.head())
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.head().rsplice(t2)
 
 
@@ -5548,18 +5548,18 @@ class BigLinkedListTests(unittest.TestCase):
 
         # always illegal to move nodes after tail
         t, head, tail = setup()
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.move(tail, t.find(1), t.find(3))
         # ... even if the range is empty
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.move(tail, t.find(1), t.find(1))
 
         # always illegal to rmove nodes before head
         t, head, tail = setup()
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.rmove(head, t.find(3), t.find(1))
         # ... even if the range is empty
-        with self.assertRaises(SpecialNodeError):
+        with self.assertRaises(UndefinedIndexError):
             t.rmove(head, t.find(1), t.find(1))
 
 
