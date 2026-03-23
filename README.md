@@ -4541,6 +4541,10 @@ Here's a list of all the delimiters recognized by `python_delimiters`:
   linebreak (`\n`) or a carriage return (`\r`).  (Python's
   "universal newlines" support should mean you won't normally
   see carriage returns here... unless you specifically permit them.)
+  If the file ends with a comment *without* a newline, you'll
+  see the `open='#'` yield, followed by a yield where the text is the
+  body of the comment, and the open, close, and change fields are all
+  the empty string.
 
 See also `python_delimiters_version`.
 
