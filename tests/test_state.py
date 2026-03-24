@@ -106,6 +106,107 @@ class StateManagerTests(unittest.TestCase):
         self.assertEqual(seen, [1, 2, 3, 4, 5])
 
 
+    def test_on_exit_exception_aborts_transition_and_clears_next(self):
+        class Stateoroonie(big.State):
+            def on_exit(self):
+                raise RuntimeError("boom")
+
+        initial = Stateoroonie()
+        state_manager = StateManager(initial)
+
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            state_manager.state = 2
+
+        self.assertIs(state_manager.state, initial)
+        self.assertIsNone(state_manager.next)
+
+        state_manager.on_exit = None
+        state_manager.state = 3
+        self.assertEqual(state_manager.state, 3)
+        self.assertIsNone(state_manager.next)
+
+
+    def test_observer_exception_does_not_cancel_transition(self):
+        seen = []
+
+        state_manager = StateManager('old')
+
+        class NewState(big.State):
+            def on_enter(self):
+                seen.append(('enter', state_manager.state, state_manager.next))
+
+        def observer1(state_manager):
+            seen.append(('observer1', state_manager.state, state_manager.next))
+            raise RuntimeError('observer1')
+
+        def observer2(state_manager):
+            seen.append(('observer2', state_manager.state, state_manager.next))
+
+        def observer3(state_manager):
+            seen.append(('observer3', state_manager.state, state_manager.next))
+            raise ValueError('observer3')
+
+        new_state = NewState()
+        state_manager.observers.extend((observer1, observer2, observer3))
+
+        with self.assertRaisesRegex(RuntimeError, 'observer1'):
+            state_manager.state = new_state
+
+        self.assertIs(state_manager.state, new_state)
+        self.assertIsNone(state_manager.next)
+        self.assertEqual(seen,
+            [
+            ('observer1', 'old', new_state),
+            ('observer2', 'old', new_state),
+            ('observer3', 'old', new_state),
+            ('enter', new_state, None),
+            ])
+
+
+    def test_observer_list_is_snapshotted(self):
+        seen = []
+
+        def observer1(state_manager):
+            seen.append('observer1')
+            state_manager.observers.append(observer2)
+
+        def observer2(state_manager):
+            seen.append('observer2')
+
+        state_manager = StateManager(...)
+        state_manager.observers.append(observer1)
+        state_manager.state = 1
+        self.assertEqual(seen, ['observer1'])
+        state_manager.state = 2
+        self.assertEqual(seen, ['observer1', 'observer1', 'observer2'])
+
+
+    def test_replacing_equal_observer_uses_new_observer(self):
+        seen = []
+
+        class Observer:
+            def __init__(self, name):
+                self.name = name
+
+            def __call__(self, state_manager):
+                seen.append(self.name)
+
+            def __eq__(self, other):
+                return isinstance(other, Observer)
+
+        observer1 = Observer('observer1')
+        observer2 = Observer('observer2')
+        self.assertEqual(observer1, observer2)
+
+        state_manager = StateManager(...)
+        state_manager.observers.append(observer1)
+        state_manager.state = 1
+        state_manager.observers[0] = observer2
+        state_manager.state = 2
+
+        self.assertEqual(seen, ['observer1', 'observer2'])
+
+
     def test_methods_as_states(self):
         @accessor()
         class StateMachine:
@@ -191,8 +292,7 @@ class StateManagerTests(unittest.TestCase):
                     event("exit true.")
 
                 def on_toggle_already(self):
-                    event("true.toggle")
-                    self.state_machine.state = self.state_machine.FalseState()
+                    event("true.toggle") ; self.state_machine.state = self.state_machine.FalseState()
 
             @dispatch('estate_mangler', prefix='on_', suffix='_already')
             def toggle(self): # pragma: no cover
@@ -219,6 +319,62 @@ class StateManagerTests(unittest.TestCase):
             ]
         self.assertEqual(events, expected_events)
 
+    def test_dispatch_funny_names_direct_true_toggle(self):
+        events = []
+        event = events.append
+
+        @accessor(state_manager='estate_mangler')
+        class MiamiStateMachine:
+            def __init__(self):
+                self.estate_mangler = StateManager(self.TrueState(),
+                    on_enter='hey_lets_enter',
+                    on_exit='oh_no_exit_time',
+                    )
+
+            @big.BoundInnerClass
+            class FalseState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event("enter false!")
+
+                def oh_no_exit_time(self):
+                    event("exit false.")
+
+                def on_toggle_already(self):
+                    event("false.toggle")
+                    self.state_machine.state = self.state_machine.TrueState()
+
+            @big.BoundInnerClass
+            class TrueState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event("enter true!")
+
+                def oh_no_exit_time(self):
+                    event("exit true.")
+
+                def on_toggle_already(self):
+                    event("true.toggle")
+                    self.state_machine.state = self.state_machine.FalseState()
+
+        msm = MiamiStateMachine()
+        msm.state.on_toggle_already()
+        self.assertEqual(msm.state.__class__.__name__, 'FalseState')
+        msm.state.on_toggle_already()
+        self.assertEqual(msm.state.__class__.__name__, 'TrueState')
+        self.assertEqual(events, [
+            'enter true!',
+            'true.toggle',
+            'exit true.',
+            'enter false!',
+            'false.toggle',
+            'exit false.',
+            'enter true!',
+            ])
 
     def test_integers_as_states(self):
         @accessor()
@@ -256,7 +412,6 @@ class StateManagerTests(unittest.TestCase):
                 def on_enter(self):
                     self.unittest.assertEqual(self.sm.state, self)
                     self.unittest.assertEqual(self.sm.state_manager.next, None)
-                    # self.unittest.assertEqual(self.sm.state_manager.next, big.invalid_state)
                     methods_called.append('FirstState.on_enter')
                     sm.state = sm.SecondState(sm, self.unittest)
 
@@ -269,7 +424,6 @@ class StateManagerTests(unittest.TestCase):
                 def on_enter(self):
                     self.unittest.assertEqual(self.sm.state, self)
                     self.unittest.assertEqual(self.sm.state_manager.next, None)
-                    # self.unittest.assertEqual(self.sm.state_manager.next, big.invalid_state)
                     methods_called.append('SecondState.on_enter')
                     self.next = sm.ThirdState(sm, self.unittest)
                     sm.state = self.next
@@ -341,8 +495,7 @@ class StateManagerTests(unittest.TestCase):
                 self.stock = collections.defaultdict(int)
                 self.not_ready = self.NotReadyToVend()
                 self.ready = self.ReadyToVend()
-                self.state_manager = StateManager(self.not_ready,
-                    state_class=self.VendingMachineState)
+                self.state_manager = StateManager(self.not_ready, state_class=self.VendingMachineState)
 
             def restock(self, product, count):
                 assert isinstance(count, int)
@@ -506,6 +659,64 @@ class StateManagerTests(unittest.TestCase):
                 self.assertEqual(result, None)
                 self.assertEqual(change, quarter + quarter + dime)
 
+
+
+
+    def test_dispatch_funny_names_direct_round_trip(self):
+        events = []
+        event = events.append
+
+        @accessor(state_manager='estate_mangler')
+        class MiamiStateMachine:
+            def __init__(self):
+                self.estate_mangler = StateManager(self.TrueState(),
+                    on_enter='hey_lets_enter',
+                    on_exit='oh_no_exit_time',
+                    )
+
+            @big.BoundInnerClass
+            class FalseState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event('enter false!')
+
+                def oh_no_exit_time(self):
+                    event('exit false.')
+
+                def on_toggle_already(self):
+                    event('false.toggle')
+                    self.state_machine.state = self.state_machine.TrueState()
+
+            @big.BoundInnerClass
+            class TrueState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event('enter true!')
+
+                def oh_no_exit_time(self):
+                    event('exit true.')
+
+                def on_toggle_already(self):
+                    event('true.toggle')
+                    self.state_machine.state = self.state_machine.FalseState()
+
+        msm = MiamiStateMachine()
+        msm.state.on_toggle_already()
+        msm.state.on_toggle_already()
+        self.assertEqual(events, [
+            'enter true!',
+            'true.toggle',
+            'exit true.',
+            'enter false!',
+            'false.toggle',
+            'exit false.',
+            'enter true!',
+            ])
+        self.assertEqual(msm.state.__class__.__name__, 'TrueState')
 
 def run_tests():
     bigtestlib.run(name="big.state", module=__name__)

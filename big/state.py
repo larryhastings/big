@@ -39,19 +39,14 @@ class State:
     Base class for state machine state implementation classes.
     Use of this base class is optional; states can be instances
     of any type except types.NoneType.
+
+    States may optionally define on_enter() and on_exit()
+    methods (or whatever names are configured on the
+    StateManager).  on_enter() is called immediately after
+    transitioning to the state; on_exit() is called during
+    the transition away from the state.
     """
-
-    def on_enter(self):
-        """
-        Called when entering this state.  Optional.
-        """
-        pass
-
-    def on_exit(self):
-        """
-        Called when exiting this state.  Optional.
-        """
-        pass
+    pass
 
 
 
@@ -108,7 +103,14 @@ class StateManager:
             * You're permitted to modify the list of observers
               at any time.  If you modify the list of observers
               from an observer call, StateManager will still use
-              the old list for the remainder of that transition.
+              a snapshot of the old list for the remainder of that
+              transition.
+            * If an observer raises an exception, StateManager
+              remembers the first exception, continues calling the
+              remaining observers, completes the state transition,
+              and then re-raises that first exception.  (If more
+              than one observer raises an exception, only the first
+              exception is retained and re-raised.)
 
     The constructor takes the following parameters:
 
@@ -128,7 +130,7 @@ class StateManager:
         Passing in a false value for on_enter disables this behavior.
         on_enter is called immediately after the transition is complete,
         which means you're expressly permitted to make a state transition
-        inside an on_enter call.  If defined, on_exit will be called on
+        inside an on_enter call.  If defined, on_enter will be called on
         the initial state object, from inside the StateManager constructor.
 
         on_exit is similar to on_enter, except the attribute is
@@ -156,12 +158,21 @@ class StateManager:
 
         If the current state object has an 'on_exit' attribute,
         it will be called as a function with zero arguments during
-        the the transition to the next state.
+        the transition to the next state.
 
         If you assign an object to 'state' that has an 'on_enter'
         attribute, it will be called as a function with zero
         arguments immediately after we have transitioned to that
         state.
+
+        If the current state object's on_exit raises an exception,
+        the transition is aborted, self.state remains unchanged,
+        and self.next is restored to None.
+
+        If an observer raises an exception, the transition still
+        completes, self.next is restored to None, and StateManager
+        re-raises the first observer exception after completing the
+        transition.
 
     If you have an StateManager instance called "state_manager",
     and you transition it to "new_state":
@@ -171,17 +182,23 @@ class StateManager:
     StateManager will execute the following sequence of actions:
 
         * Set self.next to 'new_state'.
-            * At of this moment your StateManager instance is
+            * As of this moment your StateManager instance is
               "transitioning" to the new state.
         * If self.state has an attribute called 'on_exit',
           call self.state.on_exit().
-        * For every object 'o' in the observer list, call o(self).
-        * Set self.next to None.
+        * For every object 'o' in a snapshot of the observer list,
+          call o(self).
+            * If an observer raises an exception, StateManager
+              remembers the first exception, then keeps calling the
+              remaining observers.
         * Set self.state to 'new_state'.
             * As of this moment, the transition is complete, and
               your StateManager instance is now "in" the new state.
+        * Set self.next to None.
         * If self.state has an attribute called 'on_enter',
           call self.state.on_enter().
+        * If an observer raised an exception, re-raise the first
+          observer exception now.
 
     You may also be interested in the `accessor` and `dispatch`
     decorators in this module.
@@ -222,29 +239,41 @@ class StateManager:
         if state is self.__state:
             raise TransitionError(f"can't transition to {state}, it's already the current state")
 
+        # once we set __next...
         self.__next = state
-        # as of this moment we are "transitioning" to a new state.
+        # ... we are now officially "transitioning" to a new state.
 
-        if self.on_exit:
-            on_exit = getattr(self.__state, self.on_exit, None)
-            if on_exit is not None:
-                on_exit()
-        if self.observers:
-            if self.observers != self._observers_copy:
-                self._observers_copy = list(self.observers)
-                self._observers_tuple = tuple(self.observers)
-            for o in self._observers_tuple:
-                o(self)
+        exception = None
+        try:
+            if self.on_exit:
+                on_exit = getattr(self.__state, self.on_exit, None)
+                if on_exit is not None:
+                    on_exit()
 
-        self.__state = state
-        self.__next = None
-        # as of this moment we are "in" our new state, the transition is over.
-        # (it's explicitly permitted to start a new state transition from inside enter().)
+            for o in tuple(self.observers):
+                try:
+                    o(self)
+                except Exception as e:
+                    if exception is None:
+                        exception = e
+
+            self.__state = state
+        finally:
+            self.__next = None
+
+        # as of this moment we are "in" our new state.
+        # the transition is over.
 
         if self.on_enter:
+            # note: it's explicitly permitted to start
+            # a new state transition from inside enter(),
+            # because the state transition is complete at this moment.
             on_enter = getattr(self.__state, self.on_enter, None)
             if on_enter is not None:
                 on_enter()
+
+        if exception is not None:
+            raise exception
 
     __next = None
     @property
@@ -275,8 +304,6 @@ class StateManager:
         self.on_exit = on_exit
 
         self.observers = []
-        self._observers_copy = []
-        self._observers_tuple = ()
         self.state = state
 
     def __repr__(self):
@@ -321,10 +348,10 @@ def accessor(attribute='state', state_manager='state_manager'):
     def accessor(cls):
         def getter(self):
             i = getattr(self, state_manager)
-            return getattr(i, 'state')
+            return i.state
         def setter(self, value):
             i = getattr(self, state_manager)
-            setattr(i, 'state', value)
+            i.state = value
         setattr(cls, attribute, property(getter, setter))
         return cls
     return accessor

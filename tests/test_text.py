@@ -924,12 +924,22 @@ class BigTextTests(unittest.TestCase):
 
         # this should be covered in the loop above,
         # but we'll explicitly check it anyway:
-        # multistrip *always* returns either str or bytes
-        # objects, even when it doesn't strip anything.
+        # multistrip preserves string/bytes subclasses even
+        # when it doesn't strip anything.
         self.assertEqual(big.multistrip(StrSubclass('abcde'), StrSubclass(' ')), 'abcde')
         self.assertEqual(type(big.multistrip(StrSubclass('abcde'), StrSubclass(' '))), StrSubclass)
         self.assertEqual(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' ')), b'abcde')
         self.assertEqual(type(big.multistrip(BytesSubclass(b'abcde'), BytesSubclass(b' '))), BytesSubclass)
+
+        # regression: if separators is an iterator or generator,
+        # multistrip should still validate it correctly and use it.
+        self.assertEqual(big.multistrip('xaayx', iter(('x', 'y'))), 'aa')
+        self.assertEqual(big.multistrip(b'xaayx', iter((b'x', b'y'))), b'aa')
+
+        with self.assertRaises(ValueError):
+            big.multistrip('s', iter(()))
+        with self.assertRaises(ValueError):
+            big.multistrip(b's', iter(()))
 
         # regression test:
         # the old approach had a bug that had to do with overlapping separators.
@@ -1082,6 +1092,11 @@ class BigTextTests(unittest.TestCase):
             # test: progressive strip
             self.assertEqual(list_multisplit(c('   a b c   '), c((' ',)), maxsplit=1, strip=big.PROGRESSIVE), c([ 'a', 'b c   ']))
 
+            # regression: PROGRESSIVE + maxsplit=None should behave like
+            # unlimited splitting in both directions.
+            self.assertEqual(list_multisplit(c('^apple^banana_cookie_'), c(('^', '_')), maxsplit=None, strip=big.PROGRESSIVE), c(['apple', 'banana', 'cookie']))
+            self.assertEqual(list_multisplit(c('^apple^banana_cookie_'), c(('^', '_')), maxsplit=None, strip=big.PROGRESSIVE, reverse=True), c(['apple', 'banana', 'cookie']))
+
             # regression test: when there are *overlapping* separators,
             # multisplit prefers the leftmost one(s), but passing in
             # reverse=True makes it prefer the *rightmost* ones.
@@ -1113,6 +1128,21 @@ class BigTextTests(unittest.TestCase):
             self.assertEqual(list_multisplit(c('   '), reverse=True), c(['', '']))
             self.assertEqual(list_multisplit(c('   '), strip=True), c(['']))
             self.assertEqual(list_multisplit(c('   '), strip=True, reverse=True), c(['']))
+
+            # regression: if separators is an iterator or generator,
+            # multisplit should materialize it before validating and using it.
+            self.assertEqual(list_multisplit(c('a,b'), iter((c(','),))), c(['a', 'b']))
+            self.assertEqual(list_multisplit(c('a,b'), iter((c(','),)), reverse=True), c(['a', 'b']))
+            with self.assertRaises(ValueError):
+                list_multisplit(c('s'), iter(()))
+
+            class Indexable:
+                def __init__(self, value):
+                    self.value = value
+                def __index__(self):
+                    return self.value
+
+            self.assertEqual(list_multisplit(c('xaxbxc'), c('abc'), maxsplit=Indexable(2)), c(['x', 'x', 'xc']))
 
             with self.assertRaises(TypeError):
                 list_multisplit(c('s'), 3.1415)
@@ -1363,6 +1393,12 @@ class BigTextTests(unittest.TestCase):
 
         simple_test_multisplit("a,b,,,c", ",", ['a', ',', 'b', ',', '', ',', '', ',', 'c'], keep=big.ALTERNATING, separate=True)
         simple_test_multisplit("a,b,,,c", ",", ['a', ',', 'b', ',', '', ',', '', ',', 'c'], keep=big.ALTERNATING, separate=True, reverse=True)
+
+    def test_regression_unhashable_separator_iterables(self):
+        self.assertEqual(big.multistrip('xyhelloxy', ['xy']), 'hello')
+        self.assertEqual(list(big.multisplit('a,b,c', [','])), ['a', 'b', 'c'])
+        self.assertEqual(big.multipartition('a,b,c', [','], 1), ('a', ',', 'b,c'))
+        self.assertEqual(list(big.multisplit(b'a,b,c', [b','])), [b'a', b'b', b'c'])
 
     def test_reimplemented_str_split(self):
         """
@@ -2152,9 +2188,32 @@ class BigTextTests(unittest.TestCase):
         test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'))
         test_multipartition("VWabcWXabXYbcYZ", ('a', 'ab', 'abc', 'b', 'bc', 'c'), 3, ('VW', 'abc', 'WX', 'ab', 'XY', 'bc', 'YZ'), reverse=True)
 
-        # I don't bother to test the str / subclass of str / etc stuff
-        # with multipartition, because it literally uses multisplit
-        # to do the splitting.  so the multisplit tests cover it.
+        # regression: multipartition should preserve subclasses by
+        # returning slices of the original.
+        SS = StrSubclass
+        result = big.multipartition(SS('a:b:c'), (SS(':'),), 2)
+        self.assertEqual(('a', ':', 'b', ':', 'c'), result)
+        for s in result:
+            self.assertIsInstance(s, SS)
+        self.assertEqual(''.join(result), 'a:b:c')
+
+        # regression: if separators is an iterator or generator,
+        # multipartition should materialize and validate it.
+        self.assertEqual(big.multipartition('a,b', iter((',',)), 1), ('a', ',', 'b'))
+        self.assertEqual(big.multipartition(b'a,b', iter((b',',)), 1), (b'a', b',', b'b'))
+        with self.assertRaises(ValueError):
+            big.multipartition('abc', iter(()), 1)
+        with self.assertRaises(ValueError):
+            big.multipartition(b'abc', iter(()), 1)
+
+        class Indexable:
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        self.assertEqual(big.multipartition('a:b:c:d', (':',), Indexable(2)), ('a', ':', 'b', ':', 'c:d'))
+        self.assertEqual(big.multirpartition('a:b:c:d', (':',), Indexable(2)), ('a:b', ':', 'c', ':', 'd'))
 
         with self.assertRaises(ValueError):
             big.multipartition("a x x b y y c", (" x ", " y "), -1)
@@ -4179,29 +4238,45 @@ class BigTextTests(unittest.TestCase):
             for file in files:
                 if file.endswith(".py"):
                     path = os.path.join(root, file)
-                    expect_decode_failure = file.startswith("invalid_")
-                    try:
-                        text = read_python_file(path)
-                        self.assertFalse(expect_decode_failure, f"failed on {file}")
-                    except UnicodeDecodeError as e:
-                        self.assertTrue(expect_decode_failure, f"failed on {file}")
-                        continue
-                    state = []
-                    for info, line in lines(text, clip_linebreaks=False):
-                        for _, open, close, change in split_delimiters(line, python_delimiters, state=state):
-                            if open:
-                                state.append(open)
-                            elif close:
-                                state.pop()
-                    self.assertFalse(state)
+                    with self.subTest(path=path):
+                        expect_decode_failure = file.startswith("invalid_")
+                        try:
+                            text = read_python_file(path)
+                            self.assertFalse(expect_decode_failure, f"failed on {file}")
+                        except UnicodeDecodeError as e:
+                            self.assertTrue(expect_decode_failure, f"failed on {file}")
+                            continue
+                        state = []
+                        for info, line in lines(text, clip_linebreaks=False):
+                            for _, open, close, change in split_delimiters(line, python_delimiters, state=state):
+                                if open:
+                                    state.append(open)
+                                elif close:
+                                    state.pop()
 
-                    # also, all the test files in test_encodings
-                    # contain either a Unicode chipmunk or an ASCII squirrel
-                    if "test_encodings" in str(path):
-                        if "ascii" in str(path):
-                            self.assertIn("Squirrel &o", text, f"Squirrel not found in {path}!")
+                        # if the file ends with a line that ends with a comment,
+                        # we'll "open" a comment and not close it.  therefore,
+                        # the only time we should see junk in "state" is if it's
+                        # a terminal comment, which means it was on the last line,
+                        # which means--
+                        if state == ['#']:
+                            # the last line we saw ended with the comment.
+                            self.assertTrue( line.endswith('#' + _) )
+                            # open and close and change are all empty.
+                            # (we don't get a close='\n' because the file doesn't have one.)
+                            self.assertFalse(open)
+                            self.assertFalse(close)
+                            self.assertFalse(change)
                         else:
-                            self.assertIn("Chipmunk 🐿️", text, f"Chipmunk not found in {path}!")
+                            self.assertFalse(state)
+
+                        # also, all the test files in test_encodings
+                        # contain either a Unicode chipmunk or an ASCII squirrel
+                        if "test_encodings" in str(path):
+                            if "ascii" in str(path):
+                                self.assertIn("Squirrel &o", text, f"Squirrel not found in {path}!")
+                            else:
+                                self.assertIn("Chipmunk 🐿️", text, f"Chipmunk not found in {path}!")
 
 
     def test_python_delimiters_regressions(self):
@@ -6032,6 +6107,18 @@ class BigPatternTests(unittest.TestCase):
                 self.assertTypedEqual(re_split(sep, ':a:b::c'), expected)
 
 
+
+
+
+    def test_regression__separators_to_re_unhashable_iterables(self):
+        direct = big.text._separators_to_re([',', ';'], False)
+        expected = big.text._separators_to_re((',', ';'), False)
+        self.assertEqual(direct, expected)
+        # direct helper coverage: unhashable iterables are normalized to tuples.
+        self.assertEqual(direct, expected)
+        direct_bytes = big.text._separators_to_re([b',', b';'], True)
+        expected_bytes = big.text._separators_to_re((b',', b';'), True)
+        self.assertEqual(direct_bytes, expected_bytes)
 
 def run_tests():
     bigtestlib.run(name="big.text", module=__name__)

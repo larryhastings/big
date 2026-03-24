@@ -499,7 +499,6 @@ def reversed_re_finditer(pattern, string):
     # for potential overlapping matches.
     matches = [(match.end(), -match.start(), match) for match in pattern.finditer(string)]
     if not matches:
-        # print(f"no matches at all! exiting immediately.")
         return
 
     # Does this pattern match zero-length strings?
@@ -679,7 +678,6 @@ def reversed_re_finditer(pattern, string):
                 for pos in range(start, end):
                     match = pattern_match(string, pos, previous_match_start)
                     if match:
-                        # print(f"  found {match=}")
                         append((match.end(), -pos, match))
 
         if not overlapping_matches:
@@ -856,10 +854,6 @@ def multistrip(s, separators, left=True, right=True):
     Strips from the string "s" all leading and trailing
     instances of strings found in "separators".
 
-    Returns a copy of s with the leading and/or trailing
-    separators stripped.  (If left and right are both false,
-    the contents are unchanged.)
-
     s should be str or bytes.
     separators should be an iterable of either str or bytes
     objects matching the type of s.
@@ -873,17 +867,17 @@ def multistrip(s, separators, left=True, right=True):
     multistrip first removes leading separators, until the
     string does not start with a separator (or is empty).
     Then it removes trailing separators, until the string
-    until the string does not end with a separator (or is
-    empty).
+    string does not end with a separator (or is empty).
 
     multistrip is "greedy"; if more than one separator
     matches, multistrip will strip the longest one.
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
-    for both must be the same (str or bytes).  multistrip will
-    only return str or bytes objects, even if left and right
-    are both false.
+    for both must be the same (str or bytes).
+
+    Returns s unchanged, or a slice of s, with the leading
+    and/or trailing separators stripped.
     """
 
     is_bytes = isinstance(s, bytes)
@@ -915,8 +909,6 @@ def multistrip(s, separators, left=True, right=True):
         else:
             check_separators = True
 
-    if not separators:
-        raise ValueError("separators must be an iterable of non-empty objects the same type as s")
     if check_separators:
         s2 = []
         for o in separators:
@@ -926,6 +918,8 @@ def multistrip(s, separators, left=True, right=True):
                 raise ValueError("separators must be an iterable of non-empty objects the same type as s")
             s2.append(o)
         separators = tuple(s2)
+    if not separators:
+        raise ValueError("separators must be an iterable of non-empty objects the same type as s")
 
     # deliberately do this *after* checking types,
     # so we complain about bad types even if this is a do-nothing call.
@@ -964,7 +958,7 @@ PROGRESSIVE = "PROGRESSIVE"
 export(PROGRESSIVE)
 
 def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators):
-    if maxsplit == None:
+    if maxsplit is None:
         maxsplit = -1
     elif maxsplit == 0:
         if keep == ALTERNATING:
@@ -987,7 +981,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
 
         separators = tuple(separators)
         s2 = _reversed_builtin_separators.get(separators, None)
-        if s2 != None:
+        if s2 is not None:
             separators = s2
         else:
             separators = _multisplit_reversed(separators, 'separators')
@@ -1041,7 +1035,6 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
         if desired_length > (last_non_empty_nonsep + 2):
             # strip!
             l = l[:last_non_empty_nonsep + 1]
-            desired_length = length = last_non_empty_nonsep
 
         if not keep:
             for i in range(len(l) - 2, 0, -2):
@@ -1127,9 +1120,14 @@ def multisplit(s, separators=None, *,
     If separators is None and s is bytes, multisplit will
     use big.ascii_whitespace as the list of separators.
 
-    Returns an iterator yielding the strings split from s.  If keep
-    is true (or ALTERNATING), and strip is false, joining these strings
-    together will recreate s.
+    Returns an iterator yielding values split from s.  The values
+    yielded are slices of the original object, or in some cases
+    adjacent slices joined with +.  All slices are yielded in
+    left-to-right order; this even includes zero-length strings,
+    which are sliced from the contextually correct spot.
+
+    If keep is true (or ALTERNATING), and strip is false, joining
+    these strings together will recreate s.
 
     multisplit is "greedy": if two or more separators start at the same
     location in "s", multisplit splits using the longest matching separator.
@@ -1225,8 +1223,7 @@ def multisplit(s, separators=None, *,
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
-    for both must be the same (str or bytes).  multisplit will
-    only return str or bytes objects.
+    for both must be the same (str or bytes).
     """
     is_bytes = isinstance(s, bytes)
     separators_is_bytes = isinstance(separators, bytes)
@@ -1252,25 +1249,33 @@ def multisplit(s, separators=None, *,
     if separators is None:
         separators = bytes_whitespace if is_bytes else whitespace
         check_separators = False
-    elif not separators:
-        raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
 
     # check_separators is True if separators isn't str or bytes
     # or something we split ourselves.
     if check_separators:
         if not hasattr(separators, '__iter__'):
             raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
+        s2 = []
         for o in separators:
             if not isinstance(o, s_type):
                 raise TypeError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
             if not o:
                 raise TypeError(f"separators cannot contain an empty str/bytes object")
+            s2.append(o)
+        separators = tuple(s2)
+
+    if separators is not None:
+        if not separators:
+            raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
+
+    if maxsplit is not None:
+        maxsplit = operator.index(maxsplit)
 
     internally_keep_separators = keep
 
     if strip:
         if strip == PROGRESSIVE:
-            if maxsplit == -1:
+            if (maxsplit is None) or (maxsplit == -1):
                 strip = left = right = True
             else:
                 left = not reverse
@@ -1303,27 +1308,38 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     the earliest separator, the separator, and the portion of "s" after
     that separator.  Example:
 
-        multipartition('aXbYz', ('X', 'Y')) => ('a', 'X', 'bYz')
+        >>> multipartition('aXbYz', ('X', 'Y'))
+        ('a', 'X', 'bYz')
 
     If none of the separators are found in the string, returns
     a tuple containing `s` unchanged followed by two empty strings.
+
+    Returns a tuple of slices of s—including zero-length boundary
+    slices when needed—so concatenating the returned values
+    reconstitutes the original s.
 
     multipartition is *greedy*: if two or more separators appear at
     the leftmost location in `s`, multipartition partitions using
     the longest matching separator.  For example:
 
-        big.multipartition('wxabcyz', ('a', 'abc')) => ('wx', 'abc', 'yz')
+        >>> multipartition('wxabcyz', ('a', 'abc'))
+        ('wx', 'abc', 'yz')
 
     Passing in an explicit "count" lets you control how many times
     multipartition partitions the string.  multipartition will always
     return a tuple containing (2*count)+1 elements.  Passing in a
     count of 0 will always return a tuple containing s.
 
-    If `separate` is true, multiple adjacent separator strings behave
-    like one separator.  Example:
+    If `separate` is false, multiple adjacent separator strings get joined
+    together, behaving like one big separator.  If `separate` is true,
+    they're kept separate.  Example:
 
-        big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False) => ('a', 'XY', 'b', 'YX', 'c')
-        big.text.multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True ) => ('a', 'X', '', 'Y', 'bYXc')
+        >>> multipartition('aXYbYXc', ('X', 'Y',),          separate=False)
+        ('a', 'XY', 'b', 'YX', 'c')
+        >>> multipartition('aXYbYXc', ('X', 'Y',),          separate=True )
+        ('a', 'X', '', 'Y', 'b', 'Y', '', 'X', 'c')
+        >>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True )
+        ('a', 'X', '', 'Y', 'bYXc')
 
     If reverse is true, multipartition behaves like str.rpartition.
     It partitions starting on the right, scanning backwards through
@@ -1331,9 +1347,9 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
-    for both must be the same (str or bytes).  multipartition
-    will only yield str or bytes objects.
+    for both must be the same (str or bytes).
     """
+    count = operator.index(count)
     if count < 0:
         raise ValueError("count must be positive")
     result = list(multisplit(s, separators,
@@ -1358,6 +1374,7 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 
 @export
 def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
+    "Like big.multipartition, but partitions from the right by default, like str.rpartition."
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
 
 @export
@@ -1388,9 +1405,8 @@ def format_map(s, mapping):
     pop = words.pop
     empty_join = ''.join
     saw_backslash = False
-    # print("\n" + s)
+
     for s, delimiter in multisplit(s, '{}\\', separate=True, keep=AS_PAIRS):
-        # print(f">> {s=} {delimiter=} {saw_backslash=} {words=}")
         append(s)
         if not delimiter:
             continue
@@ -1968,9 +1984,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
     text = s[0:0]
 
     quote = state
-    # print(f"    >> {state=}")
     for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
-        # print(f"    >> {pair}  -- {quote=}")
         literal, separator = pair
 
         if literal:
@@ -2009,10 +2023,8 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
                     raise SyntaxError("unterminated quoted string, {s!r}")
             if state:
                 state = None
-                # print(f"    <<1 empty, {text=}, {quote=}")
                 yield (text[0:0], text, separator)
             else:
-                # print(f"    <<2 {quote=}, {text=}, {quote=}")
                 yield (quote, text, separator)
         length = len(text)
         text = text[length:length]
@@ -2026,7 +2038,6 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
         if state:
             # state = None
             quote = text[0:0]
-        # print(f"    <<3 {quote=}, {text=}, empty")
         length = len(text)
         yield (quote, text, text[length:length])
 
@@ -2114,8 +2125,6 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
       If you need the opening and closing markers to be
       different strings, use split_delimiters.
     """
-
-    # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {multiline_quotes=}, {state=})")
 
     if multiline_quotes is None:
         multiline_quotes = ()
@@ -3089,25 +3098,15 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
     escaped = empty
 
     consumed = 0
-    # print(">> split_delimiters start!")
-    # print(">>", repr(text))
-    # print()
 
     i = multisplit(text, all_tokens, keep=AS_PAIRS, separate=True)
     resplit = False
 
-    # want_debug = False
-    # want_debug = True
-
     while True:
         for s, delimiter in i:
-            # if want_debug:
-            #     print(f">> {s=!r} {delimiter=!r}  {[o[1] for o in stack]}")
-            #     print(f">> {consumed:03} {text[consumed:]!r}")
             if not (s or delimiter):
                 continue
             if escaped:
-                # print(f"    {escaped=}")
                 # either s or delimiter is true
                 escaped = empty
                 if not s:
@@ -3116,17 +3115,14 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                     consumed += 1
 
                     if len(delimiter) == 1:
-                        # print(f"    consume the entire {delimiter=}")
                         append(delimiter)
                         continue
 
                     # if delimiter is longer than 1 character, resplit.
-                    # print(f"    consume the first character of {delimiter=} and resplit at {consumed=}")
                     append(delimiter[0:1])
                     i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                     break
 
-            # print(f"    append {s=} and consume {len(s)} characters")
             if s:
                 append(s)
                 consumed += len(s)
@@ -3218,7 +3214,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 escaped = delimiter
                 consumed += len(delimiter)
             elif action is _ACTION_FLUSH:
-                # print(f"    flush {delimiter=}")
                 append(delimiter)
                 consumed += len(delimiter)
             elif action is _ACTION_FLUSH_1_AND_RESPLIT:
@@ -3226,7 +3221,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 append(delimiter[0:1])
                 consumed += 1
                 resplit = True
-                # print(f"    flush 1 and resplit.  flushing {delimiter[0:1]}, adding 1 to consumed, now {consumed}, and resplitting.")
             elif action is _ACTION_ILLEGAL:
                 # illegal character
                 raise SyntaxError(f"index {consumed}: illegal string {delimiter!r}")
@@ -3239,7 +3233,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
 
             if resplit:
-                # print(f"#    resplitting at offset {consumed}, {text[consumed:]!r}")
                 i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                 resplit = False
                 break
@@ -3485,22 +3478,22 @@ class LineInfo:
         if not isinstance(indent, int):
             raise TypeError("indent must be int")
 
-        if leading == None:
+        if leading is None:
             leading = empty
         elif not isinstance(leading, line_type):
             raise TypeError(f"leading must be same type as line or None, not {leading!r}")
 
-        if trailing == None:
+        if trailing is None:
             trailing = empty
         elif not isinstance(trailing, line_type):
             raise TypeError(f"trailing must be same type as line or None, not {trailing!r}")
 
-        if end == None:
+        if end is None:
             end = empty
         elif not isinstance(end, line_type):
             raise TypeError(f"end must be same type as line or None, not {end!r}")
 
-        if not ((match == None) or isinstance_re_pattern(match)):
+        if not ((match is None) or isinstance_re_pattern(match)):
             raise TypeError("match must be None or re.Pattern")
 
         self.lines = lines
@@ -4044,7 +4037,7 @@ def lines_sort(li, *, key=None, reverse=False):
     no sooner than March 2027.
     """
     lines = list(li)
-    if key == None:
+    if key is None:
         fn = lambda t: t[1]
     else:
         fn = lambda t: key(t)
@@ -4058,8 +4051,6 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
     starting_pair_for_state = None
 
     for info, line in li:
-        # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
-
         if quotes or multiline_quotes:
             i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
         else:
@@ -4309,7 +4300,6 @@ def lines_strip_indent(li):
             # That way you don't change column_number nonsensically.
             line = info.clip_trailing(line, line)
             blank_lines.append((info, line))
-            # print(f"BL+ {info=} {lstripped=}")
             continue
 
         line = info.clip_leading(line, len(line) - len(lstripped))
@@ -4350,13 +4340,11 @@ def lines_strip_indent(li):
                 raise IndentationError(f"Line {info.line_number} column {column_number}: unindent doesn't match any outer indentation level")
             new_indent = False
 
-        # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
             leadings.append(column_number)
             indent += 1
 
         if blank_lines:
-            # print(f"BL+ {blank_lines=}")
             for pair in blank_lines:
                 pair[0].indent = indent # don't overwrite "info" or "line"! derp!
                 yield pair
@@ -4493,7 +4481,6 @@ _text_paragraph = "text paragraph"
 @state.accessor()
 class _column_wrapper_splitter:
     def __init__(self, is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces):
-        # print(f"\n_column_wrapper_splitter({tab_width=}, {allow_code=}, {convert_tabs_to_spaces=})")
         self.is_bytes = is_bytes
         if is_bytes:
             self.empty = b''
@@ -4528,15 +4515,12 @@ class _column_wrapper_splitter:
         self.state_manager = state.StateManager(self.state_initial)
 
     def emit(self, c):
-        # print(f" [emit]", repr(c))
         self.words.append(c)
 
     def line_break(self):
-        # print(f" [  \\n]")
         self.words.append(self.linebreak_string)
 
     def paragraph_break(self):
-        # print(f" [\\n\\n]")
         self.words.append(self.paragraph_string)
 
     def write(self, c):
@@ -4595,8 +4579,6 @@ class _column_wrapper_splitter:
         append_c_to_leading = False
         empty = self.empty
         linebreak_string = self.linebreak_string
-
-        # print(f"<{c!r}> ", end='')
 
         if not c.isspace():
             word.append(c)
@@ -5274,7 +5256,6 @@ def decode_python_script(script, *,
             assert "unknown encoding" in message
             raise UnicodeDecodeError(bom_encoding, script, 0, len(script), "unknown encoding") from None
         encoded = False
-        # print(f"decoded! {text!r}")
 
         encoding_re = _python_source_code_encoding_line_str_re
     else:
@@ -5633,13 +5614,11 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
                 raise IndentationError(f"unindent doesn't match any outer indentation level")
             new_indent = False
 
-        # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
             leadings.append(column_number)
             depth += 1
 
         if blank_lines:
-            # print(f"BL+ {blank_lines=}")
             for line in blank_lines:
                 yield (depth, line)
             blank_lines.clear()
@@ -5674,8 +5653,6 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         empty = ''
 
     for line in lines:
-        # print(f"\n[!!!] {line=}\n[!!!] {quotes=} {escape=} {multiline_quotes=} {state=}")
-
         if quotes or multiline_quotes:
             i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
         else:
@@ -5688,7 +5665,6 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         offset = 0
 
         for leading_quote, segment, trailing_quote in i:
-            # print(f">>> {leading_quote=} {segment=} {trailing_quote=}")
             offset += previous_lengths
 
             previous_lengths = len(leading_quote) + len(segment) + len(trailing_quote)

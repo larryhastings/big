@@ -25,9 +25,13 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import builtins
-from .types import string
-from .text import split_quoted_strings
+import itertools
 import token
+import tokenize
+import sys
+
+from .types import string
+from .text import split_quoted_strings, split_delimiters, Delimiter
 
 # TODO
 # test all unclosed open delimiters
@@ -110,9 +114,9 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
     "internal iterator for public big.parse_template_string"
     if not s:
         yield s
+        return
 
     original_s = s
-    length = len(original_s)
 
     stack = []
     stack_push = stack.append
@@ -136,7 +140,6 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
 
     while s:
         before, delimiter, after = s.partition('{')
-        # print(f">> {before=} {delimiter=} {after=} {text=}")
         if before:
             text_append(before)
 
@@ -152,9 +155,10 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
 
         if parse_comments and (after0 == '#'):
             # comment
+            where = delimiter.where
             comment, delimiter, s2 = after.partition('#}')
             if not delimiter:
-                raise SyntaxError(f"{delimiter.where}: unterminated comment")
+                raise SyntaxError(f"{where}: unterminated comment")
             s = s2
             continue
 
@@ -189,7 +193,6 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                 else:
                     iterator = (('', after, ''),)
                 for opening_quote, t, closing_quote in iterator:
-                    # print(f">> {opening_quote=} {t=} {closing_quote=}")
                     if opening_quote:
                         if not closing_quote:
                             # this is going to be the last thing yielded,
@@ -222,57 +225,74 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
         tos = previous_was_rcurly = None
         start_offset = after.offset
 
-        for t in after.generate_tokens():
-            if t.type != _TOKEN_OP:
-                continue
-            t_string = t.string
-            offset = t_string.offset
-            is_rcurly = t_string == '}'
-            if is_rcurly:
-                if previous_was_rcurly:
-                    s = original_s[offset + 1:]
-                    offset -= 1
-                    break
-            else:
-                previous_was_rcurly = None
+        try:
+            for t in after.generate_tokens():
+                if t.type != _TOKEN_OP:
+                    continue
+                t_string = t.string
+                offset = t_string.offset
+                is_rcurly = t_string == '}'
+                if is_rcurly:
+                    if previous_was_rcurly:
+                        s = original_s[offset + 1:]
+                        offset -= 1
+                        break
+                else:
+                    previous_was_rcurly = None
 
-            right = _delimiter_map.get(t_string)
-            if right:
+                right = _delimiter_map.get(t_string)
+                if right:
+                    if tos:
+                        stack_push(tos)
+                    tos = right
+                    continue
                 if tos:
-                    stack_push(tos)
-                tos = right
-                continue
-            if tos:
-                if t_string == tos:
-                    tos = stack_pop() if stack else None
-                continue
-            if t_string == '|':
-                x = original_s[start_offset:offset]
-                if not x.strip():
-                    noun = 'filter' if expression else 'expression'
-                    raise SyntaxError(f'empty {noun} at {x.where}')
-                expression_append(x)
-                start_offset = offset + 1
-                continue
-            previous_was_rcurly = is_rcurly
-        else:
-            noun = 'filter' if expression else 'expression'
-            raise SyntaxError(f'unterminated {noun} at {after.where}')
-        expression_append(original_s[start_offset:offset])
+                    if t_string == tos:
+                        tos = stack_pop() if stack else None
+                    continue
+                if t_string == '|':
+                    x = original_s[start_offset:offset]
+                    if not x.strip():
+                        noun = 'filter' if expression else 'expression'
+                        raise SyntaxError(f'empty {noun} at {x.where}')
+                    expression_append(x)
+                    start_offset = offset + 1
+                    continue
+                previous_was_rcurly = is_rcurly
+            else:
+                noun = 'filter' if expression else 'expression'
+                raise SyntaxError(f'unterminated {noun} at {after.where}')
+            final_expression = original_s[start_offset:offset]
+            if not final_expression.strip():
+                raise SyntaxError(f'empty expression at {after.where}')
+            expression_append(final_expression)
 
-        # handle trailing =
-        x = expression[0]
-        before, equals, after = x.partition('=')
-        if equals and (not after.rstrip()):
-            debug = x
-            expression[0] = before
-        else:
-            l = len(x)
-            debug = x[l:l]
-        stripped = [x.strip() for x in expression]
-        yield Interpolation(*stripped, debug=debug)
-        expression_clear()
-        debug = None
+            # handle trailing =
+            x = expression[0]
+            before, equals, after = x.partition('=')
+            if equals and (not after.rstrip()):
+                debug = x
+                expression[0] = before
+            else:
+                l = len(x)
+                debug = x[l:l]
+            stripped = [x.strip() for x in expression]
+            yield Interpolation(*stripped, debug=debug)
+            expression_clear()
+            debug = None
+        except tokenize.TokenError as e:
+            message, (line, column) = e.args
+            message = message.partition(" (detected at")[0]
+            line -= 1
+            # the old Python parser used 0 as the first column here,
+            # the new one uses 1 as the first column.
+            if _new_peg_parser: # pragma: nocover
+                column -= 1
+
+            lines = after.splitlines()
+            offending_to_eol = lines[line][column:]
+            offending = offending_to_eol.split()[0]
+            raise SyntaxError(f"{offending.where}: {message} ({offending!r})") from None
 
     # flush text
     if text:
@@ -325,8 +345,8 @@ def parse_template_string(s, *,
           either a non-whitespace character or the end of the string.
 
     Each of these delimiters can be individually enabled or disabled
-    with boolean keyword-only parameters, e.g. "parse_expression",
-    "parse_whitespace_eater".  By default only parse_expression is true.
+    with boolean keyword-only parameters, e.g. "parse_expressions",
+    "parse_whitespace_eater".  By default only parse_expressions is true.
 
     Returns a generator yielding the components of s.  These components
     can be:
@@ -397,5 +417,368 @@ def eval_template_string(s, globals, locals=None, *,
 
     return ''.join(result)
 
+
+_curly_brace_delimiters = {'{': Delimiter('}')}
+
+# Characters that can't be used as the first character of a
+# format_map key used as a prefix: '!' and ':' are conversion/format
+# spec markers, '.' digits and '[' trigger positional field or
+# attribute/index parsing, '{' and '}' break format parsing,
+# and '"' and "'" are skipped for debugger readability.
+_bad_prefix_characters = frozenset("!\"'.0123456789:[]{}")
+
+
+_new_peg_parser = ((sys.version_info.major, sys.version_info.minor) >= (3, 11))
+
+@export
+class Formatter:
+    """
+    A sophisticated template formatter, similar to str.format.
+
+    The Formatter constructor takes the following arguments:
+        * 'template', a string.  Calling the Formatter object
+           is like calling the 'str.format' method on that string.
+        * 'map', a dict or None, default None.  If a dict,
+          pre-initializes values used at interpolation time.
+        * 'width', an integer, default 79, the target width of
+          lines when computing "starred interpolations".
+        * 'stretch', a boolean, default True, also used in
+          conjunction with "starred interpolations".
+
+    Also, additional **kwargs are used as additional pre-initialized
+    map values, and take precedence over the "map" parameter.
+
+    Returns a Formatter object.  Calling this object formats
+    the template string using 'str.format_map' and returns
+    the result.  Substitutions in the template use 'str.format_map'
+    syntax.  The signature of this callable is:
+
+        fn(message=''', **kwargs)
+
+    The **kwargs passed in here are also used as values for the
+    interpolation, and take precedence over any value passed in
+    to the constructor.
+
+    Formatter has two additional features:
+        * Special support for an interpolation named "{message}",
+          which are formatted in conjunction with the "message" parameter.
+          If your template contains one or more lines containing "{message}",
+          these "message lines" are formatted using the lines of the "message"
+          argument.  The "message" argument is split by the newline character
+          ('\\n') and these are zipped together with the "message lines";
+          the first "message line" will be formatted with the first line
+          of the "message" parameter, the second with the second, etc.
+            * If there are more "message lines" in the template than lines
+              in the "message" parameter, the additional "message lines"
+              are discarded.  Example: if there are three "message lines"
+              in the template, but only two lines in the "message" parameter,
+              the third "message line" won't appear in the output.
+            * If there are more lines in the "message" parameter than
+              "message lines" in the template, the last template
+              "message line" will be repeated.  Example: if there are
+              three lines in the "message" parameter, but only two
+              "message lines" in the template, the last "message line"
+              will be repeated, used to format the last two lines of
+              the "message" parameter.
+        * Values whose keys end with '*' (e.g. "{line*}") are special:
+          they are "starred interpolations".  Their value is repeated
+          zero or more times then truncated until the line is at least
+          "width" characters.  Starred interpolations must not use:
+            * dotted expressions ({line.foo*})
+            * indexing ({line[3]*})
+            * a conversion ({line*!r})
+            * or a format spec ({line*:5})
+
+        If 'stretch' is true, Formatter calculates the width of the
+        longest formatted line (assuming all starred interpolations
+        are length 0), then recomputes "width" as
+
+            width = max(longest_line, width)
+
+        This means the starred interpolations will "stretch" to fit
+        the longest line of the output.
+
+    Example:
+
+        fmt = Formatter('{line*}\\n{name} start\\n>> {message}\\n<< {message}\\n{double*}{line*}',
+            {'line*': '-', 'double*': '=', 'name': 'Log'},
+            width=20)
+        print(fmt("hello\\nthere\\nworld!"))
+
+    This prints:
+
+        --------------------
+        Log start
+        >> hello
+        << there
+        << world!
+        ==========----------
+    """
+
+    def __init__(self, template, map=None, *, stretch=True, width=79, **kwargs):
+        if not isinstance(template, str):
+            raise TypeError(f"template must be str, not {type(template).__name__}")
+
+        if not isinstance(width, int):
+            raise TypeError(f"width must be int, not {type(width).__name__}")
+        if width <= 0:
+            raise ValueError(f"width must be greater than zero")
+
+        if map is not None:
+            if not isinstance(map, dict):
+                raise TypeError(f"map must be dict or None, not {type(map).__name__}")
+            if "message" in map:
+                raise ValueError("map must not contain 'message'")
+
+            for k in map:
+                if not isinstance(k, str):
+                    raise TypeError(f"map keys must be str, not {type(k).__name__}")
+            map = dict(map)
+            map.update(kwargs)
+        else:
+            map = dict(kwargs)
+
+        # pre str-ize all starred interpolation values
+        for key, value in map.items():
+            if key.endswith('*'):
+                map[key] = str(value)
+
+        self._map = map
+        self._stretch = bool(stretch)
+        self._template = template
+        self._width = width
+
+        # First pass: scan all interpolation expressions to find a unique
+        # prefix character.  We collect the set of first characters of all
+        # interpolation names, then find a codepoint starting at '#' (0x23)
+        # that doesn't appear.
+        bad_prefix_chars = set(_bad_prefix_characters)
+        supported = set()
+        template_entries = []
+
+        for template_line in template.split('\n'):
+            cleaned = template_line.replace('{{', '').replace('}}', '')
+
+            contains_message = in_interpolation = False
+            starred_interpolations = []
+
+            for text, open, close, change in split_delimiters(cleaned, _curly_brace_delimiters, yields=4):
+                if open:
+                    if in_interpolation:
+                        raise ValueError(f"template does not support nested curly braces (near {{{text}}})")
+                    in_interpolation = True
+                    continue
+                in_interpolation = False
+                if not close:
+                    continue
+                # strip format spec, conversion, attribute access, and indexing
+                key, sep_colon, _ = text.partition(':')
+                key, sep_bang, _ = key.partition('!')
+                key, sep_dot, _ = key.partition('.')
+                key, sep_bracket, _ = key.partition('[')
+                if not key:
+                    raise ValueError(f"interpolation lacks an initial identifier: {{{text}}}")
+                if key.isdecimal():
+                    raise ValueError(f"Formatter doesn't support positional arguments: {{{text}}}")
+                if key.endswith('*'):
+                    # it's a starred interpolation
+                    if sep_dot or sep_bracket:
+                        raise ValueError(f"starred interpolation {{{text}}} must not use a dotted or indexed expression")
+                    if sep_bang or sep_colon:
+                        raise ValueError(f"starred interpolation {{{text}}} must not use a conversion or format spec")
+                    if key == '*':
+                        raise ValueError(f"starred interpolation {{{text}}} must have a name")
+                    if key not in map:
+                        raise ValueError(f"template uses {{{key}}} but {key!r} is not defined in map")
+                    starred_interpolations.append(key)
+                elif key == 'message':
+                    contains_message = True
+                supported.add(key)
+                bad_prefix_chars.add(key[0])
+
+            template_entries.append((template_line, contains_message, starred_interpolations))
+
+        # Find a unique prefix character not used by any interpolation.
+        # Start at '#' (0x23): it's visible for debugging, and it's safe
+        # to use as a format_map key prefix.
+        unique_prefix = '#'
+        while unique_prefix in bad_prefix_chars:
+            unique_prefix = chr(ord(unique_prefix) + 1)
+
+        # Second pass: rewrite template lines, replacing starred interpolations
+        # with unique per-occurrence keys using the prefix character.
+        # Classify lines into prologue, body, and epilogue.
+        prologue = []
+        body = []
+        epilogue = []
+        state = prologue
+        test_starred_interpolations_map = {}
+        max_test_index = 0
+
+        for template_line, contains_message, starred_interpolations in template_entries:
+            if contains_message:
+                if state is prologue:
+                    state = body
+                elif state is epilogue:
+                    raise ValueError("all {message} lines in template must be contiguous")
+            else:
+                if state is body:
+                    state = epilogue
+
+            starred_interpolation_names = []
+            if starred_interpolations:
+                # replace each {key*} with {<prefix><i>} in order
+                for i, original_key in enumerate(starred_interpolations, 1):
+                    prefix_key = f"{unique_prefix}{i}"
+                    starred_interpolation_names.append((prefix_key, original_key))
+                    if i > max_test_index:
+                        test_starred_interpolations_map[prefix_key] = ''
+                        max_test_index = i
+
+                    # replace the first remaining occurrence of {original_key}
+                    before, sep, after = template_line.partition(f'{{{original_key}}}')
+                    assert sep
+                    template_line = f'{before}{{{prefix_key}}}{after}'
+
+            state.append((template_line, starred_interpolation_names))
+
+        self._prologue = prologue
+        self._body = body
+        self._epilogue = epilogue
+        self._test_starred_interpolations_map = test_starred_interpolations_map
+        self._supported = frozenset(supported)
+
+    @property
+    def template(self):
+        """The original template string."""
+        return self._template
+
+    @property
+    def map(self):
+        """A copy of the substitution dict."""
+        return dict(self._map)
+
+    @property
+    def stretch(self):
+        """If true, will increase width for an interpolation to match the longest line."""
+        return self._stretch
+
+    @property
+    def width(self):
+        """The target line width when using starred interpolations."""
+        return self._width
+
+    @property
+    def supported(self):
+        """A frozenset of all interpolation keys used by this template."""
+        return self._supported
+
+    def __repr__(self):
+        return f"Formatter({self._template!r}, {self._map!r}, width={self._width!r})"
+
+    def __call__(self, message='', **kwargs):
+        """Alias for format."""
+        return self.format_map(message, kwargs)
+
+    def format(self, message='', **kwargs):
+        """
+        Format the template with the given message and kwargs.
+
+        message must be str.
+        kwargs override the map for this call only.
+        Raises TypeError if message is not str.
+        Raises ValueError if message is non-empty but the
+        template has no {message} lines.
+        Returns the formatted string.
+        """
+        return self.format_map(message, kwargs)
+
+    def format_map(self, message='', map=None):
+        """
+        Format the template with the given message and map.
+
+        message must be str.
+        map overrides the stored map for this call only.
+        Raises TypeError if message is not str.
+        Raises ValueError if message is non-empty but the
+        template has no {message} lines.
+        Returns the formatted string.
+        """
+        if not isinstance(message, str):
+            raise TypeError(f"message must be str, not {type(message).__name__}")
+        if message and not self._body:
+            raise ValueError("message is non-empty but template has no {message} lines")
+
+        combined_map = self._map
+        if map is not None:
+            if not isinstance(map, dict):
+                raise TypeError(f"map must be dict or None, not {type(map).__name__}")
+            if map:
+                if "message" in map:
+                    raise ValueError("map must not contain 'message'")
+                combined_map = dict(combined_map)
+                for key, value in map.items():
+                    if key.endswith('*'):
+                        value = str(value)
+                    combined_map[key] = value
+
+        buffer = []
+        append = buffer.append
+        width = self._width
+        longest_base_line = 0
+
+
+        while True:
+            prologue_iter = ((entry, None) for entry in self._prologue)
+            if not self._body:
+                body_iter = ()
+            else:
+                message_lines = message.split('\n')
+                if len(self._body) > len(message_lines):
+                    body_iter = zip(self._body, message_lines)
+                else:
+                    body_iter = itertools.zip_longest(self._body, message_lines, fillvalue=self._body[-1])
+            epilogue_iter = ((entry, None) for entry in self._epilogue)
+
+            for (template_line, starred_interpolation_names), message_line in itertools.chain(prologue_iter, body_iter, epilogue_iter):
+                map_line = dict(combined_map)
+                if message_line is not None:
+                    map_line['message'] = message_line
+
+                line = None
+                if starred_interpolation_names:
+                    map_line.update(self._test_starred_interpolations_map)
+                    test_line = template_line.format_map(map_line)
+                    len_test_line = len(test_line)
+                    longest_base_line = len_test_line if len_test_line > longest_base_line else longest_base_line
+                    delta = width - len_test_line
+                    if delta <= 0:
+                        line = test_line
+                    else:
+                        count = len(starred_interpolation_names)
+                        cumulative = 0
+
+                        for i, (prefix_key, original_key) in enumerate(starred_interpolation_names, 1):
+                            fill_value = combined_map[original_key]
+                            target = int((delta * i) / count)
+                            length = target - cumulative
+                            repeated = fill_value * ((length // len(fill_value)) + 1)
+                            map_line[prefix_key] = repeated[:length]
+                            cumulative = target
+
+                if line is None:
+                    line = template_line.format_map(map_line)
+                    if not starred_interpolation_names:
+                        len_line = len(line)
+                        longest_base_line = len_line if len_line > longest_base_line else longest_base_line
+
+                append(line)
+            if self._stretch and (width < longest_base_line):
+                width = longest_base_line
+                buffer.clear()
+                continue
+            break
+
+        return "\n".join(buffer)
 
 mm()
