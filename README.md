@@ -9869,9 +9869,9 @@ others.  Views are completely independent from each other.
 
 #### 0.13.1
 
-*under development*
+*2026/03/23*
 
-This is a bugfix and polish release for 0.13, though I added
+This is mostly a bugfix and polish release for 0.13, though I added
 one new helper class in *big.template* and a few small APIs.
 
 * `linked_list` got new APIs and a heap of bug fixes!  It's more correct
