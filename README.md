@@ -235,6 +235,8 @@ And here are six little functions/classes I use all the time:
 
 [`eval_template_string(s, globals, locals=None, *, ...)`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
 
+[`Formatter(template, map=None, *, stretch=True, width=79, **kwargs)`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
+
 [`fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`](#fgreppath-text--encodingnone-enumeratefalse-case_insensitivefalse)
 
 [`file_mtime(path)`](#file_mtimepath)
@@ -321,6 +323,8 @@ And here are six little functions/classes I use all the time:
 
 [`linked_list.match(predicate)`](#linked_listmatchpredicate)
 
+[`linked_list.move(where, start=None, stop=None)`](#linked_listmovewhere-startnone-stopnone)
+
 [`linked_list.pop(index=-1)`](#linked_listpopindex-1)
 
 [`linked_list.prepend(object)`](#linked_listprependobject)
@@ -338,6 +342,8 @@ And here are six little functions/classes I use all the time:
 [`linked_list.rfind(value)`](#linked_listrfindvalue)
 
 [`linked_list.rmatch(predicate)`](#linked_listrmatchpredicate)
+
+[`linked_list.rmove(where, start=None, stop=None)`](#linked_listrmovewhere-startnone-stopnone)
 
 [`linked_list.rotate(n)`](#linked_listrotaten)
 
@@ -381,6 +387,8 @@ And here are six little functions/classes I use all the time:
 
 [`linked_list_iterator.match(predicate)`](#linked_list_iteratormatchpredicate)
 
+[`linked_list_iterator.move(where, stop=None)`](#linked_list_iteratormovewhere-stopnone)
+
 [`linked_list_iterator.next(default=undefined, *, count=1)`](#linked_list_iteratornextdefaultundefined--count1)
 
 [`linked_list_iterator.pop(index=0)`](#linked_list_iteratorpopindex0)
@@ -402,6 +410,8 @@ And here are six little functions/classes I use all the time:
 [`linked_list_iterator.rfind(value)`](#linked_list_iteratorrfindvalue)
 
 [`linked_list_iterator.rmatch(predicate)`](#linked_list_iteratorrmatchpredicate)
+
+[`linked_list_iterator.rmove(where, stop=None)`](#linked_list_iteratorrmovewhere-stopnone)
 
 [`linked_list_iterator.rpop(index=0)`](#linked_list_iteratorrpopindex0)
 
@@ -445,6 +455,8 @@ And here are six little functions/classes I use all the time:
 
 [`linked_list_reverse_iterator.match(predicate)`](#linked_list_reverse_iteratormatchpredicate)
 
+[`linked_list_reverse_iterator.move(where, stop=None)`](#linked_list_reverse_iteratormovewhere-stopnone)
+
 [`linked_list_reverse_iterator.next(default=undefined, *, count=1)`](#linked_list_reverse_iteratornextdefaultundefined--count1)
 
 [`linked_list_reverse_iterator.pop(index=0)`](#linked_list_reverse_iteratorpopindex0)
@@ -466,6 +478,8 @@ And here are six little functions/classes I use all the time:
 [`linked_list_reverse_iterator.rfind(value)`](#linked_list_reverse_iteratorrfindvalue)
 
 [`linked_list_reverse_iterator.rmatch(predicate)`](#linked_list_reverse_iteratorrmatchpredicate)
+
+[`linked_list_reverse_iterator.rmove(where, stop=None)`](#linked_list_reverse_iteratorrmovewhere-stopnone)
 
 [`linked_list_reverse_iterator.rpop(index=0)`](#linked_list_reverse_iteratorrpopindex0)
 
@@ -2009,8 +2023,10 @@ character for separator lines).
 `Log` has six built-in formats: `"print"`, `"box"`, `"enter"`,
 `"exit"`, `"start"`, and `"end"`.  User-defined formats are
 automatically added as methods on the `Log` instance.  To
-suppress the initial or final log messages, set `"start"` or
-`"end"` to `None` in the formats dict.
+suppress the start or end log banners, set `"start"` or
+`"end"` to `None` in the formats dict; this also works for
+the `"enter"` and `"exit"` formats to suppress the enter
+and exit banners.
 
 All keyword-only options are also available as read-only
 properties on the `Log` instance.
@@ -2055,8 +2071,11 @@ Closes the log.  This ensures the log is in the "closed" state,
 in which all writes are silently ignored.  To write to the log
 again after closing, call [`Log.reset()`](#logreset).
 
-* If the log is in "logging" state, it gets closed.
-* If the log is in "initial" state, it gets opened then immediately closed.
+* If the log is in "logging" state, it gets closed in an orderly
+  fashion.  This includes logging an "end" banner, if an `"end"`
+  format is defined.
+* If the log is in "initial" state, it goes directly to closed state,
+  and no `"end"` banner will be logged.
 * If the log is already "closed", this is a no-op.
 
 If `block` is true (the default), `close` won't return
@@ -2238,7 +2257,7 @@ strings for their `message` arguments.)
   is logged (one of `write`, `log`, or `enter`).  If no message
   is ever logged, `start` is never sent.
 
-* `flush` is only sent if the the log is dirty.  The log is
+* `flush` is only sent if the log is dirty.  The log is
   only considered "dirty" if any non-empty `formatted` strings
   were sent to the log.
 
@@ -3232,8 +3251,9 @@ observers to the list as needed.
 * You're permitted to modify the list of observers
   at any time--even from inside an observer callback.
   Note that this won't modify the list of observers called
-  until the *next* state transition.
-  (`StateManager` uses a snapshot of the observer list.)
+  until the *next* state transition.  (Upon every state
+  transition, `StateManager` locally caches the list of
+  observers before calling any of them.)
 * If an observer raises an exception,
   `StateManager` remembers the first exception,
   continues calling the remaining observers,
@@ -3269,11 +3289,12 @@ Python identifier string, or any false value.
 If `on_enter` is a valid identifier string, and this
 [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 object transitions to a state object *O*, and *O* has an attribute
-with this name,
+defined with this name,
 [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 will call that attribute (with no
 arguments) immediately after transitioning to that state.
-Passing in a false value for `on_enter` disables this behavior.
+Passing in a false value for `on_enter` to the `StateManager`
+constructor disables this behavior.
 
 `on_enter` is called immediately after the transition is complete,
 which means you're expressly permitted to make a state transition
@@ -3295,6 +3316,9 @@ Its default value is `'on_exit'`.
 `on_exit` is called
 *during* the state transition, which means you're expressly
 forbidden from making a state transition inside an `on_exit` call.
+
+If the `on_exit` method raises an exception, the state transition
+is aborted, and the state machine stays in the current state.
 
 </dd><dt>
 
@@ -3322,9 +3346,11 @@ attribute.
   at any time `self.next` is not `None`.)
 * If the current state object has an `on_exit` method,
   it will be called (with zero arguments) *during*
-  the the transition to the next state.  This means it's
+  the transition to the next state.  This means it's
   illegal to initiate a state transition inside an `on_exit`
-  call.
+  call.  If the `on_exit` method raises an exception,
+  the state transition is aborted, and the `StateManager`
+  stays in the current state.
 * If you assign an object to `state` that has an `on_enter`
   attribute, that method will be called (with zero
   arguments) immediately *after* we have transitioned to that
@@ -3333,14 +3359,17 @@ attribute.
 * If the current state object's `on_exit` raises an exception,
   the transition is aborted, `state` remains unchanged,
   and `next` is restored to `None`.
-* If an observer raises an exception,
-  the transition still completes,
-  `next` is restored to `None`,
-  and `StateManager` re-raises the first observer exception
-  after completing the transition.
+* If an observer raises an exception, the transition still
+  completes, `next` is restored to `None`, and `StateManager`
+  re-raises the first observer exception after completing
+  the transition.
 * It's illegal to attempt to transition to the current
   state.  If `state_manager.state` is already `foo`,
   `state_manager.state = foo` will raise an exception.
+  (However, it's legal to transition to an object `bar`
+  even if `foo == bar` is true.  Equivalent objects are
+  fine; you just can't transition to literally the *same*
+  object.)
 
 #### Sequence of events during a state transition
 
@@ -3414,6 +3443,105 @@ patterned after
 [Django Templates](https://docs.djangoproject.com/en/stable/ref/templates/language/)
 and [Jinja](https://jinja.palletsprojects.com/).
 Similar in spirit to Python 3.14+ t-strings.
+
+</dd></dl>
+
+#### `Formatter(template, map=None, *, stretch=True, width=79, **kwargs)`
+
+<dl><dd>
+
+A sophisticated template formatter, similar to `str.format`.
+
+The `Formatter` constructor takes the following arguments:
+    * `template`, a string.  Calling the `Formatter` object
+      is like calling the `str.format` method on that string.
+    * `map`, a `dict` or `None`, default `None`.  If a `dict`,
+      pre-initializes values used at interpolation time.
+    * `width`, an integer, default 79, the target width of
+      lines when computing "starred interpolations".
+    * `stretch`, a boolean, default `True`, also used in
+      conjunction with "starred interpolations".
+
+Also, additional `**kwargs` are used as additional pre-initialized
+map values, and take precedence over the "map" parameter.
+
+Returns a `Formatter` object.  Calling this object formats
+the template string using `str.format_map` and returns
+the result.  Substitutions in the template use `str.format_map`
+syntax.  The signature of this callable is:
+
+```Python
+   fn(message=''', **kwargs)
+```
+
+The `**kwargs` passed in here are also used as values for the
+interpolation, and take precedence over any value passed in to the constructor.
+
+Formatter has two additional features:
+
+    * Special support for an interpolation named `"{message}"`,
+      which are formatted in conjunction with the "message" parameter.
+      If your template contains one or more lines containing `"{message}"`,
+      these "message lines" are formatted using the lines of the `message`
+      argument.  The "message" argument is split by the newline character
+      (`'\n'`) and these are zipped together with the "message lines";
+      the first "message line" will be formatted with the first line
+      of the "message" parameter, the second with the second, etc.
+
+        * If there are more "message lines" in the template than lines
+          in the "message" parameter, the additional "message lines"
+          are discarded.  Example: if there are three "message lines"
+          in the template, but only two lines in the "message" parameter,
+          the third "message line" won't appear in the output.
+
+        * If there are more lines in the "message" parameter than
+          "message lines" in the template, the last template
+          "message line" will be repeated.  Example: if there are
+          three lines in the "message" parameter, but only two
+          "message lines" in the template, the last "message line"
+          will be repeated, used to format the last two lines of
+          the "message" parameter.
+
+    * Values whose keys end with `'*'` (e.g. `"{line*}"`) are special:
+      they are "starred interpolations".  Their value is repeated
+      zero or more times then truncated until the line is at least
+      "width" characters.  Starred interpolations must not use:
+
+        * dotted expressions (`"{line.foo*}"`)
+        * indexing (`"{line[3]*}"`)
+        * a conversion (`"{line*!r}"`)
+        * or a format spec (`"{line*:5}"`)
+
+    If `stretch` is true, `Formatter` calculates the width of the
+    longest formatted line (assuming all starred interpolations
+    are length 0), then recomputes width as
+
+```Python
+    width = max(longest_line, width)
+```
+
+  This means the starred interpolations will "stretch" to fit
+  the longest line of the output.
+
+   Example:
+
+```Python
+    fmt = Formatter('{line*}\\n{name} start\\n>> {message}\\n<< {message}\\n{double*}{line*}',
+      {'line*': '-', 'double*': '=', 'name': 'Log'},
+      width=20)
+    print(fmt("hello\\nthere\\nworld!"))
+```
+
+This prints:
+
+```
+    --------------------
+    Log start
+    >> hello
+    << there
+    << world!
+    ==========----------
+```
 
 </dd></dl>
 
@@ -4413,6 +4541,11 @@ Here's a list of all the delimiters recognized by `python_delimiters`:
   linebreak (`\n`) or a carriage return (`\r`).  (Python's
   "universal newlines" support should mean you won't normally
   see carriage returns here... unless you specifically permit them.)
+  If the text being split ends with a comment *without* a newline,
+  you'll see yield where `open` is `'#'`, followed by a
+  slightly-strange final yield: `text` will be the body of the
+  comment, and the `open`, `close`, and `change` fields will all be
+  an empty string.
 
 See also `python_delimiters_version`.
 
@@ -5395,6 +5528,61 @@ Equivalent to calling
 string.
 </dd></dl>
 
+
+#### `string.partition(sep, *, count=1)` and `string.rpartition(sep, *, count=1)`
+
+<dl><dd>
+
+Behaves like `str.partition` and `str.rpartition`,
+but adds one feature: a `count=` parameter that
+specifies how many times to split the string.
+`count` must be an "index" with a value 0 or higher.
+The returned tuple will be length `(count * 2) + 1`.
+</dd></dl>
+
+### `string_context`
+
+The value returned by the `string.context` property.
+
+`str(s.context)` evaluates to a string that represents
+the "context" of `s`--where `s` was sliced from in the
+larger string object.  For example:
+
+```Python
+    line = "elif attempt(blast):"
+    s = line.partition('(')[2][:5] # s is 'blast'
+    print(s.context)
+```
+
+would print:
+
+```
+    elif attempt(blast):
+                 ^^^^^
+```
+
+Note that `str(s.context)` only shows one line of context;
+if `s` is a multi-line string, this will only show the first
+line.  If you want to show all lines, use `s.context.all`
+instead, see below.
+
+`string_context` supports the following attributes:
+
+* `parts` is a tuple of "context line" tuples representing
+  the lines of `str(context)`.  Each "context line" tuple
+  matches `(before, span, after, linebreak)`, and has named
+  accessors for these values.  These values are strings;
+  joining all the strings of all the tuples produces
+  `str(context)`.
+* `all` is like `str(context)`, but contains context lines
+  for all lines, in case `context` contains linebreaks.
+* `all_parts` is like `parts`, but contains the parts for
+  all the lines of `all`.
+
+In addition, it provides many of the `string` properties,
+like `where`, `origin`, `line_number`, etc.  These are the
+same as the `string` object the context was taken from.
+
 ### `linked_list`
 
 <dl><dd>
@@ -5464,20 +5652,35 @@ Returns the number of occurrences of `value` in the linked list.
 
 <dl><dd>
 
-Cuts a range of nodes from the list and returns them as a
-new `linked_list`.
+Cuts nodes from this list and returns them in a new `linked_list`.
 
 `start` and `stop`, if specified, must be iterators over this
 list.  If `start` is `None`, it defaults to the first node
-after head.  If `stop` is `None`, it defaults to tail.
-The range includes `start` but excludes `stop`.  `start`
-must not point to a node after `stop`.
+after head.  (If the list is empty, this will be tail.)
+If `stop` is `None`, it defaults to tail.
+The range of nodes cut includes `start` but excludes `stop`.
+`start` must not point to a node after `stop`.
 
 `lock` is passed to the new list's constructor; if `None`,
-the new list reuses this list's lock parameter.
+the new list reuses this list's `lock` parameter.
 
-Will not cut head.  Raises `SpecialNodeError` if `start`
-points to head.
+If any nodes are cut, the `start` and `stop` iterators will
+still point at the same nodes--which means `start` will have
+been moved to the new list.
+
+Raises `SpecialNodeError` if `start` points to head,
+because you can't cut the head of the list.
+
+`start` and `stop` may be reverse iterators; however, the
+linked list resulting from a cut will have the elements
+in forward order.  If either `start` or `stop` is a reverse
+iterator, then they must both be reverse iterators (or `None`),
+and:
+
+ * `start` defaults to the last node before tail,
+ * `stop` defaults to head,
+ * `start` must not point to a node after `stop`, and
+ * raises `SpecialNodeError` if `start` points to head.
 
 See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
 </dd></dl>
@@ -5530,6 +5733,34 @@ Returns an iterator pointing at the first value for which
 such value exists.
 </dd></dl>
 
+#### `linked_list.move(where, start=None, stop=None)`
+
+<dl><dd>
+
+Moves a range of nodes to after `where`.
+
+`start` and `stop`, if specified, must be iterators over this
+list.  If `start` is `None`, it defaults to the first node
+after head.  (If the list is empty, this will be tail.)
+If `stop` is `None`, it defaults to tail.  The range of nodes
+moved includes `start` but excludes `stop`.  `start` must not point
+to a node after `stop`.  `where` must be an iterator over this list.
+`where` must not point to a node being moved, or tail.
+
+Raises `SpecialNodeError` if `start` points to head,
+because you can't move the head of the list.
+
+`start` and `stop` may be reverse iterators.  If either `start`
+or `stop` is a reverse iterator, then they must both be reverse
+iterators (or `None`), and:
+
+ * `start` defaults to the last node before tail,
+ * `stop` defaults to head,
+ * `start` must not point to a node after `stop`, and
+ * raises `SpecialNodeError` if `start` points to head.
+
+</dd></dl>
+
 #### `linked_list.pop(index=-1)`
 
 <dl><dd>
@@ -5576,7 +5807,7 @@ otherwise raises `ValueError`.
 
 <dl><dd>
 
-Reverses all values in the linked list in place.
+Reverses all nodes in the linked list, including special nodes.
 </dd></dl>
 
 #### `linked_list.rextend(iterable)`
@@ -5602,6 +5833,18 @@ or `None` if `value` does not appear.
 Returns an iterator pointing at the last value for which
 `predicate(value)` returns a true value, or `None` if no
 such value exists.
+</dd></dl>
+
+#### `linked_list.rmove(where, start=None, stop=None)`
+
+<dl><dd>
+
+Like [`linked_list.move`,](#linked_listmovewhere-startnone-stopnone)
+but `start` must come *after* `stop`, the nodes are inserted
+*before* `where`, and `where` cannot be head.  All other behaviors
+are unchanged (e.g. `start` is inclusive, `stop` is exclusive).
+
+
 </dd></dl>
 
 #### `linked_list.rpop(index=0)`
@@ -5634,9 +5877,11 @@ otherwise raises `ValueError`.
 <dl><dd>
 
 Like [`linked_list.splice`](#linked_listspliceother--wherenone),
-except: if `where` is `None`, the nodes are prepended (rather
-than appended).  If `where` is not `None`, the nodes are inserted
-before (rather than after) the node pointed to by `where`.
+except: if `where` is `None`, the nodes are prepended to the list.
+If `where` is not `None`, the nodes are inserted before
+(rather than after) the node pointed to by `where`.  Raises
+`SpecialNodeError` if `where` is head, because you can't insert
+nodes before head.
 </dd></dl>
 
 #### `linked_list.sort(key=None, reverse=False)`
@@ -5644,7 +5889,9 @@ before (rather than after) the node pointed to by `where`.
 <dl><dd>
 
 Sorts the linked list in ascending order.  Arguments are the
-same as `list.sort`.
+same as `list.sort`.  `linked_list.sort` moves nodes rather
+than swapping values, so iterators continue to point at the
+same nodes.
 </dd></dl>
 
 #### `linked_list.splice(other, *, where=None)`
@@ -5658,7 +5905,8 @@ will be empty.
 `where` must be an iterator over this list, or `None`.
 If `where` is an iterator, the nodes are inserted after
 the node pointed to by `where`.  If `where` is `None`,
-the nodes are appended.
+the nodes are appended.  Raises `SpecialNodeError` if
+`where` is tail, because you can't insert nodes after tail.
 
 See the [**The big `linked_list`**](#the-big-linked_list) tutorial for more.
 </dd></dl>
@@ -5820,6 +6068,15 @@ Returns an iterator pointing at the nearest next value for which
 value exists before tail.
 </dd></dl>
 
+#### `linked_list_iterator.move(where, stop=None)`
+
+<dl><dd>
+
+Moves nodes from the current node up to (but not including) `stop`
+to after `where`.  If `stop` is `None`, the moved range extends to tail.
+
+</dd></dl>
+
 #### `linked_list_iterator.next(default=undefined, *, count=1)`
 
 <dl><dd>
@@ -5911,6 +6168,16 @@ of `value`, or `None` if not found before head.
 Returns an iterator pointing at the nearest previous value for which
 `predicate(value)` returns a true value, or `None` if no such
 value exists before head.
+</dd></dl>
+
+#### `linked_list_iterator.rmove(where, stop=None)`
+
+<dl><dd>
+
+Like [`linked_list_iterator.move`](#linked_list_iteratormovewhere-stopnone),
+but moves the range to before `where` and walks the range in the reverse
+direction.
+
 </dd></dl>
 
 #### `linked_list_iterator.rpop(index=0)`
@@ -6084,6 +6351,13 @@ Returns the `linked_list` this iterator belongs to.
 Behaves like [`linked_list_iterator.rmatch`](#linked_list_iteratorrmatchpredicate).
 </dd></dl>
 
+#### `linked_list_reverse_iterator.move(where, stop=None)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.rmove`](#linked_list_iteratorrmovewhere-stopnone).
+</dd></dl>
+
 #### `linked_list_reverse_iterator.next(default=undefined, *, count=1)`
 
 <dl><dd>
@@ -6159,6 +6433,13 @@ Behaves like [`linked_list_iterator.find`](#linked_list_iteratorfindvalue).
 <dl><dd>
 
 Behaves like [`linked_list_iterator.match`](#linked_list_iteratormatchpredicate).
+</dd></dl>
+
+#### `linked_list_reverse_iterator.rmove(where, stop=None)`
+
+<dl><dd>
+
+Behaves like [`linked_list_iterator.move`](#linked_list_iteratormovewhere-stopnone).
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rpop(index=0)`
@@ -6916,6 +7197,7 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
 * As a rule, actions on iterators that act on multiple nodes include the node they're pointing at.
 * iterator[0] *always* refers to the node the iterator is currently pointing at, even if it's a special
   node.  If the index is non-zero, it skips over special nodes.
+* You can't ever insert a node *before* head.  You can't ever insert a node *after* tail.
 
 
 </dd></dl>
@@ -7085,7 +7367,8 @@ Log start at 2026/02/15 13:14:13.648816 PST
 
 As you can see, `Log` automatically adds a "start" banner showing the current
 local time that the log was started.  (There's a symmetric "end" banner produced
-when the log is closed.)
+when the log is closed.)  These banners are only emitted if some logging
+operation produces non-empty formatted output.
 
 Also, every printed log message gets a "prefix", showing the elapsed time
 so far (since the start of the log) and the thread that logged the message.
@@ -7105,7 +7388,8 @@ j.write("This was written without formatting!\nLine breaks work too!\n")
 
 This is useful in case you've carefully formatted some text by hand and
 you want to dump it straight into the log.  (Or you simply want to suppress
-the per-line prefix.)
+the per-line prefix.)  Passing an empty string to `Log.write` is a no-op;
+it does not start the log and it does not emit banners.
 
 `Log` also supports a method called `box` that writes a message with a three-sided
 box drawn around it:
@@ -7196,15 +7480,19 @@ will flush all buffered messages.  If `block` is true (the default), the
 is false, `flush` may start the flushing process but won't necessarily
 wait until it's complete.
 
-`Log.close(block=True)` flushes then closes the log.  When a log is closed,
-it *ignores* all attempts to write log messages to the log.  No error is
-reported--the messages are simply ignored.  The only way to re-open a
-closed log is to call its `reset` method.  The `block` parameter works
+`Log.close(block=True)` closes the log.  If the log is dirty, it flushes
+first.  When a log is closed, it *ignores* all attempts to write log
+messages to the log.  No error is reported--the messages are simply
+ignored.  The only way to re-open a closed log is to call its `reset`
+method.  If a log is still in its initial state when you close it, it
+closes directly without emitting the start banner, end banner, or any
+destination events besides `register`.  The `block` parameter works
 the same as it does for `flush`.
 
-`Log.reset()` resets a log to its initial state.  After a log is reset,
-it will print the "start" banner.  Resetting the log is the only way
-to re-open a closed log.
+`Log.reset()` resets a log to its initial state.  Resetting the log is the
+only way to re-open a closed log.  After reset, the log behaves like a
+fresh log and won't emit the start banner until some operation produces
+non-empty formatted output.
 
 Every `Log` also registers an "atexit" handler.  The "atexit" handler
 closes the `Log` if it hasn't been closed already.
@@ -7439,9 +7727,9 @@ and `Log.__call__`, construct your `Log` as follows:
 j = big.Log(..., formats={"print": {"template": "{message}"}})
 ```
 
-You can also suppress the "start banner" and "end banner", by setting those
-to `None` in the `formats` dict you pass in.  This log won't print the
-start and end banners:
+You can also suppress the `start`, `end`, `enter`, and `exit` banners by
+setting any of those formats to `None` in the `formats` dict you pass in.
+This log won't print the start and end banners:
 
 ```Python
 j = big.Log(..., formats={"start": None, "end": None})
@@ -7525,44 +7813,48 @@ or `None` if the message isn't associated with a particular thread
 `formatted` is the formatted string to be written to the log.
 `Destination.write` is called directly to implement `Log.write`.
 
-Next there are five optional `Destination` methods
-representing high-level method calls on the `Log` object:
+Next there are seven optional `Destination` methods
+representing higher-level events sent by the `Log` object:
 
 ```Python
-    def start(self, start_time_ns, start_time_epoch, formatted):
-        ...
-
-    def end(self, elapsed, formatted):
-        ...
-
     def log(self, elapsed, thread, format, message, formatted):
         ...
 
-    def enter(self, elapsed, thread, message, formatted):
+    def flush(self):
         ...
 
-    def exit(self, elapsed, thread, message, formatted):
+    def reset(self):
+        ...
+
+    def start(self, start_time_ns, start_time_epoch):
+        ...
+
+    def end(self, elapsed):
+        ...
+
+    def enter(self, elapsed, thread, message):
+        ...
+
+    def exit(self, elapsed, thread):
         ...
 ```
 
-These map respectively to the "start banner", the "end banner",
-`Log.print` (and `Log.__call__`), `Log.enter`, and `Log.exit`.
-If you implement one of these, it'll be called when the user
-calls that method on the `Log`.  If you don't bother, you'll
-get the base class implementation, which calls
-`self.write(elapsed, thread, message)`.
+`Destination.log` is called for `Log.print`, `Log.__call__`, and the
+`start`, `end`, `enter`, and `exit` banners when those banners produce
+non-empty formatted text.  `Destination.enter` and `Destination.exit` are
+separate events that bracket changes in indentation depth.  `Destination.start`
+and `Destination.end` report lifecycle changes for the log itself.
+If you don't override `Destination.log`, the base class implementation calls
+`self.write(elapsed, thread, formatted)`.
 
-`Destination` also supports optional methods handling the
-three `Log` methods that don't send a log message:
+`Destination` also supports optional methods handling the two `Log` methods
+that don't send a log message:
 
 ```Python
     def reset(self):
         ...
 
     def flush(self):
-        ...
-
-    def close(self):
         ...
 ```
 
@@ -7577,8 +7869,8 @@ method, passing in the `owner` parameter, like so:
         ...
 ```
 
-`Log` objects obey a certain lifecycle, and guarantee that
-the `Destination` methods will be called in this order:
+`Log` objects obey a certain lifecycle.  If the log ever produces non-empty
+formatted output, the `Destination` methods will be called in this order:
 
 ```
 register
@@ -7595,19 +7887,16 @@ write | log | enter | exit | flush   |
   +----------------------------------+
   |
   v
-end
-  |
-  v
 [flush]
   |
   v
-close
+end
 ```
 
-The final `flush`, before `close`, is optional; it's only called
-if the `Log` is "dirty".  (If the `Log` has sent formatted text to
-its destinations since the log was started, or the last time the
-log was flushed.)
+The final `flush`, before `end`, is optional; it's only called
+if the `Log` is dirty.  If a log is created and then closed without ever
+producing non-empty formatted output, destinations only receive the initial
+`register` event.
 
 ### Final notes on `Log`
 
@@ -9580,119 +9869,99 @@ others.  Views are completely independent from each other.
 
 #### 0.13.1
 
-*under development*
+*2026/03/23*
 
-Observing the big release tradition: a day after I ship a big
-chunk of work, I make a new release to make a dinky tweak to
-it.
+This is mostly a bugfix and polish release for 0.13, though I added
+one new helper class in *big.template* and a few small APIs.
 
-* Retooled `Log`, resulting in observable behavior changes
-  and breaking API changes.  Sorry, but this is really for
-  the best!  The already awesome `Log` is even super-better-er
-  now!
-
-   * The `Log` that shipped in 0.13 had a somewhat annoying
-     behavior that I didn't notice: if you created a `Log`
-     object, but never logged any text, it would still print
-     the "start banner" and "end banner".  This is fixed,
-     but pulling on this thread unraveled a lot of the sweater,
-     as the expression goes, resulting in all this rewriting.
-   * In 0.13, if you called `Log.write` with an empty string,
-     the call was ignored; nothing was sent to the log, and
-     the destinations were not called.  But if you called
-     `Log.print` in such a way that the resulting formatted
-     text was empty, it would still send a `log` event to
-     the destinations.  In 0.13.1, this is changed; `Log.print`
-     calls that produce an empty string for their formatted
-     text are ignored.  In fact, any internally generated log
-     message that produces an empty string for its formatted
-     text is ignored.
-   * In 0.13, you could suppress the "start banner" and
-     "end banner" by setting their respective format to
-     `None` in the `formats` dict passed in to the `Log`
-     constructor.  In 0.13.1, this has been extended to
-     `Log.enter` and `Log.exit`; you can suppress their
-     banners by setting their format to `None`.
-   * Redesigned the API and semantics around the `formats`
-     dict.  The result is so good, you'll want to use it
-     in your own code, outside of the `Log` object!  Which
-     is why it now lives outside `Log` as the brilliant new
-     `big.template.Formatter` class.
-
-* Breaking changes to the `Log.Destination` API:
-
-   * The `start`, `end`, `enter`, and `exit` methods no longer
-     take the `formatted` parameter.  This parameter conveyed
-     the formatted "banner" associated with the message (e.g.
-     `start` took a `formatted` parameter containing the "start
-     banner" formatted text).
-     In 0.13.1, the "banner" is now sent separately, as its
-     own `log` call.
-       * `start` is followed immediately by a `log` call
-         using the `start` format.
-       * `enter` is followed immediately by a `log` call
-         using the `enter` format.
-       * `exit` is immediately preceded by a `log` call
-         using the `exit` format.
-       * `end` is immediately preceded by a `log` call
-         using the `end` format, optionally followed by
-         a `flush`.
-   * As per the previously describe change for `Log.print`,
-     any `log` call where the `formatted` parameter would
-     be an empty string is discarded.  So if the
-
-* As alluded to earlier, added `Formatter` to *big.template*.
-  This has a different approach to text formatting, and
-  includes a sophisticated approach to horizontal alignment.
-
-
-* Retooled `Log` behavior around "start" and "end".  Bad news:
-  this is a breaking change.  (Good news: it probably won't
-  affect anybody, I doubt anyone has started writing their
-  own Destinations already.)  The problem: in 0.13, if you
-  create a Log with default behavior (no positional arguments,
-  no keyword-only arguments), and you *never* print to it,
-  it still prints the "start banner" and the "end banner".
-  That's kinda dumb, huh.  Addressing this caused me to re-think
-  a few things.  The basic approach: disconnect the "start banner"
-  from the `start` event, and disconnect the "end banner"
-  from the `end` event.  This had ramifications for other
-  parts of the API.  Here's the full list of resulting changes:
-   * `Destination.start` and `Destination.end` no longer take
-     a `formatted` argument.
-   * `Destination.start(self, start_time_ns, start_time_epoch)`
-     is called lazily, just before the first `write`, `log`,
-     or `enter` event is logged.  `start` is sent even if the
-     event has no `formatted` text.
-   * `Destination.close()` has been removed.  Instead, the last
-     event sent to a destination is `Destination.end(elapsed)`,
-     after the optional `flush`.
-   * The "start banner" and "end banner" are now logged
-     as their own `Destination.log`.  For these `log` events,
-     `thread` is `None`, `message` is an empty string, and `format`
-     is either `"start"` or `"end"` respectively.  (The `elapsed`
-     parameter is accurate; for `start` it's `0`, and for `end`
-     it's the (elapsed) time the log was closed.)
-   * The "start banner" is logged immediately before the first
-     message logged that has any `formatted` text. The "end banner"
-     is only logged if the "start banner" was ever logged, in which
-     case it's logged immediately before the final `flush` event
-     (which in turn is immediately before the `end` event).
-   * If you close a log without ever logging a message,
-     the log internally goes directly from "initial" state
-     to "closed" state, and never sends *any* events to
-     the destinations (apart from the "register").  The
-     `start` and `end` events are *not* sent.  If you
-     then reset the log while in this state, it also
-     doesn't send a `reset` event to the destinations.
-     (Why?  The log state has not meaningfully changed,
-     there's no point in marching the destinations through
-     pointless non-events.)
-* Swapped two of the parameters for `Destination.log`.
-  This makes more sense, and again I don't think anybody is using
-  it yet.  The new prototype is `def log(self, elapsed, thread, message, format, formatted)`.
-  (I swapped `message` and `format`.  Sorry, I guess I just like chaos.)
-
+* `linked_list` got new APIs and a heap of bug fixes!  It's more correct
+  than ever!
+  * Added `move()` / `rmove()` to `linked_list`, `linked_list_iterator`, and
+    `linked_list_reverse_iterator`.  Moves nodes internally inside a linked
+    list--like a `cut` followed by a `splice`, but cheaper.
+  * Breaking API change: `splice` used to allow you to pass in tail for `where`,
+    and `rsplice` used to allow you to pass in head for `where`, and honestly
+    its behavior was a little weird when you did.  Those values are no longer
+    allowed.  The rule is: you can't ever add nodes before head or after tail;
+    sadly, in 0.13, `splice` and `rsplice` got it wrong.
+  * `reverse()` and `sort()` now move nodes rather than swapping values;
+    this means iterators continue to point to the same value.  (What about
+    special nodes?  `reverse` reverses those too, just like data nodes;
+    `sort` groups special nodes with their *subsequent* data node, or tail.)
+  * Fixed a number of iterator, locking, rotation, clearing, and cut/splice
+    edge cases.
+  * The "head" and "tail" nodes are now instances of special classes that
+    disallow writing to some attributes.  This would have caught an obscure
+    regression bug (which is also fixed) and should preclude similar bugs
+    in the future.
+* `string` got one new feature and some `str` compatibility improvements:
+  * Added `string.context`: a property returning a `string_context`
+    object.  `str(s.context)` produces a "context string", showing
+    the entire line `s` was sliced from, and adding a second line below
+    it with a line of carets (`"^^^"`) calling attention to `s` in context.
+    This can make error messages even nicer!  The full `string_context`
+    object contains the individual components, as well as the full
+    context string for multi-line strings.  (`str(s.context)` only
+    shows the first line of context for multi-line slices.)
+  * Lots of little bugfixes: reverse-slice edge cases, `join([])`,
+    signed `zfill()`, `removesuffix('')`, `partition('')` and
+    `rpartition('')`, and `replace('', ...)`.
+  * Added broader `__index__` support where `string` mirrors `str` APIs.
+  * Improved support for stateless subclasses of `string`.  (If you want
+    to subclass `string` *and* add new attributes, you'll probably have a
+    rough time.  File a bug and maybe we can improve the interfaces for you.)
+* Several quality-of-life improvements for the new `Log` class:
+  * The log object no longer logs the start banner or end banner
+    unless some operation actually logs some (formatted) output.
+    If you never log a message, you don't get spurious (and
+    uninteresting) start and end banners.
+  * Mapping `'enter'` or `'exit'` to `None` in the `formats` dict you
+    pass in to the constructor will suppress the `enter` and `exit`
+    banners respectively.
+  * `Log.write('')` is ignored; you have to log some text for real
+    to cause the start and end banners to happen.
+  * *Note:* I have a major, backwards-incompatible rewrite of
+    `Log` under process.  The `Log` interface will change some,
+    `Destination` will change completely, and `Sink` will change a
+    whole lot too.  You're gonna love it!  (In the meantime...
+    don't get too comfortable!)
+* Added [`Formatter`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
+  to [*big.template*](#bigtemplate).  `Formatter` is a reusable formatter for
+  multi-line text templates with clever support for repeated / stretched
+  line-fill fields via "starred interpolations".
+* `StateManager` fixes in *big.state*:
+  * If `on_exit` raises an exception, the transition is aborted;
+    `state` remains unchanged, and `next` is reset to `None`.
+  * `StateManager` now handles observers raising an exception.
+    If any observer raises an exception, `StateManager` remembers the first
+    exception raised, continues calling the remaining observers,
+    completes the transition, and then re-raises that first exception.
+  * Observer lists are no longer cached internally--they're now snapshotted
+    at the start of every transition.  This fixes an obscure edge case:
+    if you replaced one observer A with another observer B, and A == B even
+    though they're different objects, the `StateMachine` wouldn't refresh
+    its cache and would continue calling A.
+  * Trimmed no-op `StateMachine.on_enter` and  `StateMachine.on_exit`
+    methods.  They were useless in and of themselves, but I put them
+    there on the theory that they'd help with autocomplete for these
+    methods in subclasses when using advanced editors like PyCharm.
+    But that's not a strong enough reason to keep 'em.  Sorry, you'll
+    just have to type `def on_enter(self):` by hand yourself, like
+    some sort of caveman.
+* `big.text` multi-function fixes and polish:
+  * `multistrip`, `multisplit`, and `multipartition`/`multirpartition`
+    now correctly accept one-shot iterables--like generators--for
+    their `separator` argument.
+  * `multistrip`: fixed `strip=PROGRESSIVE` when `maxsplit=None`.
+  * Added `__index__` support for `maxsplit` and `count` parameters.
+  * Documentation updates, reflecting these functions returning
+    slices of the original object (rather than guaranteed `str`
+    or `bytes` objects).  This has been true for a while, but the
+    documentation was stale.
+* Minor bugfixes in `parse_template_string` in *big.template:*
+  * Improved error message for an unterminated comment;
+    it now shows where the comment started, not where it ended.
+  * Now catch tokenization errors and re-raise a nicer exception.
 
 #### 0.13
 

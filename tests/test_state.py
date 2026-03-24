@@ -196,6 +196,7 @@ class StateManagerTests(unittest.TestCase):
 
         observer1 = Observer('observer1')
         observer2 = Observer('observer2')
+        self.assertEqual(observer1, observer2)
 
         state_manager = StateManager(...)
         state_manager.observers.append(observer1)
@@ -291,8 +292,7 @@ class StateManagerTests(unittest.TestCase):
                     event("exit true.")
 
                 def on_toggle_already(self):
-                    event("true.toggle")
-                    self.state_machine.state = self.state_machine.FalseState()
+                    event("true.toggle") ; self.state_machine.state = self.state_machine.FalseState()
 
             @dispatch('estate_mangler', prefix='on_', suffix='_already')
             def toggle(self): # pragma: no cover
@@ -319,6 +319,62 @@ class StateManagerTests(unittest.TestCase):
             ]
         self.assertEqual(events, expected_events)
 
+    def test_dispatch_funny_names_direct_true_toggle(self):
+        events = []
+        event = events.append
+
+        @accessor(state_manager='estate_mangler')
+        class MiamiStateMachine:
+            def __init__(self):
+                self.estate_mangler = StateManager(self.TrueState(),
+                    on_enter='hey_lets_enter',
+                    on_exit='oh_no_exit_time',
+                    )
+
+            @big.BoundInnerClass
+            class FalseState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event("enter false!")
+
+                def oh_no_exit_time(self):
+                    event("exit false.")
+
+                def on_toggle_already(self):
+                    event("false.toggle")
+                    self.state_machine.state = self.state_machine.TrueState()
+
+            @big.BoundInnerClass
+            class TrueState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event("enter true!")
+
+                def oh_no_exit_time(self):
+                    event("exit true.")
+
+                def on_toggle_already(self):
+                    event("true.toggle")
+                    self.state_machine.state = self.state_machine.FalseState()
+
+        msm = MiamiStateMachine()
+        msm.state.on_toggle_already()
+        self.assertEqual(msm.state.__class__.__name__, 'FalseState')
+        msm.state.on_toggle_already()
+        self.assertEqual(msm.state.__class__.__name__, 'TrueState')
+        self.assertEqual(events, [
+            'enter true!',
+            'true.toggle',
+            'exit true.',
+            'enter false!',
+            'false.toggle',
+            'exit false.',
+            'enter true!',
+            ])
 
     def test_integers_as_states(self):
         @accessor()
@@ -439,8 +495,7 @@ class StateManagerTests(unittest.TestCase):
                 self.stock = collections.defaultdict(int)
                 self.not_ready = self.NotReadyToVend()
                 self.ready = self.ReadyToVend()
-                self.state_manager = StateManager(self.not_ready,
-                    state_class=self.VendingMachineState)
+                self.state_manager = StateManager(self.not_ready, state_class=self.VendingMachineState)
 
             def restock(self, product, count):
                 assert isinstance(count, int)
@@ -604,6 +659,64 @@ class StateManagerTests(unittest.TestCase):
                 self.assertEqual(result, None)
                 self.assertEqual(change, quarter + quarter + dime)
 
+
+
+
+    def test_dispatch_funny_names_direct_round_trip(self):
+        events = []
+        event = events.append
+
+        @accessor(state_manager='estate_mangler')
+        class MiamiStateMachine:
+            def __init__(self):
+                self.estate_mangler = StateManager(self.TrueState(),
+                    on_enter='hey_lets_enter',
+                    on_exit='oh_no_exit_time',
+                    )
+
+            @big.BoundInnerClass
+            class FalseState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event('enter false!')
+
+                def oh_no_exit_time(self):
+                    event('exit false.')
+
+                def on_toggle_already(self):
+                    event('false.toggle')
+                    self.state_machine.state = self.state_machine.TrueState()
+
+            @big.BoundInnerClass
+            class TrueState:
+                def __init__(self, state_machine):
+                    self.state_machine = state_machine
+
+                def hey_lets_enter(self):
+                    event('enter true!')
+
+                def oh_no_exit_time(self):
+                    event('exit true.')
+
+                def on_toggle_already(self):
+                    event('true.toggle')
+                    self.state_machine.state = self.state_machine.FalseState()
+
+        msm = MiamiStateMachine()
+        msm.state.on_toggle_already()
+        msm.state.on_toggle_already()
+        self.assertEqual(events, [
+            'enter true!',
+            'true.toggle',
+            'exit true.',
+            'enter false!',
+            'false.toggle',
+            'exit false.',
+            'enter true!',
+            ])
+        self.assertEqual(msm.state.__class__.__name__, 'TrueState')
 
 def run_tests():
     bigtestlib.run(name="big.state", module=__name__)

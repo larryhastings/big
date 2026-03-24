@@ -435,45 +435,84 @@ class Formatter:
     """
     A sophisticated template formatter, similar to str.format.
 
+    The Formatter constructor takes the following arguments:
+        * 'template', a string.  Calling the Formatter object
+           is like calling the 'str.format' method on that string.
+        * 'map', a dict or None, default None.  If a dict,
+          pre-initializes values used at interpolation time.
+        * 'width', an integer, default 79, the target width of
+          lines when computing "starred interpolations".
+        * 'stretch', a boolean, default True, also used in
+          conjunction with "starred interpolations".
+
+    Also, additional **kwargs are used as additional pre-initialized
+    map values, and take precedence over the "map" parameter.
+
+    Returns a Formatter object.  Calling this object formats
+    the template string using 'str.format_map' and returns
+    the result.  Substitutions in the template use 'str.format_map'
+    syntax.  The signature of this callable is:
+
+        fn(message=''', **kwargs)
+
+    The **kwargs passed in here are also used as values for the
+    interpolation, and take precedence over any value passed in
+    to the constructor.
+
+    Formatter has two additional features:
+        * Special support for an interpolation named "{message}",
+          which are formatted in conjunction with the "message" parameter.
+          If your template contains one or more lines containing "{message}",
+          these "message lines" are formatted using the lines of the "message"
+          argument.  The "message" argument is split by the newline character
+          ('\\n') and these are zipped together with the "message lines";
+          the first "message line" will be formatted with the first line
+          of the "message" parameter, the second with the second, etc.
+            * If there are more "message lines" in the template than lines
+              in the "message" parameter, the additional "message lines"
+              are discarded.  Example: if there are three "message lines"
+              in the template, but only two lines in the "message" parameter,
+              the third "message line" won't appear in the output.
+            * If there are more lines in the "message" parameter than
+              "message lines" in the template, the last template
+              "message line" will be repeated.  Example: if there are
+              three lines in the "message" parameter, but only two
+              "message lines" in the template, the last "message line"
+              will be repeated, used to format the last two lines of
+              the "message" parameter.
+        * Values whose keys end with '*' (e.g. "{line*}") are special:
+          they are "starred interpolations".  Their value is repeated
+          zero or more times then truncated until the line is at least
+          "width" characters.  Starred interpolations must not use:
+            * dotted expressions ({line.foo*})
+            * indexing ({line[3]*})
+            * a conversion ({line*!r})
+            * or a format spec ({line*:5})
+
+        If 'stretch' is true, Formatter calculates the width of the
+        longest formatted line (assuming all starred interpolations
+        are length 0), then recomputes "width" as
+
+            width = max(longest_line, width)
+
+        This means the starred interpolations will "stretch" to fit
+        the longest line of the output.
+
     Example:
 
-        fmt = Formatter('{line*}\\n{name} start\\n{double*}{line*}',
+        fmt = Formatter('{line*}\\n{name} start\\n>> {message}\\n<< {message}\\n{double*}{line*}',
             {'line*': '-', 'double*': '=', 'name': 'Log'},
             width=20)
-        print(fmt())
+        print(fmt("hello\\nthere\\nworld!"))
 
     This prints:
 
         --------------------
         Log start
+        >> hello
+        << there
+        << world!
         ==========----------
-
-    The template string is split on newlines into template lines.
-    Template lines are classified into three groups:
-
-        prologue: lines before any {message} line
-        body: contiguous lines containing {message}
-        epilogue: lines after the last {message} line
-
-    When the message is formatted, the lines of the message are
-    zipped together with the "body".  If the message has more lines
-    than body template lines, Formatter repeats the last body
-    template line.
-
-    Substitution values in the template use str.format_map syntax.
-    Values whose keys end with * (e.g. "{line*}") are special:
-    they are "starred interpolations", and their value is repeated
-    zero or more times and truncated until the line is at least
-    "width" characters.  Starred interpolations must not use
-    dotted expressions ({line.foo*}), indexing ({line[3]*}), a
-    conversion ({line*!r}), or a format spec ({line*:5}).
-
-    If 'stretch' is True, the width used for a specific call to
-    format / format_map is the minimum of 'width' and the length
-    of the longest formatted line where all "starred interpolations"
-    are set to zero length.  In other words: if you have one long
-    "message" line, all the lines in the output will stretch to be
-    the same width.
     """
 
     def __init__(self, template, map=None, *, stretch=True, width=79, **kwargs):
@@ -615,14 +654,19 @@ class Formatter:
         return self._template
 
     @property
-    def width(self):
-        """The target line width for starred interpolations."""
-        return self._width
-
-    @property
     def map(self):
         """A copy of the substitution dict."""
         return dict(self._map)
+
+    @property
+    def stretch(self):
+        """If true, will increase width for an interpolation to match the longest line."""
+        return self._stretch
+
+    @property
+    def width(self):
+        """The target line width when using starred interpolations."""
+        return self._width
 
     @property
     def supported(self):
