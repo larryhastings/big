@@ -2896,19 +2896,29 @@ class linked_list:
             head = self._head
             tail = self._tail
 
+            # we sort a linked list by storing all its data nodes
+            # in "nodes" and calling nodes.sort.
             nodes = []
 
+            # what about special nodes?
+            #
             # specials stores references to runs of special nodes interior
             # to the list--proper 'special' nodes, not 'head' or 'tail'.
             # we keep special nodes together with the first subsequent
             # data node, or tail if there's no subsequent data node.
             #
-            # ... - [1] - [2] - [special] - [special] - [special] - [6] - [7] - ...
-            #                       ^           ^                    ^
-            #                       |           |                    |
-            #                     first        last                anchor
+            # when we scan over the linked list and build the "nodes" list,
+            # we find all the runs of special nodes.  we note the first
+            # special node in the run, the last one, and the subsequent
+            # data node, which we call the "anchor":
             #
-            # after sorting, those three special nodes will still be before [6].
+            # ... - [1] - [2] - [special] - [special] - [special] - [6] - [7] - ...
+            #                       ^                       ^        ^
+            #                       |                       |        |
+            #                     first                    last    anchor
+            #
+            # after sorting, those three special nodes will be reinserted
+            # into the linked list immediately before [6].
             #
             specials = []
 
@@ -2960,9 +2970,8 @@ class linked_list:
     def _normalize_cut_and_move_range(self, start, stop, _lock_state, is_reverse, verb):
         """
         Takes start and stop as passed in to cut or move.
-        Normalizes them and returns (first, last, is_reversed).
+        Normalizes them and returns a 3-tuple (first, last, is_reverse):
 
-        Returns a 3-tuple:
             * first points to the first node to be cut/moved (inclusive),
               always in forwards order.
             * last points to the last node to be cut/moved (inclusive),
@@ -2974,11 +2983,13 @@ class linked_list:
         This is because if we need to raise an exception, we release the lock,
         and we need the caller's finally block to not re-release the lock.
         (And we can't *return* state to the caller telling them so,
-        because we're raising, not returning.)
+        because we're raising, not returning.)  So, the caller (_cut or _move)
+        stores the lock in an array, and if we release it, we clear the array.
 
-        Why do we release the lock?  When we format the exception,
-        we often involve the repr of various values, and the __repr__
-        that gets called might try to acquire that same lock.
+        Why do we release the lock?  If we're raising an exception, we format
+        the exception, and that often involves the repr of various values.
+        And the __repr__ that gets called might try to acquire that same lock.
+        (It's happened before!)
         """
 
         start_is_none = start is None

@@ -438,8 +438,8 @@ class Formatter:
     The Formatter constructor takes the following arguments:
         * 'template', a string.  Calling the Formatter object
            is like calling the 'str.format' method on that string.
-        * 'map', a dict or None, default None.  If a dict, pre-initializes
-          values used at interpolation time.
+        * 'map', a dict or None, default None.  If a dict,
+          pre-initializes values used at interpolation time.
         * 'width', an integer, default 79, the target width of
           lines when computing "starred interpolations".
         * 'stretch', a boolean, default True, also used in
@@ -450,9 +450,11 @@ class Formatter:
 
     Returns a Formatter object.  Calling this object formats
     the template string using 'str.format_map' and returns
-    the result.  So, substitutions in the template use 'str.format_map'
-    syntax.  The signature of this object is:
+    the result.  Substitutions in the template use 'str.format_map'
+    syntax.  The signature of this callable is:
+
         fn(message=''', **kwargs)
+
     The **kwargs passed in here are also used as values for the
     interpolation, and take precedence over any value passed in
     to the constructor.
@@ -490,7 +492,9 @@ class Formatter:
         If 'stretch' is true, Formatter calculates the width of the
         longest formatted line (assuming all starred interpolations
         are length 0), then recomputes "width" as
+
             width = max(longest_line, width)
+
         This means the starred interpolations will "stretch" to fit
         the longest line of the output.
 

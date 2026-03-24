@@ -3467,8 +3467,8 @@ map values, and take precedence over the "map" parameter.
 
 Returns a `Formatter` object.  Calling this object formats
 the template string using `str.format_map` and returns
-the result.  So, substitutions in the template use `str.format_map`
-syntax.  The signature of this object is:
+the result.  Substitutions in the template use `str.format_map`
+syntax.  The signature of this callable is:
 
 ```Python
    fn(message=''', **kwargs)
@@ -9874,45 +9874,27 @@ others.  Views are completely independent from each other.
 This is a bugfix and polish release for 0.13, though I added
 one new helper class in *big.template* and a few small APIs.
 
-* Several quality-of-life improvements for the new `Log` class:
-  * The log object no longer logs the start banner or end banner
-    unless some operation produces non-empty formatted output.
-    For example, `Log.write('')` is ignored, doesn't start the
-    log, and doesn't result in the start and end banners being
-    printed.
-  * Empty formatted output from internally generated log messages
-    is now ignored too, and won't trigger the start/end banners.
-  * Mapping `'enter'` or `'exit'` to `None` in the `formats` dict you
-    pass in to the constructor will suppress the `enter` and `exit`
-    banners respectively.
-  * *Note:* I have a major, backwards-incompatible rewrite of
-    `Log` under process--don't get too comfortable.  In particular,
-    `Destination` will change completely.  You're gonna love it!
-* Added [`Formatter`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
-  to [*big.template*](#bigtemplate).  `Formatter` is a reusable formatter for
-  multi-line text templates with clever support for repeated / stretched
-  line-fill fields via "starred interpolations".
 * `linked_list` got new APIs and a heap of bug fixes!  It's more correct
   than ever!
   * Added `move()` / `rmove()` to `linked_list`, `linked_list_iterator`, and
     `linked_list_reverse_iterator`.  Moves nodes internally inside a linked
     list--like a `cut` followed by a `splice`, but cheaper.
-  * `reverse()` and `sort()` now move nodes rather than swapping values;
-    this means iterators continue to point to the same value.  (What about
-    special nodes?  `reverse` reverses those too, just like data nodes;
-    `sort` groups special nodes with the *subsequent* data node, or tail.)
-  * Fixed a number of iterator, locking, rotation, clearing, and cut/splice
-    edge cases.
   * Breaking API change: `splice` used to allow you to pass in tail for `where`,
     and `rsplice` used to allow you to pass in head for `where`, and honestly
     its behavior was a little weird when you did.  Those values are no longer
     allowed.  The rule is: you can't ever add nodes before head or after tail;
     sadly, in 0.13, `splice` and `rsplice` got it wrong.
+  * `reverse()` and `sort()` now move nodes rather than swapping values;
+    this means iterators continue to point to the same value.  (What about
+    special nodes?  `reverse` reverses those too, just like data nodes;
+    `sort` groups special nodes with their *subsequent* data node, or tail.)
+  * Fixed a number of iterator, locking, rotation, clearing, and cut/splice
+    edge cases.
   * The "head" and "tail" nodes are now instances of special classes that
     disallow writing to some attributes.  This would have caught an obscure
-    regression bug (which is now fixed, of course) and should preclude similar
-    bugs in the future.
-* `string`, one new feature and some `str` compatibility improvements:
+    regression bug (which is also fixed) and should preclude similar bugs
+    in the future.
+* `string` got one new feature and some `str` compatibility improvements:
   * Added `string.context`: a property returning a `string_context`
     object.  `str(s.context)` produces a "context string", showing
     the entire line `s` was sliced from, and adding a second line below
@@ -9928,6 +9910,25 @@ one new helper class in *big.template* and a few small APIs.
   * Improved support for stateless subclasses of `string`.  (If you want
     to subclass `string` *and* add new attributes, you'll probably have a
     rough time.  File a bug and maybe we can improve the interfaces for you.)
+* Several quality-of-life improvements for the new `Log` class:
+  * The log object no longer logs the start banner or end banner
+    unless some operation actually logs some (formatted) output.
+    If you never log a message, you don't get spurious (and
+    uninteresting) start and end banners.
+  * Mapping `'enter'` or `'exit'` to `None` in the `formats` dict you
+    pass in to the constructor will suppress the `enter` and `exit`
+    banners respectively.
+  * `Log.write('')` is ignored; you have to log some text for real
+    to cause the start and end banners to happen.
+  * *Note:* I have a major, backwards-incompatible rewrite of
+    `Log` under process.  The `Log` interface will change some,
+    `Destination` will change completely, and `Sink` will change a
+    whole lot too.  You're gonna love it!  (In the meantime...
+    don't get too comfortable!)
+* Added [`Formatter`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
+  to [*big.template*](#bigtemplate).  `Formatter` is a reusable formatter for
+  multi-line text templates with clever support for repeated / stretched
+  line-fill fields via "starred interpolations".
 * `StateManager` fixes in *big.state*:
   * If `on_exit` raises an exception, the transition is aborted;
     `state` remains unchanged, and `next` is reset to `None`.
@@ -9940,6 +9941,13 @@ one new helper class in *big.template* and a few small APIs.
     if you replaced one observer A with another observer B, and A == B even
     though they're different objects, the `StateMachine` wouldn't refresh
     its cache and would continue calling A.
+  * Trimmed no-op `StateMachine.on_enter` and  `StateMachine.on_exit`
+    methods.  They were useless in and of themselves, but I put them
+    there on the theory that they'd help with autocomplete for these
+    methods in subclasses when using advanced editors like PyCharm.
+    But that's not a strong enough reason to keep 'em.  Sorry, you'll
+    just have to type `def on_enter(self):` by hand yourself, like
+    some sort of caveman.
 * `big.text` multi-function fixes and polish:
   * `multistrip`, `multisplit`, and `multipartition`/`multirpartition`
     now correctly accept one-shot iterables--like generators--for
@@ -9952,7 +9960,7 @@ one new helper class in *big.template* and a few small APIs.
     documentation was stale.
 * Minor bugfixes in `parse_template_string` in *big.template:*
   * Improved error message for an unterminated comment;
-    it now shows where the comment started.
+    it now shows where the comment started, not where it ended.
   * Now catch tokenization errors and re-raise a nicer exception.
 
 #### 0.13

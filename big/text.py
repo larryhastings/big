@@ -499,7 +499,6 @@ def reversed_re_finditer(pattern, string):
     # for potential overlapping matches.
     matches = [(match.end(), -match.start(), match) for match in pattern.finditer(string)]
     if not matches:
-        # print(f"no matches at all! exiting immediately.")
         return
 
     # Does this pattern match zero-length strings?
@@ -679,7 +678,6 @@ def reversed_re_finditer(pattern, string):
                 for pos in range(start, end):
                     match = pattern_match(string, pos, previous_match_start)
                     if match:
-                        # print(f"  found {match=}")
                         append((match.end(), -pos, match))
 
         if not overlapping_matches:
@@ -1407,9 +1405,8 @@ def format_map(s, mapping):
     pop = words.pop
     empty_join = ''.join
     saw_backslash = False
-    # print("\n" + s)
+
     for s, delimiter in multisplit(s, '{}\\', separate=True, keep=AS_PAIRS):
-        # print(f">> {s=} {delimiter=} {saw_backslash=} {words=}")
         append(s)
         if not delimiter:
             continue
@@ -1987,9 +1984,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
     text = s[0:0]
 
     quote = state
-    # print(f"    >> {state=}")
     for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
-        # print(f"    >> {pair}  -- {quote=}")
         literal, separator = pair
 
         if literal:
@@ -2028,10 +2023,8 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
                     raise SyntaxError("unterminated quoted string, {s!r}")
             if state:
                 state = None
-                # print(f"    <<1 empty, {text=}, {quote=}")
                 yield (text[0:0], text, separator)
             else:
-                # print(f"    <<2 {quote=}, {text=}, {quote=}")
                 yield (quote, text, separator)
         length = len(text)
         text = text[length:length]
@@ -2045,7 +2038,6 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
         if state:
             # state = None
             quote = text[0:0]
-        # print(f"    <<3 {quote=}, {text=}, empty")
         length = len(text)
         yield (quote, text, text[length:length])
 
@@ -2133,8 +2125,6 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
       If you need the opening and closing markers to be
       different strings, use split_delimiters.
     """
-
-    # print(f"split_quoted_strings({s=}, {quotes=}, *, {escape=}, {multiline_quotes=}, {state=})")
 
     if multiline_quotes is None:
         multiline_quotes = ()
@@ -3108,25 +3098,15 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
     escaped = empty
 
     consumed = 0
-    # print(">> split_delimiters start!")
-    # print(">>", repr(text))
-    # print()
 
     i = multisplit(text, all_tokens, keep=AS_PAIRS, separate=True)
     resplit = False
 
-    # want_debug = False
-    # want_debug = True
-
     while True:
         for s, delimiter in i:
-            # if want_debug:
-            #     print(f">> {s=!r} {delimiter=!r}  {[o[1] for o in stack]}")
-            #     print(f">> {consumed:03} {text[consumed:]!r}")
             if not (s or delimiter):
                 continue
             if escaped:
-                # print(f"    {escaped=}")
                 # either s or delimiter is true
                 escaped = empty
                 if not s:
@@ -3135,17 +3115,14 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                     consumed += 1
 
                     if len(delimiter) == 1:
-                        # print(f"    consume the entire {delimiter=}")
                         append(delimiter)
                         continue
 
                     # if delimiter is longer than 1 character, resplit.
-                    # print(f"    consume the first character of {delimiter=} and resplit at {consumed=}")
                     append(delimiter[0:1])
                     i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                     break
 
-            # print(f"    append {s=} and consume {len(s)} characters")
             if s:
                 append(s)
                 consumed += len(s)
@@ -3237,7 +3214,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 escaped = delimiter
                 consumed += len(delimiter)
             elif action is _ACTION_FLUSH:
-                # print(f"    flush {delimiter=}")
                 append(delimiter)
                 consumed += len(delimiter)
             elif action is _ACTION_FLUSH_1_AND_RESPLIT:
@@ -3245,7 +3221,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 append(delimiter[0:1])
                 consumed += 1
                 resplit = True
-                # print(f"    flush 1 and resplit.  flushing {delimiter[0:1]}, adding 1 to consumed, now {consumed}, and resplitting.")
             elif action is _ACTION_ILLEGAL:
                 # illegal character
                 raise SyntaxError(f"index {consumed}: illegal string {delimiter!r}")
@@ -3258,7 +3233,6 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
 
             if resplit:
-                # print(f"#    resplitting at offset {consumed}, {text[consumed:]!r}")
                 i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
                 resplit = False
                 break
@@ -4077,8 +4051,6 @@ def lines_strip_line_comments(li, line_comment_splitter, quotes, multiline_quote
     starting_pair_for_state = None
 
     for info, line in li:
-        # print(f"[!!!] {info=}\n[!!!] {line=}\n[!!!] {state=}\n")
-
         if quotes or multiline_quotes:
             i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
         else:
@@ -4328,7 +4300,6 @@ def lines_strip_indent(li):
             # That way you don't change column_number nonsensically.
             line = info.clip_trailing(line, line)
             blank_lines.append((info, line))
-            # print(f"BL+ {info=} {lstripped=}")
             continue
 
         line = info.clip_leading(line, len(line) - len(lstripped))
@@ -4369,13 +4340,11 @@ def lines_strip_indent(li):
                 raise IndentationError(f"Line {info.line_number} column {column_number}: unindent doesn't match any outer indentation level")
             new_indent = False
 
-        # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
             leadings.append(column_number)
             indent += 1
 
         if blank_lines:
-            # print(f"BL+ {blank_lines=}")
             for pair in blank_lines:
                 pair[0].indent = indent # don't overwrite "info" or "line"! derp!
                 yield pair
@@ -4512,7 +4481,6 @@ _text_paragraph = "text paragraph"
 @state.accessor()
 class _column_wrapper_splitter:
     def __init__(self, is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces):
-        # print(f"\n_column_wrapper_splitter({tab_width=}, {allow_code=}, {convert_tabs_to_spaces=})")
         self.is_bytes = is_bytes
         if is_bytes:
             self.empty = b''
@@ -4547,15 +4515,12 @@ class _column_wrapper_splitter:
         self.state_manager = state.StateManager(self.state_initial)
 
     def emit(self, c):
-        # print(f" [emit]", repr(c))
         self.words.append(c)
 
     def line_break(self):
-        # print(f" [  \\n]")
         self.words.append(self.linebreak_string)
 
     def paragraph_break(self):
-        # print(f" [\\n\\n]")
         self.words.append(self.paragraph_string)
 
     def write(self, c):
@@ -4614,8 +4579,6 @@ class _column_wrapper_splitter:
         append_c_to_leading = False
         empty = self.empty
         linebreak_string = self.linebreak_string
-
-        # print(f"<{c!r}> ", end='')
 
         if not c.isspace():
             word.append(c)
@@ -5293,7 +5256,6 @@ def decode_python_script(script, *,
             assert "unknown encoding" in message
             raise UnicodeDecodeError(bom_encoding, script, 0, len(script), "unknown encoding") from None
         encoded = False
-        # print(f"decoded! {text!r}")
 
         encoding_re = _python_source_code_encoding_line_str_re
     else:
@@ -5652,13 +5614,11 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
                 raise IndentationError(f"unindent doesn't match any outer indentation level")
             new_indent = False
 
-        # print(f"  >> {leadings=} {new_indent=}")
         if new_indent:
             leadings.append(column_number)
             depth += 1
 
         if blank_lines:
-            # print(f"BL+ {blank_lines=}")
             for line in blank_lines:
                 yield (depth, line)
             blank_lines.clear()
@@ -5693,8 +5653,6 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         empty = ''
 
     for line in lines:
-        # print(f"\n[!!!] {line=}\n[!!!] {quotes=} {escape=} {multiline_quotes=} {state=}")
-
         if quotes or multiline_quotes:
             i = split_quoted_strings(line, quotes, escape=escape, multiline_quotes=multiline_quotes, state=state)
         else:
@@ -5707,7 +5665,6 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
         offset = 0
 
         for leading_quote, segment, trailing_quote in i:
-            # print(f">>> {leading_quote=} {segment=} {trailing_quote=}")
             offset += previous_lengths
 
             previous_lengths = len(leading_quote) + len(segment) + len(trailing_quote)

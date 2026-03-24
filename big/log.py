@@ -1214,7 +1214,6 @@ class Log:
         #        out of it.
         #
         assert state in ('initial', 'logged', 'closed', 'exited')
-        # print(f"\n\n>>>>>>>>>>>>>>>>>>>>>>>>>\n>>ES>> {self._state!r} --> {state!r}")
 
         # fast path: we're already in the correct state
         if self._state == state:
@@ -1243,7 +1242,6 @@ class Log:
         try:
 
             if state == 'initial':
-                # print(f">> {self._state} BACK to initial")
                 # because of the above ifs, we already know
                 # we're not in 'initial' or 'exited'.
                 # that means we're in 'logged' or 'closed'.
@@ -1273,14 +1271,12 @@ class Log:
                 if state in ('closed', 'exited'):
                     # we're transitioning directly from 'initial' to 'closed' or 'exited'.
                     # we don't need to do any intermediary stuff.
-                    # print(f">> initial directly to closed")
                     self._ensure_closed(ns, epoch)
                     self._state = state
                     return True
 
                 # transition to 'logged':
                 # flush buffered initial events.
-                # print(f">> to logged, {state=}")
                 self._state = 'logged'
                 self._initial_events()
 
@@ -1290,7 +1286,6 @@ class Log:
                     return True
 
             if self._state == 'logged':
-                # print(f">> to closed")
                 self._ensure_closed(ns, epoch)
 
                 if state == 'closed':
@@ -1298,13 +1293,11 @@ class Log:
 
             assert self._state == 'closed'
             if state == 'logged':
-                # print(f">> closed to logged?! no.")
                 # it's illegal to transition directly from closed to logged,
                 # you have to go through initial first (by resetting)
                 return False
 
 
-            # print(f">> to exited")
             assert state == 'exited'
             # transition to exited
             self._state = 'exited'

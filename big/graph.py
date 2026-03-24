@@ -213,7 +213,6 @@ class TopologicalSorter:
                     raise ValueError(f"node {node!r} was not added using add()")
                 if node not in self._yielded:
                     raise ValueError(f"node {node!r} was not passed out")
-                # print("CALL _mark_node_done", node, self.graph.nodes[node])
                 self._mark_node_done(node, self.graph.nodes[node][1])
             nodes = set(nodes)
             self._done |= nodes
@@ -307,9 +306,7 @@ class TopologicalSorter:
             The node is guaranteed to have been added to the view,
             either with _add_nodes, or was brought over by copy().
             """
-            # print(f"{self=} _remove_node {node=} {successors=}")
             if (node in self._conflicts) or (node in self._reverse_conflicts):
-                # print("REMOVE vYHS", node)
                 for this, other in (
                     (self._conflicts, self._reverse_conflicts),
                     (self._reverse_conflicts, self._conflicts)
@@ -338,7 +335,6 @@ class TopologicalSorter:
             """
             Does *not* update _done or _yielded.
             """
-            # print(f"{self=} _mark_node_done {node=} {successors=}")
 
             # this "for" statement is why successors is a dict, not a set.
             # when iterating over a dict, you see the elements in insertion order.
@@ -351,7 +347,6 @@ class TopologicalSorter:
                 self._predecessors[successor] -= 1
                 if not self._predecessors[successor]:
                     self._ready.append(successor)
-            # print(f"_mark_node_done done. {self=}")
 
         def print(self, print=print):
             """
@@ -469,8 +464,6 @@ class TopologicalSorter:
         calling K.add('a', 'b') once, or
         calling K.add('a', 'b', 'b', 'b', 'b') once.
         """
-        # print(f"{node:3} depends on {dependencies!r}")
-
         new_nodes = []
         new_successors = []
 
@@ -512,9 +505,6 @@ class TopologicalSorter:
         remove() works but it's slow (O(N)).
         TopologicalSorter is optimized for fast adds and fast views.
         """
-
-        # print("remove!", node)
-        # print(f"    before {self.nodes=}")
         if node not in self.nodes:
             raise ValueError("node not in graph")
 
@@ -533,9 +523,6 @@ class TopologicalSorter:
                     if not predecessor_count:
                         break
 
-        # print(f"    {predecessors=}")
-        # print(f"    {successors=}")
-
         for n in predecessors:
             _, s = self.nodes[n]
             del s[node]
@@ -545,8 +532,6 @@ class TopologicalSorter:
             p_s[0] -= 1
 
         del self.nodes[node]
-        # print(f"    after {self.nodes=}")
-        # print()
 
         for v in self.views:
             v._remove_node(node, successors)
