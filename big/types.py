@@ -1941,7 +1941,7 @@ class linked_list:
         the linked_list constructor, as well as (optionally)
         a "prototype" linked_list self is based on.
         """
-        # returns (lock_parameter, lock)
+        # returns (lock_argument, lock)
         if lock is True:
             return threading.Lock()
         if lock is False:
@@ -2224,8 +2224,8 @@ class linked_list:
         self._head = d['_head']
         self._tail = d['_tail']
         self._length = d['_length']
-        self._lock_argument = lock_parameter = d['_lock']
-        self._lock = self._choose_lock(lock_parameter, None)
+        self._lock_argument = lock_argument = d['_lock']
+        self._lock = self._choose_lock(lock_argument, None)
 
     # new in 3.7
     if _python_3_7_plus:
@@ -2235,7 +2235,7 @@ class linked_list:
     def __add__(self, other):
         with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
-            lock_parameter = self._lock_argument
+            lock_argument = self._lock_argument
 
         if isinstance(other, linked_list):
             with other._lock or _inert_context_manager:
@@ -2243,8 +2243,8 @@ class linked_list:
         else:
             t.extend(other)
 
-        t._lock_argument = lock_parameter
-        t._lock = t._choose_lock(lock_parameter, None)
+        t._lock_argument = lock_argument
+        t._lock = t._choose_lock(lock_argument, None)
         return t
 
     def __iadd__(self, other):
@@ -2260,10 +2260,10 @@ class linked_list:
             if multiplicand > 0:
                 for _ in range(multiplicand):
                     t.extend((node.value for node in self._internal_iter()))
-            lock_parameter = self._lock_argument
+            lock_argument = self._lock_argument
 
-        t._lock_argument = lock_parameter
-        t._lock = t._choose_lock(lock_parameter, None)
+        t._lock_argument = lock_argument
+        t._lock = t._choose_lock(lock_argument, None)
         return t
 
     __rmul__ = __mul__
