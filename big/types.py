@@ -1931,7 +1931,7 @@ class linked_list:
     be pickled.)
     """
 
-    __slots__ = ('_head', '_tail', '_lock', '_lock_parameter', '_length')
+    __slots__ = ('_head', '_tail', '_lock', '_lock_argument', '_length')
 
     def _choose_lock(self, lock, prototype):
         """
@@ -1941,14 +1941,14 @@ class linked_list:
         the linked_list constructor, as well as (optionally)
         a "prototype" linked_list self is based on.
         """
-        # returns (lock_parameter, lock)
+        # returns (lock_argument, lock)
         if lock is True:
             return threading.Lock()
         if lock is False:
             return None
         if lock is None:
             if prototype is not None:
-                return self._choose_lock(prototype._lock_parameter, None)
+                return self._choose_lock(prototype._lock_argument, None)
             return None
         # duck-typed lock
         if (hasattr(lock, 'acquire')
@@ -1972,7 +1972,7 @@ class linked_list:
         self._lock = None
         self._extend(iterable)
 
-        self._lock_parameter = lock
+        self._lock_argument = lock
         self._lock = self._choose_lock(lock, None)
 
     def _repr(self):
@@ -2190,18 +2190,18 @@ class linked_list:
 
     def __copy__(self):
         with self._lock or _inert_context_manager:
-            return linked_list((node.value for node in self._internal_iter()), lock=self._lock_parameter)
+            return linked_list((node.value for node in self._internal_iter()), lock=self._lock_argument)
 
     def copy(self, *, lock=None):
         "Returns a shallow copy of the linked_list."
         with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
-            t._lock_parameter = lock
+            t._lock_argument = lock
             t._lock = t._choose_lock(lock, self)
         return t
 
     def __deepcopy__(self, memo):
-        t = linked_list(lock=self._lock_parameter)
+        t = linked_list(lock=self._lock_argument)
         append = t.append
         with self._lock or _inert_context_manager:
             for node in self._internal_iter():
@@ -2210,12 +2210,12 @@ class linked_list:
 
     def __getstate__(self):
         with self._lock or _inert_context_manager:
-            if self._lock_parameter not in (False, True, None):
+            if self._lock_argument not in (False, True, None):
                 raise ValueError("can't pickle linked_list with a user-supplied lock")
             return (None, {
                 '_head': self._head,
                 '_tail': self._tail,
-                '_lock': self._lock_parameter,
+                '_lock': self._lock_argument,
                 '_length': self._length,
                 })
 
@@ -2224,8 +2224,8 @@ class linked_list:
         self._head = d['_head']
         self._tail = d['_tail']
         self._length = d['_length']
-        self._lock_parameter = lock_parameter = d['_lock']
-        self._lock = self._choose_lock(lock_parameter, None)
+        self._lock_argument = lock_argument = d['_lock']
+        self._lock = self._choose_lock(lock_argument, None)
 
     # new in 3.7
     if _python_3_7_plus:
@@ -2235,7 +2235,7 @@ class linked_list:
     def __add__(self, other):
         with self._lock or _inert_context_manager:
             t = linked_list((node.value for node in self._internal_iter()), lock=False)
-            lock_parameter = self._lock_parameter
+            lock_argument = self._lock_argument
 
         if isinstance(other, linked_list):
             with other._lock or _inert_context_manager:
@@ -2243,8 +2243,8 @@ class linked_list:
         else:
             t.extend(other)
 
-        t._lock_parameter = lock_parameter
-        t._lock = t._choose_lock(lock_parameter, None)
+        t._lock_argument = lock_argument
+        t._lock = t._choose_lock(lock_argument, None)
         return t
 
     def __iadd__(self, other):
@@ -2260,10 +2260,10 @@ class linked_list:
             if multiplicand > 0:
                 for _ in range(multiplicand):
                     t.extend((node.value for node in self._internal_iter()))
-            lock_parameter = self._lock_parameter
+            lock_argument = self._lock_argument
 
-        t._lock_parameter = lock_parameter
-        t._lock = t._choose_lock(lock_parameter, None)
+        t._lock_argument = lock_argument
+        t._lock = t._choose_lock(lock_argument, None)
         return t
 
     __rmul__ = __mul__
@@ -3166,7 +3166,7 @@ class linked_list:
             self._length -= count
             t2._length = count
 
-            t2._lock_parameter = lock
+            t2._lock_argument = lock
             t2._lock = t2._choose_lock(lock, self)
 
             if start is not None:

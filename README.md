@@ -9867,6 +9867,16 @@ others.  Views are completely independent from each other.
 
 ## Release history
 
+#### 0.13.2
+
+*under development*
+
+
+* Minor change to `linked_list`: renamed an internal attribute.
+  `_lock_parameter` should have been named `_lock_argument`
+  all along!  *slaps forehead*  This is purely an internal change
+  and shouldn't have any user-visible effect.
+
 #### 0.13.1
 
 *2026/03/23*
