@@ -27,6 +27,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import atexit
 import builtins
+import copy
 import io
 import os
 import pathlib
@@ -36,13 +37,18 @@ import tempfile
 import threading
 import time
 import types
+import weakref
 
 from . import template as big_template
 
+from .boundinnerclass import BoundInnerClass, BOUNDINNERCLASS_OUTER_SLOTS
 from .builtin import ModuleManager
 from .file import translate_filename_to_exfat
 from .time import timestamp_human
 from .types import linked_list
+
+Queue = getattr(queue, "SimpleQueue", queue.Queue)
+
 
 
 mm = ModuleManager()
@@ -68,615 +74,378 @@ class FormatterValueError(ValueError):
     pass
 
 
-@export
-class LogEvent(tuple):
-    """
-    Abstract base class for Log events sent to a Formatter.
-    """
+_USE_DEFAULT = None
 
-    __slots__ = ()
+class UseDefault:
+    def __new__(cls):
+        global _USE_DEFAULT
+        if _USE_DEFAULT is not None:
+            raise ValueError("_USE_DEFAULT is a singleton")
+        _USE_DEFAULT = super().__new__(cls)
+        return _USE_DEFAULT
 
     def __repr__(self):
-        fields = []
-        for name in self._field_names:
-            value = getattr(self, name)
-            fields.append(f"{name}={value!r}")
-        return f"{self.__class__.__name__}({', '.join(fields)})"
+        return "<UseDefault>"
 
-    def __lt__(self, other):
-        if not isinstance(other, LogEvent):
-            raise TypeError(f"'<' not supported between instances of LogEvent and {type(other)}")
-        return (
-                (self.session  <= other.session)
-            and (self.elapsed <  other.elapsed)
-            )
+_USE_DEFAULT = UseDefault()
 
 
-
-
-@export
-class LogStartEvent(LogEvent):
-
-    __slots__ = ()
-
-    _field_names = ('session', 'ns', 'epoch', 'nesting', 'configuration', 'duration')
-
-    def              __new__(cls,  session, ns, epoch, nesting, configuration, duration=0):
-        return tuple.__new__(cls, (session, ns, epoch, nesting, configuration, duration))
-
-    @property
-    def session(self):
-        return self[0]
-
-    @property
-    def ns(self):
-        return self[1]
-
-    @property
-    def epoch(self):
-        return self[2]
-
-    @property
-    def nesting(self):
-        return self[3]
-
-    @property
-    def configuration(self):
-        return self[4]
-
-    @property
-    def duration(self):
-        return self[5]
-
-    @property
-    def elapsed(self):
-        return 0
-
-    @property
-    def depth(self):
-        return 0
-
-
-    def __hash__(self):
-        return hash((self.session, self.ns, self.epoch))
-
-    def _calculate_duration(self, next_event):
-        return LogStartEvent(
-            self.session, self.ns, self.epoch,
-            self.nesting, self.configuration,
-            next_event.elapsed - self.elapsed,
-            )
-
-
-
-@export
-class LogEndEvent(LogEvent):
-
-    __slots__ = ()
-
-    _field_names = ('session', 'elapsed')
-
-    def              __new__(cls,  session, elapsed):
-        return tuple.__new__(cls, (session, elapsed))
-
-    @property
-    def session(self):
-        return self[0]
-
-    @property
-    def elapsed(self):
-        return self[1]
-
-    @property
-    def depth(self):
-        return 0
-
-
-
-@export
-class LogLogEvent(LogEvent):
-
-    __slots__ = ()
-
-    _field_names = ('session', 'elapsed', 'thread', 'format', 'message', 'data', 'depth', 'duration')
-
-    def              __new__(cls,  session, elapsed, thread, format, message, data, depth, duration=0):
-        return tuple.__new__(cls, (session, elapsed, thread, format, message, data, depth, duration))
-
-    @property
-    def session(self):
-        return self[0]
-
-    @property
-    def elapsed(self):
-        return self[1]
-
-    @property
-    def thread(self):
-        return self[2]
-
-    @property
-    def format(self):
-        return self[3]
-
-    @property
-    def message(self):
-        return self[4]
-
-    @property
-    def data(self):
-        return self[5]
-
-    @property
-    def depth(self):
-        return self[6]
-
-    @property
-    def duration(self):
-        return self[7]
-
-    def _calculate_duration(self, next_event):
-        return LogLogEvent(
-            self.session, self.elapsed, self.thread,
-            self.format, self.message, self.data, self.depth,
-            next_event.elapsed - self.elapsed,
-            )
-
-
-@export
-class LogEnterEvent(LogEvent):
-
-    __slots__ = ()
-
-    _field_names = ('session', 'elapsed', 'thread', 'format', 'message', 'depth', 'duration')
-
-    def              __new__(cls,  session, elapsed, thread, format, message, depth, duration=0):
-        return tuple.__new__(cls, (session, elapsed, thread, format, message, depth, duration))
-
-    @property
-    def session(self):
-        return self[0]
-
-    @property
-    def elapsed(self):
-        return self[1]
-
-    @property
-    def thread(self):
-        return self[2]
-
-    @property
-    def format(self):
-        return self[3]
-
-    @property
-    def message(self):
-        return self[4]
-
-    @property
-    def depth(self):
-        return self[5]
-
-    @property
-    def duration(self):
-        return self[6]
-
-    def _calculate_duration(self, next_event):
-        return LogEnterEvent(
-            self.session, self.elapsed, self.thread,
-            self.format, self.message, self.depth,
-            next_event.elapsed - self.elapsed,
-            )
-
-
-
-@export
-class LogExitEvent(LogEvent):
-
-    __slots__ = ()
-
-    _field_names = ('session', 'elapsed', 'thread', 'format', 'context', 'depth', 'duration')
-
-    def              __new__(cls,  session, elapsed, thread, format, context, depth, duration=0):
-        return tuple.__new__(cls, (session, elapsed, thread, format, context, depth, duration))
-
-    @property
-    def session(self):
-        return self[0]
-
-    @property
-    def elapsed(self):
-        return self[1]
-
-    @property
-    def thread(self):
-        return self[2]
-
-    @property
-    def format(self):
-        return self[3]
-
-    @property
-    def context(self):
-        return self[4]
-
-    @property
-    def depth(self):
-        return self[5]
-
-    @property
-    def duration(self):
-        return self[6]
-
-    def _calculate_duration(self, next_event):
-        return LogExitEvent(
-            self.session, self.elapsed, self.thread,
-            self.format, self.context, self.depth,
-            next_event.elapsed - self.elapsed,
-            )
-
-
-
-class _EmptyThread:
-    name = ''
-    ident = ''
-    native_id = ''
-    daemon = ''
-    def __repr__(self):
-        return ''
-    def __str__(self):
-        return ''
-
-_empty_thread = _EmptyThread()
-
-
-
-@export
-class EnterContext(tuple):
-    """
-    """
-
-    __slots__ = ()
-
-    def __new__(cls, elapsed, thread, format, message):
-        t = (elapsed, thread, format, message)
-        return tuple.__new__(cls, t)
-
-    def __repr__(self):
-        fields = []
-        for name in ("elapsed", "thread", "format", "message"):
-            value = getattr(self, name)
-            fields.append(f"{name}={value!r}")
-        return f"EnterContext({', '.join(fields)})"
-
-    def __lt__(self, other):
-        if not isinstance(other, EnterContext):
-            raise TypeError(f"'<' not supported between instances of EnterContext and {type(other)}")
-        return self.elapsed < other.elapsed
-
-    @property
-    def elapsed(self):
-        return self[0]
-
-    @property
-    def thread(self):
-        return self[1]
-
-    @property
-    def format(self):
-        return self[2]
-
-    @property
-    def message(self):
-        return self[3]
-
-
-
-@export
-class Scheduler:
-    def __init__(self, log, *, atexit=False, drain=False, first=False, wait=False):
-        """
-        Manages creating "jobs" iterables and scheduling the work.  To use:
-
-            s = Scheduler()
-            s(fn, arg1, arg2) # adds fn(arg1, arg2) to our local job list
-            s()               # schedules all the work on the local job list
-
-        Scheduler takes four keyword-only boolean parameters
-        which guide its behavior:
-
-        * atexit - if true, and Log is in threaded mode,
-            schedules a final None so the worker thread will exit.
-            also, passes in a "blocker" so we can wait
-            until the worker thread has finished.
-
-        * drain - if true, and Log is in non-threaded mode,
-            flush the work queue.
-
-        * first - if true,
-            insert these jobs on the front of the work queue (in order).
-            default is to append them to the end.
-
-        * wait - if true,
-            wait until all this scheduled work is completed:
-            * in non-threaded mode, this is the same as drain.
-            * in threaded mode, this blocks until the worker thread
-              processes every job queued by the scheduler.
-        """
-        self.log = log
-        self.jobs = []
-        self.atexit = atexit
-        self.first = first
-
-        wait = wait or atexit
-        threaded = log._threaded
-        self.block = wait and threaded and (not atexit)
-        self.drain = (drain or wait) and (not threaded)
-
-        assert not (self.block and self.drain)
-        assert not (self.block and self.atexit)
-
-    def __bool__(self):
-        return bool(self.jobs)
-
-    def __call__(self, method=None, *args):
-        if method is None:
-            jobs = self.jobs
-            locker = None
-            threaded = self.log._threaded
-
-            if self.block or self.atexit:
-                blocker = threading.Lock()
-                blocker.acquire()
-
-            if self.block:
-                jobs.append(((blocker,), blocker.release, ()))
-
-            if self.atexit:
-                jobs.append(((), None, (blocker.release,)))
-
-            if jobs:
-                self.log._schedule(jobs, first=self.first)
-                self.jobs = jobs = []
-
-            if self.block:
-                blocker.acquire()
-
-            if self.drain:
-                self.log._drain()
-
-            return
-
-        involved = []
-
-        if isinstance(method, types.MethodType):
-            method_self = method.__self__
-            if isinstance(method_self, (Destination, Formatter)):
-                involved.append(method_self)
+def deep_update(dst, src):
+    for key, value in src.items():
+        if isinstance(value, dict) and isinstance(dst.get(key), dict):
+            deep_update(dst[key], value)
         else:
-            method_self = None
+            dst[key] = copy.deepcopy(value)
+    return dst
 
-        for a in args:
-            if isinstance(a, (Destination, Formatter)):
-                assert a not in involved
-                involved.append(a)
 
-        t = (involved, method, args)
-        # print(t)
-        self.jobs.append(t)
+
+_serial_number_lock = threading.Lock()
+_serial_number_counter = 1
+
+def _serial_number():
+    global _serial_number_counter
+    with _serial_number_lock:
+        sn = _serial_number_counter
+        _serial_number_counter += 1
+    return sn
 
 
 
 @export
 class Formatter:
-    """
-    format must have the signature:
-        format(elapsed, thread, format, message, data, *, nesting=None)
-    Pass in None if you've subclassed Formatter, and you've defined
-    a "format" method on the subclass, and you want to use that.
-    """
-    # destinations                        # list of Destinations
     # supported_formats                   # frozenset, or True = accepts any
     # output_type                         # type (str, bytes, SinkEvent, etc.)
 
-    def __init__(self, format, *, name=None):
-        self.root = self.owner = None
-        self.started = False
+    # __slots__ = ('name', 'key', '__weakref__') + BOUNDINNERCLASS_OUTER_SLOTS
 
-        self.destinations = []
+    def __init__(self, *, name=None):
+        # self.root = self.owner = None
+        if not ((name is None) or isinstance(name, str)):
+            raise  TypeError('str must be name or None')
 
         if name is None:
             name = type(self).__name__
         self.name = name
 
-        # every destination appears in either dormant or active.
-        #     invariant: dormant | active == set(destinations)
-        # (Once the implementation settles down, maybe we can
-        # remove one of these.)
-        self.dormant = set()
-        self.active = set()
-        self.dirty = set()
+        self.serial_number = _serial_number()
+        self.key = (self.name, self.serial_number, id(self))
 
-        self.start_time_ns = None
-        self.start_time_epoch = None
+        self.core = None
+        self.session = None
 
-        if not callable(format):
-            raise ValueError('format must be callable')
-        self.format = format
-
-        self._scheduler = None
-
-
-    def append(self, destination):
-        if self.root:
-            destination.register(self.root, self.owner)
-        self.destinations.append(destination)
-        self.dormant.add(destination)
-
-    def _dirty_add(self, destination):
-        self.dirty.add(destination)
-
-    def _dirty_clear(self):
-        self.dirty.clear()
-
-    def _dirty_discard(self, destination):
-        self.dirty.discard(destination)
-
-    def _mark_dormant(self, destination):
-        self.active.remove(destination)
-        self.dormant.add(destination)
-
-    def end_destination(self, destination, s):
-        """
-        Returns True if the destination was active and we transitioned it to dormant.
-        Returns False if it was already dormant.
-
-        When this function returns, the destination will be in dormant.
-
-        Second argument 's' should be a Scheduler.
-        """
-        if destination in self.dormant:
-            assert destination not in self.active
-            return False
-        assert destination in self.active
-        if destination in self.dirty:
-            s(self._dirty_discard, destination)
-            s(destination.flush, False)
-        s(destination.end)
-        s(self._mark_dormant, destination)
-        return True
-
-    def _remove(self, destination, started):
-        if started:
-            self.dormant.remove(destination)
-        self.destinations.remove(destination)
-
-    def remove(self, destination):
-        s = self._scheduler()
-        self.end_destination(destination, s)
-        s(self._remove, destination)
-        s(destination.unregister)
-        s()
-
-    # def _clear(self):
-    #     self.destinations.clear()
-    #     self.dormant.clear()
-    #     self.active.clear()
-    #     self.dirty.clear()
-
-    # def clear(self):
-    #     s = self._scheduler()
-
-    #     if self.started:
-    #         for d in self.destinations:
-    #             self.end_destination(d, s)
-
-    #     if s:
-    #         s(self._clear)
-    #         s()
-    #     else:
-    #         self._clear()
-
-
-    @staticmethod
-    def ns_to_float(ns):
-        return ns / 1_000_000_000.0
-
-    def register(self, log, owner):
-        assert self.root is None
-        assert self.owner is None
-        assert log is not None
-        assert owner is not None
-        assert not self.started
-        self.root = log
-        self.owner = owner
-        self._scheduler = log._scheduler
-
-        for d in self.destinations:
-            d.register(log, owner)
+    # a callback, core calls f.register(self) when f is routed in this Log
+    def register(self, core):
+        assert self.core is None
+        self.core = core
+        # print(f"{self!r} registered! {core=}")
 
     def unregister(self):
-        assert self.root is not None
-        assert self.owner is not None
-        assert not self.started
-        self.root = self.owner = None
-        for d in self.destinations:
-            d.unregister()
+        assert isinstance(self.core, Core)
+        self.core = None
 
-    def start(self, ns, epoch, nesting):
-        assert not self.started
-        self.started = True
-        self.start_time_ns = ns
-        self.start_time_epoch = epoch
-        self.nesting = list(nesting)
+    # a callback, somebody calls f.start(session) after f is registered and a session has been created
+    def start(self, session):
+        assert self.session is None
+        self.session = session
+        # print(f"{self!r} started! {session=}")
 
-    def _end(self):
-        self.started = False
+    def end(self):
+        assert isinstance(self.session, Session)
+        self.session = None
 
-    def end(self, elapsed):
-        assert self.started
-        self.flush()
-        self.started = False
 
-    def flush(self):
-        assert self.started
-        if self.dirty:
-            s = self._scheduler(first=True)
-            for d in self.destinations:
-                if d in self.dirty:
-                    s(d.flush)
-            if s:
-                s(self._dirty_clear)
-                s()
+    @BoundInnerClass
+    class State:
+        __slots__ = ('keys', 'dedup_keys', 'fstates')
 
-    def fix(self, exception):
-        pass
+        @staticmethod
+        def compute_keys(parent, format):
+            if not parent:
+                assert not format
+                return (), ()
+            if not format:
+                return parent.keys, parent.dedup_keys
+            format_tuple = (format,)
+            keys = parent.keys + format_tuple
+            dedup_keys = tuple(o for o in parent.dedup_keys if o != format) + format_tuple
+            return keys, dedup_keys
 
-    def validate(self, format, message, data):
-        # used for real-time validation of a requested format
-        raise NotImplementedError()
+        def __repr__(self):
+            return f"<State {self.keys}>"
 
-    # def write(self, formatted):
-    #     assert self.started
-    #     assert formatted
+        def __init__(self, outer, *, parent=None, format=None):
+            self.keys, self.dedup_keys = self.compute_keys(parent, format)
+            self.fstates = {} if parent is None else dict(parent.fstates)
 
-    #     for d in self.destinations:
-    #         self.dirty.add(d)
+        def child(self, format):
+            if format in self.fstates:
+                return self.fstates[format]
+            child = self.__class__(parent=self, format=format)
+            self.fstates[format] = child
+            return child
 
-    #         if d in self.dormant:
-    #             self.dormant.remove(d)
-    #             self.active.add(d)
-    #             d.start()
+    def prepare(self, fstate, message):
+        raise NotImplementedError
 
-    #         d.write(formatted)
+    def render(self, message, prepared):
+        raise NotImplementedError
 
-    def write_queued(self, formatted, s):
-        assert self.started
-        assert formatted
 
-        for d in self.destinations:
-            if d in self.dormant:
-                self.dormant.remove(d)
-                self.active.add(d)
-                s(d.start)
 
-            s(d.write, formatted)
-            s(self._dirty_add, d)
 
-    def log(self, elapsed, thread, format, message, data):
-        formatted = self.format(elapsed, thread, format, message, data, self.nesting)
-        s = self._scheduler(first=True)
-        if formatted:
-            # self.write(formatted)
-            self.write_queued(formatted, s)
-        s()
 
-    def enter(self, elapsed, thread, format, message):
-        pass
 
-    def exit(self, elapsed, thread, format, context):
-        pass
 
+@export
+def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, indent=True, ascii=False):
+    """
+    Formats a "prefix" string for use with a Log object.
+
+    The format it returns is in the form:
+        "[{elapsed} {thread.name}] "
+    formatted with these widths:
+         "[{time_seconds_width}.{time_fractional_width} {thread_name_width}]"
+    For example, the default value for Log.prefix is prefix_format(3, 10, 12),
+    which looks like this in the final log:
+        "[003.0706368860   MainThread]"
+
+    If the indent parameter is true (the default), the prefix generated
+    is followed by {indent}, which inserts the current indent string.
+
+    (The actual value of "indent" supplied by TextFormatter will be
+    the string passed in to its 'indent' parameter, multipled by the
+    current "enter" nesting depth.)
+    """
+    # the +1 is for the dot between seconds and fractional seconds
+    time_width = time_seconds_width + 1 + time_fractional_width
+    indent = '{indent}' if indent else ''
+    prefix = f'{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}│ {indent}'
+    if ascii:
+        prefix = prefix.translate(_ascii_translation_table)
+    return prefix
+
+
+@export
+class TextFormatter(Formatter):
+    # supported_formats = frozenset({...})
+    # owns formats dict, prefix, nesting stack, indentation
+
+    # __slots__ = ('format_dict', 'formats', 'timestamp_format', 'width', 'indents', 'renderers')
+
+
+    def __init__(self,
+        *,
+        name=None,
+        format_dict=None,
+        # indent='    ',
+        # prefix=prefix_format(3, 10, 12),
+        width=79,
+        ):
+
+        if not isinstance(width, int):
+            raise  TypeError('width must be an int and greater than zero')
+        if not (width > 0):
+            raise ValueError('width must be an int and greater than zero')
+
+        fd = copy.deepcopy(self.base_format_dict)
+        if isinstance(format_dict, dict):
+            deep_update(fd, format_dict)
+        elif format_dict is not None:
+            raise  TypeError('format_dict must be a dict or None')
+
+        super().__init__(name=name)
+
+        self.format_dict = fd
+
+        self.width = width
+        self.indents = {}
+        self.renderers = {}
+
+        self.indent = ''
+        # self.indent_stack = []
+        # self.prefix = prefix
+
+        self.supported_formats = set(fd.get('formats', ()))
+
+
+    base_format_dict = {
+        "prefix": prefix_format(3, 10, 12),
+        'template': '{prefix}{message}\n',
+
+        "formats": {
+            "log": {},
+            "print": {},
+            "preformatted": {},
+
+            "box" : {
+                "template": '{prefix}┌{line*}┐\n{prefix}│ {message}{space*} │\n{prefix}└{line*}┘\n',
+                "line*": '─',
+                "space*": ' ',
+            },
+            "box2" : {
+                "template": '{prefix}╔{double*}╗\n{prefix}║ {message}{space*} ║\n{prefix}╚{double*}╝\n',
+                "double*": '═',
+                "space*": ' ',
+            },
+
+            "start": {
+                "template": '╔{double*}╗\n║ {name} start at {timestamp} {space*}║\n╚{double*}╝\n',
+                "double*": '═',
+                "space*": ' ',
+            },
+            "end" : {
+                "template": '╔{double*}╗\n║ {name} finish at {timestamp} {space*}║\n╚{double*}╝\n',
+                "double*": '═',
+                "space*": ' ',
+            },
+
+            "child": {
+                "indent": "    │ ",
+                "formats": {
+                    "start": {
+                        "template": '{prefix}┏━━━━━┱{line*}┐\n{prefix}┃enter┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┡━━━━━┹{line*}┘\n',
+                        "line*": '─',
+                        "space*": ' ',
+                        "indent": '│   ',
+                        "exit": 'exit',
+                    },
+                    "end": {
+                        "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
+                        "line*": '─',
+                        "space*": ' ',
+                    },
+                }
+            }
+        }
+    }
+
+    @staticmethod
+    def parse_formats(base_formats, override_formats, width):
+
+        formats = dict(base_formats)
+        formatters = {}
+
+        for key, value in override_formats.items():
+            if not isinstance(key, str):
+                raise TypeError(f"formats dict contains {key!r}, formats dict keys must be str")
+
+            if value is None:
+                if key not in ("start", "end", 'enter', 'exit'):
+                    raise ValueError("None is only a valid value for 'start', 'end', 'enter', and 'exit' formats")
+                formats.pop(key, None)
+                # formatters[key] = _none_format
+            else:
+                if not isinstance(value, dict):
+                    raise TypeError(f"format values must be dict or None, but formats[{key!r}] is type {type(value).__name__}")
+                if 'message' in value:
+                    raise ValueError(f"format dict for {key!r} must not contain 'message'")
+                if 'template' not in value:
+                    raise ValueError(f"format dict for {key!r} must contain 'template'")
+                template = value['template']
+                if not isinstance(template, str):
+                    raise TypeError(f"format dict template values must be str, but formats[{key!r}]['template'] is type {type(template).__name__}")
+                formats[key] = dict(value)
+
+        for key, d in formats.items():
+            d_copy = dict(d)
+            template = d_copy.pop('template')
+            formatters[key] = big_template.Formatter(template, d_copy, width=width).format_map
+
+        return formats, formatters
+
+
+    @BoundInnerClass
+    class State(Formatter.State):
+        __slots__ = ()
+
+
+
+    class Prepared:
+        __slots__ = ('args', 'kwargs', 'format', 'keys', 'dedup_keys')
+
+        def __init__(self, args, kwargs, format):
+            self.args = tuple(str(o) for o in args)
+            self.kwargs = {name: str(value) for name, value in kwargs.items()}
+            self.format = format
+            self.keys = None
+            self.dedup_keys = None
+
+        def __repr__(self):
+            return f"<TextFormatter.Prepared format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} keys={self.keys!r} dedup_keys={self.dedup_keys!r}>"
+
+
+    def prepare(self, fstate, message):
+        prepared = self.Prepared(message.args, message.kwargs, message.format)
+        prepared.keys, prepared.dedup_keys = fstate.compute_keys(fstate, message.format)
+        return prepared
+
+    def key_to_format_dict(self, d, key):
+        if not isinstance(key, tuple):
+            key = (key,)
+        for s in key:
+            d = d['formats'][s]
+        return d
+
+    def get_indent(self, keys):
+        indent = self.indents.get(keys)
+        if indent is not None:
+            return indent
+        parts = []
+        for key in keys:
+            d = self.key_to_format_dict(self.format_dict, key)
+            part = d.get('indent', '')
+            if part:
+                parts.append(part)
+        indent = ''.join(parts)
+        self.indents[keys] = indent
+        return indent
+
+    def render_format_dict(self, dedup_keys):
+        d = copy.deepcopy(self.format_dict)
+        for key in dedup_keys:
+            deep_update(d, self.key_to_format_dict(d, key))
+        return d
+
+    def get_renderers(self, dedup_keys):
+        renderers = self.renderers.get(dedup_keys)
+        if renderers is not None:
+            return renderers
+        format_dict = self.render_format_dict(dedup_keys)
+        prefix_renderer = format_dict.get('prefix', '').format_map
+        template_renderer = big_template.Formatter(
+            format_dict['template'],
+            format_dict,
+            width=self.width,
+            )
+        renderers = (prefix_renderer, template_renderer)
+        self.renderers[dedup_keys] = renderers
+        return renderers
+
+    def message_to_priority(self, message, prepared):
+        session = self.session
+        clock = session.clock
+        timestamp = clock.time_to_timestamp(message.time)
+        elapsed = clock.delta_to_seconds(message.time - session.clock.initial)
+
+        return {
+            'elapsed': elapsed,
+            'indent': self.get_indent(prepared.keys),
+            'name': session.name,
+            'thread': message.thread,
+            'timestamp': timestamp,
+            }
+
+    def render(self, message, prepared):
+        prefix_renderer, template_renderer = self.get_renderers(prepared.dedup_keys)
+        priority = self.message_to_priority(message, prepared)
+        priority['prefix'] = prefix_renderer(priority)
+        lines = list(prepared.args)
+        if prepared.kwargs:
+            lines.extend(f'{name}={value}' for name, value in prepared.kwargs.items())
+        message_text = '\n'.join(lines)
+        s = template_renderer(message=message_text, **priority)
+        return s
 
 
 _ascii_translation_table = ''.maketrans({
@@ -714,438 +483,50 @@ _ascii_translation_table = ''.maketrans({
     '┹': '+',
     })
 
+def _convert_to_ascii(d):
+    result = {}
+    for key, value in d.items():
+        if isinstance(value, str):
+            value = value.translate(_ascii_translation_table)
+        elif isinstance(value, dict):
+            value = _convert_to_ascii(value)
+        result[key] = value
 
-@export
-def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, indent=True, ascii=False):
-    """
-    Formats a "prefix" string for use with a Log object.
-
-    The format it returns is in the form:
-        "[{elapsed} {thread.name}] "
-    formatted with these widths:
-         "[{time_seconds_width}.{time_fractional_width} {thread_name_width}]"
-    For example, the default value for Log.prefix is prefix_format(3, 10, 12),
-    which looks like this in the final log:
-        "[003.0706368860   MainThread]"
-
-    If the indent parameter is true (the default), the prefix generated
-    is followed by {indent}, which inserts the current indent string.
-
-    (The actual value of "indent" supplied by TextFormatter will be
-    the string passed in to its 'indent' parameter, multipled by the
-    current "enter" nesting depth.)
-    """
-    # the +1 is for the dot between seconds and fractional seconds
-    time_width = time_seconds_width + 1 + time_fractional_width
-    indent = '{indent}' if indent else ''
-    prefix = f'{{elapsed:0{time_width}.{time_fractional_width}f}} {{thread.name:>{thread_name_width}}}│ {indent}'
-    if ascii:
-        prefix = prefix.translate(_ascii_translation_table)
-    return prefix
-
-
-@export
-class TextFormatter(Formatter):
-    # supported_formats = frozenset({...})
-    # owns formats dict, prefix, nesting stack, indentation
-
-    def __init__(self,
-        *,
-        formats=None,
-        indent='    ',
-        prefix=prefix_format(3, 10, 12),
-        timestamp_format=timestamp_human,
-        width=79,
-        ):
-
-        if not isinstance(indent, str):
-            raise  TypeError('indent must be a non-empty str')
-        if not indent:
-            raise ValueError('indent must be a non-empty str')
-        if not isinstance(prefix, str):
-            raise  TypeError('prefix must be a str')
-        if not callable(timestamp_format):
-            raise  TypeError('timestamp_format must be callable')
-        if not isinstance(width, int):
-            raise  TypeError('width must be an int and greater than zero')
-        if not (width > 0):
-            raise ValueError('width must be an int and greater than zero')
-        if formats is None:
-            formats = {}
-        elif not isinstance(formats, dict):
-            raise  TypeError('formats must be a dict')
-
-        super().__init__(self.format)
-
-        self.formats, self.formatters = self.parse_formats(self.base_formats, formats, width)
-        self.default_indent = indent
-        self.indent = ''
-        self.indent_stack = []
-        self.prefix = prefix
-        self.timestamp_format = timestamp_format
-
-        self.supported_formats = set(self.formats)
-
-    def validate(self, format, message, data):
-        if data is not None:
-            raise FormatterValueError(f'{type(self).__name__} only supports data=None')
-
-        if isinstance(format, str):
-            format_name = format
-        elif isinstance(format, dict):
-            if not 'format' in format:
-                raise FormatterValueError(f"format dict must contain 'format' key")
-            format_name = format['format']
-            if self.name in format:
-                raise FormatterValueError(f"{type(self).__name__} doesn't support configuration in format dict")
-        else:
-            raise FormatterTypeError(f"format must be str or dict, not {type(format).__name__}")
-
-        if not format_name in self.supported_formats:
-            raise FormatterValueError(f"{type(self).__name__} doesn't support {format_name!r} format")
-
-
-
-    def start(self, ns, epoch, nesting):
-        super().start(ns, epoch, nesting)
-        self.indent_stack = []
-        for context in nesting:
-            format = context.format
-            if isinstance(format, str):
-                format_name = format
-            else:
-                format_name = format['format']
-            if format_name not in self.formats:
-                indent = self.default_indent
-            else:
-                format = self.formats[format_name]
-                assert 'exit' in format
-                indent = format.get('indent', self.default_indent)
-            self.indent_stack.append(indent)
-
-        self.indent = ''.join(self.indent_stack)
-
-
-
-    base_formats = {
-        "box" : {
-            "template": '{prefix}┌{line*}┐\n{prefix}│ {message}{space*} │\n{prefix}└{line*}┘\n',
-            "line*": '─',
-            "space*": ' ',
-        },
-        "box2" : {
-            "template": '{prefix}╔{double*}╗\n{prefix}║ {message}{space*} ║\n{prefix}╚{double*}╝\n',
-            "double*": '═',
-            "space*": ' ',
-        },
-        "end" : {
-            "template": '╔{double*}╗\n║ {name} finish at {timestamp} {space*}║\n╚{double*}╝\n',
-            "double*": '═',
-            "space*": ' ',
-        },
-        "enter": {
-            "template": '{prefix}┏━━━━━┱{line*}┐\n{prefix}┃enter┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┡━━━━━┹{line*}┘\n',
-            "line*": '─',
-            "space*": ' ',
-            "indent": '│   ',
-            "exit": 'exit',
-        },
-        "exit": {
-            "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
-            "line*": '─',
-            "space*": ' ',
-        },
-        "log": {
-            "template": '{prefix}{message}\n',
-        },
-        "start": {
-            "template": '╔{double*}╗\n║ {name} start at {timestamp} {space*}║\n╚{double*}╝\n',
-            "double*": '═',
-            "space*": ' ',
-        },
-        "preformatted": {
-            "template": '{prefix}{message}\n',
-        },
-
-    }
-
-    @staticmethod
-    def parse_formats(base_formats, override_formats, width):
-
-        formats = dict(base_formats)
-        formatters = {}
-
-        for key, value in override_formats.items():
-            if not isinstance(key, str):
-                raise TypeError(f"formats dict contains {key!r}, formats dict keys must be str")
-
-            if value is None:
-                if key not in ("start", "end", 'enter', 'exit'):
-                    raise ValueError("None is only a valid value for 'start', 'end', 'enter', and 'exit' formats")
-                formats.pop(key, None)
-                # formatters[key] = _none_format
-            else:
-                if not isinstance(value, dict):
-                    raise TypeError(f"format values must be dict or None, but formats[{key!r}] is type {type(value).__name__}")
-                if 'message' in value:
-                    raise ValueError(f"format dict for {key!r} must not contain 'message'")
-                if 'template' not in value:
-                    raise ValueError(f"format dict for {key!r} must contain 'template'")
-                template = value['template']
-                if not isinstance(template, str):
-                    raise TypeError(f"format dict template values must be str, but formats[{key!r}]['template'] is type {type(template).__name__}")
-                formats[key] = dict(value)
-
-        for key, d in formats.items():
-            d_copy = dict(d)
-            template = d_copy.pop('template')
-            formatters[key] = big_template.Formatter(template, d_copy, width=width).format_map
-
-        return formats, formatters
-
-    def format(self, elapsed, thread, format, message, data, nesting):
-        if data is not None:
-            raise TypeError("data must be None")
-
-        if nesting is None:
-            nesting_depth = len(self.nesting)
-            cache = True
-        else:
-            nesting_depth = len(nesting)
-            cache = False
-
-        if thread is None:
-            thread = _empty_thread
-
-        epoch = self.start_time_epoch + self.ns_to_float(elapsed)
-
-        map = {
-            "elapsed": self.ns_to_float(elapsed),
-            "format": format,
-            "indent": self.indent,
-            "name": self.root.name,
-            "thread": thread,
-            "time": epoch,
-            "timestamp": self.timestamp_format(epoch),
-            }
-
-        prefix = self.prefix.format_map(map)
-        map['prefix'] = prefix
-
-        # unbox format
-        format_name = format['format']
-
-        formatter = self.formatters[format_name]
-        formatted = formatter(message, map)
-        return formatted
-
-    def exit_format(self, format):
-        if isinstance(format, str):
-            format_name = format
-            result = {}
-        else:
-            format_name = format['format']
-            result = dict(format)
-        d = self.formats.get(format_name, None)
-        if (d is None) or ('exit' not in d):
-            return None
-        result['format'] = d['exit']
-        return result
-
-
-    def enter(self, elapsed, thread, format, message):
-        if isinstance(format, str):
-            format_name = format
-        else:
-            format_name = format['format']
-        if format_name not in self.formats:
-            indent = self.default_indent
-        else:
-            format = self.formats[format_name]
-            assert 'exit' in format
-            indent = format.get('indent', self.default_indent)
-        self.indent_stack.append(indent)
-
-        self.indent = ''.join(self.indent_stack)
-
-    def exit(self, elapsed, thread, format, context):
-        assert self.indent_stack
-        self.indent_stack.pop()
-        self.indent = ''.join(self.indent_stack)
-
-
+    return result
 
 
 @export
 class ASCIIFormatter(TextFormatter):
 
-    def make_base_formats():
-        base_formats = {}
-        for format_name, format in TextFormatter.base_formats.items():
-            base_formats[format_name] = d = {}
-            for key, value in format.items():
-                d[key] = value.translate(_ascii_translation_table)
-        return base_formats
-
-    base_formats = make_base_formats()
-    del make_base_formats
+    base_format_dict = _convert_to_ascii(TextFormatter.base_format_dict)
 
 
     def __init__(self,
         *,
         formats=None,
-        indent='    ',
-        prefix=prefix_format(3, 10, 12, ascii=True),
+        # indent='    ',
+        # prefix=prefix_format(3, 10, 12, ascii=True),
         timestamp_format=timestamp_human,
         width=79,
         ):
-        super().__init__(formats=formats, indent=indent, prefix=prefix, timestamp_format=timestamp_format, width=width)
+        super().__init__(formats=formats,
+            # indent=indent, prefix=prefix,
+            timestamp_format=timestamp_format, width=width)
 
 
-
-class Sink(Formatter):
-    """
-    A Formatter retaining all log messages, in order, using LogEvents.
-
-    Every time Sink receives an event from the Log, it appends
-    a LogEvent object to an internal list of events.
-    See LogEvent and its subclasses for more.
-
-    You may iterate over a Sink, which yields all events logged so far.
-
-    Sink.print() formats the events and prints them using
-    builtins.print.
-    """
-
-    supported_formats = True
-
-    def validate(self, format, message, data):
-        return True
-
-    def __init__(self):
-        super().__init__(self._format)
-        self._session = 0
-        self._events = []
-        self._longest_message = 0
-        self._depth = 0
-
-    def _format(self):
-        raise NotImplementedError()
-
-    def _event(self, event):
-        if hasattr(event, 'message') and (event.message is not None):
-            self._longest_message = max(self._longest_message, len(event.message))
-
-        if self._events:
-            previous = self._events[-1]
-            if not isinstance(previous, LogEndEvent):
-                assert event.elapsed >= previous.elapsed, \
-                    f"duration should be >= 0 but it's {event.elapsed - previous.elapsed} ({previous})"
-                self._events[-1] = previous._calculate_duration(event)
-
-        self._events.append(event)
-
-    def start(self, start_time_ns, start_time_epoch, nesting):
-        super().start(start_time_ns, start_time_epoch, nesting)
-        self._session += 1
-
-        configuration = {
-            "clock" : self.root._clock,
-            "name" : self.root._name,
-            "paused" : self.root.paused_on_reset,
-            "threaded" : self.root._threaded,
-            "timestamp_clock" : self.root._timestamp_clock,
-        }
-        nesting = tuple(nesting)
-        self._event(LogStartEvent(self._session, start_time_ns, start_time_epoch, nesting, configuration))
-
-
-    def end(self, elapsed):
-        super().end(elapsed)
-        self._event(LogEndEvent(self._session, elapsed))
-        self._depth = 0
-
-    def log(self, elapsed, thread, format, message, data):
-        self._event(LogLogEvent(self._session, elapsed, thread, format, message, data, self._depth))
-
-    def enter(self, elapsed, thread, format, message):
-        self._event(LogEnterEvent(self._session, elapsed, thread, format, message, self._depth))
-        self._depth += 1
-
-    def exit(self, elapsed, thread, format, context):
-        self._depth -= 1
-        self._event(LogExitEvent(self._session, elapsed, thread, format, context, self._depth))
-
-    def __iter__(self):
-        for e in self._events:
-            yield e
-
-    def print(self, *,
-            enter='',
-            exit='',
-            indent=2,
-            prefix='[{elapsed:>014.10f} {thread.name:>12} {duration:>014.10f} {format:>8} {type:>5}] {indent}',
-            print=None,
-            timestamp=timestamp_human,
-            width=None,
-            ):
-        if not self._events:
-            return
-
-        # start_time_epoch will always have a valid value
-        assert isinstance(self._events[0], LogStartEvent)
-
-        if not print:
-            print = builtins.print
-
-        if width is None:
-            width = self._longest_message
-
-        start_time_epoch = None
-
-        for e in self._events:
-            if isinstance(e, LogStartEvent):
-                start_time_epoch = e.epoch
-
-            elapsed = e.elapsed / 1_000_000_000.0
-            duration = getattr(e, 'duration', 0) / 1_000_000_000.0
-            epoch = elapsed + start_time_epoch
-            ts = timestamp(epoch)
-            indent_str = ' ' * (e.depth * indent)
-            thread = getattr(e, 'thread', _empty_thread)
-
-            e_type = type(e).__name__[3:-5].lower()
-
-            format = getattr(e, 'format', None) or {}
-            format_name = format.get('format', '')
-
-            fields = {
-                'elapsed': elapsed,
-                'duration': duration,
-                'format': format_name,
-                'timestamp': ts,
-                'thread': thread,
-                'type': e_type,
-                'depth': e.depth,
-                'indent': indent_str,
-            }
-            prefix_str = prefix.format_map(fields)
-            space_str = " " * len(prefix_str)
-            message = getattr(e, 'message', '')
-            for line in message.split('\n'):
-                print(prefix_str + line)
-                prefix_str = space_str
-
-            data = getattr(e, 'data', None)
-            if data is not None:
-                print(prefix_str + repr(data))
 
 
 @export
 class Destination:
+    # __slots__ = ('_log', '_formatter', '_session')
+
     def __init__(self):
-        self.owner = self.log = None
-        self.active = False
+        self._core = None
+        self._formatter = None
+        self._session = None
+
+        self._serial_number = _serial_number()
+        self._key = (self.__class__.__name__, self._serial_number, id(self))
 
     def __eq__(self, other):
         raise NotImplementedError()
@@ -1154,38 +535,44 @@ class Destination:
         raise NotImplementedError()
 
     def __repr__(self):
-        registered = 'registered' if self.owner is not None else 'unregistered'
-        active = 'active' if self.active else 'inactive'
+        registered = 'registered' if self._core is not None else 'unregistered'
+        active = 'active' if self._session else 'inactive'
         return f'<{type(self).__name__} {registered}>'
 
-    def register(self, log, owner):
-        if (self.log is not None) or (self.owner is not None):
+    def register(self, core, formatter):
+        if (self._core is not None) or (self._formatter is not None):
             raise RuntimeError(f"{self} is already registered")
-        self.log = log
-        self.owner = owner
+        self._core = core
+        self._formatter = formatter
+        # print(f"{self!r} registered! {core=} {formatter=}")
 
     def unregister(self):
-        if (self.log is None) or (self.owner is None):
+        if (self._core is None) or (self._formatter is None):
             raise RuntimeError(f"{self} isn't registered")
-        self.log = self.owner = None
+        self._core = self._formatter = None
 
-    def start(self):
-        if (self.log is None) or (self.owner is None):
+    def start(self, session):
+        if (self._core is None) or (self._formatter is None):
             raise RuntimeError(f"can't start {self}, it's unregistered")
-        if self.active:
+        if (self._session is not None):
             raise RuntimeError(f"can't start {self}, it was already started")
-        self.active = True
+        self._session = session
+        # print(f"{self!r} started! {session=}")
 
     def end(self):
-        if not self.active:
+        if self._session is None:
             raise RuntimeError(f"can't end {self}, it wasn't started")
-        self.active = False
+        self._session = None
 
-    def write(self, formatted):
+    def write(self, o):
+        assert self._session
         raise NotImplementedError()
 
     def flush(self):
-        pass
+        assert self._session
+
+
+
 
 @export
 class Callable(Destination):
@@ -1194,6 +581,8 @@ class Callable(Destination):
 
     Calls the callable for every formatted log message.
     """
+    __slots__ = ('_callable',)
+
     def __init__(self, callable):
         super().__init__()
         self._callable = callable
@@ -1208,154 +597,31 @@ class Callable(Destination):
     def __hash__(self):
         return hash(Callable) ^ hash(self._callable)
 
-    def write(self, formatted):
-        self._callable(formatted)
-
-@export
-class File(Destination):
-    """
-    A Destination wrapping a file in the filesystem.
-
-    This Destination writes to a file in the filesystem,
-    using the path you specify (either a str or a pathlib.Path
-    object).
-
-    If flush=False (the default), when a formatted log message
-    is written to the destination, it's buffered internally.
-    Then, when the log is flushed, File concatenates all the
-    buffered messages, opens the file, writes to it with one
-    write call, and closes it.
-
-    If flush=True, the file is opened and kept open.  Every
-    time it receives a formatted log message, it writes the
-    message immediately and flushes the file handle.  If File
-    receives an "end" message, it closes the file; if it
-    receives a subsequent "start" message, it reopens the file.
-
-    The first time the file is opened, it's opened using the
-    "initial_mode" passed in, by default "at".  After the first
-    time, File always uses mode "at".
-    """
-    def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None):
-        super().__init__()
-
-        Path = pathlib.Path
-
-        original_path = path
-
-        is_bytes = isinstance(path, bytes)
-        is_str = isinstance(path, str)
-        is_path = isinstance(path, Path)
-
-        if not (is_bytes or is_str or is_path):
-            raise TypeError("path must be str, bytes, or pathlib.Path, and non-empty")
-        if not path:
-            raise ValueError("path must be str, bytes, or pathlib.Path, and non-empty")
-
-        if is_bytes:
-            path = os.fsdecode(path)
-            is_str = True
-        if is_str:
-            path = Path(path)
-
-        path = path.resolve()
-
-        if not isinstance(initial_mode, str):
-            raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
-        if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
-            raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
-
-        self._buffer = buffer = []
-        self._buffering = buffering
-        self._original_path = original_path
-        self._path = path
-        self._mode = initial_mode
-        self._encoding = encoding
-        self._f = None
-
-    @property
-    def path(self):
-        return self._original_path
-
-    @property
-    def mode(self):
-        return self._mode
-
-    @property
-    def encoding(self):
-        return self._encoding
-
-    @property
-    def buffering(self):
-        return self._buffering
-
-    def __eq__(self, other):
-        return isinstance(other, File) and (other._path == self._path)
-
-    def __hash__(self):
-        return hash(File) ^ hash(self._path)
-
-    def start(self):
-        super().start()
-        self._f = None if self._buffering else self._path.open(self._mode, encoding=self._encoding)
-
-    def end(self):
-        super().end()
-        assert not self._buffer
-        if self._f:
-            assert not self._buffering
-            f = self._f
-            self._f = None
-            f.close()
-            self._mode = "at"
-
-    def write(self, formatted):
-        if not formatted:
-            return
-        if self._buffering:
-            self._buffer.append(formatted)
-            return
-
-        self._f.write(formatted)
-        self._f.flush()
-
-    def flush(self):
-        if not (self._buffering and self._buffer):
-            return
-
-        assert not self._f
-        contents = "".join(self._buffer)
-        self._buffer.clear()
-        with self._path.open(self._mode, encoding=self._encoding) as f:
-            f.write(contents)
-        self._mode = "at"
+    def write(self, o):
+        self._callable(o)
 
 
 @export
-class FileHandle(Destination):
-    def __init__(self, handle, *, autoflush=False):
-        super().__init__()
-        if not isinstance(handle, io.TextIOBase):
-            raise TypeError(f"invalid file handle {handle}")
-        self._handle = handle
-        self._autoflush = autoflush
+class Print(Destination):
+    __slots__ = ()
 
     def __eq__(self, other):
-        return isinstance(other, FileHandle) and (other._handle is self._handle)
+        return isinstance(other, Print)
 
     def __hash__(self):
-        return hash(FileHandle) ^ hash(self._handle)
+        return hash(Print) ^ hash(object)
 
-    def write(self, message):
-        self._handle.write(message)
-        if self._autoflush:
-            self._handle.flush()
+    def write(self, o):
+        builtins.print(o, end='')
 
     def flush(self):
-        self._handle.flush()
+        builtins.print('', end='', flush=True)
+
 
 @export
 class List(Destination):
+    __slots__ = ('_list',)
+
     def __init__(self, list):
         super().__init__()
         self._list = list
@@ -1368,6 +634,7 @@ class List(Destination):
 
     def write(self, message):
         self._list.append(message)
+
 
 @export
 class NoneType(Destination):
@@ -1383,1108 +650,918 @@ class NoneType(Destination):
     def write(self, message):
         pass
 
+
+# @export
+# class File(Destination):
+#     """
+#     A Destination wrapping a file in the filesystem.
+
+#     This Destination writes to a file in the filesystem,
+#     using the path you specify (either a str or a pathlib.Path
+#     object).
+
+#     If flush=False (the default), when a formatted log message
+#     is written to the destination, it's buffered internally.
+#     Then, when the log is flushed, File concatenates all the
+#     buffered messages, opens the file, writes to it with one
+#     write call, and closes it.
+
+#     If flush=True, the file is opened and kept open.  Every
+#     time it receives a formatted log message, it writes the
+#     message immediately and flushes the file handle.  If File
+#     receives an "end" message, it closes the file; if it
+#     receives a subsequent "start" message, it reopens the file.
+
+#     The first time the file is opened, it's opened using the
+#     "initial_mode" passed in, by default "at".  After the first
+#     time, File always uses mode "at".
+#     """
+#     def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None):
+#         super().__init__()
+
+#         Path = pathlib.Path
+
+#         original_path = path
+
+#         is_bytes = isinstance(path, bytes)
+#         is_str = isinstance(path, str)
+#         is_path = isinstance(path, Path)
+
+#         if not (is_bytes or is_str or is_path):
+#             raise TypeError("path must be str, bytes, or pathlib.Path, and non-empty")
+#         if not path:
+#             raise ValueError("path must be str, bytes, or pathlib.Path, and non-empty")
+
+#         if is_bytes:
+#             path = os.fsdecode(path)
+#             is_str = True
+#         if is_str:
+#             path = Path(path)
+
+#         path = path.resolve()
+
+#         if not isinstance(initial_mode, str):
+#             raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
+#         if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
+#             raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
+
+#         self._buffer = buffer = []
+#         self._buffering = buffering
+#         self._original_path = original_path
+#         self._path = path
+#         self._mode = initial_mode
+#         self._encoding = encoding
+#         self._f = None
+
+#     @property
+#     def path(self):
+#         return self._original_path
+
+#     @property
+#     def mode(self):
+#         return self._mode
+
+#     @property
+#     def encoding(self):
+#         return self._encoding
+
+#     @property
+#     def buffering(self):
+#         return self._buffering
+
+#     def __eq__(self, other):
+#         return isinstance(other, File) and (other._path == self._path)
+
+#     def __hash__(self):
+#         return hash(File) ^ hash(self._path)
+
+#     def start(self):
+#         super().start()
+#         self._f = None if self._buffering else self._path.open(self._mode, encoding=self._encoding)
+
+#     def end(self):
+#         super().end()
+#         assert not self._buffer
+#         if self._f:
+#             assert not self._buffering
+#             f = self._f
+#             self._f = None
+#             f.close()
+#             self._mode = "at"
+
+#     def write(self, formatted):
+#         if not formatted:
+#             return
+#         if self._buffering:
+#             self._buffer.append(formatted)
+#             return
+
+#         self._f.write(formatted)
+#         self._f.flush()
+
+#     def flush(self):
+#         if not (self._buffering and self._buffer):
+#             return
+
+#         assert not self._f
+#         contents = "".join(self._buffer)
+#         self._buffer.clear()
+#         with self._path.open(self._mode, encoding=self._encoding) as f:
+#             f.write(contents)
+#         self._mode = "at"
+
+
+# @export
+# class FileHandle(Destination):
+#     def __init__(self, handle, *, autoflush=False):
+#         super().__init__()
+#         if not isinstance(handle, io.TextIOBase):
+#             raise TypeError(f"invalid file handle {handle}")
+#         self._handle = handle
+#         self._autoflush = autoflush
+
+#     def __eq__(self, other):
+#         return isinstance(other, FileHandle) and (other._handle is self._handle)
+
+#     def __hash__(self):
+#         return hash(FileHandle) ^ hash(self._handle)
+
+#     def write(self, message):
+#         self._handle.write(message)
+#         if self._autoflush:
+#             self._handle.flush()
+
+#     def flush(self):
+#         self._handle.flush()
+
+
+# class Buffer(Destination):
+#     """
+#     A Destination that buffers log messages before sending them to another Destination.
+
+#     This Destination wraps another arbitrary
+#     Destination, referred to as the "underlying"
+#     Destination.
+
+#     Every time a formatted log message is logged,
+#     Buffer appends it to an internal buffer (a Python list).
+#     When the log is flushed, Buffer will concatentate
+#     all the log messages into one giant string, then
+#     writes that string to the underlying Destination,
+#     and also flushes the underlying Destination.
+
+#     By default, Buffer wraps a Print destination,
+#     but you may supply your own Destination as a
+#     positional argument to the constructor.
+#     """
+#     def __init__(self, destination=None):
+#         super().__init__()
+#         self._buffer = []
+#         self._original_destination = destination
+#         self._destination = map_destination(destination) if destination is not None else Print()
+#         self._last_elapsed = self._last_thread = None
+
+
+#     @property
+#     def buffer(self):
+#         return self._buffer
+
+#     @property
+#     def destination(self):
+#         return self._original_destination
+
+#     def __eq__(self, other):
+#         return isinstance(other, Buffer) and (other._destination == self._destination)
+
+#     def __hash__(self):
+#         return hash(Buffer) ^ hash(self._destination)
+
+#     def register(self, log, owner):
+#         super().register(log, owner)
+#         self._destination.register(log, self)
+
+#     def unregister(self):
+#         super().unregister()
+#         self._destination.unregister()
+
+#     def start(self):
+#         super().start()
+#         self._destination.start()
+
+#     def end(self):
+#         super().end()
+#         self._destination.end()
+
+#     def write(self, formatted):
+#         self._buffer.append(formatted)
+
+#     def flush(self):
+#         if self._buffer:
+#             contents = "".join(self._buffer)
+#             self._buffer.clear()
+#             self._destination.write(contents)
+#         if self._buffer:
+#             self._destination.flush()
+
+
+
+# @export
+# class TmpFile(File):
+#     """
+#     A Destination that writes to a timestamped temporary file.
+
+#     This is a subclass of File that computes a temporary
+#     filename.  The filename is approximately in this format:
+#         tempfile.gettempdir() / "{Log.name}.{start timestamp}.{os.getpid()}.txt"
+#     (If the computed filename contains illegal or inconvenient characters,
+#     they may be replaced with other characters; for example ':' is replaced with '-'.)
+
+#     The filename is recomputed whenever TmpFile receives a "start" event.
+#     Thus, if a Log is reset, TmpFile will close the old temporary log;
+#     if that Log is subsequently logged to, TmpFile will open a new temporary
+#     log with a freshly recalculated name.
+#     """
+
+#     def __init__(self, prefix='{name}', *, buffering=True, encoding=None, timestamp_format=timestamp_human):
+#         # use a fake path for now,
+#         # we'll compute a proper one when we get the "start" event
+#         path = pathlib.Path(tempfile.gettempdir()) / f"Log-init.{os.getpid()}.tmp"
+#         super().__init__(path, buffering=buffering, encoding=encoding)
+#         if not (isinstance(prefix, str) and prefix):
+#             raise TypeError("prefix must be str, and cannot be empty")
+#         self._name = None
+#         self._prefix = prefix
+#         self._rendered_prefix = None
+#         self._timestamp_format = timestamp_format
+
+#     @property
+#     def prefix(self):
+#         return self._prefix
+
+#     @property
+#     def path(self):
+#         return self._path
+
+#     def __eq__(self, other):
+#         return isinstance(other, TmpFile) and (other._prefix == self._prefix)
+
+#     def __hash__(self):
+#         return hash(TmpFile) ^ hash(self._prefix)
+
+#     def register(self, log, owner):
+#         super().register(log, owner)
+#         self._name = log.name
+#         self._rendered_prefix = self._prefix.format(name=self._name)
+
+#     def start(self):
+#         super().start()
+#         assert self.owner
+#         log = self.log
+
+#         log_timestamp = self._timestamp_format(log.start_time_epoch)
+#         log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
+#         thread = threading.current_thread()
+#         tmpfile = f"{self._rendered_prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
+#         tmpfile = translate_filename_to_exfat(tmpfile)
+#         tmpfile = tmpfile.replace(" ", '_')
+#         self._path = pathlib.Path(tempfile.gettempdir()) / tmpfile
+
+# TMPFILE = object()
+# export("TMPFILE")
+
+
+
+
+
 @export
-class Print(Destination):
-    def __eq__(self, other):
-        return isinstance(other, Print)
-
-    def __hash__(self):
-        return hash(Print) ^ hash(object)
-
-    def write(self, message):
-        builtins.print(message, end='')
-
-    def flush(self):
-        builtins.print('', end='', flush=True)
-
-class Buffer(Destination):
-    """
-    A Destination that buffers log messages before sending them to another Destination.
-
-    This Destination wraps another arbitrary
-    Destination, referred to as the "underlying"
-    Destination.
-
-    Every time a formatted log message is logged,
-    Buffer appends it to an internal buffer (a Python list).
-    When the log is flushed, Buffer will concatentate
-    all the log messages into one giant string, then
-    writes that string to the underlying Destination,
-    and also flushes the underlying Destination.
-
-    By default, Buffer wraps a Print destination,
-    but you may supply your own Destination as a
-    positional argument to the constructor.
-    """
-    def __init__(self, destination=None):
-        super().__init__()
-        self._buffer = []
-        self._original_destination = destination
-        self._destination = map_destination(destination) if destination is not None else Print()
-        self._last_elapsed = self._last_thread = None
+class Core:
+    # __slots__ = (
+    #     'clock',
+    #     'clock_to_timestamp',
+    #     'sessions',
+    #     'formatters',
+    #     'formatters_by_key',
+    #     'job_queue',
+    #     'name',
+    #     'notify_queue',
+    #     'routes',
+    #     'sessions',
+    #     'started',
+    #     'threaded',
+    #     'timestamp_clock',
+    #     'thread',
+    #     )
 
 
-    @property
-    def buffer(self):
-        return self._buffer
+    def __init__(self,
+        *,
+        clock,
+        name,
+        threaded,
+        ):
 
-    @property
-    def destination(self):
-        return self._original_destination
+        self.clock = clock
+        self.name = name
+        self.threaded = bool(threaded)
 
-    def __eq__(self, other):
-        return isinstance(other, Buffer) and (other._destination == self._destination)
+        self.notify_queue = Queue()
+        self.job_queue = linked_list(lock=True)
 
-    def __hash__(self):
-        return hash(Buffer) ^ hash(self._destination)
+        self.formatters = []
+        self.formatters_by_key = {}
+        self.routes = {}
 
-    def register(self, log, owner):
-        super().register(log, owner)
-        self._destination.register(log, self)
+        self.started = None
 
-    def unregister(self):
-        super().unregister()
-        self._destination.unregister()
+        self.configuration_lock = threading.Lock()
+        self.sessions = linked_list(lock=True)
 
-    def start(self):
-        super().start()
-        self._destination.start()
+        atexit.register(self.atexit)
 
-    def end(self):
-        super().end()
-        self._destination.end()
-
-    def write(self, formatted):
-        self._buffer.append(formatted)
-
-    def flush(self):
-        if self._buffer:
-            contents = "".join(self._buffer)
-            self._buffer.clear()
-            self._destination.write(contents)
-        if self._buffer:
-            self._destination.flush()
+        self.thread = None
+        self._start_thread()
 
 
-
-@export
-class TmpFile(File):
-    """
-    A Destination that writes to a timestamped temporary file.
-
-    This is a subclass of File that computes a temporary
-    filename.  The filename is approximately in this format:
-        tempfile.gettempdir() / "{Log.name}.{start timestamp}.{os.getpid()}.txt"
-    (If the computed filename contains illegal or inconvenient characters,
-    they may be replaced with other characters; for example ':' is replaced with '-'.)
-
-    The filename is recomputed whenever TmpFile receives a "start" event.
-    Thus, if a Log is reset, TmpFile will close the old temporary log;
-    if that Log is subsequently logged to, TmpFile will open a new temporary
-    log with a freshly recalculated name.
-    """
-
-    def __init__(self, prefix='{name}', *, buffering=True, encoding=None, timestamp_format=timestamp_human):
-        # use a fake path for now,
-        # we'll compute a proper one when we get the "start" event
-        path = pathlib.Path(tempfile.gettempdir()) / f"Log-init.{os.getpid()}.tmp"
-        super().__init__(path, buffering=buffering, encoding=encoding)
-        if not (isinstance(prefix, str) and prefix):
-            raise TypeError("prefix must be str, and cannot be empty")
-        self._name = None
-        self._prefix = prefix
-        self._rendered_prefix = None
-        self._timestamp_format = timestamp_format
-
-    @property
-    def prefix(self):
-        return self._prefix
-
-    @property
-    def path(self):
-        return self._path
-
-    def __eq__(self, other):
-        return isinstance(other, TmpFile) and (other._prefix == self._prefix)
-
-    def __hash__(self):
-        return hash(TmpFile) ^ hash(self._prefix)
-
-    def register(self, log, owner):
-        super().register(log, owner)
-        self._name = log.name
-        self._rendered_prefix = self._prefix.format(name=self._name)
-
-    def start(self):
-        super().start()
-        assert self.owner
-        log = self.log
-
-        log_timestamp = self._timestamp_format(log.start_time_epoch)
-        log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
-        thread = threading.current_thread()
-        tmpfile = f"{self._rendered_prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
-        tmpfile = translate_filename_to_exfat(tmpfile)
-        tmpfile = tmpfile.replace(" ", '_')
-        self._path = pathlib.Path(tempfile.gettempdir()) / tmpfile
-
-TMPFILE = object()
-export("TMPFILE")
-
-
-
-@export
-class Log:
-    def __init__(self, *destinations,
-            clock=default_clock,
-            formatter=None,
-            name='Log',
-            paused=False,
-            timestamp_clock=time.time,
-            threaded=True,
-            ):
-
-        ns1 = clock()
-        epoch = timestamp_clock()
-        ns2 = clock()
-        start_time_ns = (ns1 + ns2) // 2
-        start_time_epoch = epoch
-
-        self._name = name
-
-        self.paused_on_reset = bool(paused)
-        self._paused_counter = int(self.paused_on_reset)
-
-        self._threaded = threaded
-
-        self._dispatch_lock = threading.Lock()
-        # if you need both, grab dispatch lock first.
-        # dispatch lock is only used for non-threaded mode.
-        self._configuration_lock = threading.Lock()
-
-        self._enter_token = 1
-
-        # when you schedule a job, you insert it into
-        # job_queue wherever you like, then you queue
-        # that number on the notify_queue.
-        #
-        # why this weird design with two queues?
-        # linked_list gives us snazzy APIs, and lets
-        #   me dogfood my new ADT.  (a deque would probably
-        #   work here, but deque.extendleft irritates me.)
-        # Queue gives us cheap cross-thread notification.
-        #
-        # We use queue.SimpleQueue on 3.7+,
-        # and queue.Queue on 3.6.
-        #
-        self._notify_queue = Queue()
-        # self._notify_queue = queue.Queue()
-        self._job_queue = linked_list(lock=True)
-
-        self._reset(start_time_ns, start_time_epoch)
-
-        self._clock = clock
-        self._timestamp_clock = timestamp_clock
-
-        if formatter is not None:
-            if not isinstance(formatter, Formatter):
-                raise TypeError(f"formatter must be Formatter, not {type(formatter).__name__}")
-            df = formatter
-        else:
-            df = TextFormatter()
-
-        df.register(self, self)
-        self._default_formatter = df
-        self._formatters = [df]
-
-        self._active = set()
-
-        if not destinations:
-            destinations = (builtins.print,)
-
-        wrapped_destinations = []
-        for d in destinations:
-            if isinstance(d, Formatter):
-                self._formatters.append(d)
-                d.register(self, self)
-                continue
-            if not isinstance(d, Destination):
-                d = self.map_destination(d)
-                assert isinstance(d, Destination)
-            wrapped_destinations.append(d)
-
-        for d in wrapped_destinations:
-            df.append(d)
-
-        intersection_formats = None
-        for f in self._formatters:
-            if f.supported_formats is True:
-                continue
-            if intersection_formats is None:
-                intersection_formats = set(f.supported_formats)
-                continue
-            intersection_formats = intersection_formats.intersection(f.supported_formats)
-
-        if intersection_formats is None:
-            intersection_formats = set()
-        intersection_formats = list(intersection_formats)
-        intersection_formats.sort()
-        for key in (
-            'start',
-            'end',
-            'enter',
-            'exit',
-            'log',
-            'preformatted',
-            ):
-            if key in intersection_formats:
-                intersection_formats.remove(key)
-
-        for key in intersection_formats:
-            if isinstance(key, str) and key.isidentifier() and (not hasattr(self, key)):
-                def make_method(key):
-                    format_dict = {'format': key}
-                    clock = self._clock
-                    current_thread = threading.current_thread
-                    scheduler = self._scheduler
-                    log = self._log
-                    validate = self._validate
-                    def method(message=''):
-                        time = clock()
-                        thread = current_thread()
-
-                        validate(format_dict, message, None)
-
-                        s = scheduler(drain=True)
-                        s(log, time, thread, format_dict, message, None)
-                        s()
-
-                    method.__doc__ = f"Writes a message to the log using the {key!r} format."
-                    return method
-                setattr(self, key, make_method(key))
-
-        atexit.register(self._atexit)
-
-        self._manage_thread()
-
-    def _manage_thread(self):
-        if not self._threaded:
-            self._queue = self._thread = None
+    def _start_thread(self):
+        if not (self.threaded and (self.thread is None)):
             return
 
-        self._thread = threading.Thread(target=self._worker_thread, daemon=True)
-        self._thread.start()
+        self.thread = threading.Thread(target=self.execute, args=(True,), daemon=True)
+        self.thread.start()
 
     def _stop_thread(self):
-        pass
-
-    def _reset(self, start_time_ns, start_time_epoch):
-        self._state = 'initial'
-
-        self._start_time_ns = start_time_ns
-        self._start_time_epoch = start_time_epoch
-        self._end_time_ns = None
-        self._end_time_epoch = None
-
-        self._ever_wrote_anything = False
-
-        self._nesting_tokens = []
-        self._nesting_contexts = []
-
-        # do this immediately, don't wait for the thread to do it.
-        # otherwise, user might observe a delay between reset()
-        # and paused state changing.
-        #
-        # modifications of _paused_counter are always under lock
-        # so we don't have race conditions with incr/decr
-
-        if self._configuration_lock:
-            paused = self._paused_counter = int(bool(self.paused_on_reset))
-
-        self._send_start_banner = not paused
-        self._ever_logged_anything = set()
-
-
-    def _atexit(self):
-        clock = self._clock
-        timestamp_clock = self._timestamp_clock
-        ns1 = clock()
-        epoch = timestamp_clock()
-        ns2 = clock()
-        ns = (ns1 + ns2) // 2
-
-        # if the main program took < sys.getswitchinterval() seconds to run,
-        # the worker thread may have been completely starved and no jobs
-        # may have run yet.  so: call block.  in non-threaded mode,
-        # it's a no-op.  in threaded mode it will flush the job queue.
-        self._block()
-        s = self._scheduler(atexit=True)
-        self._ensure_state('exited', ns=ns, epoch=epoch, s=s)
-        s(self._stop_thread)
-        s()
-
-
-    @property
-    def clock(self):
-        return self._clock
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def start_time_ns(self):
-        return self._start_time_ns
-
-    @property
-    def start_time_epoch(self):
-        return self._start_time_epoch
-
-    @property
-    def threaded(self):
-        return self._threaded
-
-    @property
-    def timestamp_clock(self):
-        return self._timestamp_clock
-
-    @property
-    def closed(self):
-        return self._state in ('closed', 'exited')
-
-    @property
-    def nesting(self):
-        with self._configuration_lock:
-            return tuple(self._nesting_contexts)
-
-
-    @classmethod
-    def base_destination_mapper(cls, o):
-        "Implements the default mapping of objects to Destination objects."
-
-        if isinstance(o, Destination):
-            return o
-        if o is print:
-            return Print()
-        if isinstance(o, (bytes, str, pathlib.Path)):
-            return File(o)
-        if isinstance(o, list):
-            return List(o)
-        if isinstance(o, io.TextIOBase):
-            return FileHandle(o)
-        if callable(o):
-            return Callable(o)
-        if o is TMPFILE:
-            return TmpFile()
-        if o is None:
-            return NoneType()
-        raise TypeError(f"don't know how to log to destination {o!r}")
-
-    destination_mappers = []
-
-    @classmethod
-    def map_destination(cls, o):
-        """
-        Wraps objects of various supported types
-        with appropriate Destination objects.
-
-        This is extensible with the class attribute
-        Log.destination_mappers, a list.  Append your
-        own mapper function(s) to this list and they'll
-        be called by map_destination.  The function should
-        take a single object, the destination, and return
-        either the correct Destination object to handle
-        that object or None.
-        """
-        for mapper in cls.destination_mappers:
-            result = mapper(o)
-            if result is not None:
-                return result
-
-        return cls.base_destination_mapper(o)
-
-
-
-    """
-    All methods on a Log object that interact with the log are
-    implemented using "jobs" objects.  A "jobs" object is a
-    list of jobs:
-        [job, job2, ...]
-    These "job" objects are 3-tuples:
-         (involved, callable, args)
-    involved is a tuple of objects (Formatters and Destinations)
-    involved in this job.  callable is a callable, args is an
-    iterable (probably a tuple) of arguments.  We execute the
-    jobs like this, more or less:
-
-        for callable, args in jobs:
-            callable(*args)
-
-    If threaded is True, the jobs are sent to the worker
-    thread.  If threaded is False, the jobs are executed
-    immediately, in the current thread, while holding
-    self._queue_lock.
-
-    None is also a legal "job"; it must be the last "job"
-    in jobs.  If threaded is True, this causes the
-    worker thread to exit; if threaded is False, it causes
-    the dispatch call to return immediately.
-
-    Why send sequences of jobs?  Why not queue each job
-    individually?  The sequence ensures that jobs from
-    multiple threads don't get interleaved.  For example,
-    Log.enter() logs the "enter" message and indents the log.
-    If we queued them separately, we could have a race with
-    another thread trying to log something; that other thread
-    could get its message logged after the "enter" message but
-    before the indent!  By sending both jobs in a list all at
-    once, we guarantee that no job from another thread gets
-    queued between these two jobs.
-    """
-
-
-    @property
-    def _closed(self):
-        return self._state in ('closed', 'exited')
-
-    def _set_state(self, state):
-        self._state = state
-
-    def _active_add(self, formatter):
-        self._active.add(formatter)
-
-    def _active_remove(self, formatter):
-        self._active.remove(formatter)
-
-    def _ensure_active(self, s):
-        nesting = tuple(self._nesting_contexts)
-        paused = bool(self._paused_counter)
-        for f in self._formatters:
-            s(f.start, self._start_time_ns, self._start_time_epoch, nesting)
-            s(self._active_add, f)
-
-            if (self._send_start_banner) and (f.supported_formats is not True) and ('start' in f.supported_formats):
-                s(f.log, 0, None, {'format': 'start'}, '', None)
-                self._ever_logged_anything.add(id(f))
-
-        self._send_start_banner = False
-        s(self._set_state, 'active')
-
-    def _ensure_closed(self, ns, epoch, state, s):
-        """
-        Ensure the Log is in its closed state, regardless of current state.
-
-        Always called from a thread holding self._configuration_lock,
-        though that probably isn't necessary for correctness.
-        (It's only in case the _atexit handler gets called
-        while we're already executing a state transition.)
-        """
-
-        if self._state in ('closed', 'exited'):
+        if not (self.threaded and (self.thread is not None)):
             return
 
-        self._end_time_ns = ns
-        self._end_time_epoch = epoch
-        elapsed = self._elapsed(ns)
+        thread = self.thread
+        jq = self.job_queue
+        nq = self.notify_queue
 
-        # print(f"ES 1 {state=}")
+        # ensure all jobs up to now have been executed
+        blocker = threading.Lock()
+        blocker.acquire()
+        self.dispatch([(blocker.release, ())])
+        blocker.acquire()
 
-        # if self._threaded and (state == 'exited'):
-        #     # force some synchronization:
-        #     # if we have any formatters that have never seen anything logged,
-        #     # it might be because the worker thread has been starved for CPU
-        #     # and hasn't been allowed to run their jobs yet.
-        #     # so, block until the worker thread clears the job queue.
-        #     #
-        #     # this will only happen if
-        #     #    * the Log object is unused, in which case the job queue
-        #     #      will be empty anyway, so this'll be quick.
-        #     #    * the program ran and finished super quick, less than
-        #     #      sys.getsysinterval() seconds.  if the program did any
-        #     #      logging, those jobs might be stuck in the queue,
-        #     #      and this will fix it.
-        #     #
-        #     # if all formatters have ever logged anything, we don't bother
-        #     # to block here.
-        #     all_f_ids = set(id(f) for f in self._formatters)
-        #     if self._ever_logged_anything != all_f_ids:
-        #         self._block()
+        # flip all sessions to closed
+        self.reset()
 
-        # print(f"ES 2 {state=}")
+        self.flush()
 
-        for f in self._formatters:
-            if f in self._active:
-                if (id(f) in self._ever_logged_anything) and (not self._paused_counter) and (f.supported_formats is not True) and ('end' in f.supported_formats):
-                    s(f.log, elapsed, None, {'format': 'end'}, '', None)
-                s(f.end, elapsed)
-                s(self._active_remove, f)
+        self.thread = self.job_queue = self.notify_queue = None
 
-        s(self._set_state, state)
+        jq.append(None)
+        nq.put(1)
+        thread.join()
 
-    def _ensure_state(self, state, *, s=None, ns=None, epoch=None):
-        # four states:
-        #
-        #     initial
-        #        The initial state.  Log starts out in initial,
-        #        and Log.reset() returns to initial.
-        #        Reachable from closed and logged.
-        #
-        #     active
-        #        We have ever logged formatted text.
-        #        Only reachable from initial.
-        #
-        #     closed
-        #        Log has been closed.  Reachable from initial
-        #        and logged.
-        #
-        #     exited
-        #        Log's _atexit handler has been called;
-        #        the process is shutting down.
-        #        Only reachable from closed.
-        #        Is a terminal state; you can't transition
-        #        out of it.
-        #
-        #     faulted
-        #        Somebody (Log? Formatter? Destination?)
-        #        raised an unexpected, and unhandled,
-        #        exception.  If it was a Formatter or
-        #        Destination, you can clear the fault
-        #        by running Log.fix.  If it was Log itself
-        #        that raised, the Log instance is unrecoverable.
-        #
-        assert state in ('initial', 'active', 'closed', 'exited', 'faulted')
 
-        # fast path: we're already in the correct state
-        if self._state == state:
-            return True
+    def route(self, formatter, destinations):
+        try:
+            session = self.sessions[0]()
+            assert self.started is not None
+        except IndexError:
+            session = None
 
-        # good news! you can always transition to faulted.
-        if state == 'faulted':
-            self._state = state
-            return True
+        if formatter.key not in self.formatters_by_key:
+            self.formatters.append(formatter)
+            self.formatters_by_key[formatter.key] = formatter
+            self.routes[formatter.key] = []
 
-        # exited is a terminal state.
-        if self._state == 'exited':
-            return False
+            formatter.register(self)
 
-        if state == 'initial':
-            # because of the above ifs, we already know
-            # we're not in 'initial' or 'exited'.
-            # that means we're in 'logged' or 'closed'.
-            # we're transitioning backwards!
-            assert ns is not None
-            assert epoch is not None
+            if session is not None:
+                formatter.start(session)
+                self.started.add(formatter.key)
 
-            if self._state == 'active':
-                self._ensure_closed(ns, epoch, 'closed', s)
-            s(self._reset, ns, epoch)
-            return True
+        route = self.routes[formatter.key]
+        for d in destinations:
+            if d not in route:
+                d.register(self, formatter)
+                route.append(d)
+                if session is not None:
+                    d.start(session)
+                    self.started.add(d._key)
 
-        simulated_self_state = self._state
+    def _start(self, session):
+        assert self.started is None
+        self.started = set()
 
-        # we're not in the correct state,
-        # and we're not trying to get to 'initial'.
-        # therefore we're making a forwards transition.
-        if simulated_self_state == 'initial':
-            if state in ('closed', 'exited'):
-                # we're transitioning directly from 'initial' to 'closed' or 'exited'.
-                # we don't need to do any intermediary stuff.
-                self._ensure_closed(ns, epoch, state, s)
-                return True
+        for f in self.formatters:
+            self.started.add(f.key)
+            f.start(session)
+            for d in self.routes[f.key]:
+                self.started.add(d._key)
+                d.start(session)
 
-            # transition to 'logged':
-            self._ensure_active(s)
-            simulated_self_state = 'active'
+    def register(self, session):
+        start = not self.sessions
 
-            if state == 'active':
-                assert ns is None
-                assert epoch is None
-                return True
+        wr = weakref.ref(session)
+        self.sessions.append(wr)
+        i = self.sessions.rfind(wr)
+        def unregister():
+            try:
+                return i.pop
+            except SpecialNodeError:
+                pass
+            if not self.sessions:
+                self.flush()
 
-        if simulated_self_state == 'active':
-            self._ensure_closed(ns, epoch, 'closed', s)
-            simulated_self_state = 'closed'
+        if start:
+            self._start(session)
 
-            if state == 'closed':
-                return True
+        return unregister
 
-        assert simulated_self_state == 'closed'
-        if state == 'active':
-            # it's illegal to transition directly from closed to active,
-            # you have to go through initial first (by resetting)
-            return False
+    def dispatch(self, jobs, *, first=False):
+        if not jobs:
+            return
+        jq = self.job_queue
+        if first:
+            verb = jq.rextend
+        else:
+            verb = jq.extend
+        verb(jobs)
+        self.notify_queue.put(len(jobs))
+        if not self.threaded:
+            self.drain()
 
-        assert state == 'exited'
-        # transition to exited
-        s(self._set_state, 'exited')
+    def drain(self):
+        self.execute(False)
 
-        return True
+    def execute(self, block):
+        jq = self.job_queue
+        nq = self.notify_queue
+        break_if_empty = not block
 
-    def _execute(self, block):
-        jq = self._job_queue
-        nq = self._notify_queue
-        result = False
-        release_blockers = False
-
-        # if you hit an exception, and you fault,
-        # put the remaining count back on nq!
         while True:
-            if nq.empty() and (not block):
+            if break_if_empty and nq.empty():
                 break
             count = nq.get()
             for _ in range(count):
-                assert jq
                 job = jq.rpop()
-                involved, fn, args = job
-                if fn is None:
-                    if args:
-                        assert len(args) == 1
-                        result = args[0]
-                    else:
-                        result = True
-                    release_blockers = True
-                    break
+                if job is None:
+                    return
+                fn, args = job
+                # print(f">> {fn.__self__} {fn.__name__} {args}")
                 fn(*args)
 
-        if release_blockers:
-            # atexit handler called.
-            # we're shutting down.
-            # zip through the jobs in the queue,
-            # and if any of them are blockers,
-            # release 'em.
-            for job in jq:
-                if job is None:
-                    continue
-                involved, fn, args = job
-                for i in involved:
-                    if isinstance(i, threading.Lock):
-                        fn(*args)
 
-        return result
+    def log(self, message):
+        for key, prepared in message.prepared.items():
+            formatter = self.formatters_by_key.get(key)
+            if formatter is None:
+                continue
+            rendered = formatter.render(message, prepared)
+            for destination in self.routes.get(key, ()):
+                destination.write(rendered)
 
-    def _block(self):
-        if self._threaded:
-            locker = threading.Lock()
-            locker.acquire()
-            self._schedule([((locker,), locker.release, ())])
-            locker.acquire()
-
-    def _drain(self):
-        with self._dispatch_lock:
-            self._execute(False)
-
-    def _worker_thread(self):
-        fn = self._execute(True)
-        if fn:
-            print("ATEXIT calling", fn)
-            fn()
-
-
-    def _schedule(self, jobs, *, first=False):
-        """
-        jobs is an iterable of job objects.
-
-        a job is either None or a tuple.  (None is a special case.)
-        if it's a tuple, it contains
-            (involved, fn, args)
-        * involved is an iterable of objects "involved" in this job.
-          you will see three types: instances of Formatter, Destination,
-          and threading.Lock.
-        * fn is a callable.
-        * args is a tuple of arguments to pass in to fn, a la fn(*args).
-        """
-        assert isinstance(jobs,       (tuple, list))
-        for job in jobs:
-            assert isinstance(job,    (tuple, list))
-            if job is not None:
-                assert isinstance(job[0], (tuple, list))      # involved
-                assert   callable(job[1]) or (job[1] is None) # fn or None
-                assert isinstance(job[2], (tuple, list))      # args
-
-        count = len(jobs)
-        jq = self._job_queue
-        nq = self._notify_queue
-
-        if first:
-            jq.rextend(jobs)
+    def flush(self):
+        if self.threaded:
+            blocker = threading.Lock()
+            blocker.acquire()
+            self.dispatch( [(blocker.release, ())] )
+            blocker.acquire()
         else:
-            jq.extend(jobs)
+            self.drain()
 
-        nq.put(count)
+        for destinations in self.routes.values():
+            for d in destinations:
+                d.flush()
 
+    def reset(self):
+        sessions = self.sessions
+        while sessions:
+            rit = reversed(sessions) # rit points at tail
+            rit.next(None)           # rit points to node before tail
+            while rit:               # rit is True if it's not head
+                wr = rit.rpop()
+                session = wr()
+                if session is not None:
+                    session._close()
+        self.flush()
 
-    def _scheduler(self, atexit=False, drain=False, first=False, wait=False):
-        return Scheduler(self, atexit=atexit, drain=drain, first=first, wait=wait)
-
-
-    def _no_longer_used(self):
-        if not self._thread:
-            try:
-                self._execute(jobs)
-            finally:
-                if notify:
-                    notify()
+    def atexit(self):
+        # If the process is shutting down,
+        # Log only aspires to keep everything
+        # logged up to that point.
+        if self.threaded:
+            self._stop_thread()
             return
-
-        lock = None
-        try:
-            if notify:
-                lock = self._queue_lock
-                lock.acquire()
-
-                # what if there's a race between this dispatch call
-                # and _atexit closing the thread?  _atexit will only
-                # set self._thread to None while holding the lock.
-                # now that we hold the lock, we know for certain.
-                # if self._thread is now false, recursively call
-                # ourselves, which will now execute the jobs directly.
-                # (it's all on one line to make coverage happy; this
-                # situation is devilishly hard to reproduce.  if only
-                # there were some library that made it easy to reproduce
-                # race conditions...!)
-                if not self._thread: lock.release() ; lock = None ; self._dispatch(jobs, notify=notify); return
-
-                jobs.append( (notify, ()) )
-
-            self._queue.put(jobs)
-
-        finally:
-            if lock:
-                lock.release()
+        self.reset()
 
 
-    def _elapsed(self, t):
-        # t should be a value returned by _clock.
-        # returns t converted to elapsed time
-        # since self.start_time_ns, as integer nanoseconds.
-        return t - self._start_time_ns
+STATE_INITIAL = (1, 'initial')
+STATE_ACTIVE = (2, 'active')
+STATE_DRAINING = (3, 'draining')
+STATE_CLOSED = (4, 'closed')
 
+@export
+class Session:
+    __slots__ = (
+        '__weakref__',
+        'active',
+        'buffer',
+        'core',
+        'clock',
+        'format',
+        'fstates',
+        'handles',
+        'kwargs',
+        'name',
+        'parent',
+        'paused',
+        'state',
+        'upstream',
+        'unregister_core',
+        'unregister_parent',
+        ) + BOUNDINNERCLASS_OUTER_SLOTS
 
-    def _flush(self):
-        s = self._scheduler()
-        for f in self._formatters:
-            s(f.flush)
-        s()
+    def __init__(self, name, core, parent, *, buffered, paused, format, kwargs):
+        self.name = name
+        self.core = core
+        self.parent = parent
+        self.format = format
+        self.buffer = [] if buffered else None
+        self.paused = bool(paused)
+        self.kwargs = kwargs
 
-    def flush(self, *, wait=True):
-        s = self._scheduler(drain=True, wait=wait)
-        s(self._flush)
-        s()
+        self.clock = core.clock()
+        self.state = STATE_INITIAL
+        self.active = set()
+        self.handles = 0
+        self.unregister_core = core.register(self)
+        self.fstates = {}
 
-    def _log(self, time, thread, format, message, data):
-        if self._paused_counter:
-            return
-
-        s = self._scheduler(first=True)
-
-        self._ensure_state('active', s=s)
-
-        elapsed = self._elapsed(time)
-
-        if isinstance(format, str):
-            format = {'format': format}
-
-        for f in self._formatters:
-            s(f.log, elapsed, thread, format, message, data)
-            self._ever_logged_anything.add(id(f))
-
-        s()
-
-
-    def _validate(self, format, message, data):
-        for f in self._formatters:
-            f.validate(format, message, data)
-
-    def log(self, message, *, format='log', data=None):
-        time = self._clock()
-        thread = threading.current_thread()
-
-        if isinstance(format, str):
-            format = {'format': format}
+        if parent is None:
+            self.upstream = core
+            self.unregister_parent = None
+            self.fstates = {f.key: f.State() for f in core.formatters}
         else:
-            if not isinstance(format, dict):
-                raise TypeError("format must be str or dict")
-            if not isinstance(format.get('format', None), str):
-                raise TypeError("format['format'] must be defined, and must be str")
-            format = dict(format)
+            self.upstream = parent
+            self.unregister_parent = parent.register(self)
+            self.fstates = {key: fstate.child(format) for key, fstate in parent.fstates.items()}
 
-        self._validate(format, message, data)
-
-        s = self._scheduler(drain=True)
-        s(self._log, time, thread, format, message, data)
-        s()
-
-    def write(self, message):
-        self.log(message, format={'format': 'preformatted'})
-
-    def _call(self, time, thread, args, sep, end, flush, format):
-        if not isinstance(sep, str):
-            raise TypeError(f'sep must be str, not {type(sep).__name__}')
-        if not isinstance(end, str):
-            raise TypeError(f'end must be str, not {type(end).__name__}')
-
-        message = sep.join(str(a) for a in args) + end
-        if message.endswith('\n'):
-            message = message[:-1]
-
-        if isinstance(format, str):
-            format = {'format': format}
+    def __repr__(self):
+        if self.buffer is None:
+            buffer = "unbuffered"
         else:
-            if not isinstance(format, dict):
-                raise TypeError("format must be dict or str, not {type(format).__name__}")
-            if not isinstance(format.get('format', None), str):
-                raise TypeError("format must contain a 'format' key with value str")
-        self._validate(format, message, None)
+            buffer = f"buffer={len(self.buffer)} waiting"
+        return f"<Session {self.name!r} {self.state[1]} {buffer} {hex(id(self)) }>"
 
-        s = self._scheduler(drain=True)
-        s(self._log, time, thread, format, message, None)
-        if flush:
-            s(self._flush)
-        s()
+    @BoundInnerClass
+    class Message:
+        __slots__ = ('time', 'thread', 'format', 'args', 'kwargs', 'prepared')
 
-    def __call__(self, *args, sep=' ', end='\n', flush=False, format='log'):
-        time = self._clock()
-        thread = threading.current_thread()
-        return self._call(time, thread, args, sep, end, bool(flush), format)
+        def __init__(self, session, time, format, args, kwargs):
+            self.time = time
+            self.thread = threading.current_thread()
+            self.format = format
+            self.args = args
+            self.kwargs = kwargs
+            self.prepared = {
+                formatter.key: formatter.prepare(session.fstate(formatter, format), self)
+                for formatter in session.core.formatters
+            }
 
-    def print(self, *args, sep=' ', end='\n', flush=False, format='log'):
-        time = self._clock()
-        thread = threading.current_thread()
-        return self._call(time, thread, args, sep, end, bool(flush), format)
-
-
-    class _InertContextManager:
-        """
-        The context manager returned by Log.enter() when the log is paused.  Does nothing.
-        """
-        def __init__(self, log):
-            assert log
-
-        def __enter__(self):
-            pass
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            pass
-
-    def _nesting_append(self, token, context):
-        self._nesting_tokens.append(token)
-        self._nesting_contexts.append(context)
-
-    def _nesting_pop(self, token):
-        if token not in self._nesting_tokens:
-            return None
-        self._nesting_tokens.pop()
-        context = self._nesting_contexts.pop()
-        return context
-
-    def _enter(self, time, thread, token, format, message):
-        elapsed = self._elapsed(time)
-        s = self._scheduler(first=True)
-
-        self._ensure_state('active', s=s)
-
-        context = EnterContext(elapsed, thread, format, message)
-
-        format_name = format['format']
-
-        for f in self._formatters:
-            if (not self._paused_counter) and (f.supported_formats is not True) and (format_name in f.supported_formats):
-                s(f.log, elapsed, thread, format, message, None)
-            s(f.enter, *context)
-
-        s(self._nesting_append, token, context)
-        s()
-
-    def _exit(self, time, thread, token):
-        elapsed = self._elapsed(time)
-        s = self._scheduler(first=True)
-
-        self._ensure_state('active', s=s)
-        s(self._exit2, elapsed, thread, token)
-        s()
-
-    def _exit2(self, elapsed, thread, token):
-        context = self._nesting_pop(token)
-        if (not context) or (self._state != 'active'):
-            return
-
-        s = self._scheduler(first=True)
-        for f in self._formatters:
-            if f.supported_formats is True:
-                exit_format = None
-            else:
-                exit_format = f.exit_format(context.format)
-            s(f.exit, elapsed, thread, exit_format, context)
-            if not self._paused_counter:
-                if exit_format and ('format' in exit_format) and (f.supported_formats is not True) and (exit_format['format'] in f.supported_formats):
-                    s(f.log, elapsed, thread, exit_format, context.message, None)
-        s(self._exit2, elapsed, thread, token)
-        s()
-
-    class _ExitContextManager:
-        """
-        The context manager returned by Log.enter().  Calls Log.exit() on exit.
-        """
-        def __init__(self, log, token):
-            assert log
-            self._log = log
-            self._token = token
-
-        def __enter__(self):
-            pass
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.__call__()
-
-        def __call__(self):
-            log = self._log
-            time = log._clock()
-            thread = threading.current_thread()
-            log._schedule([((), log._exit, (time, thread, self._token))])
-            if not log._threaded:
-                log._drain()
-
-    def enter(self, message, *, format='enter'):
-        time = self._clock()
-        thread = threading.current_thread()
-        if isinstance(format, str):
-            format = {'format': format}
-        # note: we don't validate the exit format.
-        # you gotta validate that here, when validating
-        # the enter format.  stay on the ball, son!
-        self._validate(format, message, None)
-        with self._configuration_lock:
-            token = self._enter_token
-            self._enter_token += 1
-        self._schedule([((), self._enter, (time, thread, token, format, message))])
-        if not self._threaded:
-            self._drain()
-        return self._ExitContextManager(self, token)
-
-
-    def _reset_or_close(self, state, ns, epoch):
-        s = self._scheduler(first=True)
-        self._ensure_state(state, ns=ns, epoch=epoch, s=s)
-        s()
-
-
-
-    def close(self, *, wait=True):
-        clock = self._clock
-        timestamp_clock = self._timestamp_clock
-        ns1 = clock()
-        epoch = timestamp_clock()
-        ns2 = clock()
-        ns = (ns1 + ns2) // 2
-
-        s = self._scheduler(wait=wait)
-        s(self._reset_or_close, 'closed', ns, epoch)
-        s()
-
-    def reset(self, *, wait=True):
-        clock = self._clock
-        timestamp_clock = self._timestamp_clock
-        ns1 = clock()
-        epoch = timestamp_clock()
-        ns2 = clock()
-        ns = (ns1 + ns2) // 2
-
-        s = self._scheduler(wait=wait)
-        s(self._reset_or_close, 'initial', ns, epoch)
-        s()
+        def __repr__(self):
+            return f"<Message time={self.time!r} thread={self.thread!r} format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} prepared={self.prepared!r}>"
 
 
     @property
-    def paused(self):
-        "Returns True if the log is paused, None if the log is closed, and otherwise False."
-        if self._configuration_lock:
-            if self._closed:
-                return None
-            return bool(self._paused_counter)
+    def closed(self):
+        return self.state >= STATE_DRAINING
 
+    def fstate(self, formatter, format):
+        fstate = self.fstates.get(formatter.key, None)
+        if fstate is None:
+            parent = self.parent
+            if parent is None:
+                fstate = formatter.State()
+            else:
+                parent_fstate = parent.fstate(formatter, format)
+                fstate = parent_fstate.child(format)
+            self.fstates[formatter.key] = fstate
+        return fstate
 
-    class _ResumeContextManager:
-        """
-        The context manager returned by Log.pause().  Calls Log.resume() on exit.
-        """
-        def __init__(self, log):
-            assert log
-            self._log = log
+    def register(self, o):
+        # print(f"register: {self} gets {o}")
+        if not self.handles:
+            if not isinstance(o, (Log, Child)):
+                raise TypeError(f"can't register first handle/reference {o!r}")
+        else:
+            if not isinstance(o, Session):
+                raise TypeError(f"can't register child session {o!r}")
 
-        def __enter__(self):
-            pass
+        self.handles += 1
 
-        def __exit__(self, exc_type, exc_value, traceback):
-            self._log.resume()
-
-
-    def _pause(self):
-        if self._closed:
-            return
-
-        with self._configuration_lock:
-            self._paused_counter += 1
-
-    def pause(self):
-        """
-        Pauses the log if it's not closed.
-
-        If the log is not closed, this pauses the log
-        (if it's not already paused), and returns a context
-        manage that calls Log.resume().
-
-        A paused log ignores calls to log methods
-        (write, print, __call__, enter, and exit).
-
-        Pause state is internally stored as an integer;
-        pause increments it, resume decrements it (but not below zero),
-        and if it's greater than zero the log is paused.
-
-        If the log is closed, this function does nothing,
-        and it returns a context manager that also does nothing.
-        """
-        # modifications of _paused_counter are always under lock
-        # so we don't have race conditions with incr/decr
-        self._schedule( [( (), self._pause, () )] )
-        if not self._threaded:
-            self._drain()
-
-        return self._ResumeContextManager(self)
-
-    def _resume(self):
-        # modifications of _paused_counter are always under lock
-        # so we don't have race conditions with incr/decr
-        if self._closed:
-            return
-
-        with self._configuration_lock:
-            if self._paused_counter > 1:
-                self._paused_counter -= 1
+        unregistered = False
+        def unregister():
+            # print(f"unregister: {self} loses {o}")
+            nonlocal unregistered
+            if unregistered:
                 return
+            unregistered = True
 
-            # clamp to zero
-            self._paused_counter = 0
+            self.handles -= 1
+            if not self.handles:
+                self.core.dispatch( [(self.ensure_state, (STATE_DRAINING,))] )
+
+        return unregister
+
+    def ensure_state(self, desired_state):
+        # print(f"{self.name} ensure state {self.state} -> {desired_state}")
+        if desired_state < self.state:
+            return False
+        if desired_state == self.state:
+            return True
+
+        if self.state == STATE_INITIAL:
+            if desired_state == STATE_ACTIVE:
+                self.state = STATE_ACTIVE
+                # send start banner
+                message = self.Message(self.clock.initial, 'start', (), self.kwargs)
+                self.core.dispatch( [(self.log, (message,))], first=True)
+
+                return True
+
+        # we already handled initial -> active.
+        # if we reach here, we must be going to draining or closed.
+
+        assert desired_state in (STATE_DRAINING, STATE_CLOSED)
+
+        if desired_state == STATE_DRAINING:
+            self.state = STATE_DRAINING
+            # print("send _close")
+            self.core.dispatch( [(self._close, ())] )
+            return True
+
+        # print("ensure state closed")
+        assert desired_state == STATE_CLOSED
+        # send end banner
+        time = self.clock()
+        message = self.Message(time, 'end', (), {})
+        # self.log(message)
+        self.core.dispatch( [(self.log, (message,))], first=True)
+
+        if self.buffer:
+            self.flush()
+
+        self.state = STATE_CLOSED
+
+        return True
+
+    def _close(self):
+        "Force the session to close.  Internal-only API, only used by reset and atexit."
+        self.ensure_state(STATE_CLOSED)
+
+        u = self.unregister_parent
+        self.unregister_parent = None
+        if u:
+            u()
+
+        u = self.unregister_core
+        self.unregister_core = None
+        if u:
+            u()
 
 
-    def resume(self):
-        """
-        Resumes the log if it's not closed.
 
-        If the log is not closed, and is currently paused,
-        this resumes (un-pauses) the log.
+    def log(self, message):
+        self.ensure_state(STATE_ACTIVE)
+        if self.buffer is not None:
+            self.buffer.append(message)
+            return
+        self.upstream.log(message)
 
-        A paused log ignores calls to log methods
-        (write, print, __call__, enter, and exit).
 
-        Pause state is internally stored as an integer;
-        pause increments it, resume decrements it (but not below zero),
-        and if it's greater than zero the log is paused.
+    def flush(self):
+        self.ensure_state(STATE_ACTIVE)
+        if self.buffer:
+            for message in self.buffer:
+                self.upstream.log(message)
+            self.buffer.clear()
 
-        If the log is closed, this function does nothing.
-        """
-        self._schedule( [( (), self._resume, () )] )
-        if not self._threaded:
-            self._drain()
+
+class LogBase:
+    __slots__ = ('_core', '_session', '_clock', '_unregister', '__weakref__', )
+
+    def __init__(self, core, session):
+        self._core = core
+        self._session = session
+        self._unregister = session.register(self)
+        self._clock = session.clock
+
+    @property
+    def closed(self):
+        return not self._session
+
+    def close(self):
+        if not self._session:
+            return
+        self._session = None
+        u = self._unregister
+        self._unregister = None
+        u()
+
+    def flush(self):
+        session = self._session
+        if session:
+            session.flush()
+
+    def child(self, name='', buffered=True, *, format=_USE_DEFAULT, paused=None, **kwargs):
+        time = self._clock()
+
+        if format == _USE_DEFAULT:
+            format = 'child' if name else None
+        # TODO: confirm format is defined
+
+        session = self._session
+        if (not session) or (session.state >= STATE_DRAINING):
+            return None
+        if paused is None:
+            paused = session.paused
+        return Child(self._core, session, time=time, name=name, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
+
+    def log(self, *args, format='log', **kwargs):
+        time = self._clock()
+
+        session = self._session
+        if (not session) or (session.state >= STATE_DRAINING):
+            return
+        message = session.Message(time, format, args, kwargs)
+        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+
+    def write(self, s, format='preformatted'):
+        time = self._clock()
+
+        if not isinstance(s, str):
+            raise TypeError(f"write() argument must be str, not {type(s).__name__}")
+
+        session = self._session
+        if (not session) or (session.state >= STATE_DRAINING):
+            return
+        message = session.Message(time, format, (s,), {})
+        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+
+    def print(self, *args, sep=' ', end='\n', format='print'):
+        time = self._clock()
+
+        if not isinstance(sep, str):
+            raise TypeError(f"sep must be str, not {type(sep).__name__}")
+        if not isinstance(end, str):
+            raise TypeError(f"end must be str, not {type(end).__name__}")
+
+        session = self._session
+        if (not session) or (session.state >= STATE_DRAINING):
+            return
+
+        s = sep.join(str(o) for o in args) + end
+        if s.endswith('\n'):
+            s = s[:-1]
+
+        message = session.Message(time, format, (s,), {})
+        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+
+    __call__ = print
+
+    def box(self, s):
+        time = self._clock()
+
+        session = self._session
+        if (not session) or (session.state >= STATE_DRAINING):
+            return
+
+        message = session.Message(time, 'box', (s,), {})
+        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+
+
+@export
+class Child(LogBase):
+    __slots__ = ('_core', '_session', '_clock')
+
+    def __init__(self, core, parent_session, *, time=None, name=None, buffered=True, paused=False, format=_USE_DEFAULT, kwargs=None):
+        session = Session(name, core, parent_session, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
+        clock = session.clock
+
+        super().__init__(core, session)
+        self._clock = clock
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+
+
+class Clock:
+    """
+    Attributes of a Clock instance:
+        __call__()
+            A high performance clock.  The object returned must support
+            __sub__ between two time() values, which produces a "delta".
+
+        initial
+            The time at which this Clock was constructed,
+            same type as time().
+
+        delta_to_seconds(delta)
+            Converts "delta" to float seconds, for presentation
+            to the user.
+
+        time_to_timestamp(time)
+            Converts time to a timestamp string in the user's time zone.
+    """
+
+    def __init__(self):
+        c = default_clock
+        ns1 = c()
+        epoch = time.time()
+        ns2 = c()
+        self.epoch = epoch
+
+        self.initial = (ns1 + ns2) // 2
+
+    def __call__(self):
+        return default_clock()
+
+    def delta_to_seconds(self, delta):
+        return delta / 1_000_000_000.0
+
+    def time_to_timestamp(self, time):
+        delta = time - self.initial
+        seconds = delta / 1_000_000_000.0
+        epoch = self.epoch + seconds
+        return timestamp_human(epoch)
+
+
+
+@export
+class Log(LogBase):
+
+    # __slots__ = ()
+
+    def __init__(self,
+        *destinations,
+        clock=Clock,
+        formatter=None,
+        name='Log',
+        threaded=True,
+        # threaded=False,
+        paused=False,
+        ):
+
+        core = Core(
+            name=name,
+            clock=Clock,
+            threaded=threaded,
+            )
+
+        session = Session(name, core, None, buffered=False, format=None, paused=paused, kwargs={})
+        super().__init__(core, session)
+
+        self.clock = session.clock
+
+        if formatter is None:
+            formatter = TextFormatter()
+        elif not isinstance(formatter, Formatter):
+            raise TypeError(f"formatter must be Formatter, not {type(formatter).__name__}")
+
+        if not destinations:
+            destinations = [builtins.print]
+
+        self._route(formatter, destinations)
+
+
+    def _route(self, formatter, destinations):
+        if not isinstance(formatter, Formatter):
+            raise TypeError(f"formatter must be Formatter, not {type(formatter).__name__}")
+        map_destination = self.map_destination
+        self._core.route(formatter, [map_destination(d) for d in destinations])
+
+    def route(self, formatter, *destinations):
+        self._route(formatter, destinations)
+
+    def map_destination(self, o):
+        if isinstance(o, Destination):
+            return o
+        if o is builtins.print:
+            return Print()
+        if callable(o):
+            return Callable(o)
+        if isinstance(o, list):
+            return List(o)
+
+        # if isinstance(o, (bytes, str, pathlib.Path)):
+        #     return File(o)
+        # if isinstance(o, io.TextIOBase):
+        #     return FileHandle(o)
+        # if o is TMPFILE:
+        #     return TmpFile()
+        if o is None:
+            return NoneType()
+
+        raise TypeError(f'unsupported destination {o!r}')
 
 
 mm()
