@@ -7194,10 +7194,13 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
   iterator with `next()` enough times, the iterator will yield that value.
     * If you use an iterator to prepend a new value, and nobody deletes that value, and you subsequently advance
       that iterator with `previous()` enough times, the iterator will yield that value.
-* As a rule, actions on iterators that act on multiple nodes include the node they're pointing at.
+* When traversing the list with an iterator using `next()` and/or `previous()`, iterators will skip past
+  `"special"` nodes, but they always stop at head and tail.
+* Operations on iterators that act on multiple nodes tend to include the node they're pointing at.
 * iterator[0] *always* refers to the node the iterator is currently pointing at, even if it's a special
   node.  If the index is non-zero, it skips over special nodes.
-* You can't ever insert a node *before* head.  You can't ever insert a node *after* tail.
+* You can't ever insert a node *before* head, or *after* tail.  You can't ever remove head or tail.
+* Any operation involving an empty range (start==stop) is a no-op and doesn't raise.
 
 
 </dd></dl>
