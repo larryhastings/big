@@ -90,6 +90,63 @@ class UseDefault:
 _USE_DEFAULT = UseDefault()
 
 
+
+
+
+def _merge_dicts(base, update, path):
+    base_keys = set(base)
+    update_keys = set(update)
+    all_keys = base_keys | update_keys
+
+    result = {}
+
+    for key in all_keys:
+        in_base = key in base_keys
+        in_update = key in update_keys
+
+        if not (in_base and in_update):
+            if in_base:
+                value = base[key]
+            else:
+                value = update[key]
+            result[key] = value
+            continue
+
+        # it's in both base and update.
+        base_value = base[key]
+        update_value = update[key]
+
+        base_is_dict = int(isinstance(base_value, dict))
+        update_is_dict = int(isinstance(update_value, dict))
+        is_dict_sum = base_is_dict + update_is_dict
+
+        if (base_value is None) or (update_value is None) or (not is_dict_sum):
+            result[key] = update_value
+            continue
+
+        child_path = path + f'[{key!r}]'
+        if is_dict_sum == 2:
+            result[key] = _merge_dicts(base_value, update_value, child_path)
+            continue
+
+        raise TypeError(f"type mismatch at {child_path} between dict and non-dict")
+    return result
+
+
+def merge_dicts(base, update):
+    """
+    Recursively updates base with update.
+    Returns a new dict; doesn't modify either base or update.
+
+    The shape of the two dicts must match, to the extent that
+    every value in common between the two dicts must be either
+    both dicts or neither dicts.  The one exception: one can
+    be a dict and the other, None.
+    """
+    return _merge_dicts(base, update, '')
+
+
+
 def deep_update(dst, src):
     for key, value in src.items():
         if isinstance(value, dict) and isinstance(dst.get(key), dict):
@@ -119,10 +176,12 @@ class Formatter:
 
     # __slots__ = ('name', 'key', '__weakref__') + BOUNDINNERCLASS_OUTER_SLOTS
 
-    def __init__(self, *, name=None):
+    def __init__(self, format_dict, *, name=None):
         # self.root = self.owner = None
         if not ((name is None) or isinstance(name, str)):
             raise  TypeError('str must be name or None')
+
+        self.format_dict = format_dict
 
         if name is None:
             name = type(self).__name__
@@ -130,6 +189,7 @@ class Formatter:
 
         self.serial_number = _serial_number()
         self.key = (self.name, self.serial_number, id(self))
+        self.format_cache = {}
 
         self.core = None
         self.session = None
@@ -154,41 +214,56 @@ class Formatter:
         assert isinstance(self.session, Session)
         self.session = None
 
+    @staticmethod
+    def key_to_format_dict(d, key):
+        if isinstance(key, tuple):
+            key_list = list(key)
+            key_list.reverse()
+        else:
+            key_list = [key]
+
+        while key_list:
+            subkey = key_list.pop()
+            d = d['formats']
+            if key_list:
+                d = d[subkey]
+            else:
+                # let the last one be None
+                d = d.get(subkey, None)
+        return d
+
+    def format(self, key):
+        if key == '':
+            return self.format_dict
+
+        cached = self.format_cache.get(key, None)
+        if cached is None:
+            format_dict = self.key_to_format_dict(self.format_dict, key)
+            if format_dict != None:
+                base_key = format_dict.get('base', None)
+                if base_key is not None:
+                    base = self.format(base_key)
+                    format_dict = merge_dicts(base, format_dict)
+            cached = self.format_cache[key] = format_dict
+        return cached
 
     @BoundInnerClass
     class State:
-        __slots__ = ('keys', 'dedup_keys', 'fstates')
-
-        @staticmethod
-        def compute_keys(parent, format):
-            if not parent:
-                assert not format
-                return (), ()
-            if not format:
-                return parent.keys, parent.dedup_keys
-            format_tuple = (format,)
-            keys = parent.keys + format_tuple
-            dedup_keys = tuple(o for o in parent.dedup_keys if o != format) + format_tuple
-            return keys, dedup_keys
+        # __slots__ = ('formatter', 'fstates',)
 
         def __repr__(self):
-            return f"<State {self.keys}>"
+            return f"<State formatter={self.formatter} format={self.format!r} parent={self.parent!r}>"
 
-        def __init__(self, outer, *, parent=None, format=None):
-            self.keys, self.dedup_keys = self.compute_keys(parent, format)
-            self.fstates = {} if parent is None else dict(parent.fstates)
+        def __init__(self, formatter, format, parent=None):
+            self.formatter = formatter
+            self.format = format
+            self.format_dict = formatter.format(format)
+            self.parent = parent
 
-        def child(self, format):
-            if format in self.fstates:
-                return self.fstates[format]
-            child = self.__class__(parent=self, format=format)
-            self.fstates[format] = child
-            return child
+        def prepare(self, message):
+            raise NotImplementedError
 
-    def prepare(self, fstate, message):
-        raise NotImplementedError
-
-    def render(self, message, prepared):
+    def render(self, message):
         raise NotImplementedError
 
 
@@ -235,9 +310,9 @@ class TextFormatter(Formatter):
 
 
     def __init__(self,
+        format_dict=None,
         *,
         name=None,
-        format_dict=None,
         # indent='    ',
         # prefix=prefix_format(3, 10, 12),
         width=79,
@@ -248,15 +323,17 @@ class TextFormatter(Formatter):
         if not (width > 0):
             raise ValueError('width must be an int and greater than zero')
 
-        fd = copy.deepcopy(self.base_format_dict)
-        if isinstance(format_dict, dict):
-            deep_update(fd, format_dict)
-        elif format_dict is not None:
-            raise  TypeError('format_dict must be a dict or None')
+        format_dict_is_None = format_dict is None
+        if not (format_dict_is_None or isinstance(format_dict, dict)):
+            raise TypeError('format_dict must be a dict or None')
 
-        super().__init__(name=name)
+        if format_dict_is_None:
+            format_dict = self.base_format_dict
+        else:
+            format_dict = merge_dicts(self.base_format_dict, format_dict)
 
-        self.format_dict = fd
+        super().__init__(format_dict, name=name)
+
 
         self.width = width
         self.indents = {}
@@ -266,53 +343,51 @@ class TextFormatter(Formatter):
         # self.indent_stack = []
         # self.prefix = prefix
 
-        self.supported_formats = set(fd.get('formats', ()))
+        self.supported_formats = set(self.format_dict.get('formats', ()))
 
 
     base_format_dict = {
         "prefix": prefix_format(3, 10, 12),
         'template': '{prefix}{message}\n',
 
-        "formats": {
-            "log": {},
-            "print": {},
-            "preformatted": {},
+        "double*": '═',
+        "line*": '─',
+        "space*": ' ',
 
+        "formats": {
             "box" : {
+                'base': '',
                 "template": '{prefix}┌{line*}┐\n{prefix}│ {message}{space*} │\n{prefix}└{line*}┘\n',
-                "line*": '─',
-                "space*": ' ',
             },
             "box2" : {
+                'base': '',
                 "template": '{prefix}╔{double*}╗\n{prefix}║ {message}{space*} ║\n{prefix}╚{double*}╝\n',
-                "double*": '═',
-                "space*": ' ',
             },
 
-            "start": {
-                "template": '╔{double*}╗\n║ {name} start at {timestamp} {space*}║\n╚{double*}╝\n',
-                "double*": '═',
-                "space*": ' ',
-            },
-            "end" : {
-                "template": '╔{double*}╗\n║ {name} finish at {timestamp} {space*}║\n╚{double*}╝\n',
-                "double*": '═',
-                "space*": ' ',
+            'session': {
+                'formats': {
+                    "start": {
+                        'base': '',
+                        "template": '╔{double*}╗\n║ {name} start at {timestamp} {space*}║\n╚{double*}╝\n',
+                    },
+                    "end" : {
+                        'base': '',
+                        "template": '╔{double*}╗\n║ {name} finish at {timestamp} {space*}║\n╚{double*}╝\n',
+                    },
+                }
             },
 
             "child": {
-                "indent": "    │ ",
+                "base": '',
+                "indent": "│   ",
                 "formats": {
                     "start": {
+                        'base': '',
                         "template": '{prefix}┏━━━━━┱{line*}┐\n{prefix}┃enter┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┡━━━━━┹{line*}┘\n',
-                        "line*": '─',
-                        "space*": ' ',
-                        "indent": '│   ',
-                        "exit": 'exit',
                     },
                     "end": {
+                        'base': '',
                         "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
-                        "line*": '─',
                         "space*": ' ',
                     },
                 }
@@ -320,106 +395,49 @@ class TextFormatter(Formatter):
         }
     }
 
-    @staticmethod
-    def parse_formats(base_formats, override_formats, width):
 
-        formats = dict(base_formats)
-        formatters = {}
+    class Prepared:
+        # __slots__ = ('args', 'kwargs', 'format', 'keys', 'dedup_keys')
 
-        for key, value in override_formats.items():
-            if not isinstance(key, str):
-                raise TypeError(f"formats dict contains {key!r}, formats dict keys must be str")
+        def __init__(self, args, kwargs, fstate):
+            self.args = tuple(str(o) for o in args)
+            self.kwargs = {name: str(value) for name, value in kwargs.items()}
+            self.fstate = fstate
 
-            if value is None:
-                if key not in ("start", "end", 'enter', 'exit'):
-                    raise ValueError("None is only a valid value for 'start', 'end', 'enter', and 'exit' formats")
-                formats.pop(key, None)
-                # formatters[key] = _none_format
-            else:
-                if not isinstance(value, dict):
-                    raise TypeError(f"format values must be dict or None, but formats[{key!r}] is type {type(value).__name__}")
-                if 'message' in value:
-                    raise ValueError(f"format dict for {key!r} must not contain 'message'")
-                if 'template' not in value:
-                    raise ValueError(f"format dict for {key!r} must contain 'template'")
-                template = value['template']
-                if not isinstance(template, str):
-                    raise TypeError(f"format dict template values must be str, but formats[{key!r}]['template'] is type {type(template).__name__}")
-                formats[key] = dict(value)
-
-        for key, d in formats.items():
-            d_copy = dict(d)
-            template = d_copy.pop('template')
-            formatters[key] = big_template.Formatter(template, d_copy, width=width).format_map
-
-        return formats, formatters
-
+        def __repr__(self):
+            return f"<TextFormatter.Prepared fstate={self.fstate!r} args={self.args!r} kwargs={self.kwargs!r} keys={self.keys!r} dedup_keys={self.dedup_keys!r}>"
 
     @BoundInnerClass
     class State(Formatter.State):
-        __slots__ = ()
+        # __slots__ = ()
+
+        def __init__(self, formatter, format, parent=None):
+            super().__init__(formatter, format, parent)
+
+            if parent is None:
+                parent_indent = ''
+            else:
+                parent_indent = parent.indent
+            self.indent = parent_indent + self.format_dict.get('indent', '')
+
+        def prepare(self, message):
+            return self.formatter.Prepared(message.args, message.kwargs, self)
 
 
 
-    class Prepared:
-        __slots__ = ('args', 'kwargs', 'format', 'keys', 'dedup_keys')
-
-        def __init__(self, args, kwargs, format):
-            self.args = tuple(str(o) for o in args)
-            self.kwargs = {name: str(value) for name, value in kwargs.items()}
-            self.format = format
-            self.keys = None
-            self.dedup_keys = None
-
-        def __repr__(self):
-            return f"<TextFormatter.Prepared format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} keys={self.keys!r} dedup_keys={self.dedup_keys!r}>"
-
-
-    def prepare(self, fstate, message):
-        prepared = self.Prepared(message.args, message.kwargs, message.format)
-        prepared.keys, prepared.dedup_keys = fstate.compute_keys(fstate, message.format)
-        return prepared
-
-    def key_to_format_dict(self, d, key):
-        if not isinstance(key, tuple):
-            key = (key,)
-        for s in key:
-            d = d['formats'][s]
-        return d
-
-    def get_indent(self, keys):
-        indent = self.indents.get(keys)
-        if indent is not None:
-            return indent
-        parts = []
-        for key in keys:
-            d = self.key_to_format_dict(self.format_dict, key)
-            part = d.get('indent', '')
-            if part:
-                parts.append(part)
-        indent = ''.join(parts)
-        self.indents[keys] = indent
-        return indent
-
-    def render_format_dict(self, dedup_keys):
-        d = copy.deepcopy(self.format_dict)
-        for key in dedup_keys:
-            deep_update(d, self.key_to_format_dict(d, key))
-        return d
-
-    def get_renderers(self, dedup_keys):
-        renderers = self.renderers.get(dedup_keys)
-        if renderers is not None:
-            return renderers
-        format_dict = self.render_format_dict(dedup_keys)
-        prefix_renderer = format_dict.get('prefix', '').format_map
-        template_renderer = big_template.Formatter(
-            format_dict['template'],
-            format_dict,
-            width=self.width,
-            )
-        renderers = (prefix_renderer, template_renderer)
-        self.renderers[dedup_keys] = renderers
+    def get_renderers(self, prepared):
+        fstate = prepared.fstate
+        format = fstate.format
+        renderers = self.renderers.get(format)
+        if renderers is None:
+            format_dict = fstate.format_dict
+            prefix_renderer = format_dict.get('prefix', '').format_map
+            template_renderer = big_template.Formatter(
+                format_dict['template'],
+                format_dict,
+                width=self.width,
+                )
+            self.renderers[format] = renderers = (prefix_renderer, template_renderer)
         return renderers
 
     def message_to_priority(self, message, prepared):
@@ -427,17 +445,19 @@ class TextFormatter(Formatter):
         clock = session.clock
         timestamp = clock.time_to_timestamp(message.time)
         elapsed = clock.delta_to_seconds(message.time - session.clock.initial)
+        fstate = prepared.fstate
 
         return {
             'elapsed': elapsed,
-            'indent': self.get_indent(prepared.keys),
+            'indent': fstate.indent,
             'name': session.name,
             'thread': message.thread,
             'timestamp': timestamp,
             }
 
-    def render(self, message, prepared):
-        prefix_renderer, template_renderer = self.get_renderers(prepared.dedup_keys)
+    def render(self, message):
+        prepared = message.prepared[self.key]
+        prefix_renderer, template_renderer = self.get_renderers(prepared)
         priority = self.message_to_priority(message, prepared)
         priority['prefix'] = prefix_renderer(priority)
         lines = list(prepared.args)
@@ -970,11 +990,13 @@ class Core:
         self.formatters = []
         self.formatters_by_key = {}
         self.routes = {}
+        self.fstates = {}
 
         self.started = None
 
         self.configuration_lock = threading.Lock()
         self.sessions = linked_list(lock=True)
+        self.supported_formats = None
 
         atexit.register(self.atexit)
 
@@ -1028,6 +1050,11 @@ class Core:
             self.routes[formatter.key] = []
 
             formatter.register(self)
+
+            if self.supported_formats is None:
+                self.supported_formats = formatter.supported_formats
+            else:
+                self.supported_formats &= formatter.supported_formats
 
             if session is not None:
                 formatter.start(session)
@@ -1111,7 +1138,7 @@ class Core:
             formatter = self.formatters_by_key.get(key)
             if formatter is None:
                 continue
-            rendered = formatter.render(message, prepared)
+            rendered = formatter.render(message)
             for destination in self.routes.get(key, ()):
                 destination.write(rendered)
 
@@ -1157,24 +1184,24 @@ STATE_CLOSED = (4, 'closed')
 
 @export
 class Session:
-    __slots__ = (
-        '__weakref__',
-        'active',
-        'buffer',
-        'core',
-        'clock',
-        'format',
-        'fstates',
-        'handles',
-        'kwargs',
-        'name',
-        'parent',
-        'paused',
-        'state',
-        'upstream',
-        'unregister_core',
-        'unregister_parent',
-        ) + BOUNDINNERCLASS_OUTER_SLOTS
+    # __slots__ = (
+    #     '__weakref__',
+    #     'active',
+    #     'buffer',
+    #     'core',
+    #     'clock',
+    #     'format',
+    #     'fstates',
+    #     'handles',
+    #     'kwargs',
+    #     'name',
+    #     'parent',
+    #     'paused',
+    #     'state',
+    #     'upstream',
+    #     'unregister_core',
+    #     'unregister_parent',
+    #     ) + BOUNDINNERCLASS_OUTER_SLOTS
 
     def __init__(self, name, core, parent, *, buffered, paused, format, kwargs):
         self.name = name
@@ -1190,23 +1217,26 @@ class Session:
         self.active = set()
         self.handles = 0
         self.unregister_core = core.register(self)
-        self.fstates = {}
+
+        self._fstate_cache = {}
+        self._message_fstate_cache = {}
 
         if parent is None:
             self.upstream = core
             self.unregister_parent = None
-            self.fstates = {f.key: f.State() for f in core.formatters}
+            assert format == ''
+            assert not kwargs
         else:
             self.upstream = parent
             self.unregister_parent = parent.register(self)
-            self.fstates = {key: fstate.child(format) for key, fstate in parent.fstates.items()}
+
 
     def __repr__(self):
         if self.buffer is None:
-            buffer = "unbuffered"
+            buffer = "buffer=None"
         else:
             buffer = f"buffer={len(self.buffer)} waiting"
-        return f"<Session {self.name!r} {self.state[1]} {buffer} {hex(id(self)) }>"
+        return f"<Session {hex(id(self))} name={self.name!r} format={self.format!r} state={self.state[1]} {buffer} parent={self.parent}>"
 
     @BoundInnerClass
     class Message:
@@ -1215,13 +1245,16 @@ class Session:
         def __init__(self, session, time, format, args, kwargs):
             self.time = time
             self.thread = threading.current_thread()
+            # if (format != '') and (format not in session.core.supported_formats):
+            #     raise ValueError(f"unsupported format {format!r}")
             self.format = format
             self.args = args
             self.kwargs = kwargs
-            self.prepared = {
-                formatter.key: formatter.prepare(session.fstate(formatter, format), self)
-                for formatter in session.core.formatters
-            }
+            prepared = self.prepared = {}
+
+            for formatter in session.core.formatters:
+                fstate = session.message_fstate(formatter, format)
+                prepared[formatter.key] = fstate.prepare(self)
 
         def __repr__(self):
             return f"<Message time={self.time!r} thread={self.thread!r} format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} prepared={self.prepared!r}>"
@@ -1231,26 +1264,55 @@ class Session:
     def closed(self):
         return self.state >= STATE_DRAINING
 
-    def fstate(self, formatter, format):
-        fstate = self.fstates.get(formatter.key, None)
+    @staticmethod
+    def subformat(base, format):
+        # slight hack:
+        # if format is already a tuple, it's absolute, just use it
+        if isinstance(format, tuple):
+            return format
+
+        if base == '':
+            return format
+        if isinstance(base, str):
+            return (base, format)
+        return base + (format,)
+
+    def fstate(self, formatter):
+        fstate = self._fstate_cache.get(formatter.key, None)
         if fstate is None:
             parent = self.parent
             if parent is None:
-                fstate = formatter.State()
+                parent_fstate = None
             else:
-                parent_fstate = parent.fstate(formatter, format)
-                fstate = parent_fstate.child(format)
-            self.fstates[formatter.key] = fstate
+                parent_fstate = parent.fstate(formatter)
+
+            self._fstate_cache[formatter.key] = fstate = formatter.State(self.format, parent_fstate)
         return fstate
+
+    def message_fstate(self, formatter, format):
+        formatter_cache = self._message_fstate_cache.get(formatter.key, None)
+        if formatter_cache is None:
+            self._message_fstate_cache[formatter.key] = formatter_cache = {}
+
+        assert format is not None
+
+        message_fstate = formatter_cache.get(format, None)
+        if message_fstate is None:
+            fstate = self.fstate(formatter)
+            format_key = self.subformat(fstate.format, format)
+            format_dict = formatter.format(format_key)
+
+            if format_dict is None:
+                message_fstate = fstate
+            else:
+                message_fstate = formatter.State(format_key, fstate)
+            formatter_cache[format] = message_fstate
+        return message_fstate
 
     def register(self, o):
         # print(f"register: {self} gets {o}")
-        if not self.handles:
-            if not isinstance(o, (Log, Child)):
-                raise TypeError(f"can't register first handle/reference {o!r}")
-        else:
-            if not isinstance(o, Session):
-                raise TypeError(f"can't register child session {o!r}")
+        if not isinstance(o, (Log, Child, Session)):
+            raise TypeError(f"can't register {o!r}")
 
         self.handles += 1
 
@@ -1279,7 +1341,13 @@ class Session:
             if desired_state == STATE_ACTIVE:
                 self.state = STATE_ACTIVE
                 # send start banner
-                message = self.Message(self.clock.initial, 'start', (), self.kwargs)
+                if self.parent is None:
+                    format_key = ('session', 'start')
+                    session = self
+                else:
+                    format_key = self.subformat(self.format, 'start')
+                    session = self.parent
+                message = session.Message(self.clock.initial, format_key, (), self.kwargs)
                 self.core.dispatch( [(self.log, (message,))], first=True)
 
                 return True
@@ -1299,7 +1367,13 @@ class Session:
         assert desired_state == STATE_CLOSED
         # send end banner
         time = self.clock()
-        message = self.Message(time, 'end', (), {})
+        if self.parent is None:
+            format_key = ('session', 'end')
+            session = self
+        else:
+            format_key = self.subformat(self.format, 'end')
+            session = self.parent
+        message = session.Message(time, format_key, (), {})
         # self.log(message)
         self.core.dispatch( [(self.log, (message,))], first=True)
 
@@ -1323,7 +1397,6 @@ class Session:
         self.unregister_core = None
         if u:
             u()
-
 
 
     def log(self, message):
@@ -1517,7 +1590,7 @@ class Log(LogBase):
             threaded=threaded,
             )
 
-        session = Session(name, core, None, buffered=False, format=None, paused=paused, kwargs={})
+        session = Session(name, core, None, buffered=False, format='', paused=paused, kwargs={})
         super().__init__(core, session)
 
         self.clock = session.clock

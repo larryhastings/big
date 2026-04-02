@@ -118,6 +118,89 @@ def wait_for_job(log):
     return event.wait
 
 
+class TestDictMerge(LogTestBase):
+    def test_dict_merge(self):
+        # base only has false values (apart from dicts)
+        base = {
+            'only in base': '',
+            'int': 0,
+            'str': '',
+            'base is None 1': None,
+            'base is None 2': None,
+            'update is None 1': 0,
+            'update is None 2': {'key': 456},
+            'subdict': {
+                'only in base': '',
+                'int': 0,
+                'str': '',
+                'base is None 1': None,
+                'base is None 2': None,
+                'update is None 1': 0,
+                'update is None 2': {'key': 456},
+            },
+        }
+
+        update = {
+            'only in update': 'update value',
+            'int': 1,
+            'str': 'x',
+            'base is None 1': 'update value',
+            'base is None 2': {'key': 'update value'},
+            'update is None 1': None,
+            'update is None 2': None,
+            'subdict': {
+                'only in update': 'update value',
+                'int': 1,
+                'str': 'update value',
+                'base is None 1': 'update value',
+                'base is None 2': {'key': 'update value'},
+                'update is None 1': None,
+                'update is None 2': None,
+            }
+        }
+
+        expected = {
+            'base is None 1': 'update value',
+            'base is None 2': {'key': 'update value'},
+            'int': 1,
+            'only in base': '',
+            'only in update': 'update value',
+            'str': 'x',
+            'subdict': {
+                'base is None 1': 'update value',
+                'base is None 2': {'key': 'update value'},
+                'int': 1,
+                'only in base': '',
+                'only in update': 'update value',
+                'str': 'update value',
+                'update is None 1': None,
+                'update is None 2': None
+                },
+            'update is None 1': None,
+            'update is None 2': None
+            }
+
+        got = merge_dicts(base, update)
+        self.assertEqual(got, expected)
+
+    def test_type_mismatch(self):
+        base = {
+            'subdict': {
+                'mismatched': 3,
+                'x': 'y',
+            }
+        }
+
+        update = {
+            'subdict': {
+                'mismatched': {'a': 'b'},
+                'x': 'z',
+            }
+        }
+
+        with self.assertRaises(TypeError):
+            merge_dicts(base, update)
+
 
 class TestDestination(LogTestBase):
     """Tests for the base Destination class."""
