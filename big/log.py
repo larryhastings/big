@@ -1133,6 +1133,98 @@ class Core:
                 # print(f">> {fn.__self__} {fn.__name__} {args}")
                 fn(*args)
 
+    class Scheduler:
+        def __init__(self, log, *, atexit=False, drain=False, first=False, wait=False):
+            """
+            Manages creating "jobs" iterables and scheduling the work.  To use:
+
+                s = Scheduler()
+                s(fn, arg1, arg2) # adds fn(arg1, arg2) to our local job list
+                s()               # schedules all the work on the local job list
+
+            Scheduler takes four keyword-only boolean parameters
+            which guide its behavior:
+
+            * atexit - if true, and Log is in threaded mode,
+                schedules a final None so the worker thread will exit.
+                also, passes in a "blocker" so we can wait
+                until the worker thread has finished.
+
+            * drain - if true, and Log is in non-threaded mode,
+                flush the work queue.
+
+            * first - if true,
+                insert these jobs on the front of the work queue (in order).
+                default is to append them to the end.
+
+            * wait - if true,
+                wait until all this scheduled work is completed:
+                * in non-threaded mode, this is the same as drain.
+                * in threaded mode, this blocks until the worker thread
+                  processes every job queued by the scheduler.
+            """
+            self.log = log
+            self.jobs = []
+            self.atexit = atexit
+            self.first = first
+
+            wait = wait or atexit
+            threaded = log._threaded
+            self.block = wait and threaded and (not atexit)
+            self.drain = (drain or wait) and (not threaded)
+
+            assert not (self.block and self.drain)
+            assert not (self.block and self.atexit)
+
+        def __bool__(self):
+            return bool(self.jobs)
+
+        def __call__(self, method=None, *args):
+            if method is None:
+                jobs = self.jobs
+                locker = None
+                threaded = self.log._threaded
+
+                if self.block or self.atexit:
+                    blocker = threading.Lock()
+                    blocker.acquire()
+
+                if self.block:
+                    jobs.append(((blocker,), blocker.release, ()))
+
+                if self.atexit:
+                    jobs.append(((), None, (blocker.release,)))
+
+                if jobs:
+                    self.log._schedule(jobs, first=self.first)
+                    self.jobs = jobs = []
+
+                if self.block:
+                    blocker.acquire()
+
+                if self.drain:
+                    self.log._drain()
+
+                return
+
+            involved = []
+
+            if isinstance(method, types.MethodType):
+                method_self = method.__self__
+                if isinstance(method_self, (Destination, Formatter)):
+                    involved.append(method_self)
+            else:
+                method_self = None
+
+            for a in args:
+                if isinstance(a, (Destination, Formatter)):
+                    assert a not in involved
+                    involved.append(a)
+
+            t = (involved, method, args)
+            # print(t)
+            self.jobs.append(t)
+
 
     def log(self, message):
         for key, prepared in message.prepared.items():
@@ -1210,7 +1302,7 @@ class Session:
         self.parent = parent
         self.format = format
         self.buffer = [] if buffered else None
-        self.paused = bool(paused)
+        self.paused = int(bool(paused))
         self.kwargs = kwargs
 
         self.clock = core.clock()
@@ -1264,6 +1356,18 @@ class Session:
     @property
     def closed(self):
         return self.state >= STATE_DRAINING
+
+    def pause(self):
+        self.paused += 1
+
+    def resume(self):
+        if self.paused > 1:
+            self.paused -= 1
+            return
+
+        # clamp to zero
+        self.paused = 0
+
 
     @staticmethod
     def subformat(base, format):
@@ -1419,7 +1523,7 @@ class Session:
 class LogBase:
     __slots__ = ('_core', '_session', '_clock', '_unregister', '__weakref__', )
 
-    def __init__(self, core, session):
+    def __init__(self, core, session, paused):
         self._core = core
         self._session = session
         self._unregister = session.register(self)
@@ -1441,6 +1545,71 @@ class LogBase:
         session = self._session
         if session:
             session.flush()
+
+    @property
+    def paused(self):
+        "Returns True if the handle is paused, None if the log is closed, and otherwise False."
+        if not self._session:
+            return None
+        return bool(self._paused)
+
+    class _ResumeContextManager:
+        """
+        The context manager returned by Log.pause().  Calls Log.resume() on exit.
+        """
+        def __init__(self, log):
+            assert log
+            self._log = log
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self._log.resume()
+
+    def pause(self):
+        """
+        Pauses the log if it's not closed.
+
+        If the log is not closed, this pauses the log
+        (if it's not already paused), and returns a context
+        manage that calls Log.resume().
+
+        A paused log ignores calls to log methods
+        (write, print, __call__, enter, and exit).
+
+        Pause state is internally stored as an integer;
+        pause increments it, resume decrements it (but not below zero),
+        and if it's greater than zero the log is paused.
+
+        If the log is closed, this function does nothing,
+        and it returns a context manager that also does nothing.
+        """
+        session = self._session
+        if session is not None:
+            self._core.dispatch([(session.pause, ())])
+
+        return self._ResumeContextManager(self)
+
+    def resume(self):
+        """
+        Resumes the log if it's not closed.
+
+        If the log is not closed, and is currently paused,
+        this resumes (un-pauses) the log.
+
+        A paused log ignores calls to log methods
+        (write, print, __call__, enter, and exit).
+
+        Pause state is internally stored as an integer;
+        pause increments it, resume decrements it (but not below zero),
+        and if it's greater than zero the log is paused.
+
+        If the log is closed, this function does nothing.
+        """
+        session = self._session
+        if session is not None:
+            self._core.dispatch([(session.resume, ())])
 
     def child(self, name='', buffered=True, *, format=_USE_DEFAULT, paused=None, **kwargs):
         time = self._clock()
@@ -1517,7 +1686,7 @@ class Child(LogBase):
         session = Session(name, core, parent_session, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
         clock = session.clock
 
-        super().__init__(core, session)
+        super().__init__(core, session, paused)
         self._clock = clock
 
     def __enter__(self):
@@ -1592,7 +1761,7 @@ class Log(LogBase):
             )
 
         session = Session(name, core, None, buffered=False, format='', paused=paused, kwargs={})
-        super().__init__(core, session)
+        super().__init__(core, session, paused)
 
         self.clock = session.clock
 
