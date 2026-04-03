@@ -671,283 +671,284 @@ class NoneType(Destination):
         pass
 
 
-# @export
-# class File(Destination):
-#     """
-#     A Destination wrapping a file in the filesystem.
+@export
+class File(Destination):
+    """
+    A Destination wrapping a file in the filesystem.
 
-#     This Destination writes to a file in the filesystem,
-#     using the path you specify (either a str or a pathlib.Path
-#     object).
+    This Destination writes to a file in the filesystem,
+    using the path you specify (either a str or a pathlib.Path
+    object).
 
-#     If flush=False (the default), when a formatted log message
-#     is written to the destination, it's buffered internally.
-#     Then, when the log is flushed, File concatenates all the
-#     buffered messages, opens the file, writes to it with one
-#     write call, and closes it.
+    If flush=False (the default), when a formatted log message
+    is written to the destination, it's buffered internally.
+    Then, when the log is flushed, File concatenates all the
+    buffered messages, opens the file, writes to it with one
+    write call, and closes it.
 
-#     If flush=True, the file is opened and kept open.  Every
-#     time it receives a formatted log message, it writes the
-#     message immediately and flushes the file handle.  If File
-#     receives an "end" message, it closes the file; if it
-#     receives a subsequent "start" message, it reopens the file.
+    If flush=True, the file is opened and kept open.  Every
+    time it receives a formatted log message, it writes the
+    message immediately and flushes the file handle.  If File
+    receives an "end" message, it closes the file; if it
+    receives a subsequent "start" message, it reopens the file.
 
-#     The first time the file is opened, it's opened using the
-#     "initial_mode" passed in, by default "at".  After the first
-#     time, File always uses mode "at".
-#     """
-#     def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None):
-#         super().__init__()
+    The first time the file is opened, it's opened using the
+    "initial_mode" passed in, by default "at".  After the first
+    time, File always uses mode "at".
+    """
+    def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None):
+        super().__init__()
 
-#         Path = pathlib.Path
+        Path = pathlib.Path
 
-#         original_path = path
+        original_path = path
 
-#         is_bytes = isinstance(path, bytes)
-#         is_str = isinstance(path, str)
-#         is_path = isinstance(path, Path)
+        is_bytes = isinstance(path, bytes)
+        is_str = isinstance(path, str)
+        is_path = isinstance(path, Path)
 
-#         if not (is_bytes or is_str or is_path):
-#             raise TypeError("path must be str, bytes, or pathlib.Path, and non-empty")
-#         if not path:
-#             raise ValueError("path must be str, bytes, or pathlib.Path, and non-empty")
+        if not (is_bytes or is_str or is_path):
+            raise TypeError("path must be str, bytes, or pathlib.Path, and non-empty")
+        if not path:
+            raise ValueError("path must be str, bytes, or pathlib.Path, and non-empty")
 
-#         if is_bytes:
-#             path = os.fsdecode(path)
-#             is_str = True
-#         if is_str:
-#             path = Path(path)
+        if is_bytes:
+            path = os.fsdecode(path)
+            is_str = True
+        if is_str:
+            path = Path(path)
 
-#         path = path.resolve()
+        path = path.resolve()
 
-#         if not isinstance(initial_mode, str):
-#             raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
-#         if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
-#             raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
+        if not isinstance(initial_mode, str):
+            raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
+        if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
+            raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
 
-#         self._buffer = buffer = []
-#         self._buffering = buffering
-#         self._original_path = original_path
-#         self._path = path
-#         self._mode = initial_mode
-#         self._encoding = encoding
-#         self._f = None
+        self._buffer = buffer = []
+        self._buffering = buffering
+        self._original_path = original_path
+        self._path = path
+        self._mode = initial_mode
+        self._encoding = encoding
+        self._f = None
 
-#     @property
-#     def path(self):
-#         return self._original_path
+    @property
+    def path(self):
+        return self._original_path
 
-#     @property
-#     def mode(self):
-#         return self._mode
+    @property
+    def mode(self):
+        return self._mode
 
-#     @property
-#     def encoding(self):
-#         return self._encoding
+    @property
+    def encoding(self):
+        return self._encoding
 
-#     @property
-#     def buffering(self):
-#         return self._buffering
+    @property
+    def buffering(self):
+        return self._buffering
 
-#     def __eq__(self, other):
-#         return isinstance(other, File) and (other._path == self._path)
+    def __eq__(self, other):
+        return isinstance(other, File) and (other._path == self._path)
 
-#     def __hash__(self):
-#         return hash(File) ^ hash(self._path)
+    def __hash__(self):
+        return hash(File) ^ hash(self._path)
 
-#     def start(self):
-#         super().start()
-#         self._f = None if self._buffering else self._path.open(self._mode, encoding=self._encoding)
+    def start(self, session):
+        super().start(session)
+        self._f = None if self._buffering else self._path.open(self._mode, encoding=self._encoding)
 
-#     def end(self):
-#         super().end()
-#         assert not self._buffer
-#         if self._f:
-#             assert not self._buffering
-#             f = self._f
-#             self._f = None
-#             f.close()
-#             self._mode = "at"
+    def end(self):
+        super().end()
+        assert not self._buffer
+        if self._f:
+            assert not self._buffering
+            f = self._f
+            self._f = None
+            f.close()
+            self._mode = "at"
 
-#     def write(self, formatted):
-#         if not formatted:
-#             return
-#         if self._buffering:
-#             self._buffer.append(formatted)
-#             return
+    def write(self, formatted):
+        if not formatted:
+            return
+        if self._buffering:
+            self._buffer.append(formatted)
+            return
 
-#         self._f.write(formatted)
-#         self._f.flush()
+        self._f.write(formatted)
+        self._f.flush()
 
-#     def flush(self):
-#         if not (self._buffering and self._buffer):
-#             return
+    def flush(self):
+        if not (self._buffering and self._buffer):
+            return
 
-#         assert not self._f
-#         contents = "".join(self._buffer)
-#         self._buffer.clear()
-#         with self._path.open(self._mode, encoding=self._encoding) as f:
-#             f.write(contents)
-#         self._mode = "at"
-
-
-# @export
-# class FileHandle(Destination):
-#     def __init__(self, handle, *, autoflush=False):
-#         super().__init__()
-#         if not isinstance(handle, io.TextIOBase):
-#             raise TypeError(f"invalid file handle {handle}")
-#         self._handle = handle
-#         self._autoflush = autoflush
-
-#     def __eq__(self, other):
-#         return isinstance(other, FileHandle) and (other._handle is self._handle)
-
-#     def __hash__(self):
-#         return hash(FileHandle) ^ hash(self._handle)
-
-#     def write(self, message):
-#         self._handle.write(message)
-#         if self._autoflush:
-#             self._handle.flush()
-
-#     def flush(self):
-#         self._handle.flush()
+        assert not self._f
+        contents = "".join(self._buffer)
+        self._buffer.clear()
+        with self._path.open(self._mode, encoding=self._encoding) as f:
+            f.write(contents)
+        self._mode = "at"
 
 
-# class Buffer(Destination):
-#     """
-#     A Destination that buffers log messages before sending them to another Destination.
+@export
+class FileHandle(Destination):
+    def __init__(self, handle, *, autoflush=False):
+        super().__init__()
+        if not isinstance(handle, io.TextIOBase):
+            raise TypeError(f"invalid file handle {handle}")
+        self._handle = handle
+        self._autoflush = autoflush
 
-#     This Destination wraps another arbitrary
-#     Destination, referred to as the "underlying"
-#     Destination.
+    def __eq__(self, other):
+        return isinstance(other, FileHandle) and (other._handle is self._handle)
 
-#     Every time a formatted log message is logged,
-#     Buffer appends it to an internal buffer (a Python list).
-#     When the log is flushed, Buffer will concatentate
-#     all the log messages into one giant string, then
-#     writes that string to the underlying Destination,
-#     and also flushes the underlying Destination.
+    def __hash__(self):
+        return hash(FileHandle) ^ hash(self._handle)
 
-#     By default, Buffer wraps a Print destination,
-#     but you may supply your own Destination as a
-#     positional argument to the constructor.
-#     """
-#     def __init__(self, destination=None):
-#         super().__init__()
-#         self._buffer = []
-#         self._original_destination = destination
-#         self._destination = map_destination(destination) if destination is not None else Print()
-#         self._last_elapsed = self._last_thread = None
+    def write(self, message):
+        self._handle.write(message)
+        if self._autoflush:
+            self._handle.flush()
+
+    def flush(self):
+        self._handle.flush()
 
 
-#     @property
-#     def buffer(self):
-#         return self._buffer
+class Buffer(Destination):
+    """
+    A Destination that buffers log messages before sending them to another Destination.
 
-#     @property
-#     def destination(self):
-#         return self._original_destination
+    This Destination wraps another arbitrary
+    Destination, referred to as the "underlying"
+    Destination.
 
-#     def __eq__(self, other):
-#         return isinstance(other, Buffer) and (other._destination == self._destination)
+    Every time a formatted log message is logged,
+    Buffer appends it to an internal buffer (a Python list).
+    When the log is flushed, Buffer will concatentate
+    all the log messages into one giant string, then
+    writes that string to the underlying Destination,
+    and also flushes the underlying Destination.
 
-#     def __hash__(self):
-#         return hash(Buffer) ^ hash(self._destination)
-
-#     def register(self, log, owner):
-#         super().register(log, owner)
-#         self._destination.register(log, self)
-
-#     def unregister(self):
-#         super().unregister()
-#         self._destination.unregister()
-
-#     def start(self):
-#         super().start()
-#         self._destination.start()
-
-#     def end(self):
-#         super().end()
-#         self._destination.end()
-
-#     def write(self, formatted):
-#         self._buffer.append(formatted)
-
-#     def flush(self):
-#         if self._buffer:
-#             contents = "".join(self._buffer)
-#             self._buffer.clear()
-#             self._destination.write(contents)
-#         if self._buffer:
-#             self._destination.flush()
+    By default, Buffer wraps a Print destination,
+    but you may supply your own Destination as a
+    positional argument to the constructor.
+    """
+    def __init__(self, destination=None):
+        super().__init__()
+        self._buffer = []
+        self._original_destination = destination
+        self._destination = Log.map_destination(destination) if destination is not None else Print()
+        self._last_elapsed = self._last_thread = None
 
 
+    @property
+    def buffer(self):
+        return self._buffer
 
-# @export
-# class TmpFile(File):
-#     """
-#     A Destination that writes to a timestamped temporary file.
+    @property
+    def destination(self):
+        return self._original_destination
 
-#     This is a subclass of File that computes a temporary
-#     filename.  The filename is approximately in this format:
-#         tempfile.gettempdir() / "{Log.name}.{start timestamp}.{os.getpid()}.txt"
-#     (If the computed filename contains illegal or inconvenient characters,
-#     they may be replaced with other characters; for example ':' is replaced with '-'.)
+    def __eq__(self, other):
+        return isinstance(other, Buffer) and (other._destination == self._destination)
 
-#     The filename is recomputed whenever TmpFile receives a "start" event.
-#     Thus, if a Log is reset, TmpFile will close the old temporary log;
-#     if that Log is subsequently logged to, TmpFile will open a new temporary
-#     log with a freshly recalculated name.
-#     """
+    def __hash__(self):
+        return hash(Buffer) ^ hash(self._destination)
 
-#     def __init__(self, prefix='{name}', *, buffering=True, encoding=None, timestamp_format=timestamp_human):
-#         # use a fake path for now,
-#         # we'll compute a proper one when we get the "start" event
-#         path = pathlib.Path(tempfile.gettempdir()) / f"Log-init.{os.getpid()}.tmp"
-#         super().__init__(path, buffering=buffering, encoding=encoding)
-#         if not (isinstance(prefix, str) and prefix):
-#             raise TypeError("prefix must be str, and cannot be empty")
-#         self._name = None
-#         self._prefix = prefix
-#         self._rendered_prefix = None
-#         self._timestamp_format = timestamp_format
+    def register(self, core, log):
+        super().register(core, log)
+        self._destination.register(core, log)
 
-#     @property
-#     def prefix(self):
-#         return self._prefix
+    def unregister(self):
+        super().unregister()
+        self._destination.unregister()
 
-#     @property
-#     def path(self):
-#         return self._path
+    def start(self, session):
+        super().start(session)
+        self._destination.start(session)
 
-#     def __eq__(self, other):
-#         return isinstance(other, TmpFile) and (other._prefix == self._prefix)
+    def end(self):
+        super().end()
+        self._destination.end()
 
-#     def __hash__(self):
-#         return hash(TmpFile) ^ hash(self._prefix)
+    def write(self, formatted):
+        self._buffer.append(formatted)
 
-#     def register(self, log, owner):
-#         super().register(log, owner)
-#         self._name = log.name
-#         self._rendered_prefix = self._prefix.format(name=self._name)
+    def flush(self):
+        if self._buffer:
+            contents = "".join(self._buffer)
+            self._buffer.clear()
+            self._destination.write(contents)
+        if self._buffer:
+            self._destination.flush()
 
-#     def start(self):
-#         super().start()
-#         assert self.owner
-#         log = self.log
 
-#         log_timestamp = self._timestamp_format(log.start_time_epoch)
-#         log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
-#         thread = threading.current_thread()
-#         tmpfile = f"{self._rendered_prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
-#         tmpfile = translate_filename_to_exfat(tmpfile)
-#         tmpfile = tmpfile.replace(" ", '_')
-#         self._path = pathlib.Path(tempfile.gettempdir()) / tmpfile
 
-# TMPFILE = object()
-# export("TMPFILE")
+@export
+class TmpFile(File):
+    """
+    A Destination that writes to a timestamped temporary file.
+
+    This is a subclass of File that computes a temporary
+    filename.  The filename is approximately in this format:
+        tempfile.gettempdir() / "{Log.name}.{start timestamp}.{os.getpid()}.txt"
+    (If the computed filename contains illegal or inconvenient characters,
+    they may be replaced with other characters; for example ':' is replaced with '-'.)
+
+    The filename is recomputed whenever TmpFile receives a "start" event.
+    Thus, if a Log is reset, TmpFile will close the old temporary log;
+    if that Log is subsequently logged to, TmpFile will open a new temporary
+    log with a freshly recalculated name.
+    """
+
+    def __init__(self, prefix='{name}', *, buffering=True, encoding=None, timestamp_format=timestamp_human):
+        # use a fake path for now,
+        # we'll compute a proper one when we get the "start" event
+        path = pathlib.Path(tempfile.gettempdir()) / f"Log-init.{os.getpid()}.tmp"
+        super().__init__(path, buffering=buffering, encoding=encoding)
+        if not (isinstance(prefix, str) and prefix):
+            raise TypeError("prefix must be str, and cannot be empty")
+        self._name = None
+        self._prefix = prefix
+        self._rendered_prefix = None
+        self._timestamp_format = timestamp_format
+
+    @property
+    def prefix(self):
+        return self._prefix
+
+    @property
+    def path(self):
+        return self._path
+
+    def __eq__(self, other):
+        return isinstance(other, TmpFile) and (other._prefix == self._prefix)
+
+    def __hash__(self):
+        return hash(TmpFile) ^ hash(self._prefix)
+
+    def register(self, log, owner):
+        super().register(log, owner)
+        self._name = log.name
+        self._rendered_prefix = self._prefix.format(name=self._name)
+
+    def start(self, session):
+        super().start(session)
+        assert self._core
+        clock = session.clock
+
+        log_timestamp = clock.time_to_timestamp(clock.initial)
+        log_timestamp = log_timestamp.replace("/", "-").replace(":", "-").replace(" ", ".")
+        thread = threading.current_thread()
+
+        tmpfile = f"{self._rendered_prefix}.{log_timestamp}.{os.getpid()}.{thread.name}.txt"
+        tmpfile = translate_filename_to_exfat(tmpfile)
+        tmpfile = tmpfile.replace(" ", '_')
+        self._path = pathlib.Path(tempfile.gettempdir()) / tmpfile
+
+TMPFILE = object()
+export("TMPFILE")
 
 
 
@@ -1615,7 +1616,8 @@ class Log(LogBase):
     def route(self, formatter, *destinations):
         self._route(formatter, destinations)
 
-    def map_destination(self, o):
+    @staticmethod
+    def map_destination(o):
         if isinstance(o, Destination):
             return o
         if o is builtins.print:
@@ -1625,12 +1627,12 @@ class Log(LogBase):
         if isinstance(o, list):
             return List(o)
 
-        # if isinstance(o, (bytes, str, pathlib.Path)):
-        #     return File(o)
-        # if isinstance(o, io.TextIOBase):
-        #     return FileHandle(o)
-        # if o is TMPFILE:
-        #     return TmpFile()
+        if isinstance(o, (bytes, str, pathlib.Path)):
+            return File(o)
+        if isinstance(o, io.TextIOBase):
+            return FileHandle(o)
+        if o is TMPFILE:
+            return TmpFile()
         if o is None:
             return NoneType()
 
