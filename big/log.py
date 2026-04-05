@@ -405,7 +405,7 @@ class TextFormatter(Formatter):
             self.fstate = fstate
 
         def __repr__(self):
-            return f"<TextFormatter.Prepared fstate={self.fstate!r} args={self.args!r} kwargs={self.kwargs!r} keys={self.keys!r} dedup_keys={self.dedup_keys!r}>"
+            return f"<TextFormatter.Prepared fstate={self.fstate!r} args={self.args!r} kwargs={self.kwargs!r}>"
 
     @BoundInnerClass
     class State(Formatter.State):
@@ -1023,7 +1023,8 @@ class Core:
         # ensure all jobs up to now have been executed
         blocker = threading.Lock()
         blocker.acquire()
-        self.dispatch([(blocker.release, ())])
+        jq.append( ( (), blocker.release, () ) )
+        nq.put(1)
         blocker.acquire()
 
         # flip all sessions to closed
@@ -1033,7 +1034,7 @@ class Core:
 
         self.thread = self.job_queue = self.notify_queue = None
 
-        jq.append(None)
+        jq.append( ( (), None, (blocker.release,) ) )
         nq.put(1)
         thread.join()
 
@@ -1100,21 +1101,6 @@ class Core:
 
         return unregister
 
-    def dispatch(self, jobs, *, first=False):
-        if not jobs:
-            return
-        jq = self.job_queue
-        if first:
-            verb = jq.rextend
-        else:
-            verb = jq.extend
-        verb(jobs)
-        self.notify_queue.put(len(jobs))
-        if not self.threaded:
-            self.drain()
-
-    def drain(self):
-        self.execute(False)
 
     def execute(self, block):
         jq = self.job_queue
@@ -1127,22 +1113,48 @@ class Core:
             count = nq.get()
             for _ in range(count):
                 job = jq.rpop()
-                if job is None:
+                involved, fn, args = job
+                if fn is None:
+                    if args:
+                        assert len(args) == 1
+                        args[0]()
                     return
-                fn, args = job
                 # print(f">> {fn.__self__} {fn.__name__} {args}")
                 fn(*args)
 
+    def drain(self):
+        self.execute(False)
+
+    def schedule(self, jobs, *, first=False):
+        if not jobs:
+            return
+        jq = self.job_queue
+        if first:
+            verb = jq.rextend
+        else:
+            verb = jq.extend
+        verb(jobs)
+        self.notify_queue.put(len(jobs))
+        if not self.threaded:
+            self.drain()
+
+
+    @BoundInnerClass
     class Scheduler:
-        def __init__(self, log, *, atexit=False, drain=False, first=False, wait=False):
+        def __init__(self, core, *args, atexit=False, drain=False, first=False, wait=False):
             """
             Manages creating "jobs" iterables and scheduling the work.  To use:
 
-                s = Scheduler()
-                s(fn, arg1, arg2) # adds fn(arg1, arg2) to our local job list
-                s()               # schedules all the work on the local job list
+                s = core.schedule() # returns a Scheduler
+                s(fn, arg1, arg2)   # adds fn(arg1, arg2) to our local job list
+                s()                 # schedules all the work on the local job list
 
-            Scheduler takes four keyword-only boolean parameters
+            You can call s with arguments as many times as you like, to schedule
+            multiple jobs.  There's also a shortcut if you're only scheduling one job:
+
+                core.schedule(fn, arg1, arg2)
+
+            schedule/Scheduler also takes four keyword-only boolean parameters
             which guide its behavior:
 
             * atexit - if true, and Log is in threaded mode,
@@ -1163,27 +1175,32 @@ class Core:
                 * in threaded mode, this blocks until the worker thread
                   processes every job queued by the scheduler.
             """
-            self.log = log
+            self.core = core
             self.jobs = []
             self.atexit = atexit
             self.first = first
 
             wait = wait or atexit
-            threaded = log._threaded
+            threaded = core.threaded
             self.block = wait and threaded and (not atexit)
             self.drain = (drain or wait) and (not threaded)
 
             assert not (self.block and self.drain)
             assert not (self.block and self.atexit)
 
+            if args:
+                self(*args)
+                self()
+
         def __bool__(self):
             return bool(self.jobs)
 
         def __call__(self, method=None, *args):
             if method is None:
+                # dispatch
                 jobs = self.jobs
                 locker = None
-                threaded = self.log._threaded
+                threaded = self.core.threaded
 
                 if self.block or self.atexit:
                     blocker = threading.Lock()
@@ -1196,17 +1213,18 @@ class Core:
                     jobs.append(((), None, (blocker.release,)))
 
                 if jobs:
-                    self.log._schedule(jobs, first=self.first)
+                    self.core.schedule(jobs, first=self.first)
                     self.jobs = jobs = []
 
                 if self.block:
                     blocker.acquire()
 
                 if self.drain:
-                    self.log._drain()
+                    self.core.drain()
 
                 return
 
+            # append a job
             involved = []
 
             if isinstance(method, types.MethodType):
@@ -1225,7 +1243,6 @@ class Core:
             # print(t)
             self.jobs.append(t)
 
-
     def log(self, message):
         for key, prepared in message.prepared.items():
             formatter = self.formatters_by_key.get(key)
@@ -1239,7 +1256,7 @@ class Core:
         if self.threaded:
             blocker = threading.Lock()
             blocker.acquire()
-            self.dispatch( [(blocker.release, ())] )
+            self.Scheduler(blocker.release)
             blocker.acquire()
         else:
             self.drain()
@@ -1431,7 +1448,7 @@ class Session:
 
             self.handles -= 1
             if not self.handles:
-                self.core.dispatch( [(self.ensure_state, (STATE_DRAINING,))] )
+                self.core.Scheduler(self.ensure_state, STATE_DRAINING)
 
         return unregister
 
@@ -1453,8 +1470,7 @@ class Session:
                     format_key = self.subformat(self.format, 'start')
                     session = self.parent
                 message = session.Message(self.clock.initial, format_key, (), self.kwargs)
-                self.core.dispatch( [(self.log, (message,))], first=True)
-
+                self.core.Scheduler(self.log, message, first=True)
                 return True
 
         # we already handled initial -> active.
@@ -1464,8 +1480,7 @@ class Session:
 
         if desired_state == STATE_DRAINING:
             self.state = STATE_DRAINING
-            # print("send _close")
-            self.core.dispatch( [(self._close, ())] )
+            self.core.Scheduler(self._close)
             return True
 
         # print("ensure state closed")
@@ -1480,7 +1495,7 @@ class Session:
             session = self.parent
         message = session.Message(time, format_key, (), {})
         # self.log(message)
-        self.core.dispatch( [(self.log, (message,))], first=True)
+        self.core.Scheduler(self.log, message, first=True)
 
         if self.buffer:
             self.flush()
@@ -1587,7 +1602,7 @@ class LogBase:
         """
         session = self._session
         if session is not None:
-            self._core.dispatch([(session.pause, ())])
+            self._core.Scheduler(session.pause)
 
         return self._ResumeContextManager(self)
 
@@ -1609,7 +1624,7 @@ class LogBase:
         """
         session = self._session
         if session is not None:
-            self._core.dispatch([(session.resume, ())])
+            self._core.Scheduler(session.resume)
 
     def child(self, name='', buffered=True, *, format=_USE_DEFAULT, paused=None, **kwargs):
         time = self._clock()
@@ -1632,7 +1647,10 @@ class LogBase:
         if (not session) or (session.state >= STATE_DRAINING):
             return
         message = session.Message(time, format, args, kwargs)
-        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+        s = self._core.Scheduler()
+        s(session.ensure_state, STATE_ACTIVE)
+        s(session.log, message)
+        s()
 
     def write(self, s, format='preformatted'):
         time = self._clock()
@@ -1644,7 +1662,10 @@ class LogBase:
         if (not session) or (session.state >= STATE_DRAINING):
             return
         message = session.Message(time, format, (s,), {})
-        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+        s = self._core.Scheduler()
+        s(session.ensure_state, STATE_ACTIVE)
+        s(session.log, message)
+        s()
 
     def print(self, *args, sep=' ', end='\n', format='print'):
         time = self._clock()
@@ -1663,7 +1684,10 @@ class LogBase:
             s = s[:-1]
 
         message = session.Message(time, format, (s,), {})
-        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
+        s = self._core.Scheduler()
+        s(session.ensure_state, STATE_ACTIVE)
+        s(session.log, message)
+        s()
 
     __call__ = print
 
@@ -1675,8 +1699,10 @@ class LogBase:
             return
 
         message = session.Message(time, 'box', (s,), {})
-        self._core.dispatch([(session.ensure_state, (STATE_ACTIVE,)), (session.log, (message,)),])
-
+        s = self._core.Scheduler()
+        s(session.ensure_state, STATE_ACTIVE)
+        s(session.log, message)
+        s()
 
 @export
 class Child(LogBase):
