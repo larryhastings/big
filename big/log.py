@@ -1314,7 +1314,7 @@ class Session:
     #     'unregister_parent',
     #     ) + BOUNDINNERCLASS_OUTER_SLOTS
 
-    def __init__(self, name, core, parent, *, buffered, paused, format, kwargs):
+    def __init__(self, name, core, parent, *, buffered, clock, format, kwargs, paused):
         self.name = name
         self.core = core
         self.parent = parent
@@ -1323,7 +1323,11 @@ class Session:
         self.paused = int(bool(paused))
         self.kwargs = kwargs
 
-        self.clock = core.clock()
+        clock = clock or core.clock()
+        initial = clock()
+        self.clock = clock
+        self.initial = initial
+
         self.thread = threading.current_thread()
         self.state = STATE_INITIAL
         self.active = set()
@@ -1472,7 +1476,7 @@ class Session:
                 else:
                     format_key = self.subformat(self.format, 'start')
                     session = self.parent
-                message = session.Message(self.clock.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
+                message = session.Message(self.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
                 self.log(message)
                 return True
 
@@ -1490,7 +1494,7 @@ class Session:
         else:
             format_key = self.subformat(self.format, 'end')
             session = self.parent
-            duration = time - self.clock.initial
+            duration = time - self.initial
         message = session.Message(time, format_key, (self.name,), {}, thread=self.thread, duration=duration)
         self.log(message)
 
@@ -1707,7 +1711,7 @@ class Child(LogBase):
     __slots__ = ('_core', '_session', '_clock')
 
     def __init__(self, core, parent_session, *, time=None, name=None, buffered=True, paused=False, format=_USE_DEFAULT, kwargs=None):
-        session = Session(name, core, parent_session, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
+        session = Session(name, core, parent_session, buffered=buffered, clock=parent_session.clock, format=format, kwargs=kwargs, paused=paused)
         clock = session.clock
 
         super().__init__(core, session, paused)
@@ -1784,7 +1788,7 @@ class Log(LogBase):
             threaded=threaded,
             )
 
-        session = Session(name, core, None, buffered=False, format='', paused=paused, kwargs={})
+        session = Session(name, core, None, buffered=False, clock=None, format='', kwargs={}, paused=paused)
         super().__init__(core, session, paused)
 
         self.clock = session.clock
