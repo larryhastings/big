@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.13.1.](#0131)
+The current version is [0.14.](#0131)
 
 *Think big!*
 
@@ -235,7 +235,7 @@ And here are six little functions/classes I use all the time:
 
 [`eval_template_string(s, globals, locals=None, *, ...)`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
 
-[`Formatter(template, map=None, *, stretch=True, width=79, **kwargs)`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
+[`Formatter(template, map=None, *, relaxed=False, stretch=True, width=79, **kwargs)`](#formattertemplate-mapnone--relaxedfalse-stretchtrue-width79-kwargs)
 
 [`fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`](#fgreppath-text--encodingnone-enumeratefalse-case_insensitivefalse)
 
@@ -293,7 +293,7 @@ And here are six little functions/classes I use all the time:
 
 [`iterator_context(iterator, start=0)`](#iterator_contextiterator-start0)
 
-[`iterator_filter(iterator, *, ...)`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone)
+[`iterator_filter(iterator, *, ...)`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone-call_everynone)
 
 [`linebreaks`](#linebreaks)
 
@@ -1740,6 +1740,7 @@ containing metadata about the iteration.
 `ctx` supports the following attributes:
 
 </dd><dt>
+
 `ctx.countdown`
 </dt><dd>
    contains the "opposite" value of `ctx.index`.
@@ -1751,34 +1752,40 @@ containing metadata about the iteration.
    requires the iterator to support `__len__`; if it doesn't,
    `ctx.countdown` will be undefined.
 </dd><dt>
+
 `ctx.current`
 </dt><dd>
    contains the current value yielded by the
    iterator (`o` as described above).
 </dd><dt>
+
 `ctx.index`
 </dt><dd>
    contains the index of this value.  The first
    time the iterator yields a value, this will be `start`;
    the second time, it will be `start + 1`, etc.
 <dl><dt>
+
 `ctx.is_first`
 </dt><dd>
    is true only for the first value yielded,
    and false otherwise.
 </dd><dt>
+
 `ctx.is_last`
 </dt><dd>
    is true only for the last value yielded,
    and false otherwise.  (If the iterator only yields
    one value, `is_first` and `is_last` will both be true.)
 </dd><dt>
+
 `ctx.length`
 </dt><dd>
    contain the total number of items that will be yielded.
    `ctx.length` requires the iterator to support `__len__`;
    if it doesn't, `ctx.length` will be undefined.
 </dd><dt>
+
 `ctx.next`
 </dt><dd>
    contains the next value to be yielded by
@@ -1786,6 +1793,7 @@ containing metadata about the iteration.
    value yielded by the iterator, `ctx.previous` will be
    an `undefined` value.)
 </dd><dt>
+
 `ctx.previous`
 </dt><dd>
    contains the previous value yielded if
@@ -1797,7 +1805,7 @@ containing metadata about the iteration.
 
 </dd></dl>
 
-#### `iterator_filter(iterator, *, stop_at_value=undefined, stop_at_in=None, stop_at_predicate=None, stop_at_count=None, reject_value=undefined, reject_in=None, reject_predicate=None, only_value=undefined, only_in=None, only_predicate=None)`
+#### `iterator_filter(iterator, *, stop_at_value=undefined, stop_at_in=None, stop_at_predicate=None, stop_at_count=None, reject_value=undefined, reject_in=None, reject_predicate=None, only_value=undefined, only_in=None, only_predicate=None, call_every=None)`
 
 <dl><dd>
 
@@ -1826,9 +1834,19 @@ A rule ending in `_in` passes if the yielded value is `in` the argument
 A rule ending in `_predicate` takes a callable as its argument; it passes
 if calling the argument with the yielded value returns a true value.
 
-There is one additional rule: `stop_at_count`, an integer.  The iterator
+There are two additional rules:
+
+* `stop_at_count`, an integer.  The iterator
 becomes exhausted after yielding `stop_at_count` items.  If `stop_at_count`
 is initially `<= 0`, the iterator is initialized in an exhausted state.
+
+* `call_every`, a 2-tuple of `(callable, number)`.  This calls the
+`callable` callable--without arguments--after every `number` values
+yielded.  Passing in `call_every=(foo, 4)`
+for an iterator that yields 14 values would call `foo()` after
+yielding 4 values, again after yielding 8 values, and a third
+time after yielding 12 values.
+
 </dd></dl>
 
 #### `PushbackIterator(iterable=None)`
@@ -3501,6 +3519,14 @@ Formatter has two additional features:
           "message lines" in the template, the last "message line"
           will be repeated, used to format the last two lines of
           the "message" parameter.
+
+        * If the template doesn't contain any "message lines",
+          but you pass in a non-empty string for the "message"
+          when you call the `Formatter` object, normally this will
+          raise `ValueError`.  If you want to permit passing in
+          a message when rendering a `Formatter` without any
+          "message lines", pass in `relaxed=True` to the `Formatter`
+          constructor.
 
     * Values whose keys end with `'*'` (e.g. `"{line*}"`) are special:
       they are "starred interpolations".  Their value is repeated
@@ -9870,11 +9896,19 @@ others.  Views are completely independent from each other.
 
 ## Release history
 
-#### 0.13.2
+#### 0.14
 
 *under development*
 
-
+* Added a new parameter to `iterator_filter`: `call_every`,
+  which handles calling a callback function every time the
+  wrapped iterator yields N values.
+* Added a new parameter to `Formatter`: `relaxed=False`.
+  Normally, if you create a `Formatter` using a template that
+  contains no "message lines", and then you call it with a
+  non-empty `message` argument, it will raise `ValueError`.
+  You can suppress this exception by passing in `relaxed=True`
+  when constructing the `Formatter`.
 * Minor change to `linked_list`: renamed an internal attribute.
   `_lock_parameter` should have been named `_lock_argument`
   all along!  *slaps forehead*  This is purely an internal change

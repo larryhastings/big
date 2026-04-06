@@ -25,6 +25,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import collections
+import operator
 
 
 from . import builtin
@@ -280,6 +281,7 @@ def iterator_filter(iterator,
     only_value=undefined,
     only_in=None,
     only_predicate=None,
+    call_every=None,
     ):
     """
     Wraps any iterator, filtering the values yielded.
@@ -348,12 +350,21 @@ def iterator_filter(iterator,
         "only_predicate=lambda o: isinstance(o, str)" would only accept values
         that were instances of str.
 
-    There's one additional rule not described in the above:
+    There are two additional rules not described in the above:
+
     "stop_at_count", an number.  This exhausts the iterator after
     yielding "stop_at_count" items.  If you pass in stop_at_count=5,
     the iterator becomes exhausted after yielding five values.
     If "stop_at_count" is initially <= 0, the iterator is initialized
     in an exhausted state, and will never yield any values.
+
+    "call_every", a 2-tuple of (callable, number).  This calls the
+    "callable" callable--without arguments--after every "number" values
+    yielded.  Passing in
+        call_every=(foo, 4)
+    for an iterator that yields 14 values would call foo() after
+    yielding 4 values, again after yielding 8 values, and a third
+    time after yielding 12 values.
     """
 
     stop_at_value_active     = stop_at_value     is not undefined
@@ -375,6 +386,13 @@ def iterator_filter(iterator,
     # the only rule we can apply *before* iterating over the wrapped iterator
     if stop_at_count_active and (stop_at_count <= 0):
         return
+
+    if call_every:
+        call_every_callable, call_every_count = call_every
+        cec = operator.index(call_every_count)
+        if cec < 1:
+            raise ValueError(f'call_every second value must be >= 1, not {call_every_count}')
+        call_every_counter = call_every_count = cec
 
     for o in iterator:
         if stop_at and (
@@ -408,6 +426,12 @@ def iterator_filter(iterator,
             if stop_at_count <= 0:
                 return
             stop_at_count -= 1
+
+        if call_every:
+            if not call_every_counter:
+                call_every_callable()
+                call_every_counter = call_every_count
+            call_every_counter -= 1
 
         yield o
 

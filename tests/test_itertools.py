@@ -281,6 +281,22 @@ class TidyItertoolsTests(unittest.TestCase):
                 for i in iterator_filter(fail_immediately(), stop_at_count=stop_value): # pragma: nocover
                     raise RuntimeError(f"we shouldn't have entered the body of this for loop! i={i!r}")
 
+        values = []
+        def append_x():
+            values.append('x')
+
+        for i in iterator_filter(range(14), call_every=(append_x, 4)):
+            values.append(i)
+        self.assertEqual(values, [0, 1, 2, 3, 'x', 4, 5, 6, 7, 'x', 8, 9, 10, 11, 'x', 12, 13])
+
+        with self.assertRaises(TypeError):
+            list(iterator_filter(range(14), call_every=(append_x, 4.5)))
+        with self.assertRaises(ValueError):
+            list(iterator_filter(range(14), call_every=(append_x, 0)))
+        with self.assertRaises(ValueError):
+            list(iterator_filter(range(14), call_every=(append_x, -1)))
+
+
 
 # --8<-- end tidy itertools tests --8<--
 

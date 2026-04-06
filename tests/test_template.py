@@ -856,6 +856,14 @@ Log start
         got = fmt("long message")
         self.assertEqual(expected, got)
 
+    def test_relaxed(self):
+        fmt = Formatter('{line*}\n', {'line*': '-'}, width=12)
+        with self.assertRaises(ValueError):
+            fmt('abcde')
+        fmt = Formatter('{line*}\n', {'line*': '-'}, relaxed=True, width=12)
+        got = fmt('abcde')
+        self.assertEqual(got, '------------\n')
+
 
 def run_tests():
     bigtestlib.run(name="big.template", module=__name__)

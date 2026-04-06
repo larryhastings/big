@@ -480,6 +480,13 @@ class Formatter:
               "message lines" in the template, the last "message line"
               will be repeated, used to format the last two lines of
               the "message" parameter.
+            * If the template doesn't contain any "message lines",
+              but you pass in a non-empty string for the "message"
+              when you call the Formatter object, normally this will
+              raise "ValueError".  If you want to permit passing in
+              a message when rendering a Formatter without any
+              "message lines", pass in relaxed=True to the Formatter
+              constructor.
         * Values whose keys end with '*' (e.g. "{line*}") are special:
           they are "starred interpolations".  Their value is repeated
           zero or more times then truncated until the line is at least
@@ -515,7 +522,7 @@ class Formatter:
         ==========----------
     """
 
-    def __init__(self, template, map=None, *, stretch=True, width=79, **kwargs):
+    def __init__(self, template, map=None, *, relaxed=False, stretch=True, width=79, **kwargs):
         if not isinstance(template, str):
             raise TypeError(f"template must be str, not {type(template).__name__}")
 
@@ -547,6 +554,7 @@ class Formatter:
         self._stretch = bool(stretch)
         self._template = template
         self._width = width
+        self._relaxed = bool(relaxed)
 
         # First pass: scan all interpolation expressions to find a unique
         # prefix character.  We collect the set of first characters of all
@@ -706,7 +714,7 @@ class Formatter:
         """
         if not isinstance(message, str):
             raise TypeError(f"message must be str, not {type(message).__name__}")
-        if message and not self._body:
+        if message and (not self._body) and (not self._relaxed):
             raise ValueError("message is non-empty but template has no {message} lines")
 
         combined_map = self._map

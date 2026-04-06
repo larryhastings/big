@@ -368,11 +368,11 @@ class TextFormatter(Formatter):
                 'formats': {
                     "start": {
                         'base': '',
-                        "template": '╔{double*}╗\n║ {name} start at {timestamp} {space*}║\n╚{double*}╝\n',
+                        "template": '╔{double*}╗\n║ {message} start at {timestamp} {space*}║\n {message} {space*}║\n╚{double*}╝\n',
                     },
                     "end" : {
                         'base': '',
-                        "template": '╔{double*}╗\n║ {name} finish at {timestamp} {space*}║\n╚{double*}╝\n',
+                        "template": '╔{double*}╗\n║ {message} finish at {timestamp} {space*}║\n {message} {space*}║\n╚{double*}╝\n',
                     },
                 }
             },
@@ -387,8 +387,10 @@ class TextFormatter(Formatter):
                     },
                     "end": {
                         'base': '',
-                        "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
+                        # "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┃     ┃ {space*} │\n{prefix}┃     ┃ {duration}s{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
+                        "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {duration}s{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
                         "space*": ' ',
+                        'relaxed': True,
                     },
                 }
             }
@@ -432,10 +434,12 @@ class TextFormatter(Formatter):
         if renderers is None:
             format_dict = fstate.format_dict
             prefix_renderer = format_dict.get('prefix', '').format_map
+            relaxed = bool(format_dict.get('relaxed', False))
             template_renderer = big_template.Formatter(
                 format_dict['template'],
                 format_dict,
                 width=self.width,
+                relaxed=relaxed,
                 )
             self.renderers[format] = renderers = (prefix_renderer, template_renderer)
         return renderers
@@ -443,17 +447,18 @@ class TextFormatter(Formatter):
     def message_to_priority(self, message, prepared):
         session = self.session
         clock = session.clock
-        timestamp = clock.time_to_timestamp(message.time)
-        elapsed = clock.delta_to_seconds(message.time - session.clock.initial)
         fstate = prepared.fstate
 
-        return {
-            'elapsed': elapsed,
+        d = {
+            'elapsed': clock.delta_to_seconds(message.time - session.clock.initial),
             'indent': fstate.indent,
             'name': session.name,
             'thread': message.thread,
-            'timestamp': timestamp,
+            'timestamp': clock.time_to_timestamp(message.time),
             }
+        if message.duration is not None:
+            d['duration'] = clock.delta_to_seconds(message.duration)
+        return d
 
     def render(self, message):
         prepared = message.prepared[self.key]
@@ -1009,7 +1014,7 @@ class Core:
         if not (self.threaded and (self.thread is None)):
             return
 
-        self.thread = threading.Thread(target=self.execute, args=(True,), daemon=True)
+        self.thread = threading.Thread(target=self.execute, args=(True,), daemon=True, name=f'{self.name} worker')
         self.thread.start()
 
     def _stop_thread(self):
@@ -1119,7 +1124,7 @@ class Core:
                         assert len(args) == 1
                         args[0]()
                     return
-                # print(f">> {fn.__self__} {fn.__name__} {args}")
+                # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
                 fn(*args)
 
     def drain(self):
@@ -1244,6 +1249,7 @@ class Core:
             self.jobs.append(t)
 
     def log(self, message):
+        # print("<LOG>", message)
         for key, prepared in message.prepared.items():
             formatter = self.formatters_by_key.get(key)
             if formatter is None:
@@ -1253,20 +1259,15 @@ class Core:
                 destination.write(rendered)
 
     def flush(self):
-        if self.threaded:
-            blocker = threading.Lock()
-            blocker.acquire()
-            self.Scheduler(blocker.release)
-            blocker.acquire()
-        else:
-            self.drain()
-
+        s = self.Scheduler(wait=True)
         for destinations in self.routes.values():
             for d in destinations:
-                d.flush()
+                s(d.flush)
+        s()
 
     def reset(self):
         sessions = self.sessions
+        s = self.Scheduler()
         while sessions:
             rit = reversed(sessions) # rit points at tail
             rit.next(None)           # rit points to node before tail
@@ -1274,7 +1275,8 @@ class Core:
                 wr = rit.rpop()
                 session = wr()
                 if session is not None:
-                    session._close()
+                    s(session._close)
+        s()
         self.flush()
 
     def atexit(self):
@@ -1289,8 +1291,7 @@ class Core:
 
 STATE_INITIAL = (1, 'initial')
 STATE_ACTIVE = (2, 'active')
-STATE_DRAINING = (3, 'draining')
-STATE_CLOSED = (4, 'closed')
+STATE_CLOSED = (3, 'closed')
 
 @export
 class Session:
@@ -1323,6 +1324,7 @@ class Session:
         self.kwargs = kwargs
 
         self.clock = core.clock()
+        self.thread = threading.current_thread()
         self.state = STATE_INITIAL
         self.active = set()
         self.handles = 0
@@ -1350,29 +1352,28 @@ class Session:
 
     @BoundInnerClass
     class Message:
-        __slots__ = ('time', 'thread', 'format', 'args', 'kwargs', 'prepared')
+        __slots__ = ('time', 'thread', 'format', 'args', 'kwargs', 'prepared', 'duration')
 
-        def __init__(self, session, time, format, args, kwargs):
+        def __init__(self, session, time, format, args, kwargs, duration=None, thread=None):
             self.time = time
-            self.thread = threading.current_thread()
-            # if (format != '') and (format not in session.core.supported_formats):
-            #     raise ValueError(f"unsupported format {format!r}")
+            self.thread = thread or threading.current_thread()
             self.format = format
             self.args = args
             self.kwargs = kwargs
-            prepared = self.prepared = {}
+            self.prepared = prepared = {}
+            self.duration = duration
 
             for formatter in session.core.formatters:
                 fstate = session.message_fstate(formatter, format)
                 prepared[formatter.key] = fstate.prepare(self)
 
         def __repr__(self):
-            return f"<Message time={self.time!r} thread={self.thread!r} format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} prepared={self.prepared!r}>"
+            return f"<Message time={self.time!r} thread={self.thread!r} format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} prepared={self.prepared!r} duration={self.duration!r}>"
 
 
     @property
     def closed(self):
-        return self.state >= STATE_DRAINING
+        return self.state >= STATE_CLOSED
 
     def pause(self):
         self.paused += 1
@@ -1448,16 +1449,18 @@ class Session:
 
             self.handles -= 1
             if not self.handles:
-                self.core.Scheduler(self.ensure_state, STATE_DRAINING)
+                self.core.Scheduler(self._close)
 
         return unregister
 
     def ensure_state(self, desired_state):
-        # print(f"{self.name} ensure state {self.state} -> {desired_state}")
+        # if threading.current_thread() != self.core.thread:
+        #     raise RuntimeError("change state not from worker thread")
         if desired_state < self.state:
             return False
         if desired_state == self.state:
             return True
+        # print(f"{self.name} ensure state {self.state} -> {desired_state}", threading.current_thread().name)
 
         if self.state == STATE_INITIAL:
             if desired_state == STATE_ACTIVE:
@@ -1469,38 +1472,30 @@ class Session:
                 else:
                     format_key = self.subformat(self.format, 'start')
                     session = self.parent
-                message = session.Message(self.clock.initial, format_key, (), self.kwargs)
-                self.core.Scheduler(self.log, message, first=True)
+                message = session.Message(self.clock.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
+                self.log(message)
                 return True
 
         # we already handled initial -> active.
-        # if we reach here, we must be going to draining or closed.
+        # if we reach here, we must be going to closed.
 
-        assert desired_state in (STATE_DRAINING, STATE_CLOSED)
-
-        if desired_state == STATE_DRAINING:
-            self.state = STATE_DRAINING
-            self.core.Scheduler(self._close)
-            return True
-
-        # print("ensure state closed")
         assert desired_state == STATE_CLOSED
+        self.state = STATE_CLOSED
         # send end banner
         time = self.clock()
         if self.parent is None:
             format_key = ('session', 'end')
             session = self
+            duration = None
         else:
             format_key = self.subformat(self.format, 'end')
             session = self.parent
-        message = session.Message(time, format_key, (), {})
-        # self.log(message)
-        self.core.Scheduler(self.log, message, first=True)
+            duration = time - self.clock.initial
+        message = session.Message(time, format_key, (self.name,), {}, thread=self.thread, duration=duration)
+        self.log(message)
 
         if self.buffer:
             self.flush()
-
-        self.state = STATE_CLOSED
 
         return True
 
@@ -1559,7 +1554,7 @@ class LogBase:
     def flush(self):
         session = self._session
         if session:
-            session.flush()
+            self._core.Scheduler(session.flush, wait=True)
 
     @property
     def paused(self):
@@ -1629,12 +1624,15 @@ class LogBase:
     def child(self, name='', buffered=True, *, format=_USE_DEFAULT, paused=None, **kwargs):
         time = self._clock()
 
+        if not isinstance(name, str):
+            raise TypeError(f'name must be str, not {type(name).__name__}')
+
         if format == _USE_DEFAULT:
             format = 'child' if name else None
         # TODO: confirm format is defined
 
         session = self._session
-        if (not session) or (session.state >= STATE_DRAINING):
+        if (not session) or (session.state >= STATE_CLOSED):
             return None
         if paused is None:
             paused = session.paused
@@ -1659,7 +1657,7 @@ class LogBase:
             raise TypeError(f"write() argument must be str, not {type(s).__name__}")
 
         session = self._session
-        if (not session) or (session.state >= STATE_DRAINING):
+        if (not session) or (session.state >= STATE_CLOSED):
             return
         message = session.Message(time, format, (s,), {})
         s = self._core.Scheduler()
@@ -1676,7 +1674,7 @@ class LogBase:
             raise TypeError(f"end must be str, not {type(end).__name__}")
 
         session = self._session
-        if (not session) or (session.state >= STATE_DRAINING):
+        if (not session) or (session.state >= STATE_CLOSED):
             return
 
         s = sep.join(str(o) for o in args) + end
@@ -1695,7 +1693,7 @@ class LogBase:
         time = self._clock()
 
         session = self._session
-        if (not session) or (session.state >= STATE_DRAINING):
+        if (not session) or (session.state >= STATE_CLOSED):
             return
 
         message = session.Message(time, 'box', (s,), {})
