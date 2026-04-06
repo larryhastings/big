@@ -672,6 +672,9 @@ class NoneType(Destination):
     def __hash__(self):
         return hash(NoneType) ^ hash(object)
 
+    def __bool__(self):
+        return False
+
     def write(self, message):
         pass
 
@@ -997,6 +1000,7 @@ class Core:
         self.formatters_by_key = {}
         self.routes = {}
         self.fstates = {}
+        self.truthy = False
 
         self.started = None
 
@@ -1067,14 +1071,19 @@ class Core:
                 formatter.start(session)
                 self.started.add(formatter.key)
 
+        truthy = False
         route = self.routes[formatter.key]
         for d in destinations:
-            if d not in route:
+            if d and (d not in route):
+                truthy = True
                 d.register(self, formatter)
                 route.append(d)
                 if session is not None:
                     d.start(session)
                     self.started.add(d._key)
+
+        if truthy:
+            self.truthy = truthy
 
     def _start(self, session):
         assert self.started is None
@@ -1543,6 +1552,9 @@ class LogBase:
         self._unregister = session.register(self)
         self._clock = session.clock
 
+    def __bool__(self):
+        return self._core.truthy
+
     @property
     def closed(self):
         return not self._session
@@ -1807,8 +1819,10 @@ class Log(LogBase):
     def _route(self, formatter, destinations):
         if not isinstance(formatter, Formatter):
             raise TypeError(f"formatter must be Formatter, not {type(formatter).__name__}")
-        map_destination = self.map_destination
-        self._core.route(formatter, [map_destination(d) for d in destinations])
+        if not destinations:
+            raise ValueError("must specify at least one destination")
+
+        self._core.route(formatter, [self.map_destination(d) for d in destinations])
 
     def route(self, formatter, *destinations):
         self._route(formatter, destinations)
