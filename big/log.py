@@ -208,11 +208,10 @@ class Formatter:
 
     @staticmethod
     def key_to_format_dict(d, key):
-        if isinstance(key, tuple):
-            key_list = list(key)
-            key_list.reverse()
-        else:
-            key_list = [key]
+        key_list = list(key)
+        key_list.reverse()
+        assert key_list[-1] == ''
+        key_list.pop()
 
         while key_list:
             subkey = key_list.pop()
@@ -228,12 +227,16 @@ class Formatter:
         if key == '':
             return self.format_dict
 
-        cached = self.format_cache.get(key, None)
+        assert not isinstance(key, str)
+        assert key[0] == ''
+
+        cached = self.format_cache.get(key)
         if cached is None:
             format_dict = self.key_to_format_dict(self.format_dict, key)
             if format_dict != None:
                 base_key = format_dict.get('base', None)
                 if base_key is not None:
+                    base_key = self.session.join_formats(key, base_key)
                     base = self.format(base_key)
                     format_dict = merge_dicts(base, format_dict)
             cached = self.format_cache[key] = format_dict
@@ -1492,17 +1495,20 @@ class Session:
 
 
     @staticmethod
-    def subformat(base, format):
-        # slight hack:
-        # if format is already a tuple, it's absolute, just use it
-        if isinstance(format, tuple):
+    def join_formats(base, format):
+        base_is_str = isinstance(base, str)
+        format_is_str = isinstance(format, str)
+        if format_is_str:
+            if format == '':
+                return format
+        elif format[0] == '':
             return format
 
-        if base == '':
-            return format
-        if isinstance(base, str):
-            return (base, format)
-        return base + (format,)
+        if base_is_str:
+            base = (base,)
+        if format_is_str:
+            format = (format,)
+        return base + format
 
     def fstate(self, formatter):
         fstate = self._fstate_cache.get(formatter.key, None)
@@ -1526,7 +1532,8 @@ class Session:
         message_fstate = formatter_cache.get(format, None)
         if message_fstate is None:
             fstate = self.fstate(formatter)
-            format_key = self.subformat(fstate.format, format)
+            format_key = self.join_formats(fstate.format, format)
+
             format_dict = formatter.format(format_key)
 
             if format_dict is None:
@@ -1576,10 +1583,10 @@ class Session:
             self.state = STATE_ACTIVE
             # send start banner
             if self.parent is None:
-                format_key = ('session', 'start')
+                format_key = ('', 'session', 'start')
                 session = self
             else:
-                format_key = self.subformat(self.format, 'start')
+                format_key = self.join_formats(self.format, 'start')
                 session = self.parent
             message = session.Message(self.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
             # print(f"[S] {message}")
@@ -1593,11 +1600,11 @@ class Session:
         # send end banner
         time = self.clock()
         if self.parent is None:
-            format_key = ('session', 'end')
+            format_key = ('', 'session', 'end')
             session = self
             duration = None
         else:
-            format_key = self.subformat(self.format, 'end')
+            format_key = self.join_formats(self.format, 'end')
             session = self.parent
             duration = time - self.initial
         message = session.Message(time, format_key, (self.name,), {}, thread=self.thread, duration=duration)
@@ -1753,7 +1760,7 @@ class LogBase:
             raise self._core.poisoned
 
         if format == _USE_DEFAULT:
-            format = 'child' if name else None
+            format = ('', 'child') if name else None
         # TODO: confirm format is defined
 
         session = self._session
