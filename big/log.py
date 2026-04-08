@@ -815,73 +815,65 @@ class FileHandle(Destination):
         self._handle.flush()
 
 
-class Buffer(Destination):
-    """
-    A Destination that buffers log messages before sending them to another Destination.
+# class Buffer(Destination):
+#     """
+#     A Destination that buffers log messages before sending them to another Destination.
 
-    This Destination wraps another arbitrary
-    Destination, referred to as the "underlying"
-    Destination.
+#     This Destination wraps another arbitrary
+#     Destination, referred to as the "underlying"
+#     Destination.
 
-    Every time a formatted log message is logged,
-    Buffer appends it to an internal buffer (a Python list).
-    When the log is flushed, Buffer will concatentate
-    all the log messages into one giant string, then
-    writes that string to the underlying Destination,
-    and also flushes the underlying Destination.
+#     Every time a formatted log message is logged,
+#     Buffer appends it to an internal buffer (a Python list).
+#     When the log is flushed, Buffer will concatentate
+#     all the log messages into one giant string, then
+#     writes that string to the underlying Destination,
+#     and also flushes the underlying Destination.
 
-    By default, Buffer wraps a Print destination,
-    but you may supply your own Destination as a
-    positional argument to the constructor.
-    """
-    def __init__(self, destination=None):
-        super().__init__()
-        self._buffer = []
-        self._original_destination = destination
-        self._destination = Log.map_destination(destination) if destination is not None else Print()
-        self._last_elapsed = self._last_thread = None
+#     By default, Buffer wraps a Print destination,
+#     but you may supply your own Destination as a
+#     positional argument to the constructor.
+#     """
+#     def __init__(self, destination=None):
+#         super().__init__()
+#         self._buffer = []
+#         self._original_destination = destination
+#         self._destination = Log.map_destination(destination) if destination is not None else Print()
+#         self._last_elapsed = self._last_thread = None
 
 
-    @property
-    def buffer(self):
-        return self._buffer
+#     @property
+#     def buffer(self):
+#         return self._buffer
 
-    @property
-    def destination(self):
-        return self._original_destination
+#     @property
+#     def destination(self):
+#         return self._original_destination
 
-    def __eq__(self, other):
-        return isinstance(other, Buffer) and (other._destination == self._destination)
+#     def __eq__(self, other):
+#         return isinstance(other, Buffer) and (other._destination == self._destination)
 
-    def __hash__(self):
-        return hash(Buffer) ^ hash(self._destination)
+#     def __hash__(self):
+#         return hash(Buffer) ^ hash(self._destination)
 
-    def register(self, core, log):
-        super().register(core, log)
-        self._destination.register(core, log)
+#     def start(self, session):
+#         super().start(session)
+#         self._destination.start(session)
 
-    def unregister(self):
-        super().unregister()
-        self._destination.unregister()
+#     def end(self):
+#         super().end()
+#         self._destination.end()
 
-    def start(self, session):
-        super().start(session)
-        self._destination.start(session)
+#     def write(self, formatted):
+#         self._buffer.append(formatted)
 
-    def end(self):
-        super().end()
-        self._destination.end()
-
-    def write(self, formatted):
-        self._buffer.append(formatted)
-
-    def flush(self):
-        if self._buffer:
-            contents = "".join(self._buffer)
-            self._buffer.clear()
-            self._destination.write(contents)
-        if self._buffer:
-            self._destination.flush()
+#     def flush(self):
+#         if self._buffer:
+#             contents = "".join(self._buffer)
+#             self._buffer.clear()
+#             self._destination.write(contents)
+#         if self._buffer:
+#             self._destination.flush()
 
 
 
@@ -996,8 +988,10 @@ class Core:
         self.formatters = []
         self.formatters_by_key = {}
         self.routes = {}
+        self.backroutes = {}
         self.fstates = {}
         self.truthy = False
+        self.poisoned = None
 
         self.started = None
 
@@ -1083,11 +1077,14 @@ class Core:
 
         truthy = False
         route = self.routes[formatter.key]
+        backroutes = self.backroutes
+
         for d in destinations:
             if d and (d not in route):
                 truthy = True
                 d.register(self, formatter)
                 route.append(d)
+                backroutes[d] = formatter
                 if session is not None:
                     d.start(session)
                     self.started.add(d._key)
@@ -1132,6 +1129,7 @@ class Core:
         break_if_empty = not block
 
         deleted_jobs = 0
+        drain = False
 
         while True:
             if break_if_empty and nq.empty():
@@ -1143,10 +1141,18 @@ class Core:
                     continue
                 job = jq.rpop()
                 method, args, involved, retries = job
+
+                if drain:
+                    if isinstance(involved, threading.Lock):
+                        involved.release()
+                    continue
+
                 if method is None:
                     # stop processing
                     assert not args
-                    return
+                    drain = True
+                    break_if_empty = True
+                    continue
                 # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
 
                 fault = None
@@ -1166,18 +1172,45 @@ class Core:
                                     jq.prepend(job)
                                     nq.append(1)
                                     continue
-                        except Exception as e:
-                            fault = e
+                            except Exception as e:
+                                fault = e
                     if fault is None:
-                        # failed to fix the job:
-                        # 1. drop the job
-                        # 2. remove involved from the system:
-                        # 3. remove involved from routing
-                        # 4. remove all jobs where job.involved == involved
+                        # failed to fix the job.
+
+                        # remove all jobs where job.involved == involved
+                        for j in jq:
+                            if j[2] == involved:
+                                j.pop()
+                                deleted_jobs += 1
+
+                        # unceremoniously remove involved from routing
+                        if isinstance(involved, Destination):
+                            formatter = self.backroutes.get(involve)
+                            destinations = (involved,)
+                            unregister_formatter = True
+                            unregister_destinations = False
+                        else:
+                            formatter = involved
+                            destinations = tuple(reversed(self.routes[formatter.key]))
+                            unregister_formatter = False
+                            unregister_destinations = True
+
+                        route = self.routes[formatter.key]
+                        for d in destinations:
+                            if unregister_destinations:
+                                d.unregister()
+                            route.remove(d)
+                        if not route:
+                            # formatter has no more destinations, remove it too
+                            if unregister_formatter:
+                                formatter.unregister()
+                            del self.routes[formatter.key]
+                            del self.formatters_by_key[formatter.key]
+                            self.formatters.remove(formatter)
                         pass
                     else:
                         # unfixable exception.  poison the log.
-                        pass
+                        self.poisoned = fault
 
 
     def drain(self):
@@ -1633,6 +1666,8 @@ class LogBase:
         u()
 
     def flush(self):
+        if self._core.poisoned:
+            raise self._core.poisoned
         session = self._session
         if session:
             self._core.Scheduler(session.flush, wait=True)
@@ -1640,6 +1675,8 @@ class LogBase:
     @property
     def paused(self):
         "Returns True if the handle is paused, None if the log is closed, and otherwise False."
+        if self._core.poisoned:
+            raise self._core.poisoned
         if not self._session:
             return None
         return bool(self._paused)
@@ -1676,6 +1713,8 @@ class LogBase:
         If the log is closed, this function does nothing,
         and it returns a context manager that also does nothing.
         """
+        if self._core.poisoned:
+            raise self._core.poisoned
         session = self._session
         if session is not None:
             self._core.Scheduler(session.pause)
@@ -1698,6 +1737,8 @@ class LogBase:
 
         If the log is closed, this function does nothing.
         """
+        if self._core.poisoned:
+            raise self._core.poisoned
         session = self._session
         if session is not None:
             self._core.Scheduler(session.resume)
@@ -1707,6 +1748,9 @@ class LogBase:
 
         if not isinstance(name, str):
             raise TypeError(f'name must be str, not {type(name).__name__}')
+
+        if self._core.poisoned:
+            raise self._core.poisoned
 
         if format == _USE_DEFAULT:
             format = 'child' if name else None
@@ -1722,6 +1766,9 @@ class LogBase:
     def log(self, *args, format='log', **kwargs):
         time = self._clock()
 
+        if self._core.poisoned:
+            raise self._core.poisoned
+
         session = self._session
         if (not session) or (session.state >= STATE_DRAINING):
             return
@@ -1736,6 +1783,9 @@ class LogBase:
 
         if not isinstance(s, str):
             raise TypeError(f"write() argument must be str, not {type(s).__name__}")
+
+        if self._core.poisoned:
+            raise self._core.poisoned
 
         session = self._session
         if (not session) or (session.state >= STATE_CLOSED):
@@ -1753,6 +1803,9 @@ class LogBase:
             raise TypeError(f"sep must be str, not {type(sep).__name__}")
         if not isinstance(end, str):
             raise TypeError(f"end must be str, not {type(end).__name__}")
+
+        if self._core.poisoned:
+            raise self._core.poisoned
 
         session = self._session
         if (not session) or (session.state >= STATE_CLOSED):
@@ -1772,6 +1825,9 @@ class LogBase:
 
     def box(self, s):
         time = self._clock()
+
+        if self._core.poisoned:
+            raise self._core.poisoned
 
         session = self._session
         if (not session) or (session.state >= STATE_CLOSED):
@@ -1902,6 +1958,8 @@ class Log(LogBase):
         self._core.route(formatter, [self.map_destination(d) for d in destinations])
 
     def route(self, formatter, *destinations):
+        if self._core.poisoned:
+            raise self._core.poisoned
         self._route(formatter, destinations)
 
     @staticmethod
