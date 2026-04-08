@@ -27,8 +27,8 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import atexit
 import builtins
-import copy
 import io
+import operator
 import os
 import pathlib
 import queue
@@ -146,14 +146,6 @@ def merge_dicts(base, update):
     return _merge_dicts(base, update, '')
 
 
-
-def deep_update(dst, src):
-    for key, value in src.items():
-        if isinstance(value, dict) and isinstance(dst.get(key), dict):
-            deep_update(dst[key], value)
-        else:
-            dst[key] = copy.deepcopy(value)
-    return dst
 
 
 
@@ -986,12 +978,14 @@ class Core:
         *,
         clock,
         name,
+        retries,
         threaded,
         ):
 
         self.clock = clock
         self.name = name
-        self.threaded = bool(threaded)
+        self.retries = retries
+        self.threaded = threaded
 
         self.notify_queue = Queue()
         self.job_queue = linked_list(lock=True)
@@ -1032,7 +1026,7 @@ class Core:
         # ensure all jobs up to now have been executed
         blocker = threading.Lock()
         blocker.acquire()
-        jq.append( ( (), blocker.release, () ) )
+        jq.append( ( (), blocker.release, (), 0 ) )
         nq.put(1)
         blocker.acquire()
 
@@ -1043,7 +1037,7 @@ class Core:
 
         self.thread = self.job_queue = self.notify_queue = None
 
-        jq.append( ( (), None, (blocker.release,) ) )
+        jq.append( ( (), None, (blocker.release,), 0 ) )
         nq.put(1)
         thread.join()
 
@@ -1127,7 +1121,7 @@ class Core:
             count = nq.get()
             for _ in range(count):
                 job = jq.rpop()
-                involved, fn, args = job
+                involved, fn, args, retries = job
                 if fn is None:
                     if args:
                         assert len(args) == 1
@@ -1221,10 +1215,10 @@ class Core:
                     blocker.acquire()
 
                 if self.block:
-                    jobs.append(((blocker,), blocker.release, ()))
+                    jobs.append(((blocker,), blocker.release, (), 0))
 
                 if self.atexit:
-                    jobs.append(((), None, (blocker.release,)))
+                    jobs.append(((), None, (blocker.release,), 0))
 
                 if jobs:
                     self.core.schedule(jobs, first=self.first)
@@ -1253,7 +1247,7 @@ class Core:
                         assert a not in involved
                         involved.append(a)
 
-            t = (involved, method, args)
+            t = (involved, method, args, 0)
             # print(f"\n{t}\n")
             self.jobs.append(t)
 
@@ -1804,15 +1798,20 @@ class Log(LogBase):
         clock=Clock,
         formatter=None,
         name='Log',
-        threaded=True,
-        # threaded=False,
         paused=False,
+        retries=1,
+        threaded=True,
         ):
 
+        retries = operator.index(retries)
+        if retries < 1:
+            raise ValueError('retries must be >= 1')
+
         core = Core(
-            name=name,
             clock=Clock,
-            threaded=threaded,
+            name=name,
+            retries=retries,
+            threaded=bool(threaded),
             )
 
         session = Session(name, core, None, buffered=buffered, clock=None, format='', kwargs={}, paused=paused)
