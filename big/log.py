@@ -1101,7 +1101,7 @@ class Core:
 
         wr = weakref.ref(session)
         self.sessions.append(wr)
-        i = self.sessions.rfind(wr)
+        i = self.sessions.rmatch(lambda v: v is wr)
         def unregister():
             try:
                 return i.pop
@@ -1209,7 +1209,7 @@ class Core:
         def __bool__(self):
             return bool(self.jobs)
 
-        def __call__(self, method=None, *args):
+        def __call__(self, method=None, *args, involved=None):
             if method is None:
                 # dispatch
                 jobs = self.jobs
@@ -1239,33 +1239,40 @@ class Core:
                 return
 
             # append a job
-            involved = []
 
-            if isinstance(method, types.MethodType):
-                method_self = method.__self__
-                if isinstance(method_self, (Destination, Formatter)):
-                    involved.append(method_self)
-            else:
-                method_self = None
+            if involved is None:
+                involved = []
 
-            for a in args:
-                if isinstance(a, (Destination, Formatter)):
-                    assert a not in involved
-                    involved.append(a)
+                if isinstance(method, types.MethodType):
+                    method_self = method.__self__
+                    if isinstance(method_self, (Destination, Formatter)):
+                        involved.append(method_self)
+
+                for a in args:
+                    if isinstance(a, (Destination, Formatter)):
+                        assert a not in involved
+                        involved.append(a)
 
             t = (involved, method, args)
-            # print(t)
+            # print(f"\n{t}\n")
             self.jobs.append(t)
+
+    def _render(self, formatter, message):
+        rendered = formatter.render(message)
+        s = self.Scheduler(first=True)
+        for destination in self.routes.get(formatter.key, ()):
+            s(destination.write, rendered)
+        s()
 
     def log(self, message):
         # print("<LOG>", message)
+        s = self.Scheduler()
         for key, prepared in message.prepared.items():
             formatter = self.formatters_by_key.get(key)
             if formatter is None:
                 continue
-            rendered = formatter.render(message)
-            for destination in self.routes.get(key, ()):
-                destination.write(rendered)
+            s(self._render, formatter, message)
+        s()
 
     def flush(self):
         s = self.Scheduler(wait=True)
@@ -1473,25 +1480,30 @@ class Session:
             return False
         if desired_state == self.state:
             return True
-        # print(f"{self.name} ensure state {self.state} -> {desired_state}", threading.current_thread().name)
+        # print(f"[S] {self.name!r}: {self.state!r} -> {desired_state!r} :: thread {threading.current_thread().name!r}")
 
         if self.state == STATE_INITIAL:
-            if desired_state == STATE_ACTIVE:
-                self.state = STATE_ACTIVE
-                # send start banner
-                if self.parent is None:
-                    format_key = ('session', 'start')
-                    session = self
-                else:
-                    format_key = self.subformat(self.format, 'start')
-                    session = self.parent
-                message = session.Message(self.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
-                self.log(message)
+            if desired_state == STATE_CLOSED:
+                # go directly to closed, skip start and end banners
+                self.state = STATE_CLOSED
                 return True
 
-        # we already handled initial -> active.
-        # if we reach here, we must be going to closed.
+            assert desired_state == STATE_ACTIVE
+            self.state = STATE_ACTIVE
+            # send start banner
+            if self.parent is None:
+                format_key = ('session', 'start')
+                session = self
+            else:
+                format_key = self.subformat(self.format, 'start')
+                session = self.parent
+            message = session.Message(self.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
+            # print(f"[S] {message}")
+            # self.core.Scheduler(self.log, message)
+            self.log(message)
+            return True
 
+        assert self.state == STATE_ACTIVE
         assert desired_state == STATE_CLOSED
         self.state = STATE_CLOSED
         # send end banner
@@ -1505,6 +1517,8 @@ class Session:
             session = self.parent
             duration = time - self.initial
         message = session.Message(time, format_key, (self.name,), {}, thread=self.thread, duration=duration)
+        # print(f"[S] {message}")
+        # self.core.Scheduler(self.log, message)
         self.log(message)
 
         if self.buffer:
@@ -1786,6 +1800,7 @@ class Log(LogBase):
 
     def __init__(self,
         *destinations,
+        buffered=False,
         clock=Clock,
         formatter=None,
         name='Log',
@@ -1800,7 +1815,7 @@ class Log(LogBase):
             threaded=threaded,
             )
 
-        session = Session(name, core, None, buffered=False, clock=None, format='', kwargs={}, paused=paused)
+        session = Session(name, core, None, buffered=buffered, clock=None, format='', kwargs={}, paused=paused)
         super().__init__(core, session, paused)
 
         self.clock = session.clock
