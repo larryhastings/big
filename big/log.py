@@ -977,18 +977,21 @@ class Core:
     def __init__(self,
         *,
         clock,
+        fix,
         name,
         retries,
         threaded,
         ):
 
         self.clock = clock
+        self.fix = fix
         self.name = name
         self.retries = retries
         self.threaded = threaded
 
         self.notify_queue = Queue()
         self.job_queue = linked_list(lock=True)
+        self.blockers = []
 
         self.formatters = []
         self.formatters_by_key = {}
@@ -1007,6 +1010,16 @@ class Core:
         self.thread = None
         self._start_thread()
 
+    def blocker(self):
+        if self.blockers:
+            return self.blockers.pop()
+        blocker = threading.Lock()
+        blocker.acquire()
+        return blocker
+
+    def block(self, blocker):
+        blocker.acquire()
+        self.blockers.append(blocker)
 
     def _start_thread(self):
         if not (self.threaded and (self.thread is None)):
@@ -1024,22 +1037,25 @@ class Core:
         nq = self.notify_queue
 
         # ensure all jobs up to now have been executed
-        blocker = threading.Lock()
-        blocker.acquire()
-        jq.append( ( (), blocker.release, (), 0 ) )
-        nq.put(1)
-        blocker.acquire()
+        # blocker = self.blocker()
+        # jq.append([blocker.release, (), blocker, 0])
+        # nq.put(1)
+        # self.block(blocker)
+        s = self.Scheduler(wait=True)
+        s()
 
         # flip all sessions to closed
         self.reset()
 
         self.flush()
 
-        self.thread = self.job_queue = self.notify_queue = None
+        # self.thread = self.job_queue = self.notify_queue = None
+        # jq.append([None, (), None, 0])
+        # nq.put(1)
+        # thread.join()
+        s = self.Scheduler(atexit=True)
+        s()
 
-        jq.append( ( (), None, (blocker.release,), 0 ) )
-        nq.put(1)
-        thread.join()
 
 
     def route(self, formatter, destinations):
@@ -1115,20 +1131,54 @@ class Core:
         nq = self.notify_queue
         break_if_empty = not block
 
+        deleted_jobs = 0
+
         while True:
             if break_if_empty and nq.empty():
                 break
             count = nq.get()
             for _ in range(count):
+                if deleted_jobs:
+                    deleted_jobs -= 1
+                    continue
                 job = jq.rpop()
-                involved, fn, args, retries = job
-                if fn is None:
-                    if args:
-                        assert len(args) == 1
-                        args[0]()
+                method, args, involved, retries = job
+                if method is None:
+                    # stop processing
+                    assert not args
                     return
                 # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
-                fn(*args)
+
+                fault = None
+                try:
+                    method(*args)
+                except Exception as e:
+                    if not involved:
+                        fault = e
+                    else:
+                        if retries < self.retries:
+                            try:
+                                result = self.fix(involved)
+                                if result:
+                                    # incr retries
+                                    job[-1] += 1
+                                    # and reschedule
+                                    jq.prepend(job)
+                                    nq.append(1)
+                                    continue
+                        except Exception as e:
+                            fault = e
+                    if fault is None:
+                        # failed to fix the job:
+                        # 1. drop the job
+                        # 2. remove involved from the system:
+                        # 3. remove involved from routing
+                        # 4. remove all jobs where job.involved == involved
+                        pass
+                    else:
+                        # unfixable exception.  poison the log.
+                        pass
+
 
     def drain(self):
         self.execute(False)
@@ -1149,13 +1199,13 @@ class Core:
 
     @BoundInnerClass
     class Scheduler:
-        def __init__(self, core, *args, atexit=False, drain=False, first=False, wait=False):
+        def __init__(self, core, *args, atexit=False, first=False, wait=False):
             """
             Manages creating "jobs" iterables and scheduling the work.  To use:
 
                 s = core.schedule() # returns a Scheduler
                 s(fn, arg1, arg2)   # adds fn(arg1, arg2) to our local job list
-                s()                 # schedules all the work on the local job list
+                s()                 # schedules all the jobs on the local job list
 
             You can call s with arguments as many times as you like, to schedule
             multiple jobs.  There's also a shortcut if you're only scheduling one job:
@@ -1169,9 +1219,7 @@ class Core:
                 schedules a final None so the worker thread will exit.
                 also, passes in a "blocker" so we can wait
                 until the worker thread has finished.
-
-            * drain - if true, and Log is in non-threaded mode,
-                flush the work queue.
+                atexit creates a job.
 
             * first - if true,
                 insert these jobs on the front of the work queue (in order).
@@ -1182,19 +1230,20 @@ class Core:
                 * in non-threaded mode, this is the same as drain.
                 * in threaded mode, this blocks until the worker thread
                   processes every job queued by the scheduler.
+                wait creates a job.
             """
             self.core = core
             self.jobs = []
             self.atexit = atexit
             self.first = first
 
-            wait = wait or atexit
-            threaded = core.threaded
-            self.block = wait and threaded and (not atexit)
-            self.drain = (drain or wait) and (not threaded)
-
-            assert not (self.block and self.drain)
-            assert not (self.block and self.atexit)
+            if wait:
+                assert not atexit
+                threaded = core.threaded
+                self.block = threaded
+                self.drain = not threaded
+            else:
+                self.block = self.drain = False
 
             if args:
                 self(*args)
@@ -1206,48 +1255,56 @@ class Core:
         def __call__(self, method=None, *args, involved=None):
             if method is None:
                 # dispatch
+                core = self.core
                 jobs = self.jobs
-                locker = None
-                threaded = self.core.threaded
-
-                if self.block or self.atexit:
-                    blocker = threading.Lock()
-                    blocker.acquire()
+                atexit = self.atexit
+                drain = self.drain
+                blocker = None
 
                 if self.block:
-                    jobs.append(((blocker,), blocker.release, (), 0))
+                    blocker = core.blocker()
+                    jobs.append([blocker.release, (), blocker, 0])
+                else:
+                    blocker = None
 
-                if self.atexit:
-                    jobs.append(((), None, (blocker.release,), 0))
+                if atexit:
+                    jobs.append([None, (), None, 0])
 
-                if jobs:
-                    self.core.schedule(jobs, first=self.first)
-                    self.jobs = jobs = []
+                assert jobs
+                self.jobs = []
+                core.schedule(jobs, first=self.first)
 
-                if self.block:
-                    blocker.acquire()
+                if blocker:
+                    core.block(blocker)
 
-                if self.drain:
-                    self.core.drain()
+                if drain:
+                    core.drain()
+
+                if atexit:
+                    core.thread.join()
 
                 return
 
             # append a job
 
             if involved is None:
-                involved = []
+                involveds = []
+                append = involveds.append
 
                 if isinstance(method, types.MethodType):
                     method_self = method.__self__
                     if isinstance(method_self, (Destination, Formatter)):
-                        involved.append(method_self)
+                        append(method_self)
 
                 for a in args:
                     if isinstance(a, (Destination, Formatter)):
-                        assert a not in involved
-                        involved.append(a)
+                        assert a not in involveds
+                        append(a)
+                assert len(involveds) <= 1
+                if involveds:
+                    involved = involveds[0]
 
-            t = (involved, method, args, 0)
+            t = [method, args, involved, 0]
             # print(f"\n{t}\n")
             self.jobs.append(t)
 
@@ -1786,6 +1843,10 @@ class Clock:
         return timestamp_human(epoch)
 
 
+@export
+def default_fix(o):
+    pass
+
 
 @export
 class Log(LogBase):
@@ -1796,6 +1857,7 @@ class Log(LogBase):
         *destinations,
         buffered=False,
         clock=Clock,
+        fix=default_fix,
         formatter=None,
         name='Log',
         paused=False,
@@ -1809,6 +1871,7 @@ class Log(LogBase):
 
         core = Core(
             clock=Clock,
+            fix=fix,
             name=name,
             retries=retries,
             threaded=bool(threaded),
