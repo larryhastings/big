@@ -303,13 +303,63 @@ class TextFormatter(Formatter):
 
     # __slots__ = ('format_dict', 'formats', 'timestamp_format', 'width', 'indents', 'renderers')
 
+    @classmethod
+    def format_dict(cls):
+        return {
+            "prefix": prefix_format(3, 10, 12),
+            'template': '{prefix}{message}\n',
+
+            "double*": '═',
+            "line*": '─',
+            "space*": ' ',
+
+            "formats": {
+                "box" : {
+                    'base': '',
+                    "template": '{prefix}┌{line*}┐\n{prefix}│ {message}{space*} │\n{prefix}└{line*}┘\n',
+                },
+                "box2" : {
+                    'base': '',
+                    "template": '{prefix}╔{double*}╗\n{prefix}║ {message}{space*} ║\n{prefix}╚{double*}╝\n',
+                },
+
+                'session': {
+                    'formats': {
+                        "start": {
+                            'base': '',
+                            "template": '╔{double*}╗\n║ {message} start at {timestamp} {space*}║\n {message} {space*}║\n╚{double*}╝\n',
+                        },
+                        "end" : {
+                            'base': '',
+                            "template": '╔{double*}╗\n║ {message} finish at {timestamp} {space*}║\n {message} {space*}║\n╚{double*}╝\n',
+                        },
+                    }
+                },
+
+                "child": {
+                    "base": '',
+                    "indent": "│   ",
+                    "formats": {
+                        "start": {
+                            'base': '',
+                            "template": '{prefix}┏━━━━━┱{line*}┐\n{prefix}┃enter┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┡━━━━━┹{line*}┘\n',
+                        },
+                        "end": {
+                            'base': '',
+                            # "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┃     ┃ {space*} │\n{prefix}┃     ┃ {duration}s{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
+                            "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {duration}s{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
+                            "space*": ' ',
+                            'relaxed': True,
+                        },
+                    }
+                }
+            }
+        }
 
     def __init__(self,
         format_dict=None,
         *,
         name=None,
-        # indent='    ',
-        # prefix=prefix_format(3, 10, 12),
         width=79,
         ):
 
@@ -318,79 +368,20 @@ class TextFormatter(Formatter):
         if not (width > 0):
             raise ValueError('width must be an int and greater than zero')
 
-        format_dict_is_None = format_dict is None
-        if not (format_dict_is_None or isinstance(format_dict, dict)):
+        if format_dict is None:
+            format_dict = self.format_dict()
+        elif not isinstance(format_dict, dict):
             raise TypeError('format_dict must be a dict or None')
-
-        if format_dict_is_None:
-            format_dict = self.base_format_dict
-        else:
-            format_dict = merge_dicts(self.base_format_dict, format_dict)
 
         super().__init__(format_dict, name=name)
 
 
         self.width = width
-        self.indents = {}
         self.renderers = {}
 
         self.indent = ''
-        # self.indent_stack = []
-        # self.prefix = prefix
 
         self.supported_formats = set(self.format_dict.get('formats', ()))
-
-
-    base_format_dict = {
-        "prefix": prefix_format(3, 10, 12),
-        'template': '{prefix}{message}\n',
-
-        "double*": '═',
-        "line*": '─',
-        "space*": ' ',
-
-        "formats": {
-            "box" : {
-                'base': '',
-                "template": '{prefix}┌{line*}┐\n{prefix}│ {message}{space*} │\n{prefix}└{line*}┘\n',
-            },
-            "box2" : {
-                'base': '',
-                "template": '{prefix}╔{double*}╗\n{prefix}║ {message}{space*} ║\n{prefix}╚{double*}╝\n',
-            },
-
-            'session': {
-                'formats': {
-                    "start": {
-                        'base': '',
-                        "template": '╔{double*}╗\n║ {message} start at {timestamp} {space*}║\n {message} {space*}║\n╚{double*}╝\n',
-                    },
-                    "end" : {
-                        'base': '',
-                        "template": '╔{double*}╗\n║ {message} finish at {timestamp} {space*}║\n {message} {space*}║\n╚{double*}╝\n',
-                    },
-                }
-            },
-
-            "child": {
-                "base": '',
-                "indent": "│   ",
-                "formats": {
-                    "start": {
-                        'base': '',
-                        "template": '{prefix}┏━━━━━┱{line*}┐\n{prefix}┃enter┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┡━━━━━┹{line*}┘\n',
-                    },
-                    "end": {
-                        'base': '',
-                        # "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {message}{space*} │\n{prefix}┃     ┃ {message}{space*} │\n{prefix}┃     ┃ {space*} │\n{prefix}┃     ┃ {duration}s{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
-                        "template": '{prefix}┢━━━━━┱{line*}┐\n{prefix}┃exit ┃ {duration}s{space*} │\n{prefix}┗━━━━━┹{line*}┘\n',
-                        "space*": ' ',
-                        'relaxed': True,
-                    },
-                }
-            }
-        }
-    }
 
 
     class Prepared:
@@ -419,8 +410,6 @@ class TextFormatter(Formatter):
 
         def prepare(self, message):
             return self.formatter.Prepared(message.args, message.kwargs, self)
-
-
 
     def get_renderers(self, prepared):
         fstate = prepared.fstate
@@ -503,37 +492,60 @@ _ascii_translation_table = ''.maketrans({
     '┹': '+',
     })
 
-def _convert_to_ascii(d):
+@export
+def format_dict_to_ascii(d):
     result = {}
     for key, value in d.items():
-        if isinstance(value, str):
+        if isinstance(value, str) and (key != 'base'):
             value = value.translate(_ascii_translation_table)
         elif isinstance(value, dict):
-            value = _convert_to_ascii(value)
+            value = format_dict_to_ascii(value)
         result[key] = value
 
     return result
+
+# @export
+# def format_dict_to_bytes(d):
+#     result = {}
+#     for key, value in d.items():
+#         if isinstance(value, str) and (key != 'base'):
+#             value = value.encode('ascii')
+#         elif isinstance(value, dict):
+#             value = format_dict_to_bytes(value)
+#         result[key] = value
+
+#     return result
 
 
 @export
 class ASCIIFormatter(TextFormatter):
 
-    base_format_dict = _convert_to_ascii(TextFormatter.base_format_dict)
+    @classmethod
+    def format_dict(cls):
+        return (
+            # format_dict_to_bytes(
+            format_dict_to_ascii(TextFormatter.format_dict())
+            # )
+            )
 
+    @BoundInnerClass
+    class State(TextFormatter.State):
+        def prepare(self, message):
+            prepared = super().prepare(message)
+            # confirm everybody is happy ascii
+            try:
+                for s in prepared.args:
+                    s.encode('ascii')
+                for s in prepared.kwargs.values():
+                    s.encode('ascii')
+            except UnicodeEncodeError as e:
+                return e
+            return prepared
 
-    def __init__(self,
-        *,
-        formats=None,
-        # indent='    ',
-        # prefix=prefix_format(3, 10, 12, ascii=True),
-        timestamp_format=timestamp_human,
-        width=79,
-        ):
-        super().__init__(formats=formats,
-            # indent=indent, prefix=prefix,
-            timestamp_format=timestamp_format, width=width)
-
-
+    def render(self, message):
+        s = super().render(message)
+        b = s.encode('ascii')
+        return b
 
 
 @export
@@ -697,9 +709,11 @@ class File(Destination):
 
     The first time the file is opened, it's opened using the
     "initial_mode" passed in, by default "at".  After the first
-    time, File always uses mode "at".
+    time, File uses the "subsequent_mode" passed in;
+    if "subsequent_mode" is None, File computes one based
+    on initial_mode changed to use "a" (append).
     """
-    def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None):
+    def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None, subsequent_mode=None):
         super().__init__()
 
         Path = pathlib.Path
@@ -723,34 +737,59 @@ class File(Destination):
 
         path = path.resolve()
 
+        message = "initial_mode must be a str, compatible with the mode argument to open(), and must not be read-only"
         if not isinstance(initial_mode, str):
-            raise TypeError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
-        if initial_mode not in ("at", "wt", "xt", "a", "w", "x"):
-            raise ValueError("initial_mode must be str, and can only be one of these values: 'a', 'at', 'w', 'wt', 'x', or 'xt'")
+            raise TypeError(message)
+
+        def separate(s, letters):
+            count = 0
+            matching = []
+            non_matching = []
+            for c in s:
+                (matching if c in letters else non_matching).append(c)
+            return ''.join(non_matching), ''.join(matching)
+
+        mode, actions = separate(initial_mode, "rwax")
+        mode, plus = separate(mode, '+')
+        mode, modes = separate(mode, "bt")
+
+        if (len(actions) > 1) or (actions == 'r') or (len(actions) > 1) or  (len(actions) > 1) or mode:
+            raise ValueError(message)
+
+        if subsequent_mode is None:
+            subsequent_mode = 'a' + plus + modes
 
         self._buffer = buffer = []
+        binary = modes == 'b'
+        self._binary = binary
+        self._join = b''.join if binary else ''.join
         self._buffering = buffering
         self._original_path = original_path
         self._path = path
         self._mode = initial_mode
+        self._subsequent_mode = subsequent_mode
         self._encoding = encoding
         self._f = None
 
     @property
-    def path(self):
-        return self._original_path
+    def binary(self):
+        return self._binary
 
     @property
-    def mode(self):
-        return self._mode
+    def buffering(self):
+        return self._buffering
 
     @property
     def encoding(self):
         return self._encoding
 
     @property
-    def buffering(self):
-        return self._buffering
+    def mode(self):
+        return self._mode
+
+    @property
+    def path(self):
+        return self._original_path
 
     def __eq__(self, other):
         return isinstance(other, File) and (other._path == self._path)
@@ -770,7 +809,7 @@ class File(Destination):
             f = self._f
             self._f = None
             f.close()
-            self._mode = "at"
+            self._mode = self._subsequent_mode
 
     def write(self, formatted):
         if not formatted:
@@ -787,11 +826,11 @@ class File(Destination):
             return
 
         assert not self._f
-        contents = "".join(self._buffer)
+        contents = self._join(self._buffer)
         self._buffer.clear()
         with self._path.open(self._mode, encoding=self._encoding) as f:
             f.write(contents)
-        self._mode = "at"
+        self._mode = self._subsequent_mode
 
 
 @export
@@ -1159,9 +1198,11 @@ class Core:
                 # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
 
                 fault = None
-                try:
+                # try:
+                if 1:
                     method(*args)
-                except Exception as e:
+                if 0: # except Exception as e:
+                    print("FAULT", e)
                     if not involved:
                         fault = e
                     else:
@@ -1188,7 +1229,7 @@ class Core:
 
                         # unceremoniously remove involved from routing
                         if isinstance(involved, Destination):
-                            formatter = self.backroutes.get(involve)
+                            formatter = self.backroutes.get(involved)
                             destinations = (involved,)
                             unregister_formatter = True
                             unregister_destinations = False
@@ -1345,11 +1386,13 @@ class Core:
             self.jobs.append(t)
 
     def _render(self, formatter, message):
-        rendered = formatter.render(message)
-        s = self.Scheduler(first=True)
-        for destination in self.routes.get(formatter.key, ()):
-            s(destination.write, rendered)
-        s()
+        destinations = self.routes.get(formatter.key, ())
+        if destinations:
+            rendered = formatter.render(message)
+            s = self.Scheduler(first=True)
+            for destination in destinations:
+                s(destination.write, rendered)
+            s()
 
     def log(self, message):
         # print("<LOG>", message)
@@ -1498,6 +1541,8 @@ class Session:
     def join_formats(base, format):
         base_is_str = isinstance(base, str)
         format_is_str = isinstance(format, str)
+        if format == b'':
+            raise RuntimeError('xyz')
         if format_is_str:
             if format == '':
                 return format
