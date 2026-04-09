@@ -163,8 +163,8 @@ def _serial_number():
 
 @export
 class Formatter:
-    # supported_formats                   # frozenset, or True = accepts any
-    # output_type                         # type (str, bytes, SinkEvent, etc.)
+    # formats                   # set, or True = accepts any
+    # types                     # set of types (str, bytes, SinkEvent, etc.)
 
     # __slots__ = ('name', 'key', '__weakref__') + BOUNDINNERCLASS_OUTER_SLOTS
 
@@ -519,6 +519,9 @@ def format_dict_to_ascii(d):
 
 @export
 class ASCIIFormatter(TextFormatter):
+    """
+    A 
+    """
 
     @classmethod
     def format_dict(cls):
@@ -1198,10 +1201,9 @@ class Core:
                 # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
 
                 fault = None
-                # try:
-                if 1:
+                try:
                     method(*args)
-                if 0: # except Exception as e:
+                except Exception as e:
                     print("FAULT", e)
                     if not involved:
                         fault = e
