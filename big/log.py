@@ -118,14 +118,14 @@ def _merge_dicts(base, update, path):
 
         base_is_dict = int(isinstance(base_value, dict))
         update_is_dict = int(isinstance(update_value, dict))
-        is_dict_sum = base_is_dict + update_is_dict
+        dict_count = base_is_dict + update_is_dict
 
-        if (base_value is None) or (update_value is None) or (not is_dict_sum):
+        if (base_value is None) or (update_value is None) or (not dict_count):
             result[key] = update_value
             continue
 
         child_path = path + f'[{key!r}]'
-        if is_dict_sum == 2:
+        if dict_count == 2:
             result[key] = _merge_dicts(base_value, update_value, child_path)
             continue
 
@@ -144,9 +144,6 @@ def merge_dicts(base, update):
     be a dict and the other, None.
     """
     return _merge_dicts(base, update, '')
-
-
-
 
 
 _serial_number_lock = threading.Lock()
@@ -168,12 +165,30 @@ class Formatter:
 
     # __slots__ = ('name', 'key', '__weakref__') + BOUNDINNERCLASS_OUTER_SLOTS
 
-    def __init__(self, format_dict, *, name=None):
+    def _formats(self, format_dict):
+        def yield_formats(d, path=['']):
+            yield tuple(path)
+
+            formats = d.get('formats')
+            if not (formats and isinstance(formats, dict)):
+                return
+            for key, value in formats.items():
+                assert isinstance(value, dict)
+                path.append(key)
+                yield from yield_formats(value, path)
+                path.pop()
+
+        return frozenset(yield_formats(format_dict))
+
+
+    def __init__(self, format_dict, types, *, name=None):
         # self.root = self.owner = None
         if not ((name is None) or isinstance(name, str)):
             raise  TypeError('str must be name or None')
 
         self.format_dict = format_dict
+        self.formats = self._formats(format_dict)
+        self.types = types
 
         if name is None:
             name = type(self).__name__
@@ -356,6 +371,8 @@ class TextFormatter(Formatter):
             }
         }
 
+    _types = frozenset((str,))
+
     def __init__(self,
         format_dict=None,
         *,
@@ -373,7 +390,7 @@ class TextFormatter(Formatter):
         elif not isinstance(format_dict, dict):
             raise TypeError('format_dict must be a dict or None')
 
-        super().__init__(format_dict, name=name)
+        super().__init__(format_dict, self._types, name=name)
 
 
         self.width = width
@@ -504,24 +521,21 @@ def format_dict_to_ascii(d):
 
     return result
 
-# @export
-# def format_dict_to_bytes(d):
-#     result = {}
-#     for key, value in d.items():
-#         if isinstance(value, str) and (key != 'base'):
-#             value = value.encode('ascii')
-#         elif isinstance(value, dict):
-#             value = format_dict_to_bytes(value)
-#         result[key] = value
-
-#     return result
-
 
 @export
 class ASCIIFormatter(TextFormatter):
     """
-    A 
+    A Formatter that renders to bytes objects containing
+    ASCII-encoded text.
+
+    This is a subclass of TextFormatter, and most of its
+    functionality is just inherited.  For this reason,
+    it actually does most of its computation of the log
+    messages as str, and only encodes to ASCII at the
+    very end.
     """
+
+    _types = frozenset((bytes,))
 
     @classmethod
     def format_dict(cls):
@@ -555,10 +569,11 @@ class ASCIIFormatter(TextFormatter):
 class Destination:
     # __slots__ = ('_log', '_formatter', '_session')
 
-    def __init__(self):
+    def __init__(self, types):
         self._core = None
         self._formatter = None
         self._session = None
+        self._types = types
 
         self._serial_number = _serial_number()
         self._key = (self.__class__.__name__, self._serial_number, id(self))
@@ -573,6 +588,10 @@ class Destination:
         registered = 'registered' if self._core is not None else 'unregistered'
         active = 'active' if self._session else 'inactive'
         return f'<{type(self).__name__} {registered}>'
+
+    @property
+    def types(self):
+        return self._types
 
     def register(self, core, formatter):
         if (self._core is not None) or (self._formatter is not None):
@@ -619,7 +638,7 @@ class Callable(Destination):
     __slots__ = ('_callable',)
 
     def __init__(self, callable):
-        super().__init__()
+        super().__init__(types=True)
         self._callable = callable
 
     @property
@@ -640,6 +659,9 @@ class Callable(Destination):
 class Print(Destination):
     __slots__ = ()
 
+    def __init__(self):
+        super().__init__(types=True)
+
     def __eq__(self, other):
         return isinstance(other, Print)
 
@@ -658,7 +680,7 @@ class List(Destination):
     __slots__ = ('_list',)
 
     def __init__(self, list):
-        super().__init__()
+        super().__init__(types=True)
         self._list = list
 
     def __eq__(self, other):
@@ -676,6 +698,9 @@ class NoneType(Destination):
     """
     A Destination wrapping None.  Does nothing.
     """
+    def __init__(self):
+        super().__init__(types=True)
+
     def __eq__(self, other):
         return isinstance(other, NoneType)
 
@@ -717,29 +742,6 @@ class File(Destination):
     on initial_mode changed to use "a" (append).
     """
     def __init__(self, path, initial_mode="at", *, buffering=True, encoding=None, subsequent_mode=None):
-        super().__init__()
-
-        Path = pathlib.Path
-
-        original_path = path
-
-        is_bytes = isinstance(path, bytes)
-        is_str = isinstance(path, str)
-        is_path = isinstance(path, Path)
-
-        if not (is_bytes or is_str or is_path):
-            raise TypeError("path must be str, bytes, or pathlib.Path, and non-empty")
-        if not path:
-            raise ValueError("path must be str, bytes, or pathlib.Path, and non-empty")
-
-        if is_bytes:
-            path = os.fsdecode(path)
-            is_str = True
-        if is_str:
-            path = Path(path)
-
-        path = path.resolve()
-
         message = "initial_mode must be a str, compatible with the mode argument to open(), and must not be read-only"
         if not isinstance(initial_mode, str):
             raise TypeError(message)
@@ -762,8 +764,31 @@ class File(Destination):
         if subsequent_mode is None:
             subsequent_mode = 'a' + plus + modes
 
-        self._buffer = buffer = []
         binary = modes == 'b'
+        super().__init__(types=frozenset((bytes if binary else str,)))
+
+        Path = pathlib.Path
+
+        original_path = path
+
+        is_bytes = isinstance(path, bytes)
+        is_str = isinstance(path, str)
+        is_path = isinstance(path, Path)
+
+        if not (is_bytes or is_str or is_path):
+            raise TypeError("path must be str, bytes, or pathlib.Path, and non-empty")
+        if not path:
+            raise ValueError("path must be str, bytes, or pathlib.Path, and non-empty")
+
+        if is_bytes:
+            path = os.fsdecode(path)
+            is_str = True
+        if is_str:
+            path = Path(path)
+
+        path = path.resolve()
+
+        self._buffer = buffer = []
         self._binary = binary
         self._join = b''.join if binary else ''.join
         self._buffering = buffering
@@ -773,6 +798,10 @@ class File(Destination):
         self._subsequent_mode = subsequent_mode
         self._encoding = encoding
         self._f = None
+
+    def __repr__(self):
+        mode = "binary" if self._binary else "text"
+        return f"<File {self._path!r} {mode}>"
 
     @property
     def binary(self):
@@ -839,11 +868,13 @@ class File(Destination):
 @export
 class FileHandle(Destination):
     def __init__(self, handle, *, autoflush=False):
-        super().__init__()
-        if not isinstance(handle, io.TextIOBase):
+        if not isinstance(handle, io.IOBase):
             raise TypeError(f"invalid file handle {handle}")
+        binary = not isinstance(handle, io.TextIOBase)
+        super().__init__(types=frozenset((bytes if binary else str,)))
         self._handle = handle
         self._autoflush = autoflush
+        self._binary = binary
 
     def __eq__(self, other):
         return isinstance(other, FileHandle) and (other._handle is self._handle)
@@ -1696,16 +1727,22 @@ class Session:
 
 
 class LogBase:
-    __slots__ = ('_core', '_session', '_clock', '_unregister', '__weakref__', )
+    __slots__ = ('_core', '_clock', '_name', '_session', '_unregister', '__weakref__', )
 
-    def __init__(self, core, session, paused):
+    def __init__(self, name, core, session, paused):
+        self._name = name
         self._core = core
         self._session = session
+
         self._unregister = session.register(self)
         self._clock = session.clock
 
     def __bool__(self):
         return self._core.truthy
+
+    @property
+    def name(self):
+        return self._name
 
     @property
     def closed(self):
@@ -1815,7 +1852,7 @@ class LogBase:
             return None
         if paused is None:
             paused = session.paused
-        return Child(self._core, session, time=time, name=name, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
+        return Child(name, self._core, session, time=time, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
 
     def log(self, *args, format='log', **kwargs):
         time = self._clock()
@@ -1897,11 +1934,11 @@ class LogBase:
 class Child(LogBase):
     __slots__ = ('_core', '_session', '_clock')
 
-    def __init__(self, core, parent_session, *, time=None, name=None, buffered=True, paused=False, format=_USE_DEFAULT, kwargs=None):
+    def __init__(self, name, core, parent_session, *, time=None, buffered=True, paused=False, format=_USE_DEFAULT, kwargs=None):
         session = Session(name, core, parent_session, buffered=buffered, clock=parent_session.clock, format=format, kwargs=kwargs, paused=paused)
         clock = session.clock
 
-        super().__init__(core, session, paused)
+        super().__init__(name, core, session, paused)
         self._clock = clock
 
     def __enter__(self):
@@ -1980,15 +2017,15 @@ class Log(LogBase):
             raise ValueError('retries must be >= 1')
 
         core = Core(
+            name=name,
             clock=Clock,
             fix=fix,
-            name=name,
             retries=retries,
             threaded=bool(threaded),
             )
 
         session = Session(name, core, None, buffered=buffered, clock=None, format='', kwargs={}, paused=paused)
-        super().__init__(core, session, paused)
+        super().__init__(name, core, session, paused)
 
         self.clock = session.clock
 
@@ -1996,12 +2033,16 @@ class Log(LogBase):
             formatter = TextFormatter()
         elif not isinstance(formatter, Formatter):
             raise TypeError(f"formatter must be Formatter, not {type(formatter).__name__}")
+        self._formatter = formatter
 
         if not destinations:
             destinations = [builtins.print]
 
         self._route(formatter, destinations)
 
+    @property
+    def formatter(self):
+        return self._formatter
 
     def _route(self, formatter, destinations):
         if not isinstance(formatter, Formatter):
@@ -2009,7 +2050,25 @@ class Log(LogBase):
         if not destinations:
             raise ValueError("must specify at least one destination")
 
-        self._core.route(formatter, [self.map_destination(d) for d in destinations])
+        ds = [self.map_destination(d) for d in destinations]
+
+        # confirm that each destination.write can handle all types returned by formatter.render
+        failures = []
+        append = failures.append
+        assert isinstance(formatter._types, (set, frozenset, bool))
+        for d in ds:
+            if d._types is True:
+                continue
+            if formatter._types is True:
+                append(d)
+            assert isinstance(d._types, (set, frozenset))
+            if not (formatter._types <= d._types):
+                append(d)
+        if failures:
+            incompatible_destinations = ", ".join(repr(d) for d in failures)
+            raise TypeError(f"formatter {formatter!r} can't be routed to {incompatible_destinations}")
+
+        self._core.route(formatter, ds)
 
     def route(self, formatter, *destinations):
         if self._core.poisoned:
