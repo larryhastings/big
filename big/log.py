@@ -891,66 +891,64 @@ class FileHandle(Destination):
         self._handle.flush()
 
 
-# class Buffer(Destination):
-#     """
-#     A Destination that buffers log messages before sending them to another Destination.
+class Buffer(Destination):
+    """
+    A Destination that buffers log messages before sending them to another Destination.
 
-#     This Destination wraps another arbitrary
-#     Destination, referred to as the "underlying"
-#     Destination.
+    This Destination wraps another arbitrary
+    Destination, referred to as the "underlying"
+    Destination.
 
-#     Every time a formatted log message is logged,
-#     Buffer appends it to an internal buffer (a Python list).
-#     When the log is flushed, Buffer will concatentate
-#     all the log messages into one giant string, then
-#     writes that string to the underlying Destination,
-#     and also flushes the underlying Destination.
+    Every time a formatted log message is logged,
+    Buffer appends it to an internal buffer (a Python list).
+    When the log is flushed, Buffer will write
+    all the log messages to 
+    writes that string to the underlying Destination,
+    and also flushes the underlying Destination.
 
-#     By default, Buffer wraps a Print destination,
-#     but you may supply your own Destination as a
-#     positional argument to the constructor.
-#     """
-#     def __init__(self, destination=None):
-#         super().__init__()
-#         self._buffer = []
-#         self._original_destination = destination
-#         self._destination = Log.map_destination(destination) if destination is not None else Print()
-#         self._last_elapsed = self._last_thread = None
+    By default, Buffer wraps a Print destination,
+    but you may supply your own Destination as a
+    positional argument to the constructor.
+    """
+    def __init__(self, destination=None):
+        original_destination = destination
+        destination = Log.map_destination(destination) if destination is not None else Print()
+        super().__init__(types=destination.types)
+        self._buffer = []
+        self._original_destination = original_destination
+        self._destination = destination
 
+    @property
+    def buffer(self):
+        return self._buffer
 
-#     @property
-#     def buffer(self):
-#         return self._buffer
+    @property
+    def destination(self):
+        return self._original_destination
 
-#     @property
-#     def destination(self):
-#         return self._original_destination
+    def __eq__(self, other):
+        return isinstance(other, Buffer) and (other._original_destination is self._original_destination)
 
-#     def __eq__(self, other):
-#         return isinstance(other, Buffer) and (other._destination == self._destination)
+    def __hash__(self):
+        return hash(Buffer) ^ hash(self._destination)
 
-#     def __hash__(self):
-#         return hash(Buffer) ^ hash(self._destination)
+    def write(self, formatted):
+        self._buffer.append(formatted)
 
-#     def start(self, session):
-#         super().start(session)
-#         self._destination.start(session)
-
-#     def end(self):
-#         super().end()
-#         self._destination.end()
-
-#     def write(self, formatted):
-#         self._buffer.append(formatted)
-
-#     def flush(self):
-#         if self._buffer:
-#             contents = "".join(self._buffer)
-#             self._buffer.clear()
-#             self._destination.write(contents)
-#         if self._buffer:
-#             self._destination.flush()
-
+    def flush(self):
+        if self._buffer:
+            b = self._buffer
+            self._buffer = []
+            if isinstance(self._destination, Print) or (self._types == frozenset((str,))):
+                message = "".join(b)
+                self._destination.write(message)
+            elif self._types == frozenset((bytes,)):
+                message = b"".join(b)
+                self._destination.write(message)
+            else:
+                for message in b:
+                    self._destination.write(message)
+            self._destination.flush()
 
 
 @export
@@ -1019,7 +1017,77 @@ TMPFILE = object()
 export("TMPFILE")
 
 
+class NotCalledYet:
+    def __repr__(self):
+        return "<NotCalledYet>"
 
+_NOT_CALLED_YET = NotCalledYet()
+del NotCalledYet
+
+class Job:
+    def __init__(self, method, args, involved=None):
+        if not ((method is None) or callable(method)):
+            raise TypeError("method must be callable, or None")
+
+        if involved is None:
+            involveds = []
+            append = involveds.append
+
+            if isinstance(method, types.MethodType):
+                method_self = method.__self__
+                if isinstance(method_self, (Destination, Formatter)):
+                    append(method_self)
+
+            for a in args:
+                if isinstance(a, (Destination, Formatter)):
+                    assert a not in involveds
+                    append(a)
+            assert len(involveds) <= 1
+            if involveds:
+                involved = involveds[0]
+
+        self.method = method
+        if not isinstance(args, tuple):
+            args = tuple(args)
+        self.futures = sum(isinstance(a, Job) for a in args)
+        self.args = args
+        self.exception = None
+        self.involved = involved
+        self.resets = 0
+        self.result = _NOT_CALLED_YET
+
+    def __repr__(self):
+        return f"<Job {self.method}{self.args} result={self.result} exception={self.exception} resets={self.resets} involved={self.involved}>"
+
+    def __call__(self):
+        if self.result is _NOT_CALLED_YET:
+            try:
+                if self.futures:
+                    args = [_resolve(a) for a in self.args]
+                else:
+                    args = self.args
+                self.result = self.method(*args)
+            except Exception as e:
+                self.exception = e
+        return self.exception
+
+    @property
+    def called(self):
+        return self.result is not _NOT_CALLED_YET
+
+    def reset(self):
+        self.resets += 1
+        self.result = _NOT_CALLED_YET
+        self.exception = None
+
+
+def _resolve(o):
+    if not isinstance(o, Job):
+        return o
+    result = o.result
+    if result is _NOT_CALLED_YET:
+        raise RuntimeError("attempted to resolve {o} before it was called")
+    return result
 
 
 @export
@@ -1215,79 +1283,76 @@ class Core:
                 if deleted_jobs:
                     deleted_jobs -= 1
                     continue
+
                 job = jq.rpop()
-                method, args, involved, retries = job
 
                 if drain:
-                    if isinstance(involved, threading.Lock):
-                        involved.release()
+                    if isinstance(job.involved, threading.Lock):
+                        job.involved.release()
                     continue
 
-                if method is None:
+                if job.method is None:
                     # stop processing
-                    assert not args
+                    assert not job.args
                     drain = True
                     break_if_empty = True
                     continue
                 # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
 
-                fault = None
-                try:
-                    method(*args)
-                except Exception as e:
-                    print("FAULT", e)
-                    if not involved:
-                        fault = e
-                    else:
-                        if retries < self.retries:
-                            try:
-                                result = self.fix(involved)
-                                if result:
-                                    # incr retries
-                                    job[-1] += 1
-                                    # and reschedule
-                                    jq.prepend(job)
-                                    nq.append(1)
-                                    continue
-                            except Exception as e:
-                                fault = e
-                    if fault is None:
-                        # failed to fix the job.
+                assert not job.called
+                fault = job()
+                if fault is None:
+                    continue
 
-                        # remove all jobs where job.involved == involved
-                        for j in jq:
-                            if j[2] == involved:
-                                j.pop()
-                                deleted_jobs += 1
+                if not isinstance(job.involved, (Formatter, Destination)):
+                    # unfixable exception, poisoned
+                    self.poisoned = fault
+                    continue
 
-                        # unceremoniously remove involved from routing
-                        if isinstance(involved, Destination):
-                            formatter = self.backroutes.get(involved)
-                            destinations = (involved,)
-                            unregister_formatter = True
-                            unregister_destinations = False
-                        else:
-                            formatter = involved
-                            destinations = tuple(reversed(self.routes[formatter.key]))
-                            unregister_formatter = False
-                            unregister_destinations = True
+                if job.resets < self.retries:
+                    try:
+                        result = self.fix(involved, fault)
+                        if result:
+                            # try again!
+                            job.reset()
+                            jq.prepend(job)
+                            nq.append(1)
+                            continue
+                    except Exception as e:
+                        self.poisoned = e
+                        continue
 
-                        route = self.routes[formatter.key]
-                        for d in destinations:
-                            if unregister_destinations:
-                                d.unregister()
-                            route.remove(d)
-                        if not route:
-                            # formatter has no more destinations, remove it too
-                            if unregister_formatter:
-                                formatter.unregister()
-                            del self.routes[formatter.key]
-                            del self.formatters_by_key[formatter.key]
-                            self.formatters.remove(formatter)
-                        pass
-                    else:
-                        # unfixable exception.  poison the log.
-                        self.poisoned = fault
+                # failed to fix the job.
+                # remove all jobs where job.involved == involved
+                for j in jq:
+                    if j[2] == involved:
+                        j.pop()
+                        deleted_jobs += 1
+
+                # unceremoniously remove involved from routing
+                if isinstance(involved, Destination):
+                    formatter = self.backroutes.get(involved)
+                    destinations = (involved,)
+                    unregister_formatter = True
+                    unregister_destinations = False
+                else:
+                    isinstance(involved, Formatter)
+                    destinations = tuple(reversed(self.routes[formatter.key]))
+                    unregister_formatter = False
+                    unregister_destinations = True
+
+                route = self.routes[formatter.key]
+                for d in destinations:
+                    if unregister_destinations:
+                        d.unregister()
+                    route.remove(d)
+                if not route:
+                    # formatter has no more destinations, remove it too
+                    if unregister_formatter:
+                        formatter.unregister()
+                    del self.routes[formatter.key]
+                    del self.formatters_by_key[formatter.key]
+                    self.formatters.remove(formatter)
 
 
     def drain(self):
@@ -1373,12 +1438,12 @@ class Core:
 
                 if self.block:
                     blocker = core.blocker()
-                    jobs.append([blocker.release, (), blocker, 0])
+                    jobs.append(Job(blocker.release, (), involved=blocker))
                 else:
                     blocker = None
 
                 if atexit:
-                    jobs.append([None, (), None, 0])
+                    jobs.append(Job(None, ()))
 
                 assert jobs
                 self.jobs = []
@@ -1396,36 +1461,15 @@ class Core:
                 return
 
             # append a job
+            if isinstance(method, Job):
+                assert not args
+                assert involved is None
+                job = method
+            else:
+                job = Job(method, args, involved)
 
-            if involved is None:
-                involveds = []
-                append = involveds.append
+            self.jobs.append(job)
 
-                if isinstance(method, types.MethodType):
-                    method_self = method.__self__
-                    if isinstance(method_self, (Destination, Formatter)):
-                        append(method_self)
-
-                for a in args:
-                    if isinstance(a, (Destination, Formatter)):
-                        assert a not in involveds
-                        append(a)
-                assert len(involveds) <= 1
-                if involveds:
-                    involved = involveds[0]
-
-            t = [method, args, involved, 0]
-            # print(f"\n{t}\n")
-            self.jobs.append(t)
-
-    def _render(self, formatter, message):
-        destinations = self.routes.get(formatter.key, ())
-        if destinations:
-            rendered = formatter.render(message)
-            s = self.Scheduler(first=True)
-            for destination in destinations:
-                s(destination.write, rendered)
-            s()
 
     def log(self, message):
         # print("<LOG>", message)
@@ -1434,8 +1478,14 @@ class Core:
             formatter = self.formatters_by_key.get(key)
             if formatter is None:
                 continue
-            s(self._render, formatter, message)
-        s()
+            destinations = self.routes.get(formatter.key, ())
+            if destinations:
+                render_job = Job(formatter.render, (message,))
+                s(render_job)
+                for destination in destinations:
+                    s(destination.write, render_job)
+        if s:
+            s()
 
     def flush(self):
         s = self.Scheduler(wait=True)
@@ -1546,9 +1596,15 @@ class Session:
             self.prepared = prepared = {}
             self.duration = duration
 
-            for formatter in session.core.formatters:
+            core = session.core
+
+            s = core.Scheduler() # first=True)
+            for formatter in core.formatters:
                 fstate = session.message_fstate(formatter, format)
-                prepared[formatter.key] = fstate.prepare(self)
+                prepare_job = Job(fstate.prepare, (self,), involved=formatter)
+                s(prepare_job)
+                s(prepared.__setitem__, formatter.key, prepare_job)
+            s()
 
         def __repr__(self):
             return f"<Message time={self.time!r} thread={self.thread!r} format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} prepared={self.prepared!r} duration={self.duration!r}>"
@@ -1991,7 +2047,7 @@ class Clock:
 
 
 @export
-def default_fix(o):
+def default_fix(o, fault):
     pass
 
 
