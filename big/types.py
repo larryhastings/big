@@ -5223,8 +5223,8 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
 
         The difference between pop and rpop is the direction the
         reverse iterator moves after popping if index is 0.
-        pop advances to the next node, rpop advances backwards
-        to the previous node.
+        pop advances forward to the next node, rpop advances
+        backward to the previous node.
         """
         return super().pop(-index)
 

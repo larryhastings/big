@@ -313,7 +313,6 @@ def prefix_format(time_seconds_width, time_fractional_width, thread_name_width=1
 
 @export
 class TextFormatter(Formatter):
-    # supported_formats = frozenset({...})
     # owns formats dict, prefix, nesting stack, indentation
 
     # __slots__ = ('format_dict', 'formats', 'timestamp_format', 'width', 'indents', 'renderers')
@@ -397,8 +396,6 @@ class TextFormatter(Formatter):
         self.renderers = {}
 
         self.indent = ''
-
-        self.supported_formats = set(self.format_dict.get('formats', ()))
 
 
     class Prepared:
@@ -1123,13 +1120,12 @@ class Core:
         self.fix = fix
         self.name = name
         self.retries = retries
-        self.threaded = threaded
+        self.threaded = bool(threaded)
 
-        self.notify_queue = Queue()
-        self.job_queue = linked_list(lock=True)
+        self.queue = self.Queue(self.threaded)
         self.blockers = []
 
-        self.formatters = []
+        self.formatters = linked_list(lock=True)
         self.formatters_by_key = {}
         self.routes = {}
         self.backroutes = {}
@@ -1141,7 +1137,8 @@ class Core:
 
         self.configuration_lock = threading.Lock()
         self.sessions = linked_list(lock=True)
-        self.supported_formats = None
+
+        self.formats = True
 
         atexit.register(self.atexit)
 
@@ -1163,7 +1160,7 @@ class Core:
         if not (self.threaded and (self.thread is None)):
             return
 
-        self.thread = threading.Thread(target=self.execute, args=(True,), daemon=True, name=f'{self.name} worker')
+        self.thread = threading.Thread(target=self.queue.execute, daemon=True, name=f'{self.name} worker')
         self.thread.start()
 
     def _stop_thread(self):
@@ -1171,8 +1168,6 @@ class Core:
             return
 
         thread = self.thread
-        jq = self.job_queue
-        nq = self.notify_queue
 
         # ensure all jobs up to now have been executed
         # blocker = self.blocker()
@@ -1210,10 +1205,12 @@ class Core:
 
             formatter.register(self)
 
-            if self.supported_formats is None:
-                self.supported_formats = formatter.supported_formats
-            else:
-                self.supported_formats &= formatter.supported_formats
+            if self.formats is True:
+                self.formats = formatter.formats
+            elif formatter.formats is not True:
+                self.formats &= formatter.formats
+                if not self.formats:
+                    raise ValueError("formatters have no formats in common")
 
             if session is not None:
                 formatter.start(session)
@@ -1267,67 +1264,35 @@ class Core:
         return unregister
 
 
-    def execute(self, block):
-        jq = self.job_queue
-        nq = self.notify_queue
-        break_if_empty = not block
-
-        deleted_jobs = 0
-        drain = False
-
-        while True:
-            if break_if_empty and nq.empty():
-                break
-            count = nq.get()
-            for _ in range(count):
-                if deleted_jobs:
-                    deleted_jobs -= 1
-                    continue
-
-                job = jq.rpop()
-
-                if drain:
-                    if isinstance(job.involved, threading.Lock):
-                        job.involved.release()
-                    continue
-
-                if job.method is None:
-                    # stop processing
-                    assert not job.args
-                    drain = True
-                    break_if_empty = True
-                    continue
-                # print(f">1> {fn.__self__}\n>2> {fn.__name__}\n>3> {args}")
-
+    def execute(self, iterator):
+        for job in iterator:
+            while True:
                 assert not job.called
                 fault = job()
                 if fault is None:
-                    continue
+                    break
 
                 if not isinstance(job.involved, (Formatter, Destination)):
                     # unfixable exception, poisoned
                     self.poisoned = fault
-                    continue
+                    break
 
                 if job.resets < self.retries:
                     try:
-                        result = self.fix(involved, fault)
+                        with self.configuration_lock:
+                            result = self.fix(involved, fault)
                         if result:
-                            # try again!
                             job.reset()
-                            jq.prepend(job)
-                            nq.append(1)
+                            # retry job!
                             continue
                     except Exception as e:
                         self.poisoned = e
-                        continue
+                        break
 
                 # failed to fix the job.
+
                 # remove all jobs where job.involved == involved
-                for j in jq:
-                    if j[2] == involved:
-                        j.pop()
-                        deleted_jobs += 1
+                self.queue.remove_involved(involved)
 
                 # unceremoniously remove involved from routing
                 if isinstance(involved, Destination):
@@ -1353,23 +1318,129 @@ class Core:
                     del self.routes[formatter.key]
                     del self.formatters_by_key[formatter.key]
                     self.formatters.remove(formatter)
+                break
 
 
-    def drain(self):
-        self.execute(False)
+    @BoundInnerClass
+    class Queue:
+        def __init__(self, core, block):
+            self.core = core
+            self.block = bool(block)
 
-    def schedule(self, jobs, *, first=False):
-        if not jobs:
-            return
-        jq = self.job_queue
-        if first:
-            verb = jq.rextend
-        else:
-            verb = jq.extend
-        verb(jobs)
-        self.notify_queue.put(len(jobs))
-        if not self.threaded:
-            self.drain()
+            self.lock = threading.Lock()
+            self.notify_queue = Queue()
+            self.job_queue = linked_list(lock=True)
+            self.deletions = 0
+            self.count = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            nq = self.notify_queue
+            jq = self.job_queue
+            break_if_empty = not self.block
+            drain = False
+
+            # load
+            count = self.count
+            deletions = self.deletions
+
+            while True:
+                with self.lock:
+                    if not count:
+                        if break_if_empty and nq.empty():
+                            break
+                        count = nq.get()
+
+                    while count:
+                        if deletions:
+                            deletions -= 1
+                            continue
+
+                        job = jq.rpop()
+                        count -= 1
+
+                        if drain:
+                            if isinstance(job.involved, threading.Lock):
+                                job.involved.release()
+                            continue
+
+                        if job.method is None:
+                            # stop processing
+                            assert not job.args
+                            drain = True
+                            break_if_empty = True
+                            continue
+
+                        # spill
+                        self.count = count
+                        self.deletions = deletions
+                        return job
+
+            # spill
+            self.count = count
+            self.deletions = deletions
+            raise StopIteration
+
+        def append(self, job):
+            self.job_queue.append(job)
+            self.notify_queue.put(1)
+
+        def extend(self, jobs):
+            if not jobs:
+                return
+            self.job_queue.extend(jobs)
+            self.notify_queue.put(len(jobs))
+
+        def prepend(self, job):
+            self.job_queue.prepend(job)
+            self.notify_queue.put(1)
+
+        def rextend(self, job):
+            if not jobs:
+                return
+            self.job_queue.rextend(jobs)
+            self.notify_queue.put(len(jobs))
+
+        def remove(self, predicate):
+            with self.lock:
+                deletions = 0
+                i = iter(self.jobs_queue)
+                while True:
+                    i = i.match(predicate)
+                    if i is None:
+                        break
+                    deletions += 1
+                    i.rpop()
+
+                self.deletions += deletions
+
+        def remove_involved(self, involved):
+            self.remove(lambda job: job.involved is involved)
+
+        def execute(self):
+            self.core.execute(self)
+
+        def drain(self):
+            assert not self.block
+            self.execute()
+
+
+
+    # def schedule(self, jobs, *, first=False):
+    #     if not jobs:
+    #         return
+    #     jq = self.job_queue
+    #     if first:
+    #         verb = jq.rextend
+    #     else:
+    #         verb = jq.extend
+    #     print(">>", verb.__name__, [j.args for j in jobs])
+    #     verb(jobs)
+    #     self.notify_queue.put(len(jobs))
+    #     if not self.threaded:
+    #         self.queue.drain()
 
 
     @BoundInnerClass
@@ -1412,13 +1483,10 @@ class Core:
             self.atexit = atexit
             self.first = first
 
-            if wait:
-                assert not atexit
-                threaded = core.threaded
-                self.block = threaded
-                self.drain = not threaded
-            else:
-                self.block = self.drain = False
+            threaded = self.core.threaded
+            self.drain = not threaded
+            self.block = block = threaded and wait
+            assert not (atexit and block)
 
             if args:
                 self(*args)
@@ -1427,10 +1495,17 @@ class Core:
         def __bool__(self):
             return bool(self.jobs)
 
+        def execute(self):
+            jobs = self.jobs
+            self.jobs = []
+            self.core.execute(jobs)
+
         def __call__(self, method=None, *args, involved=None):
             if method is None:
                 # dispatch
                 core = self.core
+                queue = core.queue
+
                 jobs = self.jobs
                 atexit = self.atexit
                 drain = self.drain
@@ -1447,13 +1522,17 @@ class Core:
 
                 assert jobs
                 self.jobs = []
-                core.schedule(jobs, first=self.first)
+
+                if self.first:
+                    queue.rextend(jobs)
+                else:
+                    queue.extend(jobs)
 
                 if blocker:
                     core.block(blocker)
 
                 if drain:
-                    core.drain()
+                    core.queue.drain()
 
                 if atexit:
                     core.thread.join()
@@ -1598,13 +1677,16 @@ class Session:
 
             core = session.core
 
-            s = core.Scheduler() # first=True)
             for formatter in core.formatters:
                 fstate = session.message_fstate(formatter, format)
+                s = core.Scheduler()
                 prepare_job = Job(fstate.prepare, (self,), involved=formatter)
                 s(prepare_job)
-                s(prepared.__setitem__, formatter.key, prepare_job)
-            s()
+                s.execute()
+                result = prepare_job.result
+                if isinstance(result, Exception):
+                    raise result
+                prepared[formatter.key] = result
 
         def __repr__(self):
             return f"<Message time={self.time!r} thread={self.thread!r} format={self.format!r} args={self.args!r} kwargs={self.kwargs!r} prepared={self.prepared!r} duration={self.duration!r}>"
@@ -1699,8 +1781,8 @@ class Session:
         return unregister
 
     def ensure_state(self, desired_state):
-        # if threading.current_thread() != self.core.thread:
-        #     raise RuntimeError("change state not from worker thread")
+        if self.core.threaded and (threading.current_thread() != self.core.thread):
+            raise RuntimeError("change state not from worker thread")
         if desired_state < self.state:
             return False
         if desired_state == self.state:
@@ -1766,7 +1848,7 @@ class Session:
             u()
 
 
-    def log(self, message):
+    def log(self, message, scheduler=None):
         self.ensure_state(STATE_ACTIVE)
         if self.buffer is not None:
             self.buffer.append(message)

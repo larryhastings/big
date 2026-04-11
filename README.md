@@ -6211,7 +6211,8 @@ direction.
 <dl><dd>
 
 Removes and returns the value at `index` relative to the current
-position (default `0`).
+position.  If `index` is `0` (the default), removes the current
+node and the iterator advances forwards to the next node.
 </dd></dl>
 
 #### `linked_list_iterator.rremove(value, default=undefined)`
@@ -6289,21 +6290,24 @@ tutorial for more.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.before`](#linked_list_iteratorbeforecount1).
+Behaves like [`linked_list_iterator.before`](#linked_list_iteratorbeforecount1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.append(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.prepend`](#linked_list_iteratorprependvalue).
+Behaves like [`linked_list_iterator.prepend`](#linked_list_iteratorprependvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.before(count=1)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.after`](#linked_list_iteratoraftercount1).
+Behaves like [`linked_list_iterator.after`](#linked_list_iteratoraftercount1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.copy()`
@@ -6317,14 +6321,16 @@ Returns a copy of the reverse iterator, pointing at the same node.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rcount`](#linked_list_iteratorrcountvalue).
+Behaves like [`linked_list_iterator.rcount`](#linked_list_iteratorrcountvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.cut(stop=None, *, lock=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rcut`](#linked_list_iteratorrcutstopnone--locknone).
+Behaves like [`linked_list_iterator.rcut`](#linked_list_iteratorrcutstopnone--locknone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.exhaust()`
@@ -6338,14 +6344,16 @@ Advances the reverse iterator to point to head.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rextend`](#linked_list_iteratorrextenditerable).
+Behaves like [`linked_list_iterator.rextend`](#linked_list_iteratorrextenditerable)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.find(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rfind`](#linked_list_iteratorrfindvalue).
+Behaves like [`linked_list_iterator.rfind`](#linked_list_iteratorrfindvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.insert(index, object)`
@@ -6360,7 +6368,8 @@ index direction.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.is_special`](#linked_list_iteratoris_special).
+Behaves like [`linked_list_iterator.is_special`](#linked_list_iteratoris_special)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.linked_list`
@@ -6374,63 +6383,72 @@ Returns the `linked_list` this iterator belongs to.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rmatch`](#linked_list_iteratorrmatchpredicate).
+Behaves like [`linked_list_iterator.rmatch`](#linked_list_iteratorrmatchpredicate)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.move(where, stop=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rmove`](#linked_list_iteratorrmovewhere-stopnone).
+Behaves like [`linked_list_iterator.rmove`](#linked_list_iteratorrmovewhere-stopnone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.next(default=undefined, *, count=1)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.previous`](#linked_list_iteratorpreviousdefaultundefined--count1).
+Behaves like [`linked_list_iterator.previous`](#linked_list_iteratorpreviousdefaultundefined--count1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.pop(index=0)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rpop`](#linked_list_iteratorrpopindex0).
+Behaves like [`linked_list_iterator.rpop`](#linked_list_iteratorrpopindex0)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.prepend(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.append`](#linked_list_iteratorappendvalue).
+Behaves like [`linked_list_iterator.append`](#linked_list_iteratorappendvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.previous(default=undefined, *, count=1)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.next`](#linked_list_iteratornextdefaultundefined--count1).
+Behaves like [`linked_list_iterator.next`](#linked_list_iteratornextdefaultundefined--count1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rcount(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.count`](#linked_list_iteratorcountvalue).
+Behaves like [`linked_list_iterator.count`](#linked_list_iteratorcountvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rcut(stop=None, *, lock=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.cut`](#linked_list_iteratorcutstopnone--locknone).
+Behaves like [`linked_list_iterator.cut`](#linked_list_iteratorcutstopnone--locknone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.remove(value, default=undefined)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rremove`](#linked_list_iteratorrremovevalue-defaultundefined).
+Behaves like [`linked_list_iterator.rremove`](#linked_list_iteratorrremovevalue-defaultundefined)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.reset()`
@@ -6444,77 +6462,88 @@ Resets the reverse iterator to point to tail.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.extend`](#linked_list_iteratorextenditerable).
+Behaves like [`linked_list_iterator.extend`](#linked_list_iteratorextenditerable)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rfind(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.find`](#linked_list_iteratorfindvalue).
+Behaves like [`linked_list_iterator.find`](#linked_list_iteratorfindvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rmatch(predicate)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.match`](#linked_list_iteratormatchpredicate).
+Behaves like [`linked_list_iterator.match`](#linked_list_iteratormatchpredicate)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rmove(where, stop=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.move`](#linked_list_iteratormovewhere-stopnone).
+Behaves like [`linked_list_iterator.move`](#linked_list_iteratormovewhere-stopnone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rpop(index=0)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.pop`](#linked_list_iteratorpopindex0).
+Behaves like [`linked_list_iterator.pop`](#linked_list_iteratorpopindex0)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rremove(value, default=undefined)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.remove`](#linked_list_iteratorremovevalue-defaultundefined).
+Behaves like [`linked_list_iterator.remove`](#linked_list_iteratorremovevalue-defaultundefined)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rsplice(other)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.splice`](#linked_list_iteratorspliceother).
+Behaves like [`linked_list_iterator.splice`](#linked_list_iteratorspliceother)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rtruncate()`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.truncate`](#linked_list_iteratortruncate).
+Behaves like [`linked_list_iterator.truncate`](#linked_list_iteratortruncate)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.special()`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.special`](#linked_list_iteratorspecial).
+Behaves like [`linked_list_iterator.special`](#linked_list_iteratorspecial)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.splice(other)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rsplice`](#linked_list_iteratorrspliceother).
+Behaves like [`linked_list_iterator.rsplice`](#linked_list_iteratorrspliceother)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.truncate()`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rtruncate`](#linked_list_iteratorrtruncate).
+Behaves like [`linked_list_iterator.rtruncate`](#linked_list_iteratorrtruncate)
+with the directions reversed.
 </dd></dl>
 
 
