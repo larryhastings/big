@@ -1329,7 +1329,8 @@ class Core:
 
             self.lock = threading.Lock()
             self.notify_queue = Queue()
-            self.job_queue = linked_list(lock=True)
+            self.priority_jobs = linked_list(lock=True)
+            self.normal_jobs = linked_list(lock=True)
             self.deletions = 0
             self.count = 0
 
@@ -1338,7 +1339,8 @@ class Core:
 
         def __next__(self):
             nq = self.notify_queue
-            jq = self.job_queue
+            pj = self.priority_jobs
+            nj = self.normal_jobs
             break_if_empty = not self.block
             drain = False
 
@@ -1358,7 +1360,7 @@ class Core:
                             deletions -= 1
                             continue
 
-                        job = jq.rpop()
+                        job = (pj if pj else nj).rpop()
                         count -= 1
 
                         if drain:
@@ -1383,36 +1385,27 @@ class Core:
             self.deletions = deletions
             raise StopIteration
 
-        def append(self, job):
-            self.job_queue.append(job)
+        def append(self, job, *, priority=False):
+            (self.priority_jobs if priority else self.normal_jobs).append(job)
             self.notify_queue.put(1)
 
-        def extend(self, jobs):
+        def extend(self, jobs, *, priority=False):
             if not jobs:
                 return
-            self.job_queue.extend(jobs)
-            self.notify_queue.put(len(jobs))
-
-        def prepend(self, job):
-            self.job_queue.prepend(job)
-            self.notify_queue.put(1)
-
-        def rextend(self, job):
-            if not jobs:
-                return
-            self.job_queue.rextend(jobs)
+            (self.priority_jobs if priority else self.normal_jobs).extend(jobs)
             self.notify_queue.put(len(jobs))
 
         def remove(self, predicate):
             with self.lock:
                 deletions = 0
-                i = iter(self.jobs_queue)
-                while True:
-                    i = i.match(predicate)
-                    if i is None:
-                        break
-                    deletions += 1
-                    i.rpop()
+                for q in (self.priority_jobs, self.normal_jobs):
+                    i = iter(q)
+                    while True:
+                        i = i.match(predicate)
+                        if i is None:
+                            break
+                        deletions += 1
+                        i.rpop()
 
                 self.deletions += deletions
 
@@ -1428,24 +1421,9 @@ class Core:
 
 
 
-    # def schedule(self, jobs, *, first=False):
-    #     if not jobs:
-    #         return
-    #     jq = self.job_queue
-    #     if first:
-    #         verb = jq.rextend
-    #     else:
-    #         verb = jq.extend
-    #     print(">>", verb.__name__, [j.args for j in jobs])
-    #     verb(jobs)
-    #     self.notify_queue.put(len(jobs))
-    #     if not self.threaded:
-    #         self.queue.drain()
-
-
     @BoundInnerClass
     class Scheduler:
-        def __init__(self, core, *args, atexit=False, first=False, wait=False):
+        def __init__(self, core, *args, atexit=False, priority=False, wait=False):
             """
             Manages creating "jobs" iterables and scheduling the work.  To use:
 
@@ -1467,9 +1445,9 @@ class Core:
                 until the worker thread has finished.
                 atexit creates a job.
 
-            * first - if true,
-                insert these jobs on the front of the work queue (in order).
-                default is to append them to the end.
+            * priority - if true,
+                these jobs are high priority and should be run sooner.
+                default is False, the jobs are normal priority.
 
             * wait - if true,
                 wait until all this scheduled work is completed:
@@ -1481,7 +1459,7 @@ class Core:
             self.core = core
             self.jobs = []
             self.atexit = atexit
-            self.first = first
+            self.priority = priority
 
             threaded = self.core.threaded
             self.drain = not threaded
@@ -1501,58 +1479,54 @@ class Core:
             self.core.execute(jobs)
 
         def __call__(self, method=None, *args, involved=None):
-            if method is None:
-                # dispatch
-                core = self.core
-                queue = core.queue
-
-                jobs = self.jobs
-                atexit = self.atexit
-                drain = self.drain
-                blocker = None
-
-                if self.block:
-                    blocker = core.blocker()
-                    jobs.append(Job(blocker.release, (), involved=blocker))
+            if method is not None:
+                # append a job
+                if isinstance(method, Job):
+                    assert not args
+                    assert involved is None
+                    job = method
                 else:
-                    blocker = None
+                    job = Job(method, args, involved)
 
-                if atexit:
-                    jobs.append(Job(None, ()))
-
-                assert jobs
-                self.jobs = []
-
-                if self.first:
-                    queue.rextend(jobs)
-                else:
-                    queue.extend(jobs)
-
-                if blocker:
-                    core.block(blocker)
-
-                if drain:
-                    core.queue.drain()
-
-                if atexit:
-                    core.thread.join()
-
+                self.jobs.append(job)
                 return
 
-            # append a job
-            if isinstance(method, Job):
-                assert not args
-                assert involved is None
-                job = method
+            # schedule
+            core = self.core
+            queue = core.queue
+
+            jobs = self.jobs
+            atexit = self.atexit
+            drain = self.drain
+            blocker = None
+
+            if self.block:
+                blocker = core.blocker()
+                jobs.append(Job(blocker.release, (), involved=blocker))
             else:
-                job = Job(method, args, involved)
+                blocker = None
 
-            self.jobs.append(job)
+            if atexit:
+                jobs.append(Job(None, ()))
+
+            assert jobs
+            self.jobs = []
+
+            queue.extend(jobs, priority=self.priority)
+
+            if blocker:
+                core.block(blocker)
+
+            if drain:
+                core.queue.drain()
+
+            if atexit:
+                core.thread.join()
 
 
-    def log(self, message):
+    def log(self, message, priority=True):
         # print("<LOG>", message)
-        s = self.Scheduler()
+        s = self.Scheduler(priority=priority)
         for key, prepared in message.prepared.items():
             formatter = self.formatters_by_key.get(key)
             if formatter is None:
@@ -1566,8 +1540,8 @@ class Core:
         if s:
             s()
 
-    def flush(self):
-        s = self.Scheduler(wait=True)
+    def flush(self, priority=True):
+        s = self.Scheduler(priority=priority, wait=True)
         for destinations in self.routes.values():
             for d in destinations:
                 s(d.flush)
@@ -1585,7 +1559,7 @@ class Core:
                 if session is not None:
                     s(session._close)
         s()
-        self.flush()
+        self.flush(priority=False)
 
     def atexit(self):
         # If the process is shutting down,
