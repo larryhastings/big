@@ -74,26 +74,26 @@ class FormatterValueError(ValueError):
     pass
 
 
-_USE_DEFAULT = None
+_DEFAULT_CHILD_FORMAT = None
 
-class UseDefault:
+class DefaultChildFormat:
     def __new__(cls):
-        global _USE_DEFAULT
-        if _USE_DEFAULT is not None:
-            raise ValueError("_USE_DEFAULT is a singleton")
-        _USE_DEFAULT = super().__new__(cls)
-        return _USE_DEFAULT
+        global _DEFAULT_CHILD_FORMAT
+        if _DEFAULT_CHILD_FORMAT is not None:
+            raise ValueError("_DEFAULT_CHILD_FORMAT is a singleton")
+        _DEFAULT_CHILD_FORMAT = super().__new__(cls)
+        return _DEFAULT_CHILD_FORMAT
 
     def __repr__(self):
-        return "<UseDefault>"
+        return "<DefaultChildFormat>"
 
-_USE_DEFAULT = UseDefault()
-
-
+_DEFAULT_CHILD_FORMAT = DefaultChildFormat()
 
 
 
-def _merge_dicts(base, update, path):
+
+
+def _merge_dicts_recurse(base, update, path):
     base_keys = set(base)
     update_keys = set(update)
     all_keys = base_keys | update_keys
@@ -126,14 +126,14 @@ def _merge_dicts(base, update, path):
 
         child_path = path + f'[{key!r}]'
         if dict_count == 2:
-            result[key] = _merge_dicts(base_value, update_value, child_path)
+            result[key] = _merge_dicts_recurse(base_value, update_value, child_path)
             continue
 
         raise TypeError(f"type mismatch at {child_path} between dict and non-dict")
     return result
 
 
-def merge_dicts(base, update):
+def _merge_dicts(base, update):
     """
     Recursively updates base with update.
     Returns a new dict; doesn't modify either base or update.
@@ -143,7 +143,7 @@ def merge_dicts(base, update):
     both dicts or neither dicts.  The one exception: one can
     be a dict and the other, None.
     """
-    return _merge_dicts(base, update, '')
+    return _merge_dicts_recurse(base, update, '')
 
 
 _serial_number_lock = threading.Lock()
@@ -159,15 +159,75 @@ def _serial_number():
 
 
 @export
+class Optional(tuple):
+    def __new__(cls, *elements):
+        if not elements:
+            raise TypeError("Optional requires at least one path element")
+        if not all(isinstance(s, str) for s in elements):
+            raise TypeError("Optional path elements must all be str")
+        if any(s == '' for s in elements[1:]):
+            raise ValueError("'' may only appear at index 0 in a format path")
+        return super().__new__(cls, elements)
+
+@export
+def format_path(base, format):
+    if base is None:
+        raise TypeError("base can't be None")
+    if format is None:
+        return base  # assume base is normalized
+
+    results = []
+    optional = False
+    for value in (base, format):
+        if isinstance(value, str):
+            value = (value,)
+        else:
+            if not value:
+                raise ValueError("format path tuples may not be empty")
+            if not all(isinstance(element, str) for element in value):
+                raise TypeError("format path tuple elements may only be str")
+            if '' in value[1:]:
+                raise ValueError("'' may only appear at index 0 in a format path")
+
+        optional = optional or isinstance(value, Optional)
+        results.append(value)
+
+    base, format = results
+
+    if format[0] == '':
+        result = format
+    else:
+        result = base + format
+
+    if not optional:
+        if len(result) == 1:
+            return result[0]
+        return result
+    return Optional(*result)
+
+
+
+@export
 class Formatter:
     # formats                   # set, or True = accepts any
     # types                     # set of types (str, bytes, SinkEvent, etc.)
 
     # __slots__ = ('name', 'key', '__weakref__') + BOUNDINNERCLASS_OUTER_SLOTS
 
-    def _formats(self, format_dict):
+
+    def __init__(self, format_dict, types, *, name=None):
+        # self.root = self.owner = None
+        if not ((name is None) or isinstance(name, str)):
+            raise  TypeError('str must be name or None')
+
+        self.format_dict = format_dict
+
         def yield_formats(d, path=['']):
-            yield tuple(path)
+            if len(path) == 1:
+                assert path == ['']
+                yield ''
+            else:
+                yield tuple(path)
 
             formats = d.get('formats')
             if not (formats and isinstance(formats, dict)):
@@ -178,16 +238,7 @@ class Formatter:
                 yield from yield_formats(value, path)
                 path.pop()
 
-        return frozenset(yield_formats(format_dict))
-
-
-    def __init__(self, format_dict, types, *, name=None):
-        # self.root = self.owner = None
-        if not ((name is None) or isinstance(name, str)):
-            raise  TypeError('str must be name or None')
-
-        self.format_dict = format_dict
-        self.formats = self._formats(format_dict)
+        self.formats = frozenset(yield_formats(format_dict))
         self.types = types
 
         if name is None:
@@ -239,11 +290,18 @@ class Formatter:
         return d
 
     def format(self, key):
+        # key must be an absolute path.
+        # so, either '', or a tuple starting with ('', ...).
+
         if key == '':
             return self.format_dict
 
-        assert not isinstance(key, str)
+        if isinstance(key, list):
+            key = tuple(key)
+        else:
+            assert isinstance(key, tuple)
         assert key[0] == ''
+        assert '' not in key[1:]
 
         cached = self.format_cache.get(key)
         if cached is None:
@@ -251,9 +309,9 @@ class Formatter:
             if format_dict != None:
                 base_key = format_dict.get('base', None)
                 if base_key is not None:
-                    base_key = self.session.join_formats(key, base_key)
+                    base_key = format_path(key, base_key)
                     base = self.format(base_key)
-                    format_dict = merge_dicts(base, format_dict)
+                    format_dict = _merge_dicts(base, format_dict)
             cached = self.format_cache[key] = format_dict
         return cached
 
@@ -455,7 +513,7 @@ class TextFormatter(Formatter):
             'timestamp': clock.time_to_timestamp(message.time),
             }
         if message.duration is not None:
-            d['duration'] = clock.delta_to_seconds(message.duration)
+            d['duration'] = message.duration
         return d
 
     def render(self, message):
@@ -1524,9 +1582,8 @@ class Core:
                 core.thread.join()
 
 
-    def log(self, message, priority=True):
-        # print("<LOG>", message)
-        s = self.Scheduler(priority=priority)
+    def log(self, message):
+        s = self.Scheduler(priority=True)
         for key, prepared in message.prepared.items():
             formatter = self.formatters_by_key.get(key)
             if formatter is None:
@@ -1540,8 +1597,8 @@ class Core:
         if s:
             s()
 
-    def flush(self, priority=True):
-        s = self.Scheduler(priority=priority, wait=True)
+    def flush(self):
+        s = self.Scheduler(priority=True, wait=True)
         for destinations in self.routes.values():
             for d in destinations:
                 s(d.flush)
@@ -1552,14 +1609,14 @@ class Core:
         s = self.Scheduler()
         while sessions:
             rit = reversed(sessions) # rit points at tail
-            rit.next(None)           # rit points to node before tail
+            rit.next(None)           # now rit points to node before tail
             while rit:               # rit is True if it's not head
                 wr = rit.rpop()
                 session = wr()
                 if session is not None:
                     s(session._close)
         s()
-        self.flush(priority=False)
+        self.flush()
 
     def atexit(self):
         # If the process is shutting down,
@@ -1597,6 +1654,8 @@ class Session:
     #     ) + BOUNDINNERCLASS_OUTER_SLOTS
 
     def __init__(self, name, core, parent, *, buffered, clock, format, kwargs, paused):
+        assert not isinstance(format, Optional)
+
         self.name = name
         self.core = core
         self.parent = parent
@@ -1606,9 +1665,7 @@ class Session:
         self.kwargs = kwargs
 
         clock = clock or core.clock()
-        initial = clock()
         self.clock = clock
-        self.initial = initial
 
         self.thread = threading.current_thread()
         self.state = STATE_INITIAL
@@ -1641,6 +1698,15 @@ class Session:
         __slots__ = ('time', 'thread', 'format', 'args', 'kwargs', 'prepared', 'duration')
 
         def __init__(self, session, time, format, args, kwargs, duration=None, thread=None):
+            core = session.core
+
+            format = format_path(session.format, format)
+            if format not in core.formats:
+                if isinstance(format, Optional):
+                    format = session.format
+                else:
+                    raise ValueError(f"format {format} not defined for all formatters")
+
             self.time = time
             self.thread = thread or threading.current_thread()
             self.format = format
@@ -1648,8 +1714,6 @@ class Session:
             self.kwargs = kwargs
             self.prepared = prepared = {}
             self.duration = duration
-
-            core = session.core
 
             for formatter in core.formatters:
                 fstate = session.message_fstate(formatter, format)
@@ -1682,24 +1746,6 @@ class Session:
         self.paused = 0
 
 
-    @staticmethod
-    def join_formats(base, format):
-        base_is_str = isinstance(base, str)
-        format_is_str = isinstance(format, str)
-        if format == b'':
-            raise RuntimeError('xyz')
-        if format_is_str:
-            if format == '':
-                return format
-        elif format[0] == '':
-            return format
-
-        if base_is_str:
-            base = (base,)
-        if format_is_str:
-            format = (format,)
-        return base + format
-
     def fstate(self, formatter):
         fstate = self._fstate_cache.get(formatter.key, None)
         if fstate is None:
@@ -1722,7 +1768,7 @@ class Session:
         message_fstate = formatter_cache.get(format, None)
         if message_fstate is None:
             fstate = self.fstate(formatter)
-            format_key = self.join_formats(fstate.format, format)
+            format_key = format_path(fstate.format, format)
 
             format_dict = formatter.format(format_key)
 
@@ -1776,9 +1822,9 @@ class Session:
                 format_key = ('', 'session', 'start')
                 session = self
             else:
-                format_key = self.join_formats(self.format, 'start')
+                format_key = format_path(self.format, 'start')
                 session = self.parent
-            message = session.Message(self.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
+            message = session.Message(self.clock.initial, format_key, (self.name,), self.kwargs, thread=self.thread)
             # print(f"[S] {message}")
             # self.core.Scheduler(self.log, message)
             self.log(message)
@@ -1788,15 +1834,16 @@ class Session:
         assert desired_state == STATE_CLOSED
         self.state = STATE_CLOSED
         # send end banner
-        time = self.clock()
+        clock = self.clock
+        time = clock()
         if self.parent is None:
             format_key = ('', 'session', 'end')
             session = self
             duration = None
         else:
-            format_key = self.join_formats(self.format, 'end')
+            format_key = format_path(self.format, 'end')
             session = self.parent
-            duration = time - self.initial
+            duration = clock.delta_to_seconds(time - clock.initial)
         message = session.Message(time, format_key, (self.name,), {}, thread=self.thread, duration=duration)
         # print(f"[S] {message}")
         # self.core.Scheduler(self.log, message)
@@ -1822,7 +1869,7 @@ class Session:
             u()
 
 
-    def log(self, message, scheduler=None):
+    def log(self, message):
         self.ensure_state(STATE_ACTIVE)
         if self.buffer is not None:
             self.buffer.append(message)
@@ -1839,18 +1886,32 @@ class Session:
 
 
 class LogBase:
-    __slots__ = ('_core', '_clock', '_name', '_session', '_unregister', '__weakref__', )
+    __slots__ = ('_core', '_clock', '_helper_cache', '_name', '_session', '_unregister', '__weakref__', )
 
     def __init__(self, name, core, session, paused):
         self._name = name
         self._core = core
         self._session = session
+        self._helper_cache = {}
 
         self._unregister = session.register(self)
         self._clock = session.clock
 
     def __bool__(self):
         return self._core.truthy
+
+    def __getattr__(self, attr):
+        # is this the name of a user-defined format?
+        format = ('', attr)
+        core = self._core
+        if format in core.formats:
+            cached = self._helper_cache.get(attr, None)
+            if cached is None:
+                def helper(s):
+                    return self.log(s, format=Optional(attr))
+                self._helper_cache[attr] = cached = helper
+            return cached
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {attr!r}")
 
     @property
     def name(self):
@@ -1946,34 +2007,24 @@ class LogBase:
         if session is not None:
             self._core.Scheduler(session.resume)
 
-    def child(self, name='', buffered=True, *, format=_USE_DEFAULT, paused=None, **kwargs):
+    def child(self, name='', buffered=True, *, format=_DEFAULT_CHILD_FORMAT, paused=None, **kwargs):
         time = self._clock()
 
-        if not isinstance(name, str):
-            raise TypeError(f'name must be str, not {type(name).__name__}')
+        session = self._session
+        core = self._core
+
+        if (not session) or (session.state >= STATE_CLOSED):
+            return None
+        return Child(name, self._core, session, time=time, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
+
+    def log(self, *args, format=Optional('log'), **kwargs):
+        time = self._clock()
 
         if self._core.poisoned:
             raise self._core.poisoned
-
-        if format == _USE_DEFAULT:
-            format = ('', 'child') if name else None
-        # TODO: confirm format is defined
 
         session = self._session
         if (not session) or (session.state >= STATE_CLOSED):
-            return None
-        if paused is None:
-            paused = session.paused
-        return Child(name, self._core, session, time=time, buffered=buffered, paused=paused, format=format, kwargs=kwargs)
-
-    def log(self, *args, format='log', **kwargs):
-        time = self._clock()
-
-        if self._core.poisoned:
-            raise self._core.poisoned
-
-        session = self._session
-        if (not session) or (session.state >= STATE_DRAINING):
             return
         message = session.Message(time, format, args, kwargs)
         s = self._core.Scheduler()
@@ -1981,7 +2032,7 @@ class LogBase:
         s(session.log, message)
         s()
 
-    def write(self, s, format='preformatted'):
+    def write(self, s, format=Optional('preformatted')):
         time = self._clock()
 
         if not isinstance(s, str):
@@ -1999,7 +2050,7 @@ class LogBase:
         s(session.log, message)
         s()
 
-    def print(self, *args, sep=' ', end='\n', format='print'):
+    def print(self, *args, sep=' ', end='\n', format=Optional('print')):
         time = self._clock()
 
         if not isinstance(sep, str):
@@ -2026,27 +2077,33 @@ class LogBase:
 
     __call__ = print
 
-    def box(self, s):
-        time = self._clock()
 
-        if self._core.poisoned:
-            raise self._core.poisoned
-
-        session = self._session
-        if (not session) or (session.state >= STATE_CLOSED):
-            return
-
-        message = session.Message(time, 'box', (s,), {})
-        s = self._core.Scheduler()
-        s(session.ensure_state, STATE_ACTIVE)
-        s(session.log, message)
-        s()
-
-@export
 class Child(LogBase):
     __slots__ = ('_core', '_session', '_clock')
 
-    def __init__(self, name, core, parent_session, *, time=None, buffered=True, paused=False, format=_USE_DEFAULT, kwargs=None):
+    def __init__(self, name, core, parent_session, *, time=None, buffered=True, paused=False, format=_DEFAULT_CHILD_FORMAT, kwargs=None):
+        if time is None:
+            time = parent_session.clock()
+
+        if not isinstance(name, str):
+            raise TypeError(f'name must be str, not {type(name).__name__}')
+
+        if format == _DEFAULT_CHILD_FORMAT:
+            format = ('', 'child') if name else None
+        else:
+            if isinstance(format, Optional):
+                raise ValueError("Child format can't be Optional")
+            format = format_path(parent_session.format, format)
+
+        if (core.formats is not True) and (format not in core.formats):
+            raise ValueError(f"{format} is not defined by all formatters")
+
+        if core.poisoned:
+            raise core.poisoned
+
+        if paused is None:
+            paused = parent_session.paused
+
         session = Session(name, core, parent_session, buffered=buffered, clock=parent_session.clock, format=format, kwargs=kwargs, paused=paused)
         clock = session.clock
 
