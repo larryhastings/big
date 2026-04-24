@@ -9929,6 +9929,8 @@ others.  Views are completely independent from each other.
 
 *under development*
 
+* A complete rewrite of `Log`.  The new `Log` is much more
+  sophisticated!
 * Added a new parameter to `iterator_filter`: `call_every`,
   which handles calling a callback function every time the
   wrapped iterator yields N values.
@@ -10131,7 +10133,7 @@ It's been more than a year... and I've been busy!
       class that has been bound to an instance.
     * [`bound_to`](#bound_tocls) returns the instance that cls has been
       bound to, if `cls` is a bound inner class bound to an instance.
-    * [`type_bound_to](#type_bound_tocls)` returns the instance that `type(o)` has
+    * [`type_bound_to`](#type_bound_tocls)` returns the instance that `type(o)` has
       been bound to, if `type(o)` is a bound inner class bound
       to an instance.
     * [`bound_inner_base`](#bound_inner_basecls) is only needed to use BoundInnerClass
