@@ -17,7 +17,7 @@ from big.boundinnerclass import (
     _BOUNDINNERCLASS_INNER_ATTR,
     _ClassProxy,
     _get_outer_weakref,
-    _make_bound_signature,
+    _bound_signature,
     _unbound,
     )
 
@@ -146,6 +146,209 @@ class TestBoundInnerClass(unittest.TestCase):
         o = Outer()
         i = o.Inner()
         self.assertEqual(repr(i), 'custom repr')
+
+
+class TestNewSupport(unittest.TestCase):
+    """Tests for BoundInnerClass support for classes that define __new__."""
+
+    def test_new_only_receives_outer(self):
+        """A BIC with only __new__ receives outer after cls."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, x, y=None):
+                    self = super().__new__(cls)
+                    self.outer_from_new = outer
+                    self.x = x
+                    self.y = y
+                    return self
+
+        o = Outer()
+        i = o.Inner(42, y='hello')
+
+        self.assertIs(i.outer_from_new, o)
+        self.assertEqual(i.x, 42)
+        self.assertEqual(i.y, 'hello')
+        self.assertIsInstance(i, Outer.Inner)
+        self.assertIsInstance(i, o.Inner)
+
+    def test_new_and_init_both_receive_outer(self):
+        """A BIC defining both __new__ and __init__ gets outer in both."""
+        calls = []
+
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, x):
+                    self = super().__new__(cls)
+                    self.outer_from_new = outer
+                    self.x_from_new = x
+                    calls.append(('new', outer, x))
+                    return self
+
+                def __init__(self, outer, x):
+                    self.outer_from_init = outer
+                    self.x_from_init = x
+                    calls.append(('init', outer, x))
+
+        o = Outer()
+        i = o.Inner(7)
+
+        self.assertIs(i.outer_from_new, o)
+        self.assertIs(i.outer_from_init, o)
+        self.assertEqual(i.x_from_new, 7)
+        self.assertEqual(i.x_from_init, 7)
+        self.assertEqual(calls, [('new', o, 7), ('init', o, 7)])
+
+    def test_new_signature_hides_outer(self):
+        """Bound class signatures hide outer for __new__ as well as __init__."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, x, y=None):
+                    self = super().__new__(cls)
+                    self.outer = outer
+                    self.x = x
+                    self.y = y
+                    return self
+
+        o = Outer()
+
+        sig = inspect.signature(o.Inner)
+        self.assertEqual(list(sig.parameters.keys()), ['x', 'y'])
+
+        sig = inspect.signature(o.Inner.__new__)
+        self.assertEqual(list(sig.parameters.keys()), ['x', 'y'])
+
+        i = o.Inner(1, y=2)
+        self.assertIs(i.outer, o)
+        self.assertEqual(i.x, 1)
+        self.assertEqual(i.y, 2)
+
+    def test_new_signature_preferred_when_new_and_init_both_exist(self):
+        """Class signature follows Python's convention and prefers __new__."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, x, y=None):
+                    self = super().__new__(cls)
+                    self.outer_from_new = outer
+                    return self
+
+                def __init__(self, outer, z):
+                    self.outer_from_init = outer
+                    self.z = z
+
+        o = Outer()
+        i = o.Inner(3)
+        sig = inspect.signature(o.Inner)
+        self.assertEqual(list(sig.parameters.keys()), ['x', 'y'])
+
+        init_sig = inspect.signature(o.Inner.__init__)
+        self.assertEqual(list(init_sig.parameters.keys()), ['z'])
+
+    def test_bound_innerclass_inheritance_new_super(self):
+        """super().__new__(cls) works in a BIC hierarchy."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __new__(cls, outer):
+                    self = super().__new__(cls)
+                    self.parent_outer = outer
+                    self.parent_called = True
+                    return self
+
+            @BoundInnerClass
+            class Child(bound_inner_base(Parent)):
+                def __new__(cls, outer, x):
+                    self = super().__new__(cls)
+                    self.child_outer = outer
+                    self.child_called = True
+                    self.x = x
+                    return self
+
+        o = Outer()
+        c = o.Child(99)
+
+        self.assertIs(c.parent_outer, o)
+        self.assertIs(c.child_outer, o)
+        self.assertTrue(c.parent_called)
+        self.assertTrue(c.child_called)
+        self.assertEqual(c.x, 99)
+        self.assertIsInstance(c, o.Parent)
+
+    def test_child_inherits_bound_parent_new(self):
+        """A child without __new__ can inherit the bound parent's __new__."""
+        class Outer:
+            @BoundInnerClass
+            class Parent:
+                def __new__(cls, outer, x):
+                    self = super().__new__(cls)
+                    self.outer = outer
+                    self.x = x
+                    return self
+
+            @BoundInnerClass
+            class Child(bound_inner_base(Parent)):
+                pass
+
+        o = Outer()
+        c = o.Child(123)
+
+        self.assertIs(c.outer, o)
+        self.assertEqual(c.x, 123)
+        self.assertIsInstance(c, o.Parent)
+
+    def test_regular_inherited_new_is_not_given_outer(self):
+        """Inherited non-BIC __new__ methods receive the normal user args only."""
+        class RegularBase:
+            def __new__(cls, value):
+                self = super().__new__(cls)
+                self.value_from_new = value
+                return self
+
+        class Outer:
+            @BoundInnerClass
+            class Inner(RegularBase):
+                def __init__(self, outer, value):
+                    self.outer = outer
+                    self.value_from_init = value
+
+        o = Outer()
+        i = o.Inner('value')
+
+        self.assertEqual(i.value_from_new, 'value')
+        self.assertIs(i.outer, o)
+        self.assertEqual(i.value_from_init, 'value')
+
+    def test_builtin_new_is_not_given_outer(self):
+        """Builtin/C-level __new__ methods don't receive outer."""
+        class Outer:
+            @BoundInnerClass
+            class Inner(int):
+                pass
+
+        o = Outer()
+        i = o.Inner(5)
+
+        self.assertEqual(i, 5)
+        self.assertIsInstance(i, int)
+        self.assertIsInstance(i, o.Inner)
+
+    def test_empty_inner_class_is_constructible(self):
+        """A BIC with object.__init__ should not receive outer there."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                pass
+
+        o = Outer()
+        i = o.Inner()
+
+        self.assertIsInstance(i, Outer.Inner)
+        self.assertIsInstance(i, o.Inner)
+
+
 
 
 class TestUnboundInnerClass(unittest.TestCase):
@@ -699,13 +902,13 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_signature_with_minimal_params(self):
         """Signature handling when __init__ has fewer than 2 params."""
-        sig = _make_bound_signature(lambda self: None)
+        sig = _bound_signature(lambda self: None)
         self.assertIsNotNone(sig)
         self.assertEqual(len(list(sig.parameters)), 0)
 
-    def test_make_bound_signature_exception(self):
-        """Test _make_bound_signature when inspect.signature raises."""
-        result = _make_bound_signature(42)
+    def test_bound_signature_exception(self):
+        """Test _bound_signature when inspect.signature raises."""
+        result = _bound_signature(42)
         self.assertIsNone(result)
 
     def test_get_cache_with_slots_and_dict(self):

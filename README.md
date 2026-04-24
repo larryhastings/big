@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.13.1.](#0131)
+The current version is [0.13.2.](#0132)
 
 *Think big!*
 
@@ -8195,7 +8195,7 @@ in the **big** test suite.
 
 * Bound inner classes are cached in the outer object, which both
   provides a small speedup and ensures that `isinstance`
-  relationships are consistent.  This is an explicit feature, and
+  relationships are consistent.  This is an explicit feature and
   you're permitted to rely on it.
 
    * If you use slots on your outer class, you must add a slot for
@@ -8210,6 +8210,36 @@ __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
   define inside another bound inner class `B`, which in turn was defined
   inside a class `A`, the constructor for `C` would be called with
   the `B` object, but not the `A` object.
+
+* You can't use pickle to serialize instances of bound inner classes.
+  Sorry, but bound inner classes don't support pickle.
+
+  The details, for those who are interested:
+
+<dl><dd>
+
+  pickle expects classes to be findable by name, in the module where
+  they were defined; it serializes instances as essentially
+  "class X.Y plus the instance state."  But bound inner classes don't
+  work that way.  When you access an inner class through an outer
+  instance, BoundInnerClass creates a dynamic subclass of that
+  inner class, bound to that specific outer instance, and accessible
+  by way of the descriptor protocol.
+
+  That dynamic bound subclass has a name, but you can't use that
+  name to look up the dynamic subclass--you'll find the original
+  unbound inner class instead.  But that's the only way pickle knows
+  how to find classes (by default).  pickle's just doesn't
+  know how to work with bound inner classes.
+
+  It's possible *custom* pickle machinery could make it work.  But
+  BoundInnerClass doesn't provide that machinery, and doing it correctly
+  would involve subtle pickle details: custom reducers, __new__ arguments,
+  state restoration, weak outer references, and implementation details
+  of bound inner classes.  It's not something BoundInnerClass could
+  simply automate for users.  So, it's unsupported.
+
+</dd></dl>
 
 * If you support Python 3.6, and you define bound inner child classes,
   you'll need to wrap all the bound inner base classes of those child
@@ -9871,15 +9901,27 @@ others.  Views are completely independent from each other.
 
 *under development*
 
+<dl><dd>
 
+* `BoundInnerClass` classes now support `__new__` as well as `__init__`!
+  When calling `__new__`, `outer` is once again the second parameter,
+  this time after `cls`.  A class can have both `__new__` and `__init__`,
+  and it behaves just like normal Python--but with a secret extra parameter!
+  BoundInnerClass also amends the bound signatures of `__new__`, `__init__`,
+  and the class itself so they don't contain `outer`.
 * Minor change to `linked_list`: renamed an internal attribute.
   `_lock_parameter` should have been named `_lock_argument`
   all along!  *slaps forehead*  This is purely an internal change
   and shouldn't have any user-visible effect.
 
+</dd></dl>
+
+
 #### 0.13.1
 
 *2026/03/23*
+
+<dl><dd>
 
 This is mostly a bugfix and polish release for 0.13, though I added
 one new helper class in *big.template* and a few small APIs.
@@ -9973,9 +10015,14 @@ one new helper class in *big.template* and a few small APIs.
     it now shows where the comment started, not where it ended.
   * Now catch tokenization errors and re-raise a nicer exception.
 
+</dd></dl>
+
+
 #### 0.13
 
 *2026/02/17*
+
+<dl><dd>
 
 It's been more than a year... and I've been busy!
 
@@ -10177,9 +10224,14 @@ It's been more than a year... and I've been busy!
     * The old alias `lines_filter_comment_lines`
 * Updated copyright notices to 2026.
 
+</dd></dl>
+
+
 #### 0.12.8
 
 *2025/01/06*
+
+<dl><dd>
 
 * Added `search_path` to the *big.file* module.  `search_path`
   implements "search path" functionality; given a list of
@@ -10191,18 +10243,28 @@ It's been more than a year... and I've been busy!
   passed in, or otherwise produced by making method calls on the
   original `s` parameter that return strings.
 
+</dd></dl>
+
+
 #### 0.12.7
 
 *2024/12/15*
+
+<dl><dd>
 
 A teeny tiny new feature.
 
 * `LineInfo` now supports a `copy` method, which returns a copy of the `LineInfo`
   object in its current state.
 
+</dd></dl>
+
+
 #### 0.12.6
 
 *2024/12/13*
+
+<dl><dd>
 
 It's a big release tradition!  Here's another small big release,
 less than a day after the last big big release.
@@ -10220,6 +10282,9 @@ less than a day after the last big big release.
   supported and tested, it just wasn't listed in the project metadata.
 
 > *Note:* Whoops!  Forgot to ever release 0.12.6 as a package.  Oh well.
+
+</dd></dl>
+
 
 #### 0.12.5
 
@@ -10357,6 +10422,7 @@ less than a day after the last big big release.
 
 </dd></dl>
 
+
 #### 0.12.4
 
 *2024/11/15*
@@ -10401,6 +10467,7 @@ less than a day after the last big big release.
 
 </dd></dl>
 
+
 #### 0.12.3
 
 *2024/09/17*
@@ -10419,6 +10486,7 @@ raises `SyntaxError` for mismatched delimiters.  (Previously it
 would sometimes raise `ValueError`.)
 
 </dd></dl>
+
 
 #### 0.12.2
 
@@ -10442,6 +10510,7 @@ would sometimes raise `ValueError`.)
 * Major cleanup to the lines modifier test suites.
 
 </dd></dl>
+
 
 #### 0.12.1
 
@@ -11193,9 +11262,10 @@ discussions._
 
 
 #### 0.11
-<dl><dd>
 
 *released 2023/09/19*
+
+<dl><dd>
 
 * Breaking change: renamed almost all the old `whitespace` and `newlines` tuples.
   Worse yet, one symbol has the same name but a *different value:* `ascii_whitespace`!
@@ -11287,10 +11357,14 @@ My thanks again to Eric V. Smith for his willingness to consider and discuss the
 issues.  Eric is now officially a contributor to **big,** increasing the project's
 [bus factor](https://en.wikipedia.org/wiki/Bus_factor) to two.  Thanks, Eric!
 
+</dd></dl>
+
+
 #### 0.10
-<dl><dd>
 
 *released 2023/09/04*
+
+<dl><dd>
 
 * Added the new [`big.state`](#bigstate) module, with its exciting
   [`StateManager`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
@@ -11311,10 +11385,12 @@ issues.  Eric is now officially a contributor to **big,** increasing the project
   so the **big** banner displays properly on PyPI.  Thanks, Hugo!
 </dd></dl>
 
+
 #### 0.9.2
-<dl><dd>
 
 *released 2023/07/22*
+
+<dl><dd>
 
 Extremely minor release.  No new features or bug fixes.
 
@@ -11331,7 +11407,9 @@ Extremely minor release.  No new features or bug fixes.
 * Fixed metadata in the `pyproject.toml` file.
 * Added badges for testing, coverage,
   and supported Python versions.
+
 </dd></dl>
+
 
 #### 0.9.1
 <dl><dd>
@@ -11342,12 +11420,14 @@ Extremely minor release.  No new features or bug fixes.
   [`Log`](#log-clocknone) class!
   I wrote this for another project--but it turned out so nice
   I just had to add it to **big**!
+
 </dd></dl>
 
 #### 0.9
-<dl><dd>
 
 *released 2023/06/15*
+
+<dl><dd>
 
 * Bugfix!  If an outer class `Outer` had an inner class `Inner`
   decorated with `@BoundInnerClass`, and `o` is an instance of
@@ -11359,12 +11439,15 @@ Extremely minor release.  No new features or bug fixes.
     - Added regression test for the above bugfix (of course!).
     - It now takes advantage of that newfangled "zero-argument `super`".
     - Added testing of an unbound subclass of an unbound subclass.
+
 </dd></dl>
 
+
 #### 0.8.3
-<dl><dd>
 
 *released 2023/06/11*
+
+<dl><dd>
 
 * Added
   [`int_to_words`](#int_to_wordsi--flowerytrue-ordinalfalse).
@@ -11374,12 +11457,14 @@ Extremely minor release.  No new features or bug fixes.
   convenient for testing with old versions of Python!
 
 > *Note:* tomorrow, **big** will be one year old!
+
 </dd></dl>
 
-#### 0.8.2
-<dl><dd>
 
+#### 0.8.2
 *released 2023/05/19*
+
+<dl><dd>
 
 * Convert all iterator functions to use my new approach:
   instead of checking arguments inside the iterator,
@@ -11388,23 +11473,29 @@ Extremely minor release.  No new features or bug fixes.
   result.  This means bad inputs raise their exceptions
   at the call site where the iterator is constructed,
   rather than when the first value is yielded by the iterator!
+
 </dd></dl>
 
+
 #### 0.8.1
-<dl><dd>
 
 *released 2023/05/19*
+
+<dl><dd>
 
 * Added
   `parse_delimiters` (ed: now [`split_delimiters`](#split_delimiterss-delimiters--state))
   and
   [`Delimiter`.](#delimiteropen-close--backslashfalse-nestedtrue)
+
 </dd></dl>
 
+
 #### 0.8
-<dl><dd>
 
 *released 2023/05/18*
+
+<dl><dd>
 
 * Major retooling of `str` and `bytes` support in `big.text`.
   * Functions in `big.text` now uniformly accept `str` or `bytes`
@@ -11473,12 +11564,15 @@ Extremely minor release.  No new features or bug fixes.
   will be slower if your pattern finds overlapping matches.  But at
   least now it's correct!)
 * Lots and lots of doc improvements, as usual.
+
 </dd></dl>
 
+
 #### 0.7.1
-<dl><dd>
 
 *released 2023/03/13*
+
+<dl><dd>
 
 * Tweaked the implementation of
   [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
@@ -11493,12 +11587,15 @@ Extremely minor release.  No new features or bug fixes.
   drops all references to the split strings
   as it iterates over the string, which may help in low-memory situations.
 * Minor doc fixes.
+
 </dd></dl>
 
+
 #### 0.7
-<dl><dd>
 
 *released 2023/03/11*
+
+<dl><dd>
 
 * Breaking changes to the
   [`Scheduler`](#schedulerregulatordefault_regulator):
@@ -11529,12 +11626,15 @@ Extremely minor release.  No new features or bug fixes.
   * The `Scheduler` now guarantees that it will only call `now` and `wake`
     on a `Regulator` object while holding that `Regulator`'s lock.
 * Minor doc fixes.
+
 </dd></dl>
 
+
 #### 0.6.18
-<dl><dd>
 
 *released 2023/03/09*
+
+<dl><dd>
 
 * Retooled
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
@@ -11542,12 +11642,15 @@ Extremely minor release.  No new features or bug fixes.
   [`multistrip`](#multistrips-separators-lefttrue-righttrue)
   argument verification code.  Both functions now consistently check all
   their inputs, and use consistent error messages when raising an exception.
+
 </dd></dl>
 
+
 #### 0.6.17
-<dl><dd>
 
 *released 2023/03/09*
+
+<dl><dd>
 
 * Fixed a minor crashing bug in
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse):
@@ -11559,12 +11662,15 @@ Extremely minor release.  No new features or bug fixes.
   now verifies that the `s` passed in is either `str` or `bytes`.
 * Updated all copyright date notices to 2023.
 * Lots of doc fixes.
+
 </dd></dl>
 
+
 #### 0.6.16
-<dl><dd>
 
 *released 2023/02/26*
+
+<dl><dd>
 
 * Fixed Python 3.6 support! Some equals-signs-in-f-strings and some
   other anachronisms had crept in.  0.6.16 has been tested on all
@@ -11573,12 +11679,15 @@ Extremely minor release.  No new features or bug fixes.
   needs it, [`parse_timestamp_3339Z()`](#parse_timestamp_3339zs--timezonenone).
 * Minor cleanup in [`PushbackIterator()`](#pushbackiteratoriterablenone).
   It also uses slots now, which should make it a bit faster.
+
 </dd></dl>
 
+
 #### 0.6.15
-<dl><dd>
 
 *released 2023/01/07*
+
+<dl><dd>
 
 * Added the new functions
   [`datetime_ensure_timezone(d, timezone)`](#datetime_ensure_timezoned-timezone) and
@@ -11593,35 +11702,44 @@ Extremely minor release.  No new features or bug fixes.
   parameter now means to un-reverse its reversing behavior.  Stated
   another way, `multipartition(reverse=X)` and `multirpartition(reverse=not X)`
   now do the same thing.
+
 </dd></dl>
 
+
 #### 0.6.14
-<dl><dd>
 
 *released 2022/12/11*
+
+<dl><dd>
 
 * Improved the text of the `RuntimeError` raised by `TopologicalSorter.View`
   when the view is incoherent.  Now it tells you exactly what nodes are
   conflicting.
 * Expanded the tutorial on `multisplit`.
+
 </dd></dl>
 
+
 #### 0.6.13
-<dl><dd>
 
 *released 2022/12/11*
+
+<dl><dd>
 
 * Changed [`translate_filename_to_exfat(s)`](#translate_filename_to_exfats)
   behavior: when modifying a string with a colon (`':'`) *not* followed by
   a space, it used to convert it to a dash (`'-'`).  Now it converts the
   colon to a period (`'.'`), which looks a little more natural.  A colon
   followed by a space is still converted to a dash followed by a space.
+
 </dd></dl>
 
+
 #### 0.6.12
-<dl><dd>
 
 *tagged 2022/12/04*
+
+<dl><dd>
 
 * Bugfix: When calling
   [`TopologicalSorter.print()`](#topologicalsorterprintprintprint),
@@ -11637,12 +11755,15 @@ Extremely minor release.  No new features or bug fixes.
   exception text.
 
 > *Note:* although version **0.6.12** was tagged, it was never packaged for release.
+
 </dd></dl>
 
+
 #### 0.6.11
-<dl><dd>
 
 *tagged 2022/11/13*
+
+<dl><dd>
 
 * Changed the import strategy.  The top-level **big** module used
   to import all its child modules, and `import *` all the symbols
@@ -11654,12 +11775,15 @@ Extremely minor release.  No new features or bug fixes.
   **big.all** to get all the symbols (like **big** itself used to do).
 
 > *Note:* although version **0.6.11** was tagged, it was never packaged for release.
+
 </dd></dl>
 
+
 #### 0.6.10
-<dl><dd>
 
 *released 2022/10/26*
+
+<dl><dd>
 
 * All code changes had to do with
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse):
@@ -11689,24 +11813,30 @@ Extremely minor release.  No new features or bug fixes.
       `multisplit` API.
 * Modernized `pyproject.toml` metadata to make `flit` happier.  This was
   necessary to ensure that `pip install big` also installs its dependencies.
+
 </dd></dl>
 
+
 #### 0.6.8
-<dl><dd>
 
 *released 2022/10/16*
+
+<dl><dd>
 
 * Renamed two of the three freshly-added lines modifier functions:
   `lines_filter_contains` is now 
   [`lines_containing`](#bigtext),
   and `lines_filter_grep` is now
   [`lines_grep`](#lines_grep).
+
 </dd></dl>
 
+
 #### 0.6.7
-<dl><dd>
 
 *released 2022/10/16*
+
+<dl><dd>
 
 * Added three new lines modifier functions
   to the [`text`](#bigtext) module:
@@ -11717,12 +11847,15 @@ Extremely minor release.  No new features or bug fixes.
 * [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
   now accepts `str` or `bytes`.  Also added the `apostrophes` and
   `double_quotes` arguments.
+
 </dd></dl>
 
+
 #### 0.6.6
-<dl><dd>
 
 *released 2022/10/14*
+
+<dl><dd>
 
 * Fixed a bug in
   [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse).
@@ -11739,12 +11872,15 @@ Extremely minor release.  No new features or bug fixes.
       and `_with_dos`) exactly match the set of characters Python considers
       whitespace and newline characters.
 * Lots more documentation and formatting fixes.
+
 </dd></dl>
 
+
 #### 0.6.5
-<dl><dd>
 
 *released 2022/10/13*
+
+<dl><dd>
 
 * Added the new [`itertools`](#bigitertools) module, which so far only contains
   [`PushbackIterator`](#pushbackiteratoriterablenone).
@@ -11755,12 +11891,15 @@ Extremely minor release.  No new features or bug fixes.
   to the
   [`text`](#bigtext)
   module.
+
 </dd></dl>
 
+
 #### 0.6.1
-<dl><dd>
 
 *released 2022/10/13*
+
+<dl><dd>
 
 * I realized that [`whitespace`](#whitespace) should contain the DOS end-of-line
   sequence (`'\r\n'`), as it should be considered a single separator
@@ -11768,12 +11907,15 @@ Extremely minor release.  No new features or bug fixes.
   and naturally [`utf8_whitespace_no_dos`](#whitespace) and
   [`ascii_whitespace_no_dos`](#whitespace) too.
 * Minor doc fixes.
+
 </dd></dl>
 
+
 #### 0.6
-<dl><dd>
 
 *released 2022/10/13*
+
+<dl><dd>
 
 A **big** upgrade!
 
@@ -11834,21 +11976,27 @@ A **big** upgrade!
   [`re_partition`](#re_partitiontext-pattern-count1--flags0)
   and
   [`re_rpartition`](#re_rpartitiontext-pattern-count1--flags0).
+
 </dd></dl>
 
+
 #### 0.5.2
-<dl><dd>
 
 *released 2022/09/12*
 
-* Added `stripped_lines` and `rstripped_lines` to the [`text`](#bigtext) module.
-* Added support for `len` to the [`TopologicalSorter`](#topologicalsortergraphnone) object.
-</dd></dl>
-
-#### 0.5.1
 <dl><dd>
 
+* Added `stripped_lines` and `rstripped_lines` to the [`text`](#bigtext) module.
+* Added support for `len` to the [`TopologicalSorter`](#topologicalsortergraphnone) object.
+
+</dd></dl>
+
+
+#### 0.5.1
+
 *released 2022/09/04*
+
+<dl><dd>
 
 * Added
   [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)
@@ -11863,12 +12011,15 @@ A **big** upgrade!
   If the colon is not followed by a space, turns the colon into `'-'`.
   This is good for tiresome modern gobbledygook like `'Re:code'`, which
   will now be translated to `'Re-code'`.
+
 </dd></dl>
 
+
 #### 0.5
-<dl><dd>
 
 *released 2022/06/12*
+
+<dl><dd>
 
 * Initial release.
 </dd></dl>

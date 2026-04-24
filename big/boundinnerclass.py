@@ -154,20 +154,22 @@ else: # pragma: nocover
 
 
 
-def _make_bound_signature(original_init):
+def _bound_signature(original_callable):
     """
     Create a signature for a bound class by removing the first parameter (outer).
 
     Returns None if signature cannot be determined.
     """
     try:
-        sig = inspect.signature(original_init)
+        sig = inspect.signature(original_callable)
     except (ValueError, TypeError):
         return None
 
     params = list(sig.parameters.values())
-    # Remove 'self' and 'outer' (first two params)
-    bound_params = params[2:] if len(params) >= 2 else []
+
+    # omit two parameters from the signature: "self" and "outer"
+    omitted_parameters_count = 2
+    bound_params = params[omitted_parameters_count:] if len(params) >= omitted_parameters_count else []
 
     return inspect.Signature(bound_params, return_annotation=sig.return_annotation)
 
@@ -354,13 +356,29 @@ def _make_bound_class(unbound_cls, outer, base):
     base: the primary base class for the wrapper
 
     Returns a new class that inherits from base
-    and injects outer into __init__.
+    and injects outer into Python-level __new__ and/or __init__ methods.
     """
     outer_weakref = weakref.ref(outer)
 
+    original_init = unbound_cls.__init__
+    bind_init = inspect.isfunction(original_init)
+
+    # Get the unbound class's  __new__,
+    # without inheriting from base classes.
+    original_new = unbound_cls.__new__
+    unbound_cls_new = unbound_cls.__dict__.get('__new__')
+    if isinstance(unbound_cls_new, (staticmethod, classmethod)):
+        unbound_cls_new = unbound_cls_new.__func__
+    bind_new = inspect.isfunction(unbound_cls_new)
+
     class Wrapper(base):
-        def __init__(self, *args, **kwargs):
-            unbound_cls.__init__(self, outer_weakref(), *args, **kwargs)
+        if bind_new:
+            def __new__(cls, *args, **kwargs):
+                return original_new(cls, outer_weakref(), *args, **kwargs)
+
+        if bind_init:
+            def __init__(self, *args, **kwargs):
+                original_init(self, outer_weakref(), *args, **kwargs)
 
         # Custom repr if the wrapped class doesn't have one
         if unbound_cls.__repr__ is object.__repr__:
@@ -387,11 +405,24 @@ def _make_bound_class(unbound_cls, outer, base):
     # Mark as a bound inner class with info about its binding
     setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (unbound_cls, outer_weakref, True))
 
-    # Set proper signature (without 'outer' param since it's injected)
-    bound_signature = _make_bound_signature(unbound_cls.__init__)
+    # Set proper signatures (without 'outer' param since it's injected).
+    # For classes with a custom __new__, follow Python's own convention for
+    # class signatures and prefer __new__ over __init__.
+    bound_new_signature = None
+    if bind_new:
+        bound_new_signature = _bound_signature(original_new)
+        if bound_new_signature is not None:
+            Wrapper.__new__.__signature__ = bound_new_signature
+
+    bound_init_signature = None
+    if bind_init:
+        bound_init_signature = _bound_signature(original_init)
+        if bound_init_signature is not None:
+            Wrapper.__init__.__signature__ = bound_init_signature
+
+    bound_signature = bound_new_signature or bound_init_signature
     if bound_signature is not None:
         Wrapper.__signature__ = bound_signature
-        Wrapper.__init__.__signature__ = bound_signature
 
     return Wrapper
 
@@ -594,6 +625,21 @@ class BoundInnerClass(_BoundInnerClassBase):
     *second* argument to Inner.__init__, which by convention we
     call "outer".
 
+    If the inner class defines __new__, the same binding happens there:
+    the outer instance is passed automatically as the *second* argument,
+    immediately after "cls".  If the inner class defines both __new__
+    and __init__, both methods receive the same outer instance:
+
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, value):
+                    self = super().__new__(cls)
+                    return self
+
+                def __init__(self, outer, value):
+                    ...
+
     @BoundInnerClass also lets an inner class inherit from another
     bound inner class.  These classes will be bound to the same
     outer instance, and they can simply call super().__init__() without
@@ -613,6 +659,30 @@ class BoundInnerClass(_BoundInnerClassBase):
                     # "outer" is passed to Parent.__init__ for us,
                     # all we need to do is call super().__init__()
                     super().__init__()
+
+    The same rule applies to __new__ in a bound inner class hierarchy:
+    call super().__new__(cls) and the bound parent class will receive
+    outer automatically.
+
+    Note for pickle users: you can't pickle instances of bound inner classes.
+    Bound inner classes are nameless dynamically-created subclasses, while
+    pickle requires that it can find the class of an object by inspecting
+    the module object and looking up attributes on it by name.  It's possible
+    they could be made to interact properly, but it'd be a lot of work--for
+    both @BoundInnerClass and the author of the pickled class.  So pickle
+    is simply unsupported.
+
+    Note for pickle users: you can't pickle instances of bound inner classes.
+    Bound inner classes are dynamically-created subclasses bound to specific
+    outer instances, and there's no module/name lookup path to any particular
+    bound subclass.  You get one by accessing the inner class through the outer
+    instance, using the descriptor protocol.  Meanwhile, by default pickle only
+    knows how to locate a class by inspecting the module object and looking up
+    attributes by *name*.  So pickle just can't cope with bound inner classes;
+    it looks up the class by name and finds the unbound version, which doesn't
+    work.  Making BoundInnerClass support pickle would be ambitious, and it
+    would require custom code in the bound class--it couldn't be made to work
+    "automatically".  So as of now pickle is simply unsupported.
 
     Note for slots users: The "outer" class of a BIC uses a special
     attribute to cache bound inner classes.  If that outer class
