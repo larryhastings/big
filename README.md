@@ -793,13 +793,15 @@ tutorial for more information.
 
 Class decorator for an inner class.  When accessing the inner class
 through an instance of the outer class, "binds" the inner class to
-the instance.  This changes the signature of the inner class's `__init__`
-from
+the instance.  This changes the signature of the inner class's  `__new__`
+and `__init__` methods from
 ```Python
+def __new__(cls, *args, **kwargs):`
 def __init__(self, *args, **kwargs):`
 ```
 to
 ```Python
+def __new__(cls, outer, *args, **kwargs):
 def __init__(self, outer, *args, **kwargs):
 ```
 where `outer` is the instance of the outer class.
@@ -815,8 +817,8 @@ Compare this to functions:
   and access it through an instance of that class,
   the *class* becomes a *bound inner class.*  When
   you call the *bound inner class,* *I* is automatically
-  passed in as the second argument to `__init__`,
-  after `self`.
+  passed in as the second argument to `__new__` and  `__init__`,
+  after `cls` and `self` respectively.
 
 Note that this has an implication for all subclasses.
 If class ***B*** is decorated with `BoundInnerClass`,
@@ -830,14 +832,34 @@ class ***S*** *must* be decorated with either
 
 <dl><dd>
 
-Class decorator for an inner class that prevents binding
-the inner class to an instance of the outer class.
+Class decorator for an inner class that omits passing
+the outer instance in as an argument to its `__new__` and
+`__init__` methods.
 
 If class ***B*** is decorated with `BoundInnerClass`,
 and class ***S*** is a subclass of ***B***, such that
 `issubclass(`***S***`, `***B***`)` returns `True`,
 class ***S*** *must* be decorated with either
-`BoundInnerClass` or `UnboundInnerClass`.
+`BoundInnerClass` or `UnboundInnerClass` in order for
+its base classes to become bound inner classes.  Which
+decorator you use depends on whether or not you want
+`outer` passed in to S's `__new__` and `__init__` methods.
+
+Speaking precisely: an "unbound inner class" *is*
+bound to the outer instance, in every important way.
+For example, `is_bound` on an unbound inner class
+will still return true.  The practical difference between
+a class decorated with `BoundInnerClass` and one
+decorated with `UnboundInnerClass` is that the former
+will pass in `outer` to its `__new__` and `__init__`
+methods, and the latter will not.
+
+(The name is a bit of a misnomer--a class decorated
+with `UnboundInnerClass` is still bound to the outer
+instance.  The name was chosen because it's obvious
+and easy to remember, even if it's technically
+inaccurate.)
+
 </dd></dl>
 
 #### `bound_inner_base(cls)`
@@ -8035,19 +8057,31 @@ positional parameter, after `self`.  And, like `self`, you don't
 *have* to use the name `outer`; you can use any name you like.
 (But we'll always use the name `outer` in this documentation.)
 
+(In case you want your class to define `__new__` instead of (or in
+addition to) `__init__`, that works too!  Your bound inner class's
+`__new__` method gets to add `outer` as its second argument,
+after the `cls` argument.)
+
 #### Inheritance
 
 Bound inner classes get slightly complicated when mixed with inheritance.
-It's not all that difficult, you merely need to obey some rules:
+It's not all that difficult, you merely need to obey some rules.:
 
 <dl><dd>
 
 **Rule 1:** *A bound inner class can inherit normally from any unbound class.*
 
+**Rule 1a:** *If a class C inherits from any bound inner class P, for all
+practical purposes C *must* be decorated with `@BoundInnerClass` or
+`@UnboundInnerClass`.*
+
 **Rule 2:** *If your bound inner class calls `super().__init__`, and its
 parent class is also a bound inner class,* **don't** *pass in `outer` manually.*
 When you instantiate a bound inner class, `outer` will be automatically
 passed in to *all* `__init__` methods of *every* bound inner parent class.
+
+**Rule 2a:** A corollary of rule 2: *If your bound inner class calls `super().__new__`, and its
+parent class is also a bound inner class,* **don't** *pass in `outer` manually.*
 
 **Rule 3:** *A bound inner class can only inherit from a parent bound inner class
 if the parent is defined in the same outer class or a base of the outer class.*
@@ -8057,9 +8091,9 @@ must be defined in the same outer class (e.g. `Outer`) or in a base class
 of Child's outer class.  This is a type relation constraint; bound inner
 classes guarantee that "outer" is an instance of the outer class.
 
-**Rule 3a:** A corollary of rule 3: *A subclass of a bound inner class, whether bound
-or unbound, can only be defined in the same outer class or a subclass of the
-outer class.*
+**Rule 3a:** A corollary of rule 3: *When a subclass of a bound inner class
+is itself decorated with `@BoundInnerClass` or `@UnboundInnerClass`, it
+must live in the same outer class or in a subclass of that outer class.*
 
 **Rule 4:** **Directly** *inheriting from a* **bound** *inner class is unsupported.*
 If `o` is an instance of `Outer`, and `Outer.Inner` is an inner class
@@ -8069,12 +8103,14 @@ You should *always* inherit from the unbound version, like this:
 `class GotItRight(Outer.Inner)`
 
 **Rule 5:** *An inner class that inherits from a bound inner class, and which also
-wants to be bound to the outer object, should be decorated with
-[`BoundInnerClass`](#boundinnerclasscls).*
+wants the outer instance passed in to its `__new__` and `__init__`, should be
+decorated with [`BoundInnerClass`](#boundinnerclasscls).*
 
 **Rule 6:** *An inner class that inherits from a bound inner class, but doesn't
-want to be bound to the outer object, should be decorated with
-[`UnboundInnerClass`](#unboundinnerclasscls).*
+wants the outer instance passed in to its `__new__` and `__init__`, should be
+decorated with [`UnboundInnerClass`](#unboundinnerclasscls).*
+`@UnboundInnerClass` means this class's own `__new__` / `__init__` won't
+receive `outer`--but its bound inner *parent* classes still *will.*
 
 </dd></dl>
 
@@ -8177,12 +8213,13 @@ in the **big** test suite.
 
 * If you refer to a inner class directly from the outer *class*
   (like `Outer.Inner`) rather than an *instance* (like `o.Inner`)
-  you get the original (unbound) class.
+  you get the original (unbound) class.  
 
-  * You might be able call `Outer.Inner` directly, to construct
-    an `Inner` object without using a bound version of the class.
-    You'll have to pass in the outer parameter by hand--just like
-    you'd have to pass in the `self` parameter by hand when calling
+  * Are these classes usable?  Possibly.  Yes, you can construct
+    an `Outer.Inner` directly, to construct an `Inner` object without
+    using a bound version of the class. You'll have to pass in the
+    outer parameter by hand--just like you'd have to pass in the
+    `self` parameter by hand when calling
     a method via the *class* (`Outer.method`) rather than via an
     *instance* of the class (`o.method`).  This won't work if
     `Outer.Inner` is a subclass of *another* bound inner class,
@@ -8193,6 +8230,53 @@ in the **big** test suite.
     argument won't get supplied when calling the base class's
     `__init__`.
 
+* Can you declare a class that inherits from a bound inner class,
+  but which itself is not decorated with either `@BoundInnerClass`
+  or `@UnboundInnerClass`?  Yes--but only in limited circumstances.
+
+  If `class P` is decorated with `@BoundInnerClass`, and undecorated
+  `class C(P)` inherits from it, `C` is just an ordinary subclass of
+  the unbound version of `P`.  It just doesn't participate in any
+  bound-inner-class stuff.
+
+  But this means `outer` won't be automatic.  Either callers must
+  pass `outer` explicitly when constructing `C`, or `C` must supply
+  an `outer` itself by overriding the relevant construction methods.
+  If `P` defines `__init__`, `C` must arrange to pass `outer` to `P.__init__`. 
+  If `P` defines `__new__`, `C` must arrange to pass `outer` to `P.__new__`.
+  If `P` defines both, `C` must handle both.
+
+  Also, this only works one level deep.  In our example, it worked
+  because `P` didn't inherit from anything.   If instead `P` inherited
+  from another bound inner class, normal bound-inner-class cooperative
+  inheritance expects `outer` to be supplied by the bound-inner-class
+  machinery.  Since undecorated `C` is not using bound inner classes
+  at all, that chain breaks.
+
+  (But even this can be made to work.  It's just that every intermediate
+  class has to be written to explicitly support this behavior.  In our
+  example, we'd have to rewrite `P` so it explicitly passes `outer` in
+  to *its* parent when it isn't being run as a bound inner class--i.e.
+  when `is_bound(cls)` is false inside `__new__`, or `is_bound(type(self))`
+  is false inside `__init__`.  Every intermediate class would have to do
+  something like this to support an undecorated leaf class.)
+
+* Can you declare a class that inherits from a bound inner class,
+  but which itself is not decorated with either `@BoundInnerClass`
+  or `@UnboundInnerClass`?  Yes--but only in limited circumstances.
+
+  * If `class P` (parent) is decorated with `@BoundInnerClass`,
+    and `class C(P)` (child) is not decorated with either
+    `@BoundInnerClass` or `@UnboundInnerClass`, this can be made
+    to work.  IF C explicitly defines either `__new__` or `__init__`,
+    it must explicitly pass in an argument for the `outer` parameter
+    on `P`.  This gets you an instance of `C`, which is a subclass
+    of an unbound version of `P`.
+
+    But this only works one level deep.  If, instead of `class P`,
+    we had `class P(GP)` (grandparent), and `class GP` was decorated
+    with `@BoundInnerClass`, this simply cannot be made to work.
+ 
 * Bound inner classes are cached in the outer object, which both
   provides a small speedup and ensures that `isinstance`
   relationships are consistent.  This is an explicit feature and
@@ -9909,10 +9993,15 @@ others.  Views are completely independent from each other.
   and it behaves just like normal Python--but with a secret extra parameter!
   BoundInnerClass also amends the bound signatures of `__new__`, `__init__`,
   and the class itself so they don't contain `outer`.
+  * Touched up the `BoundInnerClass` docs and tutorial to reflect some new
+    deeper understandings of how it works.
 * Minor change to `linked_list`: renamed an internal attribute.
   `_lock_parameter` should have been named `_lock_argument`
   all along!  *slaps forehead*  This is purely an internal change
-  and shouldn't have any user-visible effect.
+  and shouldn't have any user-visible effect.  (For those of you who
+  don't understand the distinction: if you define `def foo(a): ...`
+  then later call `foo(3)`, `a` is a *parameter* and `3` is an *argument.*
+  A parameter is a thing that recieves an argument.)
 
 </dd></dl>
 
