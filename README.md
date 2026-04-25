@@ -9983,7 +9983,7 @@ others.  Views are completely independent from each other.
 
 #### 0.13.2
 
-*under development*
+*2026/04/24*
 
 <dl><dd>
 
@@ -11352,7 +11352,7 @@ discussions._
 
 #### 0.11
 
-*released 2023/09/19*
+*2023/09/19*
 
 <dl><dd>
 
@@ -11451,7 +11451,7 @@ issues.  Eric is now officially a contributor to **big,** increasing the project
 
 #### 0.10
 
-*released 2023/09/04*
+*2023/09/04*
 
 <dl><dd>
 
@@ -11477,7 +11477,7 @@ issues.  Eric is now officially a contributor to **big,** increasing the project
 
 #### 0.9.2
 
-*released 2023/07/22*
+*2023/07/22*
 
 <dl><dd>
 
@@ -11503,7 +11503,7 @@ Extremely minor release.  No new features or bug fixes.
 #### 0.9.1
 <dl><dd>
 
-*released 2023/06/28*
+*2023/06/28*
 
 * Added the new [`big.log`](#biglog) module, with its new
   [`Log`](#log-clocknone) class!
@@ -11514,7 +11514,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.9
 
-*released 2023/06/15*
+*2023/06/15*
 
 <dl><dd>
 
@@ -11534,7 +11534,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.8.3
 
-*released 2023/06/11*
+*2023/06/11*
 
 <dl><dd>
 
@@ -11551,7 +11551,7 @@ Extremely minor release.  No new features or bug fixes.
 
 
 #### 0.8.2
-*released 2023/05/19*
+*2023/05/19*
 
 <dl><dd>
 
@@ -11568,7 +11568,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.8.1
 
-*released 2023/05/19*
+*2023/05/19*
 
 <dl><dd>
 
@@ -11582,7 +11582,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.8
 
-*released 2023/05/18*
+*2023/05/18*
 
 <dl><dd>
 
@@ -11659,7 +11659,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.7.1
 
-*released 2023/03/13*
+*2023/03/13*
 
 <dl><dd>
 
@@ -11682,7 +11682,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.7
 
-*released 2023/03/11*
+*2023/03/11*
 
 <dl><dd>
 
@@ -11721,7 +11721,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.18
 
-*released 2023/03/09*
+*2023/03/09*
 
 <dl><dd>
 
@@ -11737,7 +11737,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.17
 
-*released 2023/03/09*
+*2023/03/09*
 
 <dl><dd>
 
@@ -11757,7 +11757,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.16
 
-*released 2023/02/26*
+*2023/02/26*
 
 <dl><dd>
 
@@ -11774,7 +11774,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.15
 
-*released 2023/01/07*
+*2023/01/07*
 
 <dl><dd>
 
@@ -11797,7 +11797,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.14
 
-*released 2022/12/11*
+*2022/12/11*
 
 <dl><dd>
 
@@ -11811,7 +11811,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.13
 
-*released 2022/12/11*
+*2022/12/11*
 
 <dl><dd>
 
@@ -11870,7 +11870,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.10
 
-*released 2022/10/26*
+*2022/10/26*
 
 <dl><dd>
 
@@ -11908,7 +11908,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.8
 
-*released 2022/10/16*
+*2022/10/16*
 
 <dl><dd>
 
@@ -11923,7 +11923,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.7
 
-*released 2022/10/16*
+*2022/10/16*
 
 <dl><dd>
 
@@ -11942,7 +11942,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.6
 
-*released 2022/10/14*
+*2022/10/14*
 
 <dl><dd>
 
@@ -11967,7 +11967,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.5
 
-*released 2022/10/13*
+*2022/10/13*
 
 <dl><dd>
 
@@ -11986,7 +11986,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6.1
 
-*released 2022/10/13*
+*2022/10/13*
 
 <dl><dd>
 
@@ -12002,7 +12002,7 @@ Extremely minor release.  No new features or bug fixes.
 
 #### 0.6
 
-*released 2022/10/13*
+*2022/10/13*
 
 <dl><dd>
 
@@ -12071,7 +12071,7 @@ A **big** upgrade!
 
 #### 0.5.2
 
-*released 2022/09/12*
+*2022/09/12*
 
 <dl><dd>
 
@@ -12083,7 +12083,7 @@ A **big** upgrade!
 
 #### 0.5.1
 
-*released 2022/09/04*
+*2022/09/04*
 
 <dl><dd>
 
@@ -12106,7 +12106,7 @@ A **big** upgrade!
 
 #### 0.5
 
-*released 2022/06/12*
+*2022/06/12*
 
 <dl><dd>
 
