@@ -6980,7 +6980,7 @@ This was a genius design choice for Python, but for our linked
 list it's simply not enough.
 
 `linked_list` solves this by making its iterators far more
-powerful.  One way of describing this is like a *database cursors:*
+powerful.  One way of describing this is like a *database cursor:*
 a `linked_list` iterator points at a value (or "row"), and
 lets you modify the list (or "table") relative to that value.
 I think of it more like a moveable virtual list "head";
