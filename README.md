@@ -421,7 +421,7 @@ And here are six little functions/classes I use all the time:
 
 [`linked_list_iterator.rtruncate()`](#linked_list_iteratorrtruncate)
 
-[`linked_list_iterator.special()`](#linked_list_iteratorspecial)
+[`linked_list_iterator.special`](#linked_list_iteratorspecial)
 
 [`linked_list_iterator.splice(other)`](#linked_list_iteratorspliceother)
 
@@ -489,7 +489,7 @@ And here are six little functions/classes I use all the time:
 
 [`linked_list_reverse_iterator.rtruncate()`](#linked_list_reverse_iteratorrtruncate)
 
-[`linked_list_reverse_iterator.special()`](#linked_list_reverse_iteratorspecial)
+[`linked_list_reverse_iterator.special`](#linked_list_reverse_iteratorspecial)
 
 [`linked_list_reverse_iterator.splice(other)`](#linked_list_reverse_iteratorspliceother)
 
@@ -6236,13 +6236,13 @@ current node and all previous nodes.  After this operation,
 the iterator points to head.
 </dd></dl>
 
-#### `linked_list_iterator.special()`
+#### `linked_list_iterator.special`
 
 <dl><dd>
 
-Returns the `special` attribute of the current node: `None`
-for normal nodes, or a string (`'head'`, `'tail'`, or
-`'special'`) for sentinel nodes.
+An attribute containing the *special* attribute of the current node:
+`None` for normal nodes, or a string (`'head'`, `'tail'`, or
+`'special'`) for special nodes.
 </dd></dl>
 
 #### `linked_list_iterator.splice(other)`
@@ -6492,11 +6492,11 @@ Behaves like [`linked_list_iterator.splice`](#linked_list_iteratorspliceother).
 Behaves like [`linked_list_iterator.truncate`](#linked_list_iteratortruncate).
 </dd></dl>
 
-#### `linked_list_reverse_iterator.special()`
+#### `linked_list_reverse_iterator.special`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.special`](#linked_list_iteratorspecial).
+Identical to [`linked_list_iterator.special`](#linked_list_iteratorspecial).
 </dd></dl>
 
 #### `linked_list_reverse_iterator.splice(other)`
@@ -7157,13 +7157,15 @@ to interact with the *value* of the *current* node will raise `SpecialNodeError`
 (a subclass of `LookupError`).  For example:
 
 * Evaluating `it[0]`.
-* Evaluating `it[-1:1]`.
+* Evaluating `it[-1:1]`.  (But `it[-1:1:2]` works!  It skips over `it[0]`.)
 * Popping the current value using `it.pop()` or `it.rpop()`.
 
-If you're worried about whether your iterator is pointing at a special node,
-you can check the `special` property.  That returns `None` for a normal node,
-`"head"` for the head node, `"tail"` for the tail node, and `"special"` for
-any other special node.
+If you're not sure whether or not your iterator is pointing at a special node,
+you can call `it.is_special()`; that returns `True` if `it` is pointing
+at a special node.  You can also examine the `it.special` property.
+That evaluates to `None` for a data node, `"head"` for the head node,
+`"tail"` for the tail node, and `"special"` for any other special node.
+(Thus, this value is *also* true for a special node and false for a data node.)
 
 
 #### Reverse iterators
@@ -7181,7 +7183,7 @@ If you have a linked list that looks like this:
 [head] <-> [1] <-> [2] <-> [special] <-> [3] <-> [4] <-> [5] <-> [tail]
 ```
 
-a *reverse* iterator would see the list like this:
+a *reverse* iterator would "see" the same list like this:
 
 ```
 [tail] <-> [5] <-> [4] <-> [3] <-> [special] <-> [2] <-> [1] <-> [head]
