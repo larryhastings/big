@@ -6894,14 +6894,14 @@ as well as a reference to your value. This classic design makes its
 performance predictable: inserting and removing elements anywhere in
 the list is O(1), whereas accessing elements by index is O(n).
 
-There are acutally two types of node in a big `linked_list`: "data"
+There are actually two types of node in a big `linked_list`: "data"
 nodes, which store a value, and "special" nodes, which don't store a
-value.  Why are these "special" nodes needed?  Several reasons.
-First, `linked_list` makes a design choice that's uncommon
-but not exactly rare for linked lists: the "head" and "tail" nodes
-are "special" nodes in the linked list.  When you create a new
-`linked_list` object, it contains *two* nodes, not *zero:* the
-newly-created list already contains "head" and "tail" nodes.
+value.  Why are these "special" nodes needed?  First, `linked_list`
+makes a design choice that's uncommon but not exactly rare for
+linked lists: the "head" and "tail" nodes are "special" nodes in
+the linked list (rather than being references to the real first and
+last nodes).  When you create a new `linked_list` object, it already
+contains *two* nodes, not *zero:* one "head" node, and one "tail" node.
 This makes for a nice implementation; *every* insert and delete
 simply updates four references, rather than needing lots of
 "if we're pointed at the head" special cases all over the place.
@@ -6986,23 +6986,26 @@ performance win.  The relevant methods:
 * `splice` lets you move *all* the nodes of one `linked_list`
   into another.  After splicing linked list A into linked list B,
   A will be empty, and B will contain all of A's nodes, in order.
-* `rcut` and `rsplice` are "reversed" versions of `cut` and `splice`.
+* `move` is like a `cut` followed immediately by a `splice` back
+  into the same list.  But `move` is easier... and a lot faster!
+* `rcut`, `rsplice`, and `rmove` are "reversed" versions of
+  `cut`, `splice`, and `move` respectively.
 
 
 ### `linked_list` iterators
 
-While developing `linked_list`, it occured to me: the usual use
+While developing `linked_list`, it occured to me: the classic use
 case for a linked list involves an arbitrarily-long sequence of
 data, which you iterate over and process.  For example, compilers
 generally represent the program being compiled as a linked list
 of "basic blocks".
 
-When using a linked list for these sorts of use cases, you
-generally operate on a pointer to the linked list node under
-current consideration.  In Python parlance, you iterate over the
-list, getting a reference to each node in the list in turn.
-You perform your computation on that node, then iterate to the
-next one.
+When using a linked list for this class of problem, you generally
+operate on a pointer to the linked list node under current
+consideration.  In Python parlance, you iterate over the list,
+getting a reference to each node in the list in turn.  You perform
+your computation on that node, then iterate, moving on to the next
+one.
 
 However, you often want to *modify* the list while you're doing
 this.  You may want to remove the node, or insert new nodes,
@@ -7078,8 +7081,8 @@ relative to the beginning (or end) of the list.  Also, as
 a rule, methods that operate on one or more nodes always
 operate on the *current* node.
 
-Here are some examples.  In these examples, `it` is always
-a forwards iterator:
+Here are just a few examples.  In these examples, `it`
+is always a forwards iterator:
 
 * `it.pop` pops and returns the value the iterator currently
   points at, then moves the iterator *back* one node.
@@ -7094,6 +7097,7 @@ a forwards iterator:
 * `it.truncate` deletes all values at or after the current
   node.  When `it.truncate` is done, `it` will be pointing
   at "tail", and `it[-1]` will be unchanged.
+
 
 #### Magic methods
 
@@ -7124,7 +7128,7 @@ We'll create a new empty linked list, then create an iterator
 over that linked list, and call `next` on it twice:
 
 ```Python
-t = LinkedList((1,))
+t = linked_list((1,))
 it = iter(t)
 value_a = next(it, None)
 value_b = next(it, None)
