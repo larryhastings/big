@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.13.2.](#0132)
+The current version is [0.13.3.](#0133)
 
 *Think big!*
 
@@ -9982,6 +9982,41 @@ others.  Views are completely independent from each other.
 
 
 ## Release history
+
+#### 0.13.3
+
+*2026/06/10*
+
+<dl><dd>
+
+* A performance bump for `BoundInnerClass`!  Breaking news: computing
+  the `inspect.signature` for `__new__` and `__init__` is *shockingly*
+  expensive.  `BoundInnerClass` used to recompute them every time it
+  bound a class, even though they almost never change.  It now caches
+  the computed signatures for these two dunder methods in a private slot
+  on its descriptor.  (Which means we don't modify your class, and also
+  you won't see the cache unless you go hunting for it.)  The cache is
+  verified safe every time; if you add / modify / delete either method,
+  `BoundInnerClass` will notice and refresh the cache.  This verification
+  is quick--recomputing the signatures is the slow part.
+
+  Note that the interactions with the cache are not thread-safe.  Race
+  conditions around verifying / refreshing the cache are plausible
+  but unlikely to be harmful.  If one thread modifies the class at the
+  same time another thread instantiates the class, somebody *could* get
+  a stale signature.  My sincere advice: don't do that.
+* Small fix for the test suite: `bigtestlib.preload_local_big` tries
+  to find the root of your `big` directory by examining directories in a loop.
+  If a directory fails, it tries that directory's parent.
+  The bug: if it never found `big`, it would run forever--it would never
+  notice that it had hit the root of your filesystem, so it'd keep trying
+  the root directory, over and over, until the universe grew cold and dark.
+  The fix: if it still hasn't found the `big` directory, and the directory
+  it's examining is the same as that directory's parent,
+  raise `FileNotFoundError`.
+
+</dd></dl>
+
 
 #### 0.13.2
 

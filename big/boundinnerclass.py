@@ -154,24 +154,31 @@ else: # pragma: nocover
 
 
 
-def _bound_signature(original_callable):
+def _bound_class_new_or_init_signature(new_or_init):
     """
-    Create a signature for a bound class by removing the first parameter (outer).
+    Computes the correct signature for a bound class's __new__ and __init__.
+
+    The __new__ and __init__ methods on a bound inner class start with two
+    extra leading parameters that shouldn't be passed in when calling
+    the method directly--from, say, the equivalent method in a subclass.
+    The first is "cls" for __new__ or "self" for __init__; the second is
+    "outer".  This function returns a signature for such a function with
+    these two parameters elided.
 
     Returns None if signature cannot be determined.
     """
     try:
-        sig = inspect.signature(original_callable)
+        signature = inspect.signature(new_or_init)
     except (ValueError, TypeError):
         return None
 
-    params = list(sig.parameters.values())
+    parameters = list(signature.parameters.values())
 
-    # omit two parameters from the signature: "self" and "outer"
-    omitted_parameters_count = 2
-    bound_params = params[omitted_parameters_count:] if len(params) >= omitted_parameters_count else []
+    omitted_parameters_count = 2 # == len(["cls/self", "outer"])
+    bound_parameters = parameters[omitted_parameters_count:] if len(parameters) >= omitted_parameters_count else []
 
-    return inspect.Signature(bound_params, return_annotation=sig.return_annotation)
+    return inspect.Signature(bound_parameters, return_annotation=signature.return_annotation)
+
 
 
 class _ClassProxy:
@@ -347,86 +354,6 @@ def _get_cache(outer):
         return cache
 
 
-def _make_bound_class(unbound_cls, outer, base):
-    """
-    Create a bound wrapper class.
-
-    unbound_cls: the original unbound class being bound
-    outer: the outer instance to bind to
-    base: the primary base class for the wrapper
-
-    Returns a new class that inherits from base
-    and injects outer into Python-level __new__ and/or __init__ methods.
-    """
-    outer_weakref = weakref.ref(outer)
-
-    original_init = unbound_cls.__init__
-    bind_init = inspect.isfunction(original_init)
-
-    # Get the unbound class's  __new__,
-    # without inheriting from base classes.
-    original_new = unbound_cls.__new__
-    unbound_cls_new = unbound_cls.__dict__.get('__new__')
-    if isinstance(unbound_cls_new, (staticmethod, classmethod)):
-        unbound_cls_new = unbound_cls_new.__func__
-    bind_new = inspect.isfunction(unbound_cls_new)
-
-    class Wrapper(base):
-        if bind_new:
-            def __new__(cls, *args, **kwargs):
-                return original_new(cls, outer_weakref(), *args, **kwargs)
-
-        if bind_init:
-            def __init__(self, *args, **kwargs):
-                original_init(self, outer_weakref(), *args, **kwargs)
-
-        # Custom repr if the wrapped class doesn't have one
-        if unbound_cls.__repr__ is object.__repr__:
-            def __repr__(self):
-                return "".join([
-                    "<",
-                    unbound_cls.__module__,
-                    ".",
-                    self.__class__.__name__,
-                    " object bound to ",
-                    repr(outer_weakref()),
-                    " at ",
-                    hex(id(self)),
-                    ">",
-                ])
-
-    Wrapper.__name__ = unbound_cls.__name__
-    Wrapper.__module__ = unbound_cls.__module__
-    Wrapper.__qualname__ = unbound_cls.__qualname__
-    Wrapper.__doc__ = unbound_cls.__doc__
-    if hasattr(unbound_cls, '__annotations__'):
-        Wrapper.__annotations__ = unbound_cls.__annotations__
-
-    # Mark as a bound inner class with info about its binding
-    setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (unbound_cls, outer_weakref, True))
-
-    # Set proper signatures (without 'outer' param since it's injected).
-    # For classes with a custom __new__, follow Python's own convention for
-    # class signatures and prefer __new__ over __init__.
-    bound_new_signature = None
-    if bind_new:
-        bound_new_signature = _bound_signature(original_new)
-        if bound_new_signature is not None:
-            Wrapper.__new__.__signature__ = bound_new_signature
-
-    bound_init_signature = None
-    if bind_init:
-        bound_init_signature = _bound_signature(original_init)
-        if bound_init_signature is not None:
-            Wrapper.__init__.__signature__ = bound_init_signature
-
-    bound_signature = bound_new_signature or bound_init_signature
-    if bound_signature is not None:
-        Wrapper.__signature__ = bound_signature
-
-    return Wrapper
-
-
 def _unbound(cls):
     """
     Internal version of unbound() that doesn't raise on non-bindable classes.
@@ -447,7 +374,14 @@ class _BoundInnerClassBase(_ClassProxy):
     Subclasses implement _wrap() to define how the wrapper class is created.
     """
 
-    __slots__ = ()
+    # _signatures caches bound signatures on the descriptor.  Either
+    # None ("nothing cached") or a 2-tuple:
+    #     ((__new__, __init__), (__new__signature, __init__signature))
+    # The function pair is the validation key: the cached signatures are
+    # used only while the wrapped class still resolves __new__ / __init__
+    # to those exact function objects, so reassigning either -- or
+    # reassigning __wrapped__ itself -- transparently recomputes.
+    __slots__ = ('_signatures',)
 
     # Class-level cache mapping an (unbound_class, outer_class) pair to
     # the attribute name the slow path discovered on the outer class.
@@ -463,6 +397,11 @@ class _BoundInnerClassBase(_ClassProxy):
 
     def __init__(self, wrapped, is_boundinnerclass):
         super().__init__(wrapped)
+
+        # Must bypass _ClassProxy.__setattr__, which forwards unknown
+        # attribute writes to the wrapped class.
+        object.__setattr__(self, '_signatures', None)
+
         # Mark the wrapped class as participating in the bound inner class system.
         # Tuple: (unbound_class, outer_weakref, is_boundinnerclass)
         # outer_weakref is None for unbound classes.
@@ -709,7 +648,87 @@ class BoundInnerClass(_BoundInnerClassBase):
         super().__init__(wrapped, True)
 
     def _wrap(self, outer, base):
-        return _make_bound_class(self.__wrapped__, outer, base)
+        wrapped = self.__wrapped__
+
+        # Cache the corrected bound signatures for __new__ and __init__
+        # on the descriptor.  (inspect.signature is slow, ~15µs on a
+        # mid-2020s processor.)
+        #
+        # There are possible race conditions here, if one thread is
+        # mutating the class (adding/removing/replacing new or init)
+        # while another thread is constructing an instance of the same
+        # class.  My sincere advice: don't do that.
+        init = wrapped.__init__
+        class_defines_init = inspect.isfunction(init)
+        if not class_defines_init:
+            init = None
+
+        new = wrapped.__dict__.get('__new__')
+        if new and isinstance(new, (staticmethod, classmethod)):
+            new = new.__func__
+        class_defines_new = new and inspect.isfunction(new)
+        if not class_defines_new:
+            new = None
+
+        new_and_init = (new, init)
+
+        signatures_cache = self._signatures
+        if (signatures_cache is not None) and (signatures_cache[0] == new_and_init):
+            bound_signatures = signatures_cache[1]
+            bound_new_signature, bound_init_signature = bound_signatures
+        else:
+            bound_new_signature = None if new is None else _bound_class_new_or_init_signature(new)
+            bound_init_signature = None if init is None else _bound_class_new_or_init_signature(init)
+            bound_signatures = (bound_new_signature, bound_init_signature)
+            object.__setattr__(self, '_signatures', (new_and_init, bound_signatures))
+
+        outer_weakref = weakref.ref(outer)
+
+        class Wrapper(base):
+            if class_defines_new:
+                def __new__(cls, *args, **kwargs):
+                    return new(cls, outer_weakref(), *args, **kwargs)
+
+            if class_defines_init:
+                def __init__(self, *args, **kwargs):
+                    init(self, outer_weakref(), *args, **kwargs)
+
+            # Custom repr if the wrapped class doesn't have one
+            if wrapped.__repr__ is object.__repr__:
+                def __repr__(self):
+                    return "".join([
+                        "<",
+                        wrapped.__module__,
+                        ".",
+                        self.__class__.__name__,
+                        " object bound to ",
+                        repr(outer_weakref()),
+                        " at ",
+                        hex(id(self)),
+                        ">",
+                    ])
+
+        Wrapper.__name__ = wrapped.__name__
+        Wrapper.__module__ = wrapped.__module__
+        Wrapper.__qualname__ = wrapped.__qualname__
+        Wrapper.__doc__ = wrapped.__doc__
+        if hasattr(wrapped, '__annotations__'):
+            Wrapper.__annotations__ = wrapped.__annotations__
+
+        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, outer_weakref, True))
+
+        if bound_new_signature is not None:
+            Wrapper.__new__.__signature__ = bound_new_signature
+
+        if bound_init_signature is not None:
+            Wrapper.__init__.__signature__ = bound_init_signature
+
+        bound_Wrapper_signature = bound_new_signature or bound_init_signature
+        if bound_Wrapper_signature is not None:
+            Wrapper.__signature__ = bound_Wrapper_signature
+
+        return Wrapper
+
 
 
 @export

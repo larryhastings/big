@@ -2,6 +2,7 @@
 
 import inspect
 import sys
+import threading
 import types
 import unittest
 import weakref
@@ -17,7 +18,7 @@ from big.boundinnerclass import (
     _BOUNDINNERCLASS_INNER_ATTR,
     _ClassProxy,
     _get_outer_weakref,
-    _bound_signature,
+    _bound_class_new_or_init_signature,
     _unbound,
     )
 
@@ -902,13 +903,13 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_signature_with_minimal_params(self):
         """Signature handling when __init__ has fewer than 2 params."""
-        sig = _bound_signature(lambda self: None)
+        sig = _bound_class_new_or_init_signature(lambda self: None)
         self.assertIsNotNone(sig)
         self.assertEqual(len(list(sig.parameters)), 0)
 
     def test_bound_signature_exception(self):
         """Test _bound_signature when inspect.signature raises."""
-        result = _bound_signature(42)
+        result = _bound_class_new_or_init_signature(42)
         self.assertIsNone(result)
 
     def test_get_cache_with_slots_and_dict(self):
@@ -1733,6 +1734,257 @@ class TestCacheThreadSafety(unittest.TestCase):
         # Get should also return BoundClass1
         result3 = cache.get(TestClass)
         self.assertIs(result3, BoundClass1)
+
+
+class TestSignatureCache(unittest.TestCase):
+    """Tests for the descriptor-level bound-signature cache."""
+
+    @staticmethod
+    def cached_signatures(outer_class, name):
+        """Return the descriptor's _signatures slot for inspection."""
+        descriptor = outer_class.__dict__[name]
+        return descriptor._signatures
+
+    def test_signatures_cached_on_descriptor_and_reused(self):
+        """First bind populates the cache; later binds reuse the same tuple."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer, x, y=3):
+                    self.outer = outer
+
+        self.assertIsNone(self.cached_signatures(Outer, 'Inner'))
+
+        o1 = Outer()
+        _ = o1.Inner
+        cached1 = self.cached_signatures(Outer, 'Inner')
+        self.assertIsNotNone(cached1)
+        functions, signatures = cached1
+        self.assertIs(functions[0], None)
+        self.assertIs(functions[1], Outer.Inner.__init__)
+        self.assertEqual(list(signatures[1].parameters), ['x', 'y'])
+
+        o2 = Outer()
+        sig = inspect.signature(o2.Inner)
+        self.assertEqual(list(sig.parameters), ['x', 'y'])
+        i = o2.Inner(1)
+        self.assertIs(i.outer, o2)
+        cached2 = self.cached_signatures(Outer, 'Inner')
+        self.assertIs(cached1, cached2)
+
+    def test_plain_class_caches_signature_pair_of_nones(self):
+        """A class with no __init__/__new__ caches (None, None) -- the
+        slot's None means "uncomputed", a cached tuple of Nones means
+        "computed, nothing to expose"."""
+        class Outer:
+            @BoundInnerClass
+            class Plain:
+                pass
+
+        o1 = Outer()
+        _ = o1.Plain()
+        cached1 = self.cached_signatures(Outer, 'Plain')
+        functions, signatures = cached1
+        self.assertEqual(functions, (None, None))
+        self.assertEqual(signatures, (None, None))
+
+        o2 = Outer()
+        _ = o2.Plain()
+        self.assertIs(cached1, self.cached_signatures(Outer, 'Plain'))
+
+    def test_replaced_init_is_reflected_on_next_bind(self):
+        """Regression (stale signature cache): replacing __init__ after a
+        bind must update both behavior and signature on the next bind."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer, x):
+                    self.got = ('old', x)
+
+        o1 = Outer()
+        _ = o1.Inner(1)
+        self.assertEqual(list(inspect.signature(o1.Inner).parameters), ['x'])
+
+        def replacement(self, outer, p, q):
+            self.got = ('new', p, q)
+        Outer.Inner.__init__ = replacement
+
+        o2 = Outer()
+        i = o2.Inner(1, 2)
+        self.assertEqual(i.got, ('new', 1, 2))
+        self.assertEqual(list(inspect.signature(o2.Inner).parameters), ['p', 'q'])
+        self.assertEqual(list(inspect.signature(o2.Inner.__init__).parameters), ['p', 'q'])
+
+    def test_replaced_new_is_reflected_on_next_bind(self):
+        """Regression (stale signature cache): replacing __new__ after a
+        bind must update the signature on the next bind."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, v):
+                    instance = super().__new__(cls)
+                    instance.v = v
+                    return instance
+
+        o1 = Outer()
+        self.assertEqual(list(inspect.signature(o1.Inner).parameters), ['v'])
+        i = o1.Inner(7)
+        self.assertEqual(i.v, 7)
+
+        def replacement(cls, outer, r, s):
+            instance = object.__new__(cls)
+            instance.rs = (r, s)
+            return instance
+        Outer.Inner.__new__ = replacement
+
+        o2 = Outer()
+        i = o2.Inner(1, 2)
+        self.assertEqual(i.rs, (1, 2))
+        self.assertEqual(list(inspect.signature(o2.Inner).parameters), ['r', 's'])
+
+    def test_deleted_init_drops_stale_signature(self):
+        """Regression (stale signature cache): deleting __init__ after a
+        bind must not leave the old signature on the next bound class."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer, x):
+                    pass
+
+        o1 = Outer()
+        self.assertEqual(list(inspect.signature(o1.Inner).parameters), ['x'])
+        _ = o1.Inner(1)
+
+        del Outer.Inner.__init__
+
+        o2 = Outer()
+        bound = o2.Inner
+        self.assertNotIn('__signature__', bound.__dict__)
+        self.assertNotEqual(list(inspect.signature(bound).parameters), ['x'])
+        _ = bound()
+
+    def test_deleted_new_falls_back_to_init_signature(self):
+        """Regression (stale signature cache): deleting __new__ after a
+        bind demotes the class signature to __init__'s on the next bind."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, outer, v=None):
+                    return super().__new__(cls)
+                def __init__(self, outer, x=None, y=None):
+                    pass
+
+        o1 = Outer()
+        self.assertEqual(list(inspect.signature(o1.Inner).parameters), ['v'])
+        _ = o1.Inner(1)
+
+        del Outer.Inner.__new__
+
+        o2 = Outer()
+        self.assertEqual(list(inspect.signature(o2.Inner).parameters), ['x', 'y'])
+        # no-args instantiation: a class that ever had a Python __new__
+        # keeps the slot dispatcher in tp_new after deletion, so excess
+        # constructor args reach object.__new__ and raise -- a CPython
+        # quirk, nothing to do with BoundInnerClass
+        _ = o2.Inner()
+
+    def test_added_init_gains_signature(self):
+        """Regression (stale signature cache): adding __init__ to a class
+        bound while plain must inject outer and expose the new signature."""
+        class Outer:
+            @BoundInnerClass
+            class Plain:
+                pass
+
+        o1 = Outer()
+        _ = o1.Plain()
+
+        def added(self, outer, w):
+            self.outer = outer
+            self.w = w
+        Outer.Plain.__init__ = added
+
+        o2 = Outer()
+        i = o2.Plain(9)
+        self.assertIs(i.outer, o2)
+        self.assertEqual(i.w, 9)
+        self.assertEqual(list(inspect.signature(o2.Plain).parameters), ['w'])
+
+    def test_rewrapped_descriptor_recomputes_signatures(self):
+        """Regression (stale signature cache): reassigning __wrapped__
+        must not reuse the old class's cached signatures."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer, x):
+                    pass
+
+        o1 = Outer()
+        self.assertEqual(list(inspect.signature(o1.Inner).parameters), ['x'])
+        _ = o1.Inner(1)
+
+        class Replacement:
+            def __init__(self, outer, a, b, c):
+                pass
+        Outer.__dict__['Inner'].__wrapped__ = Replacement
+
+        o2 = Outer()
+        self.assertEqual(list(inspect.signature(o2.Inner).parameters), ['a', 'b', 'c'])
+        _ = o2.Inner(1, 2, 3)
+
+    def test_existing_outer_keeps_consistent_wrapper_after_mutation(self):
+        """An outer that bound before a mutation keeps its old wrapper --
+        old behavior and old signature together, never mixed."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer, x):
+                    self.got = ('old', x)
+
+        o = Outer()
+        bound_before = o.Inner
+
+        def replacement(self, outer, p, q):
+            self.got = ('new', p, q)
+        Outer.Inner.__init__ = replacement
+
+        bound_after = o.Inner
+        self.assertIs(bound_before, bound_after)
+        i = bound_after(1)
+        self.assertEqual(i.got, ('old', 1))
+        self.assertEqual(list(inspect.signature(bound_after).parameters), ['x'])
+
+        fresh = Outer()
+        i2 = fresh.Inner(1, 2)
+        self.assertEqual(i2.got, ('new', 1, 2))
+
+    def test_concurrent_first_bindings_are_correct(self):
+        """Concurrent first binds may race to fill the cache; every thread
+        must still observe a correct signature."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, outer, x, y=3):
+                    self.outer = outer
+
+        count = 8
+        barrier = threading.Barrier(count)
+        results = [None] * count
+        def bind(index):
+            barrier.wait()
+            outer = Outer()
+            instance = outer.Inner(index)
+            results[index] = (list(inspect.signature(outer.Inner).parameters),
+                              instance.outer is outer)
+        threads = [threading.Thread(target=bind, args=(i,)) for i in range(count)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+            self.assertFalse(t.is_alive())
+        self.assertEqual(results, [(['x', 'y'], True)] * count)
+        self.assertIsNotNone(self.cached_signatures(Outer, 'Inner'))
+
 
 
 def run_tests():

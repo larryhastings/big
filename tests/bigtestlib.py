@@ -53,11 +53,17 @@ def preload_local_big():
     import sys
 
     argv_0 = pathlib.Path(sys.argv[0])
-    big_dir = argv_0.resolve().parent
+    big_dir = starting_dir = argv_0.resolve().parent
     while True:
         big_init = big_dir / "big" / "__init__.py"
         if big_init.is_file():
             break
+        if big_dir == big_dir.parent:
+            import errno
+            raise FileNotFoundError(
+                errno.ENOENT,
+                f"not found in {starting_dir} or any parent directory",
+                "big/__init__.py")
         big_dir = big_dir.parent
 
     # this almost certainly *is* a git checkout
