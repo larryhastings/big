@@ -29,6 +29,7 @@ bigtestlib.preload_local_big()
 
 
 for test_module in """
+    test_bigtestlib
     test_boundinnerclass
     test_builtin
     test_deprecated
