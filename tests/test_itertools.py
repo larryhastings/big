@@ -89,6 +89,18 @@ class BigItertoolsTests(unittest.TestCase):
         for i in pbi:
             self.assertEqual(True, False, "shouldn't reach here! pbi is exhausted!") # pragma: no cover
 
+    def test_dunder_next_only_catches_stop_iteration(self):
+        # Regression test.  __next__ used to have a bare except:,
+        # which swallowed *any* exception raised by the wrapped
+        # iterator--converting it into silent early exhaustion.
+        def angry():
+            yield 1
+            raise ValueError('propagate me')
+        pbi = big.PushbackIterator(angry())
+        self.assertEqual(next(pbi), 1)
+        with self.assertRaises(ValueError):
+            next(pbi)
+
 
 
 # --8<-- start tidy itertools tests --8<--

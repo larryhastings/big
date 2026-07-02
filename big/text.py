@@ -4432,13 +4432,13 @@ def wrap_words(words, margin=79, *, two_spaces=True):
             if isinstance(word, bytes):
                 empty = lastword = b''
                 sentence_ending_punctuation = (b'.', b'?', b'!')
-                two_spaces = b'  '
+                double_space = b'  '
                 one_space = b' '
                 linebreak = b'\n'
             else:
                 empty = lastword = ''
                 sentence_ending_punctuation = ('.', '?', '!')
-                two_spaces = '  '
+                double_space = '  '
                 one_space = ' '
                 linebreak = '\n'
 
@@ -4451,7 +4451,7 @@ def wrap_words(words, margin=79, *, two_spaces=True):
         l = len(word)
 
         if two_spaces and lastword.endswith(sentence_ending_punctuation):
-            space = two_spaces
+            space = double_space
             len_space = 2
         else:
             space = one_space
@@ -4621,6 +4621,12 @@ class _column_wrapper_splitter:
             self.state(empty.join(self.leading), empty.join(self.word))
             self.leading.clear()
             self.word.clear()
+        # flush the final code line, if any.
+        # (a code line is normally only emitted when we see the
+        # linebreak that ends it--but at EOF there might not be one.)
+        if (self.state == self.state_in_code_line) and self.code:
+            self.emit(self.empty.join(self.code))
+            self.code.clear()
 
     def state_paragraph_start(self, leading, word):
         """
@@ -4657,10 +4663,10 @@ class _column_wrapper_splitter:
             for c in self.make_iterator(leading):
                 if c == self.tab_string:
                     col = col + tab_width - (col % tab_width)
-                elif c == self.space_string:
-                    col += 1
                 else:
-                    raise RuntimeError("unhandled whitespace character " + repr(c))
+                    # space, and any unusual whitespace
+                    # (\r, \v, \f, nbsp...), counts as width 1.
+                    col += 1
             if col >= self.code_indent:
                 # code line!
                 if self.previous_paragraph == _text_paragraph:
@@ -4719,11 +4725,11 @@ class _column_wrapper_splitter:
                     self.code.append(space_string * delta)
                 else:
                     self.code.append(c)
-            elif c == space_string:
+            else:
+                # space, and any unusual whitespace
+                # (\r, \v, \f, nbsp...), counts as width 1.
                 col += 1
                 self.code.append(c)
-            else:
-                raise RuntimeError("unhandled whitespace character " + repr(c))
         self.code.append(word)
         self.col = col + len(word)
 
@@ -4934,6 +4940,12 @@ def merge_columns(*columns, column_separator=None,
             add_overflow()
             for i in range(overflow_after):
                 rstripped_lines.append(empty)
+
+        # loop 2 must consume the rstripped lines--both so that
+        # per-line trailing whitespace can't fool the padding math,
+        # and so the overflow_after padding lines appended above
+        # actually make it into the output.
+        lines = rstripped_lines
 
         if delay_all and overflows:
             overflows.clear()

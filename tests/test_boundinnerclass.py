@@ -663,6 +663,46 @@ class TestSignature(unittest.TestCase):
         self.assertEqual(i.args, (2, 3))
         self.assertEqual(i.kwargs, {'foo': 'bar'})
 
+    def test_signature_forwarding_init(self):
+        """Regression test.  An __init__ that receives outer via *args--
+        like the generic forwarding __init__(self, *args, **kwargs)--
+        used to have its *args elided from the reported signature,
+        as though it were the "outer" parameter."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __init__(self, *args, **kwargs):
+                    self.args = args
+                    self.kwargs = kwargs
+
+        o = Outer()
+        sig = inspect.signature(o.Inner)
+        self.assertEqual(list(sig.parameters), ['args', 'kwargs'])
+
+        i = o.Inner(1, 2, foo='bar')
+        self.assertIs(i.args[0], o)   # outer arrives via *args
+        self.assertEqual(i.args[1:], (1, 2))
+        self.assertEqual(i.kwargs, {'foo': 'bar'})
+
+    def test_signature_forwarding_new(self):
+        """Regression test.  The __new__ flavor of
+        test_signature_forwarding_init."""
+        class Outer:
+            @BoundInnerClass
+            class Inner:
+                def __new__(cls, *args, **kwargs):
+                    instance = super().__new__(cls)
+                    instance.new_args = args
+                    return instance
+
+        o = Outer()
+        sig = inspect.signature(o.Inner)
+        self.assertEqual(list(sig.parameters), ['args', 'kwargs'])
+
+        i = o.Inner(3, 4)
+        self.assertIs(i.new_args[0], o)   # outer arrives via *args
+        self.assertEqual(i.new_args[1:], (3, 4))
+
     def test_signature_preserves_defaults(self):
         """Signature preserves default values."""
         class Outer:

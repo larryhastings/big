@@ -2247,6 +2247,42 @@ class BigTextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             big.wrap_words([])
 
+    def test_wrap_words_two_spaces_false(self):
+        # Regression test.  The two_spaces parameter used to be
+        # clobbered by a local variable, so two_spaces=False was
+        # silently ignored.
+        words = "i like pie. so there!".split()
+        got = big.wrap_words(iter(words), two_spaces=False)
+        self.assertEqual(got, "i like pie. so there!")
+        got = big.wrap_words(to_bytes(words), two_spaces=False)
+        self.assertEqual(got, b"i like pie. so there!")
+
+    def test_split_text_with_code_unusual_whitespace(self):
+        # Regression test.  Unusual whitespace characters
+        # (\r, \v, \f, nbsp, ...) used as line-leading indentation
+        # used to raise RuntimeError.  Now they count as width 1.
+        for ws in ('\xa0', '\r', '\x0b', '\x0c'):
+            got = big.split_text_with_code(f"hello\n{ws}world")
+            self.assertEqual(got, ['hello', 'world'])
+
+    def test_merge_columns_trailing_whitespace(self):
+        # Regression test.  Per-line trailing whitespace used to
+        # fool the padding math, misaligning subsequent columns.
+        got = big.merge_columns(("alpha   \nbeta", 6, 6), ("one\ntwo", 5, 5))
+        self.assertEqual(got, "alpha  one\nbeta   two")
+
+    def test_merge_columns_overflow_after_at_end_of_column(self):
+        # Regression test.  The overflow_after padding lines for an
+        # overflow at the very end of a column used to be lost,
+        # making overflow_after a silent no-op there.
+        got = big.merge_columns(
+            ("short\nthis-line-is-way-too-wide", 5, 5),
+            ("aaa\nbbb\nccc", 3, 3),
+            overflow_strategy=big.OverflowStrategy.INTRUDE_ALL,
+            overflow_after=1)
+        self.assertEqual(got,
+            "short aaa\nthis-line-is-way-too-wide\n\n      bbb\n      ccc")
+
 
     def test_split_text_with_code(self):
         def test(s, expected, **kwargs):
@@ -2295,10 +2331,23 @@ class BigTextTests(unittest.TestCase):
             ['this', 'is', 'text,', 'but', 'next', 'is', 'a', 'code', 'paragraph', 'with', 'a', 'lot', 'of', 'internal', 'linebreaks', 'and', 'stuff.', '\n\n',
             '        for x in range(3):', '\n', '\n', '\n', '\n', '\n', '                print(x)', '\n', '\n', '\n', '                print(x*x)', '\n\n', 'welp!', "that's", 'it', 'for', 'the', 'code.']
             )
-        with self.assertRaises(RuntimeError):
-            big.split_text_with_code("howdy.\n\vwhat's this?")
-        with self.assertRaises(RuntimeError):
-            big.split_text_with_code("howdy.\n    for a in \v range(30):\n        print(a)")
+        # unusual whitespace characters (\v, \f, \r, nbsp...)
+        # used to raise RuntimeError; now they count as width 1
+        # (and are preserved verbatim inside code lines).
+        test(
+            "howdy.\n\vwhat's this?",
+            ['howdy.', "what's", 'this?'],
+            )
+        test(
+            "howdy.\n    for a in \v range(30):\n        print(a)",
+            ['howdy.', '\n\n', '    for a in \v range(30):', '\n', '        print(a)'],
+            )
+        # regression test: a code paragraph ending at EOF *without*
+        # a trailing linebreak used to lose its final line.
+        test(
+            "text here.\n    code1\n    code2",
+            ['text', 'here.', '\n\n', '    code1', '\n', '    code2'],
+            )
 
 
     def test_merge_columns(self):
@@ -2345,7 +2394,7 @@ class BigTextTests(unittest.TestCase):
             ("overflow line 1\na\nb\nc\nd\noverflow line 2\n", 4, 8),
             ("this is the second column.\ndoes it have to wait?  it should.", 20, 60),
             ],
-            'overflow line 1\na\nb\nc\nd\noverflow line 2\n         this is the second column.\n         does it have to wait?  it should.',
+            'overflow line 1\na\nb\nc\nd\noverflow line 2\n\n\n\n         this is the second column.\n         does it have to wait?  it should.',
             overflow_before=2,
             overflow_after=3,
             overflow_strategy=big.OverflowStrategy.INTRUDE_ALL)

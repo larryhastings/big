@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.13.3.](#0133)
+The current version is [0.13.4.](#0134)
 
 *Think big!*
 
@@ -9983,6 +9983,63 @@ others.  Views are completely independent from each other.
 
 ## Release history
 
+#### 0.13.4
+
+*2026/07/02*
+
+<dl><dd>
+
+A bugfix release.  Comes with free regression tests!
+
+* Fixed `PushbackIterator`: `__next__` had a bare `except:`, which caught
+  *every* exception raised by the iterator it wraps--not just
+  `StopIteration`.  If your iterator raised, say, `ValueError`,
+  `PushbackIterator` would swallow the exception and simply claim
+  to be exhausted, oops!  Now only `StopIteration` means exhausted;
+  everything else propagates, as it should.
+  * Also fixed two mistakes in the docstring: pushed values are yielded
+    in *last*-in-first-out order (it said "first-in-first-out order,
+    like a stack"--that's not even a stack!), and `__bool__` returns
+    true if the iterator *isn't* exhausted.
+* Fixed `wrap_words`: the `two_spaces` parameter was clobbered by a
+  local variable, so `two_spaces=False` was silently ignored.
+* Two fixes for `split_text_with_code`:
+  * Unusual whitespace characters (`\r`, `\v`, `\f`, non-breaking
+    space...) used as leading whitespace no longer raise
+    `RuntimeError`.  They count as one column, and are preserved
+    verbatim inside code lines.  (A non-breaking space can sneak into
+    a docstring via copy-and-paste from a web page--that shouldn't
+    crash your help system.)  I mean, nobody uses 'em--but now you can!
+  * If the string ended with a code paragraph *without* a trailing
+    linebreak, the final code line was simply lost.  Now it's lost
+    in a more complicated manner!  Just kidding, it's fixed.
+* Fixed `merge_columns`: an intermediate list of per-line-rstripped
+  lines was carefully computed... and then never used.  Two
+  user-visible consequences, both fixed: a line with trailing
+  whitespace could fool the padding math and misalign every
+  subsequent column, and `overflow_after` was silently ignored when
+  the overflow was at the very end of a column.
+* Fixed the computed signatures of `BoundInnerClass` classes whose
+  `__new__` or `__init__` receive `outer` via `*args`--for example,
+  the generic forwarding `def __init__(self, *args, **kwargs)`.
+  The reported signature elided the `*args` as though it were the
+  `outer` parameter; now `*args` correctly survives.
+* Corrected the 0.13.3 release notes about the `BoundInnerClass`
+  signature cache--two corrections, in opposite directions!  The cache
+  is *safer* against races than advertised: the cache key is the pair
+  of method objects themselves, and the bound class closes over those
+  same objects, so a stale signature is impossible--the worst a race
+  can do is make two threads redundantly compute the same signatures.
+  However, the cache *can't* detect in-place mutation of a cached
+  method--assigning to its `__signature__`, `__defaults__`,
+  `__annotations__`, etc. after binding.  (*Replacing* the method is
+  always detected.)  My sincere advice: don't mutate function
+  signatures in place--if you must, do it early, before `BoundInnerClass`
+  caches the signature.
+
+</dd></dl>
+
+
 #### 0.13.3
 
 *2026/06/10*
@@ -9996,15 +10053,23 @@ others.  Views are completely independent from each other.
   the computed signatures for these two dunder methods in a private slot
   on its descriptor.  (Which means we don't modify your class, and also
   you won't see the cache unless you go hunting for it.)  The cache is
-  verified safe every time; if you add / modify / delete either method,
+  verified safe every time; if you add / replace / delete either method,
   `BoundInnerClass` will notice and refresh the cache.  This verification
   is quick--recomputing the signatures is the slow part.
 
-  Note that the interactions with the cache are not thread-safe.  Race
-  conditions around verifying / refreshing the cache are plausible
-  but unlikely to be harmful.  If one thread modifies the class at the
-  same time another thread instantiates the class, somebody *could* get
-  a stale signature.  My sincere advice: don't do that.
+  The cache is naturally safe against races: the cache key is the pair
+  of method objects themselves, and the bound class closes over those
+  same objects, so a bound class's signature can never disagree with
+  its behavior.  The worst a race can do is make two threads both
+  recompute the same signatures, which is harmless.
+
+  The one change the cache genuinely can't detect: *mutating* one of
+  these methods in place, in a way that changes its signature--assigning
+  to its `__signature__`, `__defaults__`, `__annotations__`, etc.--after
+  the class has been bound.  The function's identity doesn't change, so
+  the cache can't notice.  (*Replacing* the method is always detected.)
+  My sincere advice: don't mutate function signatures in place--if you
+  must, do it early, before `BoundInnerClass` caches the signature.
 * Small fix for the test suite: `bigtestlib.preload_local_big` tries
   to find the root of your `big` directory by examining directories in a loop.
   If a directory fails, it tries that directory's parent.

@@ -46,7 +46,7 @@ class PushbackIterator:
     that object onto the iterator.  If any objects have been pushed onto
     the iterator, they're yielded first, before attempting to yield
     from the wrapped iterator.  Pushed values are yielded in
-    first-in-first-out order, like a stack.
+    last-in-first-out order, like a stack.
 
     Example: you have a pushback iterator J, and you call J.push(3)
     followed by J.push('x').  The next two times you iterate over
@@ -58,7 +58,7 @@ class PushbackIterator:
 
     PushbackIterator also supports a next(default=None) method,
     like Python's builtin next function, as well as a __bool__ method
-    returning true if the iterator is exhausted.
+    returning true if the iterator is not exhausted.
 
     It's explicitly supported to push values that were never yielded by
     the wrapped iterator.  If you create J = PushbackIterator(range(1, 20)),
@@ -68,7 +68,7 @@ class PushbackIterator:
     __slots__ = ('i', 'stack')
 
     def __init__(self, iterable=None):
-        if (iterable != None) and (not hasattr(iterable, '__next__')):
+        if (iterable is not None) and (not hasattr(iterable, '__next__')):
             iterable = iter(iterable)
         self.i = iterable
         self.stack = []
@@ -92,7 +92,7 @@ class PushbackIterator:
         if self.i is not None:
             try:
                 return next(self.i)
-            except:
+            except StopIteration:
                 self.i = None
         raise StopIteration
 

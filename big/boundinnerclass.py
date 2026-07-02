@@ -172,10 +172,24 @@ def _bound_class_new_or_init_signature(new_or_init):
     except (ValueError, TypeError):
         return None
 
-    parameters = list(signature.parameters.values())
-
-    omitted_parameters_count = 2 # == len(["cls/self", "outer"])
-    bound_parameters = parameters[omitted_parameters_count:] if len(parameters) >= omitted_parameters_count else []
+    # Elide the two leading implicit arguments the same way a call
+    # with two leading positional arguments would consume them.
+    # Note that a *args parameter absorbs leading positional arguments
+    # without being consumed itself, so it must survive the elision:
+    # for
+    #     def __init__(self, *args, **kwargs)
+    # "outer" is absorbed by *args at call time, and the correct
+    # bound signature is (*args, **kwargs).
+    remaining = 2 # == len(["cls/self", "outer"])
+    bound_parameters = []
+    for parameter in signature.parameters.values():
+        if remaining:
+            if parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+                remaining -= 1
+                continue
+            if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+                remaining = 0
+        bound_parameters.append(parameter)
 
     return inspect.Signature(bound_parameters, return_annotation=signature.return_annotation)
 
@@ -654,10 +668,22 @@ class BoundInnerClass(_BoundInnerClassBase):
         # on the descriptor.  (inspect.signature is slow, ~15µs on a
         # mid-2020s processor.)
         #
-        # There are possible race conditions here, if one thread is
-        # mutating the class (adding/removing/replacing new or init)
-        # while another thread is constructing an instance of the same
-        # class.  My sincere advice: don't do that.
+        # The cache is naturally safe against races: the cache key is
+        # the pair of function objects themselves, the Wrapper closes
+        # over those same objects, and the entire cache entry (key and
+        # payload together) is written with a single store.  So a
+        # Wrapper's signature can never disagree with its behavior;
+        # the worst a race can do is make two threads both recompute
+        # the same signatures, which is harmless.
+        #
+        # The one change the cache genuinely can't detect: mutating a
+        # cached function *in place* in a way that changes its
+        # signature--assigning to its __signature__, __defaults__,
+        # __annotations__, etc.--after a bind.  The function's identity
+        # doesn't change, so the cache can't notice.  (*Replacing* the
+        # method is always detected.)  My sincere advice: don't mutate
+        # function signatures in place--if you must, do it early,
+        # before BoundInnerClass caches the signature.
         init = wrapped.__init__
         class_defines_init = inspect.isfunction(init)
         if not class_defines_init:
