@@ -1300,7 +1300,12 @@ def test_documented_snippets_are_real():
     with open(readme_path, encoding="utf-8") as f:
         readme = f.read()
     start = readme.index("## Borrowable snippets")
-    end = readme.index("## Release history", start)
+    # the catalog ends at the next heading of level 1 or 2--its own
+    # per-module subsections are ###, so they don't terminate it.
+    # (don't anchor on the next section's exact title; headings get
+    # reworded and re-leveled.)
+    match = re.compile(r'(?m)^#{1,2} ').search(readme, start + 1)
+    end = match.start() if match else len(readme)
     catalog = readme[start:end]
 
     real = set()
