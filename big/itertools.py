@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-_license = """
+# --8<-- start big license --8<--
+_big_license = """
 big
 Copyright 2022-2026 Larry Hastings
 All rights reserved.
@@ -23,8 +24,12 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+# --8<-- end big license --8<--
 
 import collections
+# --8<-- start big import operator --8<--
+import operator
+# --8<-- end big import operator --8<--
 
 
 from . import builtin
@@ -128,10 +133,11 @@ class PushbackIterator:
         return f"<{self.__class__.__name__} i={self.i} stack={self.stack}>"
 
 
-# --8<-- start tidy itertools --8<--
+# --8<-- start big iterator context and filter --8<--
+# --8<-- requires big license --8<--
+# --8<-- requires big import operator --8<--
 
 
-@export
 class IteratorContext:
     "Context object yielded by big.iterator_context."
 
@@ -146,20 +152,28 @@ class IteratorContext:
 
         if not is_first:
             self.previous = previous
-        self.current =current
+        self.current = current
         if not is_last:
             self.next = next
 
     @property
     def length(self):
         if self._length is None:
-            self._length = len(self._iterator)
+            try:
+                self._length = len(self._iterator)
+            except TypeError:
+                # "undefined" means the same thing for every ctx
+                # attribute: it's absent, and hasattr() probes work
+                raise AttributeError('length') from None
         return self._length
 
     @property
     def countdown(self):
         if self._length is None:
-            self._length = len(self._iterator)
+            try:
+                self._length = len(self._iterator)
+            except TypeError:
+                raise AttributeError('countdown') from None
         return self.start + self._length - (1 + self.index - self.start)
 
     def __repr__(self):
@@ -171,7 +185,6 @@ class IteratorContext:
         return f'IteratorContext(iterator={self._iterator!r}, start={self.start!r}, index={self.index!r}, is_first={self.is_first!r}, is_last={self.is_last!r}, {s})'
 
 
-@export
 def iterator_context(iterator, start=0):
     """
     Wraps any iterator, yielding values with a helpful context object.
@@ -192,7 +205,9 @@ def iterator_context(iterator, start=0):
       be 3, 4, 5, and 6 in that order, and ctx.countdown
       will be 6, 5, 4, and 3 in that order.  ctx.countdown
       requires the iterator to support __len__; if it doesn't,
-      ctx.countdown will be undefined.
+      ctx.countdown will be undefined, and accessing it will
+      raise AttributeError (so hasattr(ctx, 'countdown') tells
+      you whether it's available).
     * ctx.current contains the current value yielded by the
       iterator.   (The same as the 'o' value in the
       yielded tuple).
@@ -206,10 +221,13 @@ def iterator_context(iterator, start=0):
       one value, is_first and is_last will both be true.)
     * ctx.length contains the total number of items that
       will be yielded.  ctx.length requires the iterator to
-      support __len__; if it doesn't, ctx.length will be undefined.
+      support __len__; if it doesn't, ctx.length will be
+      undefined, and accessing it will raise AttributeError
+      (so hasattr(ctx, 'length') tells you whether it's
+      available).
     * ctx.next contains the next value to be yielded by this
       iterator if is_last is False.  If is_last is True,
-      ctx.previous will be undefined, and accessing it will
+      ctx.next will be undefined, and accessing it will
       raise AttributeError.
     * ctx.previous contains the previous value yielded, if
       is_first is false.  If is_first is true, ctx.previous
@@ -218,7 +236,10 @@ def iterator_context(iterator, start=0):
     """
     index = start
 
-    previous = current = next = undefined = object()
+    # a fresh local sentinel--NOT the module's exported "undefined"
+    # singleton, which is a public value users could legitimately
+    # iterate over.
+    previous = current = next = sentinel = object()
     is_first = True
     is_last = False
 
@@ -242,15 +263,20 @@ def iterator_context(iterator, start=0):
         index += 1
         is_first = False
 
-    # if the iterator yielded *any* values, yield the final one
-    if next != undefined:
-        ctx = IteratorContext(iterator, start, index, is_first, True, current, next, undefined)
+    # if the iterator yielded *any* values, yield the final one.
+    # compared by identity: asking the value's __eq__ would let a
+    # promiscuous __eq__ (e.g. unittest.mock.ANY) claim to be the
+    # sentinel, silently swallowing the final value.
+    if next is not sentinel:
+        ctx = IteratorContext(iterator, start, index, is_first, True, current, next, sentinel)
         yield (ctx, next)
 
 
 undefined = None
 
-@export
+def _get_undefined():
+    return undefined
+
 class Undefined:
     def __init__(self):
         global undefined
@@ -263,11 +289,17 @@ class Undefined:
     def __bool__(self):
         return False
 
+    def __reduce__(self):
+        # pickle and copy/deepcopy reconstruct via __reduce_ex__,
+        # which builds instances through __new__--never __init__--
+        # so the singleton guard above can't stop them from minting
+        # impostors.  Route reconstruction back to the one true
+        # undefined, so "is undefined" survives round-trips.
+        return (_get_undefined, ())
+
 undefined = Undefined()
-export("undefined")
 
 
-@export
 def iterator_filter(iterator,
     *,
     stop_at_value=undefined,
@@ -280,6 +312,7 @@ def iterator_filter(iterator,
     only_value=undefined,
     only_in=None,
     only_predicate=None,
+    call_every=None,
     ):
     """
     Wraps any iterator, filtering the values yielded.
@@ -289,7 +322,7 @@ def iterator_filter(iterator,
     constitute tests applied to the values yielded by the iterator.
     iterator_filter is itself an iterator; it yields the values
     yielded by the iterator you pass in, but only if they pass
-    all the "rules" you specified as arguments to the constructor.
+    all the "rules" you specified as arguments to iterator_filter.
 
     The rules are generally formed from three prefixes: "stop_at",
     "reject", and "only", as well as three suffixes, "_value", "_in",
@@ -348,12 +381,30 @@ def iterator_filter(iterator,
         "only_predicate=lambda o: isinstance(o, str)" would only accept values
         that were instances of str.
 
-    There's one additional rule not described in the above:
-    "stop_at_count", an number.  This exhausts the iterator after
+    There are two additional rules not described in the above:
+
+    "stop_at_count", a number.  This exhausts the iterator after
     yielding "stop_at_count" items.  If you pass in stop_at_count=5,
     the iterator becomes exhausted after yielding five values.
     If "stop_at_count" is initially <= 0, the iterator is initialized
     in an exhausted state, and will never yield any values.
+
+    "call_every", a 2-tuple of (callable, number).  This calls the
+    "callable" callable--without arguments--after every "number" values
+    yielded.  Passing in
+        call_every=(foo, 4)
+    for an iterator that yields 14 values would call foo() after
+    yielding 4 values, again after yielding 8 values, and a third
+    time after yielding 12 values.
+
+    Each call_every callable call happens when the consumer requests
+    the next value after the "number"-th one--the soonest a generator
+    can act after yielding--without waiting for the wrapped iterator
+    to produce anything.  If the iterator yields an exact multiple
+    of "number" values, the final call happens on the consumer's
+    last request (the one that discovers the iterator is
+    exhausted).  If the consumer abandons iteration, pending
+    calls don't happen.
     """
 
     stop_at_value_active     = stop_at_value     is not undefined
@@ -375,6 +426,13 @@ def iterator_filter(iterator,
     # the only rule we can apply *before* iterating over the wrapped iterator
     if stop_at_count_active and (stop_at_count <= 0):
         return
+
+    if call_every:
+        call_every_callable, call_every_count = call_every
+        cec = operator.index(call_every_count)
+        if cec < 1:
+            raise ValueError(f'call_every[1] must be >= 1, not {call_every_count}')
+        call_every_counter = call_every_count = cec
 
     for o in iterator:
         if stop_at and (
@@ -405,12 +463,37 @@ def iterator_filter(iterator,
             continue
 
         if stop_at_count_active:
-            if stop_at_count <= 0:
-                return
             stop_at_count -= 1
 
         yield o
 
-# --8<-- end tidy itertools --8<--
+        # code after the yield runs when the consumer asks for the
+        # next value--the soonest a generator can act after yielding.
+
+        if call_every:
+            # fires on the consumer's resume after every Nth accepted
+            # value--without waiting for the *source* to produce
+            # anything, and including one final call if the iterator
+            # yields an exact multiple of N values.
+            call_every_counter -= 1
+            if not call_every_counter:
+                call_every_callable()
+                call_every_counter = call_every_count
+
+        # returning here stops us *before* we pull another value
+        # from the source.  stop_at_count=N must consume exactly
+        # N accepted values, not N+1.  (this check runs after
+        # call_every's, so a callback landing exactly on the quota
+        # boundary still fires.)
+        if stop_at_count_active and (stop_at_count <= 0):
+            return
+
+# --8<-- end big iterator context and filter --8<--
+
+export('IteratorContext')
+export('iterator_context')
+export('Undefined')
+export('undefined')
+export('iterator_filter')
 
 mm()

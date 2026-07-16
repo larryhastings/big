@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 """
-The big package is a grab-bag of cool code for use in your programs.
-
-Think big!
+Version: an object representing a version number,
+conforming to the PEP 440 version scheme.
 """
 
 _license = """
@@ -38,15 +37,22 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 import functools
-import itertools
 import math
 import re
 import sys
 
-try: # pragma: nocover
-    from packaging.version import Version as _packagingVersion
-except ImportError: # pragma: nocover
-    _packagingVersion = None
+def _packaging_Version():
+    # big interoperates with packaging.version.Version objects--but
+    # importing packaging costs ~3ms, just to recognize the type.
+    # so we don't import it--we check sys.modules instead.  this is
+    # lossless: a packaging Version instance can only exist if
+    # somebody already imported packaging.version, which means
+    # it's already in sys.modules.  if it's not there, no such
+    # instance exists anywhere in the process, QED.
+    module = sys.modules.get('packaging.version')
+    if module is None:
+        return None
+    return getattr(module, 'Version', None)
 
 
 _release_level_allowed_values = ('alpha', 'beta', 'rc', 'final')
@@ -141,6 +147,12 @@ class Version:
                 serial = 0
             elif not (isinstance(serial, int) and (serial >= 0)):
                 raise ValueError(f"serial must be non-negative int or None, not {serial!r}")
+            elif serial and (release_level == 'final'):
+                # a serial belongs to a pre-release; a final
+                # release has no pre-release segment for it to
+                # number.  (this combination used to construct
+                # happily, then blow an assert in __str__.)
+                raise ValueError(f"serial requires a non-final release_level, e.g. release_level='rc'")
 
             if not ((post is None) or (isinstance(post, int) and (post >= 0))):
                 raise ValueError(f"post must be non-negative int or None, not {post!r}")
@@ -167,16 +179,18 @@ class Version:
                 # support the Python sys.version_info object!
                 s2 = f"{s.major}.{s.minor}.{s.micro}"
                 rl = _sys_version_info_release_level_normalize.get(s.releaselevel, s.releaselevel)
-                if rl: # pragma: nocover
+                if rl:
                     s2 += rl
                     if s.serial:
                         s2 += f"{s.serial}"
                 s = s2
-            elif _packagingVersion and isinstance(s, _packagingVersion): # pragma: nocover
-                # support the packaging.version.Version object.  embrace and extend!
-                s = str(s)
             elif not isinstance(s, str):
-                raise ValueError("you must specify either a version string or explicit keyword arguments")
+                pv = _packaging_Version()
+                if pv and isinstance(s, pv):
+                    # support the packaging.version.Version object.  embrace and extend!
+                    s = str(s)
+                else:
+                    raise ValueError("you must specify either a version string or explicit keyword arguments")
 
             match = _re_parse_version(s)
             if not match:
@@ -234,20 +248,27 @@ class Version:
             post_n2 = get('post_n2')
             if post_n1 is not None:
                 assert (post_l is None) and (post_n2 is None)
-                post = post_n1
-            elif post_n2 is not None:
-                assert post_l is not None
-                post = post_n2
+                post = int(post_n1)
+            elif post_l is not None:
+                # the spec's "Implicit post release number":
+                # "1.0.post" means "1.0.post0".  (a post marker
+                # without a number used to be silently dropped.)
+                post = int(post_n2) if post_n2 is not None else 0
             else:
+                assert post_n2 is None
                 post = None
 
-            post = int(post) if post is not None else None
-
             dev_l = get('dev_l')
-            dev = get('dev_n')
-            if dev is not None:
-                assert dev_l is not None
-            dev = int(dev) if dev is not None else None
+            dev_n = get('dev_n')
+            if dev_l is not None:
+                # the spec's "Implicit development release number":
+                # "1.0.dev" means "1.0.dev0".  (a dev marker
+                # without a number used to be silently dropped,
+                # making "1.0.dev" wrongly equal to "1.0".)
+                dev = int(dev_n) if dev_n is not None else 0
+            else:
+                assert dev_n is None
+                dev = None
 
             local = original_local = get('local')
             if local is not None:
@@ -379,32 +400,37 @@ class Version:
     def __eq__(self, other):
         if isinstance(other, _sys_version_info_type):
             other = self.__class__(other)
-        elif _packagingVersion and isinstance(other, _packagingVersion): # pragma: no cover
-            other = self.__class__(str(other))
         elif not isinstance(other, Version):
-            return False
+            pv = _packaging_Version()
+            if pv and isinstance(other, pv):
+                other = self.__class__(str(other))
+            else:
+                # NotImplemented, not False: give the other object's
+                # reflected __eq__ its chance, per the data model.
+                return NotImplemented
         return self._tuple == other._tuple
 
     def __lt__(self, other):
         if isinstance(other, _sys_version_info_type):
             other = self.__class__(other)
-        elif _packagingVersion and isinstance(other, _packagingVersion): # pragma: no cover
-            other = self.__class__(str(other))
+        elif not isinstance(other, Version):
+            pv = _packaging_Version()
+            if pv and isinstance(other, pv):
+                other = self.__class__(str(other))
         if not isinstance(other, Version):
-            raise TypeError("'<' not supported between instances of 'Version' and '{type(other)}'")
+            # NotImplemented, not raise: reflected comparison gets
+            # its chance, and if nobody handles it, Python raises
+            # the standard TypeError with a *correctly formatted*
+            # message.  (the message here used to be an f-string
+            # missing its f: it literally printed '{type(other)}'.)
+            return NotImplemented
         return self._tuple < other._tuple
 
 
     def __hash__(self):
-        return (
-            hash(self._epoch)
-            ^ hash(self._release)
-            ^ hash(self._release_level)
-            ^ hash(self._serial)
-            ^ hash(self._post)
-            ^ hash(self._dev)
-            ^ hash(self._local)
-            )
+        # hash exactly what __eq__ compares, so equal versions
+        # are guaranteed equal hashes.
+        return hash(self._tuple)
 
     @property
     def epoch(self):
@@ -413,12 +439,6 @@ class Version:
     @property
     def release(self):
         return self._release
-
-        self._release_level = release_level
-        self._serial = serial
-        self._post = post
-        self._dev = dev or 0
-        self._local = local
 
     @property
     def major(self):

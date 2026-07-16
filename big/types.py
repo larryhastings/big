@@ -53,7 +53,7 @@ except ImportError: # pragma nocover
         return f'{origin.__name__}[{s}]'
 
 from . import builtin
-from .text import linebreaks, multipartition, multisplit, Pattern
+from .text import linebreaks, multipartition, multireplace, multisplit, Pattern
 from .tokens import generate_tokens
 
 
@@ -480,6 +480,18 @@ class string(str):
     * If you add big.string objects together, the substrings remember their
       original line / column / offset.
 
+    Provenance and mutation: methods that return *substrings* of the
+    original--slicing, partition, split, strip, replace, and friends--
+    always return big.string objects with true positions.  But methods
+    that *change the text* (capitalize, casefold, expandtabs, format,
+    format_map, lower, swapcase, title, upper) return a plain str when
+    the text actually changes.  There's no honest position to report
+    for synthesized text, and big.string prefers failing loudly (plain
+    str has no .where) over reporting approximate positions.  When such
+    a method doesn't change the text, you get the original big.string
+    back, provenance intact.  (To expand tabs *with* provenance, use
+    detab(), which synthesizes only the spaces.)
+
     Parameters:
     * source is a human-readable string describing where this string
       came from.  It's presented unquoted, so if you want quote marks
@@ -524,9 +536,10 @@ class string(str):
 
     If you pass a big.string into certain Python modules (implemented in C),
     it will return substrings as str objects and not big.string objects.
-    big.string provides wrappers for two of these:
-        * string.generate_tokens wraps tokenizer.generate_tokens, and
-        * string.compile wraps re.compile.
+    big.string provides wrappers for three of these:
+        * string.generate_tokens wraps tokenizer.generate_tokens,
+        * string.compile wraps re.compile, and
+        * string.literal_eval wraps ast.literal_eval.
 
     If you add two big.string objects together that came from different origins:
         a = big.string('abcde', source='foo')
@@ -633,6 +646,19 @@ class string(str):
         # return f"<string {str(self)!r} _ranges={self._ranges} _length={self._length}, _line_number={self._line_number}, _column_number={self._column_number}>"
         # sorry--but if the repr doesn't look *exactly* like str's repr, it breaks too much code.
         return repr(str(self))
+
+    def __str__(self):
+        # str() of a str *subclass* instance copies the whole buffer.
+        # But if this string is exactly its entire origin, we already
+        # *have* the plain str--just hand it back, zero copies.
+        # (This makes str() of a freshly-slurped file effectively free.)
+        ranges = self._ranges
+        if len(ranges) == 1:
+            r = ranges[0]
+            s = r.origin.s
+            if (r.start == 0) and (r.stop == len(s)) and (type(s) is str):
+                return s
+        return str.__str__(self)
 
     def _compute_line_and_column(self):
         r = self._ranges[0]
@@ -1086,11 +1112,52 @@ class string(str):
         return mutated
 
     def expandtabs(self, tabsize=8):
+        # 100% compatible with str.expandtabs.
+        # If you want tabs expanded according to this
+        # string's own origin coordinates, use string.detab().
         s = str(self)
         mutated = s.expandtabs(tabsize)
         if s == mutated:
             return self
         return mutated
+
+    def detab(self, tabsize=None):
+        # Preserve the substrings of the original, and expand
+        # each tab according to its own origin's coordinates:
+        # the column the tab sits at *in its source*, tab stops
+        # anchored at its origin's first_column_number--the same
+        # arithmetic where() uses.  (str.expandtabs assumes
+        # everything starts at column 0 of nowhere.)
+        #
+        # tabsize=None (the default) uses each tab's origin's
+        # tab_width; pass an int to override.  As with
+        # str.expandtabs, a tabsize <= 0 removes tabs.
+        #
+        # The expanded spaces are synthesized text; the characters
+        # around them keep their provenance, so where() still
+        # points into the original source.
+        if tabsize is not None:
+            tabsize = _index(tabsize)
+        s = str(self)
+        if '\t' not in s:
+            return self
+        result = []
+        append = result.append
+        start = 0
+        while True:
+            index = s.find('\t', start)
+            if index == -1:
+                append(self[start:])
+                break
+            if index > start:
+                append(self[start:index])
+            c = self[index]
+            tab_width = c.tab_width if tabsize is None else tabsize
+            if tab_width > 0:
+                delta = tab_width - ((c.column_number - c.first_column_number) % tab_width)
+                append(' ' * delta)
+            start = index + 1
+        return self._cat(result)
 
     def format(self, *args, **kwargs):
         s = str(self)
@@ -1405,7 +1472,13 @@ class string(str):
         return self._split(sep,  maxsplit, True)
 
     def splitlines(self, keepends=False, *, separators=linebreaks):
-        l = list(multisplit(self, separators, keep=keepends, separate=True))
+        if keepends:
+            # keep=True yields (line, end) 2-tuples; keepends
+            # semantics means gluing each end back on.  string's
+            # __add__ preserves provenance, so this is safe.
+            l = [line + end for line, end in multisplit(self, separators, keep=True, separate=True)]
+        else:
+            l = list(multisplit(self, separators, separate=True))
         if l and not l[-1]:
             l.pop()
         return l
@@ -1532,11 +1605,19 @@ class string(str):
         ):
         return multipartition(self, separators, count=count, reverse=reverse, separate=separate)
 
+    def multireplace(self, replacements, count=-1, *,
+        reverse=False,
+        ):
+        return multireplace(self, replacements, count=count, reverse=reverse)
+
     def generate_tokens(self):
         return generate_tokens(self)
 
     def compile(self, flags=0):
         return Pattern(self, flags)
+
+    def literal_eval(self):
+        return builtin.literal_eval(self)
 
 # borrow the docstrings from str methods
 dir_str = set(dir(str))
@@ -1554,8 +1635,12 @@ del value
 
 string.multisplit.__doc__ = multisplit.__doc__
 string.multipartition.__doc__ = multipartition.__doc__
+string.multireplace.__doc__ = multireplace.__doc__
 string.generate_tokens.__doc__ = generate_tokens.__doc__
 string.compile.__doc__ = re.compile.__doc__
+
+
+string.literal_eval.__doc__ = builtin.literal_eval.__doc__
 
 
 #####################################################################################################
@@ -2102,7 +2187,9 @@ class linked_list:
         if self is other:
             return True
         if not isinstance(other, linked_list):
-            return False
+            # NotImplemented, not False: reflected comparison gets
+            # its chance, per the data model.
+            return NotImplemented
         locks = self._two_locks(other)
         with locks[0], locks[1]:
             for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
@@ -2115,7 +2202,8 @@ class linked_list:
         if self is other:
             return False
         if not isinstance(other, linked_list):
-            return True
+            # NotImplemented, not True: see __eq__.
+            return NotImplemented
         locks = self._two_locks(other)
         with locks[0], locks[1]:
             for self_node, other_node in zip(self._internal_iter(), other._internal_iter()):
@@ -2347,6 +2435,11 @@ class linked_list:
         if index == length:
             return self._tail
 
+        # note: both walks skip 'special' (tombstone) nodes without
+        # counting them--tombstones don't occupy an index.  (they
+        # used to be counted, so a list with a tombstone disagreed
+        # with len() and list() about which index held which value,
+        # and indexing could even land *on* a tombstone and raise.)
         halfway = self._length // 2
         if index > halfway:
             # faster to start at tail and work backwards.
@@ -2361,12 +2454,17 @@ class linked_list:
             #
             cursor = self._tail
             countdown = length - index
-            for _ in range(countdown):
+            while countdown:
                 cursor = cursor.previous
+                if cursor.special is None:
+                    countdown -= 1
         else:
-            cursor = self._head.next
-            for _ in range(index):
+            cursor = self._head
+            advance = index + 1
+            while advance:
                 cursor = cursor.next
+                if cursor.special is None:
+                    advance -= 1
 
         return cursor
 
@@ -2770,7 +2868,10 @@ class linked_list:
 
     def _pop(self, index):
         if not self._length:
-            raise ValueError('pop from empty linked_list')
+            # IndexError, matching list.pop and deque.popleft.
+            # (this used to be ValueError, breaking the "superset
+            # of list and deque" interface promise.)
+            raise IndexError('pop from empty linked_list')
         if index == -1:
             # special case
             node = self._tail.previous
@@ -2795,7 +2896,8 @@ class linked_list:
 
     def _rpop(self, index):
         if not self._length:
-            raise ValueError('rpop from empty linked_list')
+            # IndexError, matching list.pop and deque.popleft.
+            raise IndexError('rpop from empty linked_list')
         if index == 0:
             node = self._head.next
             while node.special == 'special':
@@ -3499,12 +3601,14 @@ class linked_list:
             index = -1
 
             while cursor != tail:
-                index += 1
-                if index >= start:
-                    if index >= stop:
-                        raise exp()
-                    if (not cursor.special) and (cursor.value == value):
-                        return index
+                # tombstones don't occupy an index.
+                if cursor.special is None:
+                    index += 1
+                    if index >= start:
+                        if index >= stop:
+                            raise exp()
+                        if cursor.value == value:
+                            return index
                 cursor = cursor.next
             raise exp()
 
@@ -3805,6 +3909,10 @@ class linked_list_base_iterator:
 
 
     def __eq__(self, other):
+        if not isinstance(other, linked_list_base_iterator):
+            # NotImplemented, not False: reflected comparison gets
+            # its chance, per the data model.
+            return NotImplemented
         try:
             while True:
                 _lock = self._lock
@@ -3929,7 +4037,10 @@ class linked_list_base_iterator:
                 break
             next = self._next
 
-            if default == _undefined:
+            # "is", not "==": a default with a promiscuous __eq__
+            # (e.g. unittest.mock.ANY) must not be mistaken for
+            # "no default supplied".
+            if default is _undefined:
                 while count > 1:
                     next()
                     count -= 1
@@ -3996,7 +4107,8 @@ class linked_list_base_iterator:
                 if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
                 break
             previous = self._previous
-            if default == _undefined:
+            # "is", not "==": see next() above.
+            if default is _undefined:
                 while count > 1:
                     previous()
                     count -= 1
@@ -4329,7 +4441,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def count(self, value):
-        "Returns the number of occurances of value between here and 'tail'."
+        "Returns the number of occurrences of value between here and 'tail'."
         try:
             while True:
                 _lock = self._lock
@@ -4351,7 +4463,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def rcount(self, value):
-        "Returns the number of occurances of value between here and 'head'."
+        "Returns the number of occurrences of value between here and 'head'."
         try:
             while True:
                 _lock = self._lock
@@ -4463,7 +4575,7 @@ class linked_list_base_iterator:
         raise ValueError(f'value {value!r} not found')
 
     def remove(self, value, default=_undefined):
-        "Removes the nearest next occurance of value from the linked_list, or raises ValueError if not found."
+        "Removes the nearest next occurrence of value from the linked_list, or raises ValueError if not found."
         try:
             while True:
                 _lock = self._lock
@@ -4488,7 +4600,7 @@ class linked_list_base_iterator:
         raise ValueError(f'value {value!r} not found')
 
     def rremove(self, value, default=_undefined):
-        "Removes the nearest previous occurance of value from the linked_list, or raises ValueError if not found."
+        "Removes the nearest previous occurrence of value from the linked_list, or raises ValueError if not found."
         try:
             while True:
                 _lock = self._lock
@@ -4612,7 +4724,7 @@ class linked_list_base_iterator:
             cursor = cursor.next
 
     def find(self, value):
-        "Returns an iterator pointing at the nearest next occurance of value in linked_list, or None if value is not found."
+        "Returns an iterator pointing at the nearest next occurrence of value in linked_list, or None if value is not found."
         try:
             while True:
                 _lock = self._lock
@@ -4642,7 +4754,7 @@ class linked_list_base_iterator:
 
 
     def rfind(self, value):
-        "Returns an iterator pointing at the nearest previous occurance of value in linked_list, or None if value is not found."
+        "Returns an iterator pointing at the nearest previous occurrence of value in linked_list, or None if value is not found."
         try:
             while True:
                 _lock = self._lock
@@ -4660,7 +4772,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def match(self, predicate):
-        "Returns an iterator pointing at the nearest next occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
+        "Returns an iterator pointing at the nearest next occurrence of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         try:
             while True:
                 _lock = self._lock
@@ -4685,7 +4797,7 @@ class linked_list_base_iterator:
                 _lock.release()
 
     def rmatch(self, predicate):
-        "Returns an iterator pointing at the nearest previous occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
+        "Returns an iterator pointing at the nearest previous occurrence of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         try:
             while True:
                 _lock = self._lock
@@ -4823,13 +4935,13 @@ class linked_list_base_iterator:
         reuses the lock parameter passed in when this list was
         constructed.
 
-        If end is not None, it must be an iterator pointing to either
+        If stop is not None, it must be an iterator pointing to either
         the same node or a subsequent node in the same linked list;
-        it's an error if end points to a preceding node, or to a node
-        in a different list.  The node pointed at by end and all
+        it's an error if stop points to a preceding node, or to a node
+        in a different list.  The node pointed at by stop and all
         subsequent nodes are not cut.
 
-        If end is None, all subsequent nodes are cut, including "tail".
+        If stop is None, all subsequent nodes are cut, including "tail".
         (The linked list is given a new "tail".)
 
         If cut cuts any nodes, it always cuts the node pointed to by
@@ -4842,7 +4954,8 @@ class linked_list_base_iterator:
             _lock = self._lock
             if _lock:
                 _lock.acquire()
-                if _lock is not self._lock: _lock.release() ; continue
+            _lock2 = self._cursor.linked_list._lock
+            if _lock is not _lock2: _lock and _lock.release() ; _lock = self._lock = _lock2 ; continue
             break
         return self._cursor.linked_list._cut(self, stop, lock, _lock, False)
 
@@ -4860,13 +4973,13 @@ class linked_list_base_iterator:
         reuses the lock parameter passed in when this list was
         constructed.
 
-        If end is not None, it must be an iterator pointing to either
+        If stop is not None, it must be an iterator pointing to either
         the same node or a preceding node in the same linked list;
-        it's an error if end points to a preceding node, or to a node
-        in a different list.  The node pointed at by end and all
+        it's an error if stop points to a preceding node, or to a node
+        in a different list.  The node pointed at by stop and all
         preceding nodes are not cut.
 
-        If end is None, all preceding nodes are cut, including "head".
+        If stop is None, all preceding nodes are cut, including "head".
         (The linked list is given a new "head".)
 
         If cut cuts any nodes, it always cuts the node pointed to by
@@ -5190,11 +5303,11 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
                 _lock.release()
 
     def count(self, value):
-        "Returns the number of occurances of value between here and 'head'."
+        "Returns the number of occurrences of value between here and 'head'."
         return super().rcount(value)
 
     def rcount(self, value):
-        "Returns the number of occurances of value between here and 'tail'."
+        "Returns the number of occurrences of value between here and 'tail'."
         return super().count(value)
 
     def prepend(self, value):
@@ -5205,13 +5318,24 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
         "Inserts a value immediately before the current node."
         super().prepend(value)
 
+    @staticmethod
+    def _reversed_iterable(iterable):
+        # we need the elements in reversed order (so they land in
+        # the list in forward order), but reversed() demands a
+        # sequence--and every other extend in the class accepts any
+        # iterable.  materialize non-reversible iterables first.
+        try:
+            return reversed(iterable)
+        except TypeError:
+            return reversed(list(iterable))
+
     def extend(self, iterable):
         "Extends list by appending elements from iterable before the current node."
-        return super()._rextend(iterable, reversed(iterable), "extend")
+        return super()._rextend(iterable, self._reversed_iterable(iterable), "extend")
 
     def rextend(self, iterable):
         "Extends list by appending elements from iterable after the current node."
-        return super()._extend(iterable, reversed(iterable), "rextend")
+        return super()._extend(iterable, self._reversed_iterable(iterable), "rextend")
 
     def pop(self, index=0):
         "Removes and returns the value at index (0 by default).  If index=0, advances backwards to the previous node."
@@ -5223,25 +5347,25 @@ class linked_list_reverse_iterator(linked_list_base_iterator):
 
         The difference between pop and rpop is the direction the
         reverse iterator moves after popping if index is 0.
-        pop advances to the next node, rpop advances backwards
-        to the previous node.
+        pop advances forward to the next node, rpop advances
+        backward to the previous node.
         """
         return super().pop(-index)
 
     def find(self, value):
-        "Returns an iterator pointing at the nearest previous occurance of value in linked_list, or None if value is not found."
+        "Returns an iterator pointing at the nearest previous occurrence of value in linked_list, or None if value is not found."
         return super().rfind(value)
 
     def rfind(self, value):
-        "Returns an iterator pointing at the nearest next occurance of value in linked_list, or None if value is not found."
+        "Returns an iterator pointing at the nearest next occurrence of value in linked_list, or None if value is not found."
         return super().find(value)
 
     def match(self, predicate):
-        "Returns an iterator pointing at the nearest previous occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
+        "Returns an iterator pointing at the nearest previous occurrence of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         return super().rmatch(predicate)
 
     def rmatch(self, predicate):
-        "Returns an iterator pointing at the nearest next occurance of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
+        "Returns an iterator pointing at the nearest next occurrence of a value in linked_list such that predicate(value) returns a true value, or None if no such value is found."
         return super().match(predicate)
 
     def truncate(self):

@@ -33,12 +33,6 @@ import sys
 from .types import string
 from .text import split_quoted_strings, split_delimiters, Delimiter
 
-# TODO
-# test all unclosed open delimiters
-# close delimiter inside a quoted string?
-# if no quotes defined, don't use split quoted strings
-
-
 from . import builtin
 mm = builtin.ModuleManager()
 export = mm.export
@@ -64,18 +58,24 @@ class Interpolation:
     the text of the expression along with the '=' and all
     whitespace, otherwise it will be an empty string.
 
+    The format attribute contains the interpolation's "format
+    specification": the text after a top-level ':', kept verbatim,
+    analogous to the format spec of an f-string.  If the
+    interpolation has no top-level ':', format is None.
+
     See big.template.parse_template_string.
     """
-    def __init__(self, expression, *filters, debug=''):
+    def __init__(self, expression, *filters, debug='', format=None):
         self.expression = expression
         self.filters = filters
         self.debug = debug
+        self.format = format
 
     def __repr__(self):
         l = [repr(self.expression)]
         l.extend(repr(f) for f in self.filters)
         s = ', '.join(l)
-        return f'Interpolation({s}, debug={self.debug!r})'
+        return f'Interpolation({s}, debug={self.debug!r}, format={self.format!r})'
 
     def __eq__(self, other):
         return (
@@ -83,6 +83,7 @@ class Interpolation:
             and (self.expression == other.expression)
             and (self.filters == other.filters)
             and (self.debug == other.debug)
+            and (self.format == other.format)
             )
 
 @export
@@ -162,9 +163,44 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
             s = s2
             continue
 
-        if parse_whitespace_eater and (after0 == '>') and (after.startswith('}')):
-            s = after[1:].lstrip()
-            continue
+        if parse_whitespace_eater:
+            # whitespace eaters:
+            #   {>} eats the whitespace to its right,
+            #   {<} eats the whitespace to its left, and
+            #   {<>} eats in both directions.
+            # Set a flag for each direction this token's arrows point,
+            # then eat in each flagged direction.
+
+            arrows = after0 + after.partition('}')[0]
+            if arrows == '>':
+                eat_left  = False
+                eat_right = True
+                s = after[1:]
+            elif arrows == '<>':
+                eat_left = eat_right = True
+                s = after[2:]
+            elif arrows == '<':
+                eat_left  = True
+                eat_right = False
+                s = after[1:]
+            else:
+                eat_left = eat_right = False
+
+            if eat_left or eat_right:
+                if eat_left:
+                    # eat the whitespace to the left.  it's always still in
+                    # the text buffer: text only flushes when a statement or
+                    # expression yields, and comments and eaters don't flush.
+                    while text and not text[-1].strip():
+                        text.pop()
+                    if text:
+                        text[-1] = text[-1].rstrip()
+
+                if eat_right:
+                    # eat the whitespace to the right.  it's still ahead in s.
+                    s = s.lstrip()
+
+                continue
 
         is_statement = parse_statements and (after0 == '%')
         is_expression = parse_expressions and (after0 == '{')
@@ -187,31 +223,33 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
 
         if is_statement:
             where = delimiter
-            if after:
-                if split_statement:
-                    iterator = split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
-                else:
-                    iterator = (('', after, ''),)
-                for opening_quote, t, closing_quote in iterator:
-                    if opening_quote:
-                        if not closing_quote:
-                            # this is going to be the last thing yielded,
-                            # and we don't have a close quote.  nerts!
-                            raise SyntaxError(f'unterminated quoted string at {opening_quote.where}')
-                        statement_append(opening_quote)
-                        if t:
-                            statement_append(t)
-                        statement_append(closing_quote)
-                        continue
+            if not after:
+                # the template ends immediately after '{%'.
+                raise SyntaxError(f'{where.where}: unterminated statement')
+            if split_statement:
+                iterator = split_quoted_strings(after, quotes=quotes, multiline_quotes=multiline_quotes, escape=escape)
+            else:
+                iterator = (('', after, ''),)
+            for opening_quote, t, closing_quote in iterator:
+                if opening_quote:
+                    if not closing_quote:
+                        # this is going to be the last thing yielded,
+                        # and we don't have a close quote.  nerts!
+                        raise SyntaxError(f'{opening_quote.where}: unterminated quoted string')
+                    statement_append(opening_quote)
+                    if t:
+                        statement_append(t)
+                    statement_append(closing_quote)
+                    continue
 
-                    # opening_quote is false, ergo so is closing quote, we only care about t
-                    before, delimiter, after = t.partition('%}')
-                    if before:
-                        statement_append(before)
-                    if delimiter:
-                        break
-                else:
-                    raise SyntaxError(f'unterminated statement at {where.where}')
+                # opening_quote is false, ergo so is closing quote, we only care about t
+                before, delimiter, after = t.partition('%}')
+                if before:
+                    statement_append(before)
+                if delimiter:
+                    break
+            else:
+                raise SyntaxError(f'{where.where}: unterminated statement')
             s = after
             st = empty_join(statement)
             statement_clear()
@@ -224,6 +262,7 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
         # Top Of Stack
         tos = previous_was_rcurly = None
         start_offset = after.offset
+        format_offset = None
 
         try:
             for t in after.generate_tokens():
@@ -250,21 +289,35 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                     if t_string == tos:
                         tos = stack_pop() if stack else None
                     continue
-                if t_string == '|':
-                    x = original_s[start_offset:offset]
-                    if not x.strip():
-                        noun = 'filter' if expression else 'expression'
-                        raise SyntaxError(f'empty {noun} at {x.where}')
-                    expression_append(x)
-                    start_offset = offset + 1
-                    continue
+                if format_offset is None:
+                    if t_string == '|':
+                        x = original_s[start_offset:offset]
+                        if not x.strip():
+                            noun = 'filter' if expression else 'expression'
+                            raise SyntaxError(f'{x.where}: empty {noun}')
+                        expression_append(x)
+                        start_offset = offset + 1
+                        continue
+                    if t_string == ':':
+                        # the first top-level ':' introduces the format
+                        # specification, like an f-string's.  everything
+                        # after it, up to the closing '}}', is kept
+                        # verbatim in Interpolation.format--including
+                        # any further '|' and ':' characters.
+                        format_offset = offset
+                        continue
                 previous_was_rcurly = is_rcurly
             else:
                 noun = 'filter' if expression else 'expression'
-                raise SyntaxError(f'unterminated {noun} at {after.where}')
+                raise SyntaxError(f'{after.where}: unterminated {noun}')
+            if format_offset is not None:
+                format = original_s[format_offset + 1:offset]
+                offset = format_offset
+            else:
+                format = None
             final_expression = original_s[start_offset:offset]
             if not final_expression.strip():
-                raise SyntaxError(f'empty expression at {after.where}')
+                raise SyntaxError(f'{after.where}: empty expression')
             expression_append(final_expression)
 
             # handle trailing =
@@ -277,7 +330,7 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                 l = len(x)
                 debug = x[l:l]
             stripped = [x.strip() for x in expression]
-            yield Interpolation(*stripped, debug=debug)
+            yield Interpolation(*stripped, debug=debug, format=format)
             expression_clear()
             debug = None
         except tokenize.TokenError as e:
@@ -290,6 +343,20 @@ def parse_template_string(s, parse_expressions, parse_comments, parse_statements
                 column -= 1
 
             lines = after.splitlines()
+            if not (0 <= line < len(lines)): # pragma: nocover
+                # Why pragma nocover? This branch is version-dependent--
+                # only pre-3.12 tokenize raises TokenError here.
+                #
+                # tokenize hit EOF--e.g. "EOF in multi-line statement",
+                # an unclosed bracket in the expression--and reported a
+                # position one line *past* the text.  that's just an
+                # unterminated expression.
+                #
+                # tokenize in 3.12+ doesn't raise for this at all;
+                # there, the for-else above reports it.  this branch is
+                # only for 3.12 and earlier.
+                noun = 'filter' if expression else 'expression'
+                raise SyntaxError(f'{after.where}: unterminated {noun}') from None
             offending_to_eol = lines[line][column:]
             offending = offending_to_eol.split()[0]
             raise SyntaxError(f"{offending.where}: {message} ({offending!r})") from None
@@ -323,7 +390,20 @@ def parse_template_string(s, *,
         * {{ ... }} represents an "expression", a Python expression.
           A template library generally calls eval() on this string
           and replaces the text of the expression with the resulting
-          value.  The expression can also specify "filters".
+          value.  The expression can also specify "filters", separated
+          by '|', and a "format specification" after a ':', analogous
+          to an f-string's:
+
+              {{ expression | filter | filter : format }}
+
+          Only *top-level* '|' and ':' characters count--characters
+          nested inside brackets or quotes belong to the expression
+          or filter they're inside, so slices, dict displays, and
+          string literals work as expected.  (A top-level lambda
+          needs parentheses, same as in an f-string.)  Everything
+          after the first top-level ':' is the format specification,
+          preserved verbatim--including whitespace and any further
+          '|' or ':' characters.
         * {% ... %} represents a "statement", a Python (or other)
           statement.  A template library generally parses the text
           of the statement and performs the action specified, like
@@ -340,18 +420,28 @@ def parse_template_string(s, *,
                   must be closed before the end of the statement.
         * {# #} represents a "comment".  The delimiters and all text
           between them is discarded.
-        * {>} is the "whitespace eater".  Those three characters, and
-          all subsequent whitespace, are discarded, stopping when reaching
-          either a non-whitespace character or the end of the string.
+        * {>}, {<}, and {<>} are the "whitespace eaters".  Each
+          discards its own characters plus adjacent whitespace:
+            * {>} eats all whitespace *after* it, stopping when
+              reaching either a non-whitespace character or the
+              end of the string.
+            * {<} eats all whitespace *before* it, stopping when
+              reaching either a non-whitespace character or the
+              start of the string.
+            * {<>} eats in both directions.
 
     Each of these delimiters can be individually enabled or disabled
     with boolean keyword-only parameters, e.g. "parse_expressions",
     "parse_whitespace_eater".  By default only parse_expressions is true.
 
+    Just to be clear: all this function does is *parse* a template for
+    you, into these components.  It's up to you to do something with
+    the components.
+
     Returns a generator yielding the components of s.  These components
     can be:
         * a str object, representing literal text in the template,
-        * an Expression object, representing a parsed expression, or
+        * an Interpolation object, representing a parsed expression, or
         * a Statement object, representing a parsed statement.
     """
     if not isinstance(s, str):
@@ -376,9 +466,17 @@ def eval_template_string(s, globals, locals=None, *,
     parse_template_string function, then evaluates the
     Interpolation objects using eval(text, globals).
     This means eval_template_string supports {{ ... }}
-    to specify expressions, including supporting filters.
+    to specify expressions, including supporting filters
+    and format specifications:
+
+        {{ expression | filter : format_spec }}
+
+    The format specification is applied exactly like an
+    f-string's--format(value, spec), with the spec taken
+    verbatim--so like an f-string, don't pad it with
+    whitespace: {{x:>10}}, not {{ x : >10 }}.
     Optionally you may also enable parsing "comments" and
-    the "whitespace eater"; parsing these are disabled by
+    the "whitespace eaters"; parsing these are disabled by
     default.
 
     globals and locals (if specified) should be dictionaries
@@ -413,7 +511,12 @@ def eval_template_string(s, globals, locals=None, *,
         for f in o.filters:
             filter = eval(f, globals, locals)
             value = filter(value)
-        append(str(value))
+        if o.format is not None:
+            # the format specification, applied exactly like an
+            # f-string's: format(value, spec), spec verbatim.
+            append(format(value, o.format))
+        else:
+            append(str(value))
 
     return ''.join(result)
 
@@ -453,7 +556,7 @@ class Formatter:
     the result.  Substitutions in the template use 'str.format_map'
     syntax.  The signature of this callable is:
 
-        fn(message=''', **kwargs)
+        fn(message='', **kwargs)
 
     The **kwargs passed in here are also used as values for the
     interpolation, and take precedence over any value passed in
@@ -480,10 +583,18 @@ class Formatter:
               "message lines" in the template, the last "message line"
               will be repeated, used to format the last two lines of
               the "message" parameter.
+            * If the template doesn't contain any "message lines",
+              but you pass in a non-empty string for the "message"
+              when you call the Formatter object, normally this will
+              raise "ValueError".  If you want to permit passing in
+              a message when rendering a Formatter without any
+              "message lines", pass in relaxed=True to the Formatter
+              constructor.
         * Values whose keys end with '*' (e.g. "{line*}") are special:
           they are "starred interpolations".  Their value is repeated
           zero or more times then truncated until the line is at least
-          "width" characters.  Starred interpolations must not use:
+          "width" characters.  The value is converted with str() and
+          must not be empty.  Starred interpolations must not use:
             * dotted expressions ({line.foo*})
             * indexing ({line[3]*})
             * a conversion ({line*!r})
@@ -515,14 +626,14 @@ class Formatter:
         ==========----------
     """
 
-    def __init__(self, template, map=None, *, stretch=True, width=79, **kwargs):
+    def __init__(self, template, map=None, *, relaxed=False, stretch=True, width=79, **kwargs):
         if not isinstance(template, str):
             raise TypeError(f"template must be str, not {type(template).__name__}")
 
         if not isinstance(width, int):
             raise TypeError(f"width must be int, not {type(width).__name__}")
         if width <= 0:
-            raise ValueError(f"width must be greater than zero")
+            raise ValueError("width must be greater than zero")
 
         if map is not None:
             if not isinstance(map, dict):
@@ -541,12 +652,16 @@ class Formatter:
         # pre str-ize all starred interpolation values
         for key, value in map.items():
             if key.endswith('*'):
-                map[key] = str(value)
+                value = str(value)
+                if not value:
+                    raise ValueError(f"starred interpolation value for {key!r} must not be empty")
+                map[key] = value
 
         self._map = map
         self._stretch = bool(stretch)
         self._template = template
         self._width = width
+        self._relaxed = bool(relaxed)
 
         # First pass: scan all interpolation expressions to find a unique
         # prefix character.  We collect the set of first characters of all
@@ -562,7 +677,7 @@ class Formatter:
             contains_message = in_interpolation = False
             starred_interpolations = []
 
-            for text, open, close, change in split_delimiters(cleaned, _curly_brace_delimiters, yields=4):
+            for text, open, close, change in split_delimiters(cleaned, _curly_brace_delimiters):
                 if open:
                     if in_interpolation:
                         raise ValueError(f"template does not support nested curly braces (near {{{text}}})")
@@ -706,7 +821,7 @@ class Formatter:
         """
         if not isinstance(message, str):
             raise TypeError(f"message must be str, not {type(message).__name__}")
-        if message and not self._body:
+        if message and (not self._body) and (not self._relaxed):
             raise ValueError("message is non-empty but template has no {message} lines")
 
         combined_map = self._map
@@ -720,6 +835,8 @@ class Formatter:
                 for key, value in map.items():
                     if key.endswith('*'):
                         value = str(value)
+                        if not value:
+                            raise ValueError(f"starred interpolation value for {key!r} must not be empty")
                     combined_map[key] = value
 
         buffer = []
@@ -752,8 +869,22 @@ class Formatter:
                     len_test_line = len(test_line)
                     longest_base_line = len_test_line if len_test_line > longest_base_line else longest_base_line
                     delta = width - len_test_line
-                    if delta <= 0:
+                    if delta == 0:
+                        # a perfect fit: the starred interpolations
+                        # collapse to nothing and the line--including
+                        # any trailing decoration--lands exactly at
+                        # width.
                         line = test_line
+                    elif delta < 0:
+                        # the line overflows the width.  drawing the
+                        # trailing decoration (e.g. a closed box's
+                        # right border) glued onto overflowing content
+                        # is worse than not drawing it: cut the line
+                        # at the first starred interpolation and let
+                        # the content run open.
+                        first_key = starred_interpolation_names[0][0]
+                        before, _, _ = template_line.partition('{' + first_key + '}')
+                        line = before.format_map(map_line)
                     else:
                         count = len(starred_interpolation_names)
                         cumulative = 0

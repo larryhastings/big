@@ -33,7 +33,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import big
 
-__all__ = ['_license']
+__all__ = []
 
 from . import boundinnerclass
 __all__.append('boundinnerclass')
@@ -82,6 +82,11 @@ from . import scheduler
 __all__.append('scheduler')
 from .scheduler import *
 __all__.extend(scheduler.__all__)
+
+from . import snip
+__all__.append('snip')
+from .snip import *
+__all__.extend(snip.__all__)
 
 from . import state
 __all__.append('state')

@@ -24,13 +24,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from . import text
-from .text import _iterate_over_bytes, __separators_to_re
-from .itertools import PushbackIterator
-
-import re
-
-
 from . import builtin
 mm = builtin.ModuleManager()
 export = mm.export
@@ -143,7 +136,6 @@ class Log:
         """
         t = self.clock() - self.start
         self.events.append((t, event, len(self.stack)))
-        self.end = t
         self.longest_event = max(self.longest_event, len(event))
 
     def __iter__(self):
@@ -151,7 +143,7 @@ class Log:
         Iterate over the events of the log.
         Yields 4-tuples:
             (start_time, elapsed_time, event, depth)
-        start_time and elapsed_time are floats.
+        start_time and elapsed_time are ints (nanoseconds).
         event is the string you specified when you logged.
         depth is an integer; the higher the number,
           the more nested this event is (how many log.enter()
@@ -191,8 +183,8 @@ class Log:
 
         def format_time(t):
             assert t is not None
-            seconds = t // 1_000_000_000
-            nanoseconds = f"{t - seconds:>09}"
+            seconds, nanoseconds = divmod(t, 1_000_000_000)
+            nanoseconds = f"{nanoseconds:>09}"
             nanoseconds = nanoseconds[:fractional_width]
             return f"{seconds:0{seconds_width}}.{nanoseconds}"
 
@@ -204,7 +196,6 @@ class Log:
             column_dashes = '-' * column_width
             print(f"{indent}{column_dashes}  {column_dashes}  {'-' * self.longest_event}")
 
-        formatted = []
         for start, elapsed, event, depth in self:
             indent2 = indent * depth
             print(f"{indent}{format_time(start)}  {format_time(elapsed)}  {indent2}{event}")

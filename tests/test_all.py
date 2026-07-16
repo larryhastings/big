@@ -27,28 +27,32 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 bigtestlib.preload_local_big()
 
+from big import test
 
-for test_module in """
-    test_bigtestlib
-    test_boundinnerclass
-    test_builtin
-    test_deprecated
-    test_file
-    test_graph
-    test_heap
-    test_itertools
-    test_log
-    test_metadata
-    test_scheduler
-    test_state
-    test_template
-    test_text
-    test_time
-    test_tokens
-    test_types
-    test_version
-""".strip().split():
-    module = __import__(test_module)
-    module.run_tests()
 
-bigtestlib.finish()
+with test.suite() as run:
+    for test_module in """
+        test_bigtest
+        test_bigtestlib
+        test_boundinnerclass
+        test_builtin
+        test_deprecated
+        test_exports
+        test_file
+        test_graph
+        test_heap
+        test_itertools
+        test_log
+        test_metadata
+        test_scheduler
+        test_snip
+        test_state
+        test_template
+        test_text
+        test_time
+        test_tokens
+        test_types
+        test_version
+    """.strip().split():
+        module = __import__(test_module)
+        module.run_tests(run)

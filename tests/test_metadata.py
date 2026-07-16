@@ -28,24 +28,21 @@ import bigtestlib
 bigtestlib.preload_local_big()
 
 import big.all as big
-import unittest
 
 
-class BigTestVersion(unittest.TestCase):
+def test_metadata():
+    assert big.__version__
+    assert isinstance(big.__version__, str)
 
-    def test_metadata(self):
-        self.assertTrue(big.__version__)
-        self.assertIsInstance(big.__version__, str)
-
-        vt = big.metadata.version
-        self.assertTrue(vt)
-        self.assertIsInstance(vt, big.version.Version)
-        self.assertEqual(vt, big.version.Version(big.__version__))
-        self.assertEqual(str(vt), big.__version__)
+    vt = big.metadata.version
+    assert vt
+    assert isinstance(vt, big.version.Version)
+    assert vt == big.version.Version(big.__version__)
+    assert str(vt) == big.__version__
 
 
-def run_tests():
-    bigtestlib.run(name="big.metadata", module=__name__)
+def run_tests(run=None):
+    (run or bigtestlib.run)(name="big.metadata", module=__name__)
 
 if __name__ == "__main__": # pragma: no cover
     run_tests()

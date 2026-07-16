@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-_license = """
+# --8<-- start big license --8<--
+_big_license = """
 big
 Copyright 2022-2026 Larry Hastings
 All rights reserved.
@@ -23,20 +24,26 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+# --8<-- end big license --8<--
 
 from .boundinnerclass import BoundInnerClass
-import enum
 import functools
 import heapq
 import itertools
 from itertools import zip_longest
 from .itertools import PushbackIterator
-from . import state
 import math
-import operator
+import codecs
 import re
 import struct
+import types
+import warnings
+
+# --8<-- start big word wrap trio imports --8<--
+import enum
+import operator
 import sys
+# --8<-- end big word wrap trio imports --8<--
 
 
 try: # pragma: no cover
@@ -44,20 +51,27 @@ try: # pragma: no cover
 except ImportError: # pragma: no cover
     re_Pattern = re._pattern_type
 
-try: # pragma: no cover
-    import regex
-    regex_Pattern = regex.Pattern
-    def isinstance_re_pattern(o):
-        return isinstance(o, (re_Pattern, regex_Pattern))
-except ImportError: # pragma: no cover
-    regex_Pattern = re_Pattern
-    def isinstance_re_pattern(o):
-        return isinstance(o, re_Pattern)
+def _isinstance_re_pattern(o):
+    # big supports patterns from the PyPI 'regex' package too--but
+    # importing regex costs ~5ms, just to recognize its Pattern
+    # type.  so we don't import it; we check sys.modules instead.
+    # this is lossless, not approximate: a regex.Pattern instance
+    # can only exist if *somebody* already imported regex, and
+    # importing it put it in sys.modules.  if it's not there, no
+    # regex.Pattern exists anywhere in the process, and False is
+    # a theorem, not a guess.
+    if isinstance(o, re_Pattern):
+        return True
+    regex = sys.modules.get('regex')
+    return (regex is not None) and isinstance(o, regex.Pattern)
 
 from . import builtin
 mm = builtin.ModuleManager()
 export = mm.export
 
+
+# --8<-- start big _iterate_over_bytes --8<--
+# --8<-- requires big license --8<--
 
 def _iterate_over_bytes(b):
     # this may not actually iterate over bytes.
@@ -67,6 +81,8 @@ def _iterate_over_bytes(b):
     if isinstance(b, bytes):
         return (b[i:i+1] for i in range(len(b)))
     return iter(b)
+
+# --8<-- end big _iterate_over_bytes --8<--
 
 
 def _recursive_encode_strings(o, encoding):
@@ -199,7 +215,8 @@ export('bytes_whitespace_without_crlf')
 bytes_whitespace_without_crlf = tuple(s for s in bytes_whitespace if s != b'\r\n')
 
 
-export('str_linebreaks')
+# --8<-- start big linebreaks --8<--
+# --8<-- requires big license --8<--
 str_linebreaks = (
     # char    decimal   hex      identity
     ##########################################
@@ -223,27 +240,20 @@ str_linebreaks = (
     # Also: welcome to big, Acorn and RISC OS users!
     # What are you doing here?  You can't run Python 3.6+!
     )
-export('str_linebreaks_without_crlf')
 str_linebreaks_without_crlf = tuple(s for s in str_linebreaks if s != '\r\n')
 
-export('linebreaks')
 linebreaks = str_linebreaks
-export('linebreaks_without_crlf')
 linebreaks_without_crlf = str_linebreaks_without_crlf
 
 # Whitespace as defined by Unicode.  The same as Python's definition,
 # except we again remove the four ASCII separator characters.
-export('unicode_linebreaks')
 unicode_linebreaks = tuple(s for s in str_linebreaks if not ('\x1c' <= s <= '\x1f'))
-export('unicode_linebreaks_without_crlf')
 unicode_linebreaks_without_crlf = tuple(s for s in unicode_linebreaks if s != '\r\n')
 
 # Linebreaks as defined by ASCII.  The same as Unicode,
 # but only within the first 128 code points.
 # Note: these are still *str* objects.
-export('ascii_linebreaks')
 ascii_linebreaks = tuple(s for s in unicode_linebreaks if s < '\x80')
-export('ascii_linebreaks_without_crlf')
 ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n')
 
 # Whitespace as defined by the Python bytes object.
@@ -280,19 +290,18 @@ ascii_linebreaks_without_crlf = tuple(s for s in ascii_linebreaks if s != '\r\n'
 # linebreak character, because str.splitlines (and bytes.splitlines)
 # rstrips the string of linebreak characters before it splits lines, sigh.
 
-export('bytes_linebreaks')
 bytes_linebreaks = (
     b'\n'    , #   10 0x000a - linebreak
     )
 
 if len(b'x\vx'.splitlines()) == 2: # pragma: nocover
     bytes_linebreaks += (
-        '\v'    , #   11 - 0x000b - vertical tab
+        b'\v'    , #   11 - 0x000b - vertical tab
         )
 
 if len(b'x\fx'.splitlines()) == 2: # pragma: nocover
     bytes_linebreaks += (
-        '\f'    , #   12 - 0x000c - form feed
+        b'\f'    , #   12 - 0x000c - form feed
         )
 
 bytes_linebreaks += (
@@ -300,8 +309,19 @@ bytes_linebreaks += (
     b'\r\n'  , # bonus! the classic DOS linebreak sequence!
     )
 
-export('bytes_linebreaks_without_crlf')
 bytes_linebreaks_without_crlf = tuple(s for s in bytes_linebreaks if s != b'\r\n')
+# --8<-- end big linebreaks --8<--
+
+export('str_linebreaks')
+export('str_linebreaks_without_crlf')
+export('linebreaks')
+export('linebreaks_without_crlf')
+export('unicode_linebreaks')
+export('unicode_linebreaks_without_crlf')
+export('ascii_linebreaks')
+export('ascii_linebreaks_without_crlf')
+export('bytes_linebreaks')
+export('bytes_linebreaks_without_crlf')
 
 
 # reverse an iterable thing.
@@ -347,11 +367,17 @@ _reversed_builtin_separators = {
     ascii_whitespace: ascii_whitespace_without_crlf + ("\n\r",),
     ascii_whitespace_without_crlf: ascii_whitespace_without_crlf,
 
+    bytes_whitespace: bytes_whitespace_without_crlf + (b"\n\r",),
+    bytes_whitespace_without_crlf: bytes_whitespace_without_crlf,
+
     str_linebreaks: str_linebreaks_without_crlf + ("\n\r",),
     str_linebreaks_without_crlf: str_linebreaks_without_crlf,
 
     unicode_linebreaks: unicode_linebreaks_without_crlf + ("\n\r",),
     unicode_linebreaks_without_crlf: unicode_linebreaks_without_crlf,
+
+    ascii_linebreaks: ascii_linebreaks_without_crlf + ("\n\r",),
+    ascii_linebreaks_without_crlf: ascii_linebreaks_without_crlf,
 
     bytes_linebreaks: bytes_linebreaks_without_crlf + (b"\n\r",),
     bytes_linebreaks_without_crlf: bytes_linebreaks_without_crlf,
@@ -430,7 +456,7 @@ def re_partition(s, pattern, count=1, *, flags=0, reverse=False):
     empty = s[-1:-1]
     extension = (None, empty)
 
-    if not isinstance_re_pattern(pattern):
+    if not _isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
 
     # optimized fast path for the most frequent use case
@@ -708,7 +734,7 @@ def reversed_re_finditer(pattern, string, flags=0):
 
     string should be the same type as pattern (or pattern.pattern).
     """
-    if not isinstance_re_pattern(pattern):
+    if not _isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
 
     return _reversed_re_finditer(pattern, string)
@@ -943,11 +969,154 @@ def multistrip(s, separators, left=True, right=True):
     return s
 
 
-# for keep
+# --8<-- start big toy_multisplit --8<--
+# --8<-- requires big license --8<--
+
+def _toy_multisplit_as_pairs(segments, empty):
+    # segments alternates non-separator and separator strings,
+    # always starting and ending with a (possibly empty)
+    # non-separator string.  pair each non-separator string
+    # with its subsequent separator--appending the always-empty
+    # trailing separator--to make the keep=True 2-tuple form.
+    segments.append(empty)
+    return list(zip(segments[::2], segments[1::2]))
+
+
+def toy_multisplit(s, separators):
+    """
+    A toy version of multisplit.
+
+    s should be str or bytes.  separators should be a list or
+    tuple of str (or bytes, matching s); if separators is itself
+    a single str or bytes, every character (or byte) in it is a
+    separator.  separators must be non-empty and must not contain
+    the empty string.
+
+    Returns a list of 2-tuples of
+
+        (string, separator)
+
+    where string is a (possibly empty) substring of s containing
+    no separators, and separator is the separator that followed
+    it.  The final 2-tuple's separator is always the empty string.
+    Splitting is greedy: at each position, the longest matching
+    separator wins.  The result is identical to
+
+        list(multisplit(s, separators, keep=True, separate=True))
+
+    Why use this instead of multisplit?  It has no startup time.
+    It's also available as a snippet.
+    """
+    if not isinstance(separators, (list, tuple)):
+        separators = [separators[i:i+1] for i in range(len(separators))]
+    # assert separators
+    if isinstance(s, bytes):
+        empty = b''
+    else:
+        empty = ''
+    # assert empty not in separators
+
+    # special-cased only one separator,
+    # for PEDAL TO THE MEDAL HYPER-SPEED
+    if len(separators) == 1:
+        segments = []
+        sep = separators[0]
+        length = len(sep)
+        while s:
+            index = s.find(sep)
+            if index == -1:
+                segments.append(s)
+                s = None
+                break
+            segments.append(s[:index])
+            segments.append(sep)
+            index2 = index + length
+            s = s[index2:]
+        if s is not None:
+            segments.append(s)
+        return _toy_multisplit_as_pairs(segments, empty)
+
+    # separators_by_length is a list of tuples:
+    #    (length, bucket_of_separators_of_that_length)
+    #
+    # we add a bucket for every length, including 0.
+    # (makes the algorithm easier.)
+    longest_separator = max([len(sep) for sep in separators])
+    separators_by_length = []
+    for i in range(longest_separator, -1, -1):
+        separators_by_length.append((i, set()))
+
+    # store each separator in the correct bucket,
+    # for separators of that length.
+    for sep in separators:
+        separators_by_length[longest_separator - len(sep)][1].add(sep)
+
+    # strip out empty buckets.
+    # there may not be any separators in every length bucket.
+    # for example, if your separators are
+    #     ['X', 'Y', 'ABC', 'XYZ', ]
+    # then you don't have any separators of length 2.
+    # (also, we should never have any separators of length 0).
+    s2 = [t for t in separators_by_length if t[1]]
+    separators_by_length = s2
+
+    # confirm: we shouldn't have any separators of length 0.
+    # separators_by_length is sorted, with buckets containing
+    # longer separators appearing earlier.  so the bucket with
+    # the shortest separators is last.  the length of those
+    # separators should be > 0.
+
+    # assert separators_by_length[-1][0]
+
+    segments = []
+    word = []
+
+    def flush_word():
+        if not word:
+            segments.append(empty)
+            return
+        segments.append(empty.join(word))
+        word.clear()
+
+    longest_separator_length = separators_by_length[0][0]
+    while s:
+        substring = s
+        for length, separators_set in separators_by_length:
+            substring = substring[:length]
+            # print(f"substring={substring!r} separators_set={separators_set!r}")
+            if substring in separators_set:
+                flush_word()
+                segments.append(substring)
+                s = s[length:]
+                break
+        else:
+            # slice on a bytes object gives you back a bytes object.
+            # s[0] on a bytes object gives you back an int.
+            word.append(s[:1])
+            s = s[1:]
+    flush_word()
+
+    return _toy_multisplit_as_pairs(segments, empty)
+
+# --8<-- end big toy_multisplit --8<--
+
+export(toy_multisplit)
+
+
+# Constants supported by multisplit keep... FOR NOW.
+# As of 0.14, all three constants are deprecated.  No sooner
+# than August 2027, keep will only be a boolean.
+#    keep=false will be "throw away the separators".
+#    keep=true will be the AS_PAIRS form, the 2-tuple of (text, separator).
+#
+# Internally, big only ever used keep=False and keep=True anyway;
+# the only internal users of these constants are the tests.
 AS_PAIRS="AS_PAIRS"
 export(AS_PAIRS)
 ALTERNATING="ALTERNATING"
 export(ALTERNATING)
+JOINED="JOINED"
+export(JOINED)
 
 # for strip
 LEFT = "LEFT"
@@ -957,13 +1126,16 @@ export(RIGHT)
 PROGRESSIVE = "PROGRESSIVE"
 export(PROGRESSIVE)
 
+
 def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes, internally_keep_separators):
+    "Internal generator function for multisplit."
+    # by the time we're called, keep is always False,
+    # ALTERNATING, AS_PAIRS, or JOINED--the public multisplit
+    # translated keep=True into AS_PAIRS.
     if maxsplit is None:
         maxsplit = -1
     elif maxsplit == 0:
-        if keep == ALTERNATING:
-            yield s
-        elif keep == AS_PAIRS:
+        if keep == AS_PAIRS:
             yield (s, s[-1:-1])
         else:
             yield s
@@ -1074,8 +1246,9 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
             yield o
         return
 
-    # from here on out, we're *always* 'keep'-ing the separator strings.
-    # (we're returning the separator strings in one form or another.)
+    # from here on out, keep is AS_PAIRS or JOINED: pair up
+    # each segment with its following separator, and yield
+    # either the 2-tuple or the concatenation.
 
     append_empty = (len(l) % 2) == 1
     if append_empty:
@@ -1093,6 +1266,7 @@ def multisplit(s, separators, keep, maxsplit, reverse, separate, strip, is_bytes
         if keep == AS_PAIRS:
             yield (previous, o)
         else:
+            # keep == JOINED
             yield previous + o
         previous = None
 
@@ -1126,8 +1300,8 @@ def multisplit(s, separators=None, *,
     left-to-right order; this even includes zero-length strings,
     which are sliced from the contextually correct spot.
 
-    If keep is true (or ALTERNATING), and strip is false, joining
-    these strings together will recreate s.
+    If keep is true and strip is false, joining all the strings
+    yielded together will recreate s.
 
     multisplit is "greedy": if two or more separators start at the same
     location in "s", multisplit splits using the longest matching separator.
@@ -1136,29 +1310,55 @@ def multisplit(s, separators=None, *,
     yields 'wx' then 'yz'.
 
     "keep" indicates whether or not multisplit should keep the separator
-    strings.  It supports four values:
+    strings.  It supports two values:
         false (the default)
-            Discard the separators.
-        true (apart from ALTERNATING and AS_PAIRS)
-            Append the separators to the end of the split strings.
-            You can recreate the original string by passing the
-            list returned in to ''.join.
-        ALTERNATING
-            Yield alternating strings in the output: strings consisting
-            of separators, alternating with strings consisting of
-            non-separators.  If "separate" is true, separator strings
-            will contain exactly one separator, and non-separator strings
-            may be empty; if "separate" is false, separator strings will
-            contain one or more separators, and non-separator strings
-            will never be empty.
-            You can recreate the original string by passing the
-            list returned in to ''.join.
-        AS_PAIRS
+            Yield just the split strings, discarding the separators.
+        true
             Yield 2-tuples containing a non-separator string and its
             subsequent separator string.  Either string may be empty;
             the separator string in the last 2-tuple will always be
             empty, and if `s` ends with a separator string, *both*
             strings in the final 2-tuple will be empty.
+
+    "keep" also supports three symbolic values.  These values
+    are *deprecated,* and will be removed no sooner than one
+    year after the release of 0.14; passing any of them emits
+    a DeprecationWarning:
+
+        AS_PAIRS
+            The old name for what is now keep=True, the 2-tuple
+            (string, separator) form.
+
+        ALTERNATING
+            Yield alternating strings in the output: strings consisting
+            of separators, alternating with strings consisting of
+            non-separators.  The first and last will be non-separators,
+            which means this always yields an *odd* number of substrings.
+            If separate is true, separator strings will contain exactly
+            one separator, and non-separator strings may be empty;
+            if separate is false, separator strings will contain one or
+            more separators, and non-separator strings will never be empty,
+            unless s was empty.
+
+            You can recreate the original string by using "".join to join
+            the strings yielded.
+
+            You can recreate this format using keep=True with the following:
+                flat = list(itertools.chain.from_iterable(big.multisplit(s, seps, keep=True)))
+                flat.pop()
+
+        JOINED
+            Each separator is appended to its preceding string.
+
+            You can recreate this format using keep=True with the following:
+                (a + b  for (a, b) in big.multisplit(s, seps, keep=True))
+
+    *NOTE:* In big 0.13 and earlier, keep=True meant what JOINED
+    now means: separators appended to their preceding strings.  0.14
+    changed its meaning to the 2-tuple form.  (Why?  The 2-tuple form
+    can be mechanically converted into any other form, making it the
+    ur-form that's useful in every situation.  It's just a better API
+    this way--you don't need any of that other junk, I promise.)
 
     "separate" indicates whether multisplit should consider adjacent
     separator strings in s as one separator or as multiple separators
@@ -1213,18 +1413,45 @@ def multisplit(s, separators=None, *,
     the beginning.  Second, if there are overlapping instances of
     separators in the string, multisplit will prefer the rightmost
     separator rather than the left.  For example:
-        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING)
+        multisplit("A x x Z", (" x ",), keep=True)
     will split on the leftmost instance of " x ", yielding
-        "A", " x ", "x Z"
+        ("A", " x "), ("x Z", "")
     whereas
-        multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True)
+        multisplit("A x x Z", (" x ",), keep=True, reverse=True)
     will split on the rightmost instance of " x ", yielding
-        "A x", " x ", "Z"
+        ("A x", " x "), ("Z", "")
 
     You can pass in an instance of a subclass of bytes or str
     for s and elements of separators, but the base class
     for both must be the same (str or bytes).
     """
+    if keep:
+        # keep=True means the 2-tuple form (what 0.13 called
+        # AS_PAIRS).  the constants still work, deprecated;
+        # they'll be removed no sooner than August 2027.
+        if keep == ALTERNATING:
+            warnings.warn(
+                "multisplit's keep=ALTERNATING is deprecated, and will be"
+                " removed no sooner than August 2027.  Transform the 2-tuples"
+                " yielded by keep=True instead.",
+                DeprecationWarning, stacklevel=2)
+        elif keep == JOINED:
+            warnings.warn(
+                "multisplit's keep=JOINED is deprecated, and will be"
+                " removed no sooner than August 2027. "
+                " It exists to ease migration from 0.13's"
+                " keep=True, which meant what JOINED means; going"
+                " forward, use keep=True and join each 2-tuple.",
+                DeprecationWarning, stacklevel=2)
+        else:
+            if keep == AS_PAIRS:
+                warnings.warn(
+                    "multisplit's keep=AS_PAIRS is deprecated, and will be"
+                    " removed no sooner than August 2027. "
+                    " It's now spelled keep=True.",
+                    DeprecationWarning, stacklevel=2)
+            keep = AS_PAIRS
+
     is_bytes = isinstance(s, bytes)
     separators_is_bytes = isinstance(separators, bytes)
     separators_is_str = isinstance(separators, str)
@@ -1264,9 +1491,10 @@ def multisplit(s, separators=None, *,
             s2.append(o)
         separators = tuple(s2)
 
-    if separators is not None:
-        if not separators:
-            raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
+    # separators can't be None here--None was replaced with the
+    # default separators above--so we only need the emptiness check.
+    if not separators:
+        raise ValueError(f"separators must be either None or an iterable of objects the same type as s; s is {type(s).__name__}, separators is {separators!r}")
 
     if maxsplit is not None:
         maxsplit = operator.index(maxsplit)
@@ -1334,9 +1562,9 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     together, behaving like one big separator.  If `separate` is true,
     they're kept separate.  Example:
 
-        >>> multipartition('aXYbYXc', ('X', 'Y',),          separate=False)
+        >>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False)
         ('a', 'XY', 'b', 'YX', 'c')
-        >>> multipartition('aXYbYXc', ('X', 'Y',),          separate=True )
+        >>> multipartition('aXYbYXc', ('X', 'Y',), count=4, separate=True )
         ('a', 'X', '', 'Y', 'b', 'Y', '', 'X', 'c')
         >>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True )
         ('a', 'X', '', 'Y', 'bYXc')
@@ -1352,12 +1580,18 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
     count = operator.index(count)
     if count < 0:
         raise ValueError("count must be positive")
-    result = list(multisplit(s, separators,
-        keep=ALTERNATING,
+    # flatten the keep=True 2-tuples into the alternating form
+    # this function is built on, then drop the always-empty
+    # trailing separator.
+    result = []
+    for segment_and_separator in multisplit(s, separators,
+        keep=True,
         reverse=reverse,
         separate=separate,
         strip=False,
-        maxsplit=count))
+        maxsplit=count):
+        result.extend(segment_and_separator)
+    result.pop()
     desired_length = (2 * count) + 1
     result_length = len(result)
     if result_length < desired_length:
@@ -1376,6 +1610,118 @@ def multipartition(s, separators, count=1, *, reverse=False, separate=True):
 def multirpartition(s, separators, count=1, *, reverse=False, separate=True):
     "Like big.multipartition, but partitions from the right by default, like str.rpartition."
     return multipartition(s, separators, count=count, reverse=not reverse, separate=separate)
+
+@export
+def multireplace(s, replacements, count=-1, *, reverse=False):
+    """
+    Like str.replace, but supports multiple replacement strings,
+    and replaces them all in a single pass.
+
+    s can be str or bytes.
+
+    replacements should be a mapping (e.g. a dict) mapping
+    old strings to the new strings replacing them.  Every key
+    and every value must be the same type as s, keys cannot
+    be empty, and replacements cannot itself be empty.
+
+    Returns a copy of s with every occurrence of every key
+    replaced by that key's value.  multireplace makes only one
+    pass over s: text that has already been replaced is never
+    itself examined for further replacements.  For example:
+
+        big.multireplace('ab', {'a': 'b', 'b': 'a'})
+
+    returns 'ba'.  (Calling str.replace repeatedly gets this
+    wrong: 'ab'.replace('a', 'b').replace('b', 'a') returns
+    'aa', because the second replace re-replaces the output
+    of the first.)
+
+    multireplace is "greedy": if two or more keys match at the
+    same location in s, multireplace replaces using the longest
+    matching key.  For example:
+
+        big.multireplace('a category', {'cat': 'dog', 'category': 'taxonomy'})
+
+    returns 'a taxonomy', not 'a dogegory'.
+
+    "count" should be either an integer or None.  If count is an
+    integer greater than -1, multireplace will replace no more
+    than count times, like the "count" parameter to str.replace.
+
+    "reverse" controls the direction multireplace scans in.
+    It supports two values:
+        false (the default)
+            Scan starting from the beginning of the string,
+            moving right.
+        true
+            Scan starting from the end of the string,
+            moving left.
+    Scanning from the end of the string has two effects.  First,
+    if count is a number greater than 0, the replacements start
+    at the end of the string rather than the beginning.  Second,
+    if there are overlapping instances of keys in the string,
+    multireplace will prefer the rightmost key rather than the
+    leftmost.  For example:
+
+        big.multireplace('xa0bx', {'a0': 'A', '0b': 'B'})
+
+    returns 'xAbx', whereas
+
+        big.multireplace('xa0bx', {'a0': 'A', '0b': 'B'}, reverse=True)
+
+    returns 'xaBx'.
+
+    You can pass in instances of subclasses of bytes or str
+    for s and the keys and values of replacements, but the
+    base class for all of them must be the same (str or bytes).
+
+    multireplace supports big.string: if s is a big.string
+    object, the result is reassembled with big.string.cat,
+    so it's a big.string too, and every unchanged segment
+    still knows its original file, line, and column.
+    """
+    if not hasattr(replacements, 'items'):
+        raise TypeError(f"replacements must be a mapping of keys and values the same type as s; s is {type(s).__name__}, replacements is {replacements!r}")
+
+    if isinstance(s, bytes):
+        s_type = bytes
+        empty = b''
+    else:
+        s_type = str
+        empty = ''
+
+    keys = []
+    for key, value in replacements.items():
+        if not (isinstance(key, s_type) and isinstance(value, s_type)):
+            raise TypeError(f"replacements must be a mapping of keys and values the same type as s; s is {type(s).__name__}, replacements contains {key!r}: {value!r}")
+        if not key:
+            raise ValueError("replacements keys cannot be empty")
+        keys.append(key)
+    if not keys:
+        raise ValueError(f"replacements cannot be empty")
+
+    # multisplit hands us (segment, separator) 2-tuples, always
+    # in left-to-right order, even when reverse is true.  every
+    # non-empty separator is an exact match for one of our keys;
+    # map it through replacements and reassemble.  greediness,
+    # count, reverse, and the str/bytes discipline all come
+    # from multisplit.
+    result = []
+    for segment, separator in multisplit(s, tuple(keys),
+        keep=True,
+        maxsplit=count,
+        reverse=reverse,
+        separate=True,
+        strip=False):
+        result.append(segment)
+        if separator:
+            result.append(replacements[separator])
+
+    big_types = sys.modules.get('big.types')
+    if (big_types is not None) and isinstance(s, big_types.string):
+        return type(s).cat(*result)
+
+    return empty.join(result)
 
 @export
 def format_map(s, mapping):
@@ -1406,7 +1752,7 @@ def format_map(s, mapping):
     empty_join = ''.join
     saw_backslash = False
 
-    for s, delimiter in multisplit(s, '{}\\', separate=True, keep=AS_PAIRS):
+    for s, delimiter in multisplit(s, '{}\\', separate=True, keep=True):
         append(s)
         if not delimiter:
             continue
@@ -1464,14 +1810,22 @@ def format_map(s, mapping):
 # It's been (ab)used as an apostrophe historically,
 # but that's because ASCII had a limited number of
 # punctuation characters.
+#
+# ("our purposes" are specifically gently_title.)
+# --8<-- start big apostrophes and double quotes --8<--
+# --8<-- requires big license --8<--
+
 apostrophes = unicode_apostrophes = "'‘’‚‛"
-export('apostrophes')
 double_quotes = unicode_double_quotes = '"“”„‟«»‹›'
-export('double_quotes')
 
 ascii_apostrophes = b"'"
-export('ascii_apostrophes')
 ascii_double_quotes = b'"'
+
+# --8<-- end big apostrophes and double quotes --8<--
+
+export('apostrophes')
+export('double_quotes')
+export('ascii_apostrophes')
 export('ascii_double_quotes')
 
 utf8_apostrophes = apostrophes.encode('utf-8')
@@ -1565,7 +1919,10 @@ def split_title_case(s, *, split_allcaps=True):
             else:
                 break
 
-    if word_start < offset:
+    # careful: offset is the index of the last character enumerate
+    # yielded, not one past it--comparing word_start against offset
+    # here used to silently drop a single-character final word.
+    if word_start < len(s):
         yield s[word_start:]
 
 
@@ -1658,8 +2015,8 @@ def combine_splits(s, *split_arrays):
     combine_splits only examines the lengths of the strings
     in the split arrays, and makes no attempt to infer
     stripped characters.  (So, don't use the string's .split
-    method to split, use big's multisplit with keep=True or
-    keep=ALTERNATING.)
+    method to split; use big's multisplit with keep=True, and
+    flatten the 2-tuples it yields.)
     """
     # Convert every entry in split_arrays to a list.
     # Measure the strings in the split arrays, ignoring empty splits.
@@ -1672,6 +2029,11 @@ def combine_splits(s, *split_arrays):
 
     return _combine_splits(s, split_lengths)
 
+
+# --8<-- start big gently_title --8<--
+# --8<-- requires big license --8<--
+# --8<-- requires big apostrophes and double quotes --8<--
+# --8<-- requires big _iterate_over_bytes --8<--
 
 _in_word = "_in_word"
 _after_whitespace = "_after_whitespace"
@@ -1686,7 +2048,6 @@ _default_bytes_is_double_quote = ascii_double_quotes.__eq__
 _str_do_contains = 'DO'.__contains__
 _bytes_do_contains = b'DO'.__contains__
 
-@export
 def gently_title(s, *, apostrophes=None, double_quotes=None):
     """
     Uppercase the first character of every word in s,
@@ -1710,7 +2071,7 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     Rule b) handles certain Irish, French, and Italian
         names.
             Peter O'Toole
-            Lord D'Arcy
+            D'Artagnan
 
     Capitalize the letter after a quote mark if
     the quote mark is after whitespace (or is the
@@ -1745,7 +2106,7 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
         double-quote marks.
 
         If s is bytes, the default value is
-        big.text.ascii_double_quotes, which is the string b"'".
+        big.text.ascii_double_quotes, which is the string b'"'.
     """
     if isinstance(s, bytes):
         s_type = bytes
@@ -1830,6 +2191,11 @@ def gently_title(s, *, apostrophes=None, double_quotes=None):
     if result == s:
         return s
     return result
+
+# --8<-- end big gently_title --8<--
+
+export('gently_title')
+
 
 @export
 def normalize_whitespace(s, separators=None, replacement=None):
@@ -1984,7 +2350,7 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
     text = s[0:0]
 
     quote = state
-    for pair in multisplit(s, separators, keep=AS_PAIRS, separate=True):
+    for pair in multisplit(s, separators, keep=True, separate=True):
         literal, separator = pair
 
         if literal:
@@ -2016,16 +2382,18 @@ def split_quoted_strings(s, separators, all_quotes_set, quotes, multiline_quotes
                 text = separator
             continue
         # separator == quote
-        if quote or text:
-            if quote and text and (quote not in multiline_quotes):
-                # see treatise above
-                if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
-                    raise SyntaxError("unterminated quoted string, {s!r}")
-            if state:
-                state = None
-                yield (text[0:0], text, separator)
-            else:
-                yield (quote, text, separator)
+        # (and quote is always truthy here--if it were false,
+        # the "not currently quoted" branch above would have
+        # handled this separator.)
+        if text and (quote not in multiline_quotes):
+            # see treatise above
+            if (len(text.splitlines()) > 1) or (len( (text[-1:] + laden).splitlines()) > 1):
+                raise SyntaxError(f"unterminated quoted string, {s!r}")
+        if state:
+            state = None
+            yield (text[0:0], text, separator)
+        else:
+            yield (quote, text, separator)
         length = len(text)
         text = text[length:length]
         quote = text
@@ -2081,6 +2449,12 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     backslash ('\\') character inside strings in Python.
     By default, escape is '\\'.  (If s is bytes, escape
     defaults to b'\\'.)
+    escape works inside both quotes and multiline_quotes,
+    and shields exactly one following character, like
+    backslash in Python.  So inside a '\"\"\"' string,
+    '\\\"\"\"' is an escaped quote mark followed by two
+    live quote marks--just like Python--and doesn't
+    close the string.
 
     multiline_quotes is like quotes, except text inside
     multiline quotes is permitted to contain linebreaks.
@@ -2097,12 +2471,12 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     multiple lines individually, and you wanted to begin
     a new line continuing the state from the previous line--
     pass in the appropriate quote delimiter from quotes
-    into initial.  When a non-empty string is passed in
+    into state.  When a non-empty string is passed in
     to state, the leading_quote in the first 3-tuple
     yielded by split_quoted_strings will be an empty string.
     For example:
 
-        list(split_quoted_string("a b c'", state="'"))
+        list(split_quoted_strings("a b c'", state="'"))
 
     evaluates to
 
@@ -2230,9 +2604,12 @@ def split_quoted_strings(s, quotes=_sqs_quotes_str, *, escape=_sqs_escape_str, m
     separators = list(quotes_set)
     separators.extend(multiline_quotes_set)
 
-    # and also all escaped quote marks.
+    # and also all escaped quote marks--for *every* kind of quote,
+    # multiline quotes included.  escape shields exactly one
+    # following character, like backslash in Python, so the
+    # separator we need is escape + the quote's first character.
     if escape:
-        for first_character in {q[0:] for q in quotes}:
+        for first_character in {q[0:1] for q in all_quotes_set}:
             separators.append(escape + first_character)
         separators.append(escape + escape)
 
@@ -2247,7 +2624,10 @@ class Delimiter:
     """
     Class representing a delimiter for split_delimiters.
 
-    close is the closing delimiter character, must be the same type as open, and length 1.
+    close is the closing delimiter, either a str or bytes string,
+        or a tuple of them: alternatives, any one of which closes
+        the delimiter.  (For example, a line comment can end at
+        '\\n' or '\\r'.)  Every close must be the same type as open.
     quoting is a boolean: does this set of delimiters "quote" the text inside?
         When an open delimiter enables quoting, split_delimiters will ignore all
         other delimiters in the text until it encounters the matching close delimiter.
@@ -2259,29 +2639,90 @@ class Delimiter:
     multiline is a boolean: are linebreak characters permitted inside these delimiters?
         multiline may only be false when quoting is true.
 
+    Three parameters define what the text *inside* the delimiter
+    means.  They can also be assigned to as attributes, until the
+    first time the Delimiter is used in a compiled grammar--after
+    that the Delimiter is frozen, and you'd need to work with a
+    copy.  (Assignment exists so you can construct cyclic grammars:
+    build the Delimiters, then close the loop by assigning at the
+    end.)
+
+    nested is a mapping of open delimiter strings to Delimiter
+        objects: delimiters that are live *inside* this delimiter.
+        For a quoting delimiter, nested delimiters are the
+        exceptions to the quoting--how a Python f-string, which
+        quotes, still opens an {interpolation}.  For a non-quoting
+        delimiter, every top-level delimiter of the grammar is
+        already live inside, and nested adds to (or overrides)
+        those.  (A None value is reserved for future use and
+        currently rejected.)
+    literal is a token, or an iterable of tokens (like close),
+        that are plain text inside this delimiter, even if they'd
+        otherwise collide with a meaningful token--how '{{' inside
+        an f-string means a literal '{' rather than two
+        interpolations.  The literal property always presents the
+        tokens as a tuple.
+    change is a mapping of tokens to Delimiter objects: seeing the
+        token *changes* what the inside of the current delimiter
+        means, without opening a nested delimiter.  The current
+        delimiter continues, and its close still closes it--so a
+        change target must have the same close as its host.  This
+        is how the ':' inside an f-string {interpolation} switches
+        the text after it into the format-spec sub-language.  The
+        token is reported in the "change" field of the values
+        yielded by split_delimiters.
+
     You may not specify backslash ('\\') as an open or close delimiter.
     """
-    def __init__(self, close, *, escape='', multiline=True, quoting=False):
+    def __init__(self, close, *, escape='', multiline=True, quoting=False,
+        nested=None, literal=(), change=None):
         # you can pass in a Delimiter instance and we'll clone it
         if isinstance(close, Delimiter):
             d = close
             self._close = d._close
+            self._closes = d._closes
             self._escape = d._escape
             self._quoting = d._quoting
             self._multiline = d._multiline
+            self._nested = dict(d._nested)
+            self._literal = d._literal
+            self._change = dict(d._change)
+            # a copy is always unfrozen--that's the escape hatch
+            # for modifying a delimiter after it's been compiled.
+            self._frozen = False
             return
 
-        is_bytes = isinstance(close, bytes)
-        if is_bytes:
-            t = bytes
-            empty = b''
-            if close == b'\\':
-                raise ValueError("close delimiter must not be '\\'")
+        # close may be a single string, or an iterable of
+        # alternatives.  normalize to a tuple.
+        if isinstance(close, (str, bytes)):
+            closes = (close,)
         else:
-            t = str
+            try:
+                closes = tuple(close)
+            except TypeError:
+                raise TypeError(f"close must be str, bytes, or an iterable of str or bytes, not {close!r}")
+            if not closes:
+                raise ValueError("close must contain at least one delimiter")
+            if len(set(closes)) != len(closes):
+                raise ValueError("close contains a repeated delimiter")
+
+        is_bytes = isinstance(closes[0], bytes)
+        if is_bytes:
+            s_type = bytes
+            empty = b''
+            backslash = b'\\'
+        else:
+            s_type = str
             empty = ''
-            if close == '\\':
-                raise ValueError("close delimiter must not be b'\\'")
+            backslash = '\\'
+
+        for c in closes:
+            if not isinstance(c, s_type):
+                raise TypeError(f"close delimiters must all be the same type (str or bytes), not {c!r}")
+            if not c:
+                raise ValueError("close delimiter must not be an empty string")
+            if c == backslash:
+                raise ValueError(f"close delimiter must not be {backslash!r}")
 
         # they can't both be false, and they can't both be true
         # if bool(escape) != bool(quoting):
@@ -2294,13 +2735,45 @@ class Delimiter:
             raise ValueError(f"multiline=False unsupported when quoting=False")
 
         self._close = close
+        self._closes = closes
         self._escape = escape or empty
         self._quoting = quoting
         self._multiline = multiline
 
+        self._frozen = False
+        self._nested = {}
+        self._literal = ()
+        self._change = {}
+        # route through the setters, so construction and
+        # assignment validate identically
+        if nested is not None:
+            self.nested = nested
+        if literal:
+            self.literal = literal
+        if change is not None:
+            self.change = change
+
+    def _s_type(self):
+        return bytes if isinstance(self._closes[0], bytes) else str
+
+    def _check_unfrozen(self):
+        if self._frozen:
+            raise ValueError("this Delimiter has been used in a compiled grammar and can no longer be modified; modify a copy() instead")
+
+    def _check_token(self, token, description):
+        if not isinstance(token, self._s_type()):
+            raise TypeError(f"{description} must be the same type as close ({self._s_type().__name__}), not {token!r}")
+        if not token:
+            raise ValueError(f"{description} must not be an empty string")
+
     @property
     def close(self):
         return self._close
+
+    @property
+    def closes(self):
+        "All the delimiter's close alternatives, as a tuple, even if close was a single string."
+        return self._closes
 
     @property
     def escape(self):
@@ -2314,19 +2787,120 @@ class Delimiter:
     def multiline(self):
         return self._multiline
 
+    @property
+    def nested(self):
+        return types.MappingProxyType(self._nested)
+
+    @nested.setter
+    def nested(self, value):
+        self._check_unfrozen()
+        if value is None:
+            value = {}
+        value = dict(value)
+        for open, delimiter in value.items():
+            self._check_token(open, "nested open delimiters")
+            if delimiter is None:
+                raise ValueError(f"nested value for {open!r} is None; None values are reserved for future use")
+            if not isinstance(delimiter, Delimiter):
+                raise TypeError(f"nested values must be Delimiter objects, not {delimiter!r}")
+            if open in self._closes:
+                raise ValueError(f"nested open delimiter {open!r} is also a close delimiter of this Delimiter")
+        self._nested = value
+
+    @property
+    def literal(self):
+        return self._literal
+
+    @literal.setter
+    def literal(self, value):
+        self._check_unfrozen()
+        # like close: either a single token, or an iterable of them.
+        if isinstance(value, (str, bytes)):
+            value = (value,)
+        else:
+            value = tuple(value)
+            if len(set(value)) != len(value):
+                raise ValueError("literal contains a repeated token")
+        for token in value:
+            self._check_token(token, "literal tokens")
+            if token in self._closes:
+                raise ValueError(f"literal token {token!r} is also a close delimiter of this Delimiter")
+            if token == self._escape:
+                raise ValueError(f"literal token {token!r} is also the escape string of this Delimiter")
+        self._literal = value
+
+    @property
+    def change(self):
+        return types.MappingProxyType(self._change)
+
+    @change.setter
+    def change(self, value):
+        self._check_unfrozen()
+        if value is None:
+            value = {}
+        value = dict(value)
+        for token, delimiter in value.items():
+            self._check_token(token, "change tokens")
+            if not isinstance(delimiter, Delimiter):
+                raise TypeError(f"change values must be Delimiter objects, not {delimiter!r}")
+            if delimiter._closes != self._closes:
+                raise ValueError(f"change target for {token!r} must have the same close as this Delimiter; {delimiter._closes!r} != {self._closes!r}")
+            if token in self._closes:
+                raise ValueError(f"change token {token!r} is also a close delimiter of this Delimiter")
+        self._change = value
+
     def __repr__(self): # pragma: no cover
-        return f"Delimiter(close={self._close!r}, escape={self._escape!r}, multiline={self._multiline!r}, quoting={self._quoting!r})"
+        # nested and change can contain reference cycles,
+        # so render just their keys.
+        s = f"Delimiter(close={self._close!r}, escape={self._escape!r}, multiline={self._multiline!r}, quoting={self._quoting!r}"
+        if self._nested:
+            s += f", nested=<{{{', '.join(repr(k) for k in self._nested)}}}>"
+        if self._literal:
+            s += f", literal={self._literal!r}"
+        if self._change:
+            s += f", change=<{{{', '.join(repr(k) for k in self._change)}}}>"
+        return s + ")"
 
     def __eq__(self, other):
-        return (isinstance(other, Delimiter)
-            and (self._close   == other._close)
+        return self._eq(other, set())
+
+    def _eq(self, other, memo):
+        if self is other:
+            return True
+        if not isinstance(other, Delimiter):
+            return NotImplemented
+        # nested and change can contain reference cycles.
+        # memo remembers the pairs we're already comparing;
+        # if we meet a pair again on a back-edge, assume equal
+        # (if they differ, some *other* field along the cycle
+        # differs, and that comparison returns the False).
+        key = (id(self), id(other))
+        if key in memo:
+            return True
+        memo.add(key)
+        if not ((self._closes  == other._closes)
             and (self._escape  == other._escape)
             and (self._quoting == other._quoting)
             and (self._multiline == other._multiline)
-            )
+            and (self._literal == other._literal)
+            and (set(self._nested) == set(other._nested))
+            and (set(self._change) == set(other._change))):
+            return False
+        for open, delimiter in self._nested.items():
+            if delimiter._eq(other._nested[open], memo) is not True:
+                return False
+        for token, delimiter in self._change.items():
+            if delimiter._eq(other._change[token], memo) is not True:
+                return False
+        return True
 
     def __hash__(self):
-        return hash("Delimiter") ^ hash(self._close) ^ hash(self._escape) ^ hash(self._quoting) ^ hash(self._multiline)
+        # only hash the flat fields.  nested and change can
+        # contain reference cycles, which an ordinary recursive
+        # hash would never escape.  (perfectly legal: objects
+        # that compare equal still hash equal, because deep
+        # equality implies flat equality.)
+        return hash("Delimiter") ^ hash(self._closes) ^ hash(self._escape) ^ hash(self._quoting) ^ hash(self._multiline) ^ hash(self._literal)
 
     def copy(self):
         return Delimiter(self)
@@ -2389,12 +2963,18 @@ class _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES(bytes, _ACTION_TRUNCATE_TO_S_AND_R
     def __repr__(self): # pragma: nocover
         return f"_ACTION_TRUNCATE_TO_S_AND_RESPLIT({bytes(self)!r})"
 
-class _ACTION_GOTO_STATE(dict):
+class _ACTION_CHANGE_STATE:
+    # switch the current state to self.state, *without* pushing.
+    # this is how a Delimiter's "change" tokens are implemented:
+    # the current delimiter continues (its close still pops),
+    # but the text inside now means something different.
+    __slots__ = ('state',)
+    def __init__(self, state):
+        self.state = state
     def __repr__(self): # pragma: nocover
-        return f"_ACTION_GOTO_STATE({dict(self)!r})"
+        return f"_ACTION_CHANGE_STATE(<state with {len(self.state)} tokens>)"
 
 
-@functools.lru_cache(maxsize=None)
 def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     """
     Converts delimiters into data used by the split_delimiters
@@ -2409,7 +2989,7 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     to parse, including open delimimeters, close delimiters,
     and escape strings.
 
-    Because this function is memoized (using functools.lru_cache)
+    Because the compiler is memoized (using functools.lru_cache)
     you must convert delimiters from a dict into a tuple of
     2-tuples.  (dicts aren't hashable.)  Instead of passing
     in "delimiters", pass in:
@@ -2419,6 +2999,34 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     The state is consumed by the split_delimiters generator, below.
     See that for details.
     """
+    result = _compile_delimiters(delimiters, is_bytes)
+
+    # freeze every Delimiter in the grammar--and do it *here*,
+    # outside the memoized compiler.  the compiler memoizes by
+    # *equality*, so compiling a grammar deep-equal to an earlier
+    # one is a cache hit and the compiler body never runs--but
+    # these particular Delimiter objects are compiled now too,
+    # and mutating one couldn't change the cached states, it
+    # could only lie about them.
+    seen = set()
+    worklist = [delimiter for open, delimiter in delimiters]
+    while worklist:
+        delimiter = worklist.pop()
+        if id(delimiter) in seen:
+            continue
+        seen.add(id(delimiter))
+        delimiter._frozen = True
+        worklist.extend(delimiter.nested.values())
+        worklist.extend(delimiter.change.values())
+
+    return result
+
+
+@functools.lru_cache(maxsize=None)
+def _compile_delimiters(delimiters, is_bytes):
+    # the memoized compiler core.  always call it through
+    # _delimiters_to_state_and_tokens, which also freezes the
+    # grammar's Delimiters--even on a cache hit.
     delimiters = list(delimiters)
 
     if is_bytes:
@@ -2426,42 +3034,67 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
         s_type_description = "bytes"
         not_s_type_description = "str"
         linebreaks = bytes_linebreaks_without_crlf
-        truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES
         iterate_over_delimiter = _iterate_over_bytes
     else:
         s_type = str
         s_type_description = "str"
         not_s_type_description = "bytes"
         linebreaks = str_linebreaks_without_crlf
-        truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR
         iterate_over_delimiter = iter
 
     all_closers = set()
     all_openers = set()
     all_escapes = set()
+    all_literal_tokens = set()
+    all_change_tokens = set()
     nested_closers = set()
     all_linebreaks = set(linebreaks)
+
+    # discover every Delimiter reachable from the top level: the
+    # grammar's own values, plus everything reachable through
+    # nested and change, recursively.  each distinct *object*
+    # (by identity) compiles to one state--which is also what
+    # makes reference cycles fine.
+    all_delimiters = []
+    seen_delimiters = set()
+    worklist = [delimiter for open, delimiter in delimiters]
+    while worklist:
+        delimiter = worklist.pop()
+        if id(delimiter) in seen_delimiters:
+            continue
+        seen_delimiters.add(id(delimiter))
+        if not isinstance(delimiter, Delimiter):
+            raise TypeError(f"delimiter values must be Delimiter objects, not {delimiter!r}")
+        all_delimiters.append(delimiter)
+        worklist.extend(delimiter.nested.values())
+        worklist.extend(delimiter.change.values())
 
     for open, delimiter in delimiters:
         if not isinstance(open, s_type):
             raise TypeError(f"open delimiter {open!r} must be {s_type_description}, not {not_s_type_description}")
-        if not isinstance(delimiter, Delimiter):
-            raise TypeError(f"delimiter values must be Delimiter or SymbolicDelimiter, not {delimiter!r}")
-
         all_openers.add(open)
 
-        if isinstance(delimiter, Delimiter):
-            if not isinstance(delimiter.close, s_type):
-                raise TypeError(f"close delimiter {delimiter.close!r} must be {s_type_description}, not {not_s_type_description}")
-            if not isinstance(delimiter.escape, s_type):
-                raise TypeError(f"Delimiter: escape {delimiter.escape!r} must be {s_type_description}, not {not_s_type_description}")
-            all_closers.add(delimiter.close)
-            if delimiter.quoting:
-                if delimiter.escape:
-                    all_escapes.add(delimiter.escape)
-            else:
-                assert not delimiter.escape
-                nested_closers.add(delimiter.close)
+    for delimiter in all_delimiters:
+        for close in delimiter.closes:
+            if not isinstance(close, s_type):
+                raise TypeError(f"close delimiter {close!r} must be {s_type_description}, not {not_s_type_description}")
+        if not isinstance(delimiter.escape, s_type):
+            raise TypeError(f"Delimiter: escape {delimiter.escape!r} must be {s_type_description}, not {not_s_type_description}")
+        # no type checks needed for nested keys, literal tokens,
+        # or change tokens: the Delimiter setters guarantee they
+        # match that delimiter's own closes--so checking closes
+        # against the grammar (above) covers everything.
+        all_openers.update(delimiter.nested)
+
+        all_closers.update(delimiter.closes)
+        all_literal_tokens.update(delimiter.literal)
+        all_change_tokens.update(delimiter.change)
+        if delimiter.quoting:
+            if delimiter.escape:
+                all_escapes.add(delimiter.escape)
+        else:
+            assert not delimiter.escape
+            nested_closers.update(delimiter.closes)
 
     in_both_openers_and_closers = all_openers & nested_closers
     if in_both_openers_and_closers:
@@ -2474,7 +3107,7 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
         raise ValueError(f"{prefix}{in_both_openers_and_closers!r} cannot be both an opening and closing delimiter")
 
     all_delimiter_tokens = all_openers | all_closers
-    all_tokens = all_delimiter_tokens | all_escapes | all_linebreaks
+    all_tokens = all_delimiter_tokens | all_escapes | all_literal_tokens | all_change_tokens | all_linebreaks
 
     # all the non-quoting states reuse the same open dictionary.
     # initial_state = _DelimiterState(open={}, close=None, illegal=all_closers, single_line_only=False)
@@ -2500,27 +3133,31 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
 
     # for every state, representing a delimiter d:
     #
-    # non-quoting delimiter pairs have illegal strings, invalid delimiters.
-    # e.g. imagine d.open = '(', d.close =')', and d.quoting = False
-    # and another state has delimiters '[(' and ')]'
-    # if we parse
-    #         x[foo( a b c )])
-    # multisplit will      ^^ split here
-    # but we want to split ^ here. so.
-    # for every illegal token t
-    #    for s in (d.close, d.escape) # if d.escape is defined, that is
-    #        if len(t) > len(s) and t.startswith(s)
-    #            action = _ACTION_FLUSH_{CLOSE, ESCAPE}_AND_RESPLIT
-    #            # this behaves like we got delimiter s instead of t from multisplit
-    #            # we re-multisplit after the end of s
+    # multisplit tokenizes the entire text using *every* token in
+    # the grammar, but any individual state only cares about *some*
+    # of those tokens.  a "foreign" token--one with no meaningful
+    # action in this state--can still collide with tokens this
+    # state cares about, two ways:
     #
-    # if d.quoting:
-    #    first of all, we still have the same problem as with the previous
-    #    paragraph, except quoting delimiters would flush them, they aren't illegal.
-    #    but we still need to split
+    # 1. the foreign token can *start with* a meaningful token.
     #
-    #    but also!
-    #    proper markers might be completely *buried inside* otherwise flushed delimiters.
+    #    e.g. imagine d.open = '(', d.close =')', and d.quoting = False
+    #    and another state has delimiters '[(' and ')]'
+    #    if we parse
+    #            x[foo( a b c )])
+    #    multisplit will      ^^ split here
+    #    but we want to split ^ here.
+    #
+    #    the fix: react as if we'd received the meaningful token
+    #    instead, then "resplit" (re-run multisplit) starting after
+    #    it.  this is handled uniformly, for every state and every
+    #    meaningful token--close, escape, or open--by
+    #    _resolve_foreign_tokens, below.  (it used to be handled
+    #    here, but only for d.close and d.escape; a foreign token
+    #    starting with a valid *open* delimiter raised SyntaxError.)
+    #
+    # 2. in quoting states only: a meaningful token might be
+    #    *buried inside* an otherwise flushed foreign token.
     #
     #        e.g. imagine d.open = d.close ='"', and d.quoting = True
     #        and another state has delimiters '<"<' '>">'
@@ -2530,72 +3167,156 @@ def _delimiters_to_state_and_tokens(delimiters, is_bytes):
     #        but we should flush ^ this
     #                        and  ^ handle this.
     #
-    #    also, the *start* of a proper marker might be consumed by an otherwise flushed delimiter.
+    #    the fix: snip off the first character, flush it, then
+    #    resplit starting after that first character.
     #
-    #        e.g. imagine d.open = '<(' d.close =')>', and d.quoting = True
-    #        and another state has delimiters '([' '])'
-    #        if we parse
-    #              a b c <( d e f ])>
-    #        multisplit will      ^^^ split here
-    #        but we want to flush ^ this
-    #                         and  ^^ handle this.
-    #
-    #   what we do in these cases is snip off the first character, flush it,
-    #   then re-split (using multisplit) starting after that first character.
-    #
-    #   note that if the same multi-character delimiter *starts with* one delimiter,
-    #   but also contains any overlap with another delimiter, the startswith has
-    #   to take priority.
+    # if the same foreign token qualifies for both, rule 1 (startswith)
+    # takes priority:
     #
     #       e.g. imagine d.open = '(', d.close=')', d.escape = '[', d.quoting=True
     #       and another state has delimiters '([' '])'
     #       for state d, we want '])' to map to "TRUNCATE TO ]", not "FLUSH 1 AND RESPLIT"
     #
+    # (that priority is enforced by ordering: rule 2 is assigned here,
+    # and _resolve_foreign_tokens overwrites it with rule 1 afterward.)
 
-    for open, delimiter in delimiters:
+    state_for_delimiter = {}
+
+    for delimiter in all_delimiters:
         if delimiter.quoting:
             state = {}
-            all_delimiter_characters = set(iterate_over_delimiter(delimiter.close))
+            all_delimiter_characters = set()
+            for close in delimiter.closes:
+                all_delimiter_characters |= set(iterate_over_delimiter(close))
             if delimiter.escape:
                 all_delimiter_characters |= set(iterate_over_delimiter(delimiter.escape))
+
+            for t in all_tokens:
+                t_characters = set(iterate_over_delimiter(t))
+                if t_characters & all_delimiter_characters:
+                    state[t] = _ACTION_FLUSH_1_AND_RESPLIT
         else:
             # non-quoting delimiter
             state = non_quoting_state_with_default_actions.copy()
             states_to_update_with_all_delimiters_that_push.append(state)
-            all_delimiter_characters = None
-
-        delimiters_and_startswith_actions = [ (delimiter.close, truncate_to_s_type(delimiter.close)) ]
-        if delimiter.escape:
-            delimiters_and_startswith_actions.append((delimiter.escape, truncate_to_s_type(delimiter.escape)))
-
-        for t in all_tokens:
-            for s, startswith_action in delimiters_and_startswith_actions:
-                if t != s:
-                    if t.startswith(s):
-                        state[t] = startswith_action
-                        break # breaking here ensures priority of startswith
-                    elif all_delimiter_characters:
-                        t_characters = set(iterate_over_delimiter(t))
-                        if t_characters & all_delimiter_characters:
-                            state[t] = _ACTION_FLUSH_1_AND_RESPLIT
 
         if delimiter.quoting and (not delimiter.multiline):
             state.update(make_linebreaks_illegal)
         else:
             state.update(ignore_linebreaks)
 
-        state[delimiter.close] = _ACTION_POP
+        for close in delimiter.closes:
+            state[close] = _ACTION_POP
 
         if delimiter.escape:
             state[delimiter.escape] = _ACTION_ESCAPE
 
+        state_for_delimiter[id(delimiter)] = state
+
+    for open, delimiter in delimiters:
         assert open not in delimiters_that_push_a_new_state
-        delimiters_that_push_a_new_state[open] = state
+        delimiters_that_push_a_new_state[open] = state_for_delimiter[id(delimiter)]
 
     for state in states_to_update_with_all_delimiters_that_push:
         state.update(delimiters_that_push_a_new_state)
 
+    # wire in nested, literal, and change--*after* the top-level
+    # update, so a delimiter's own declarations override the
+    # grammar-wide defaults.
+    for delimiter in all_delimiters:
+        state = state_for_delimiter[id(delimiter)]
+        for open, nested_delimiter in delimiter.nested.items():
+            state[open] = state_for_delimiter[id(nested_delimiter)]
+        for token in delimiter.literal:
+            state[token] = _ACTION_FLUSH
+        for token, change_delimiter in delimiter.change.items():
+            state[token] = _ACTION_CHANGE_STATE(state_for_delimiter[id(change_delimiter)])
+
+    _resolve_foreign_tokens(initial_state, all_tokens, is_bytes)
+
     return initial_state, all_tokens
+
+
+def _resolve_foreign_tokens(initial_state, all_tokens, is_bytes):
+    """
+    Walks every state reachable from initial_state and resolves
+    "foreign" token collisions: a token with no meaningful action
+    in some state, which *starts with* a token that does have a
+    meaningful action there.  multisplit tokenizes greedily using
+    every token in the grammar, so without this fixup the longer
+    foreign token would swallow the meaningful one.
+
+    For each such token, in each such state, installs a
+    "truncate and resplit" action: react as if we'd received the
+    meaningful prefix token instead, then re-run multisplit
+    starting after it.  When several meaningful tokens are
+    prefixes of the same foreign token, the longest one wins.
+
+    "Meaningful" means the prefix token opens a delimiter, closes
+    this one, escapes, changes state, or is explicitly illegal
+    here--anything but flushed text.  (Truncating to an illegal
+    token matters too: inside '(', the input '}}' should produce
+    the same SyntaxError a bare '}' does, not silently flush.)
+    A token with its own meaning in a state is never rewritten
+    (if 'x' and 'xy' both open delimiters, 'xy' really is 'xy'),
+    and neither is a token explicitly declared literal
+    (an f-string's '{{').
+
+    This runs as the last step of compiling a grammar.
+    """
+    if is_bytes:
+        truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_BYTES
+    else:
+        truncate_to_s_type = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR
+
+    # map each multi-character token to its proper prefixes
+    # that are also tokens, longest first.
+    prefixes = {}
+    for t in all_tokens:
+        if len(t) <= 1:
+            continue
+        found = [m for m in all_tokens if (m != t) and t.startswith(m)]
+        if found:
+            found.sort(key=len, reverse=True)
+            prefixes[t] = found
+
+    if not prefixes:
+        return
+
+    # a token is resolvable if the state doesn't map it at all
+    # (the runtime default is flush), or maps it to one of these
+    # fixup-able actions.  any *other* explicit mapping is a
+    # declaration--including an explicit _ACTION_FLUSH, which is
+    # how a state declares a token to be literal text (e.g. '{{'
+    # inside an f-string)--and we must leave it alone.
+    resolvable = (_ACTION_ILLEGAL, _ACTION_FLUSH_1_AND_RESPLIT)
+
+    seen = set()
+    states = [initial_state]
+    while states:
+        state = states.pop()
+        if id(state) in seen:
+            continue
+        seen.add(id(state))
+
+        for action in state.values():
+            if isinstance(action, dict):
+                states.append(action)
+            elif isinstance(action, _ACTION_CHANGE_STATE):
+                states.append(action.state)
+
+        for t, candidates in prefixes.items():
+            if (t in state) and (state[t] not in resolvable):
+                continue
+            for m in candidates:
+                m_action = state.get(m, _ACTION_FLUSH)
+                if (isinstance(m_action, (dict, _ACTION_CHANGE_STATE))
+                    or (m_action is _ACTION_POP)
+                    or (m_action is _ACTION_ESCAPE)
+                    or (m_action is _ACTION_ILLEGAL)):
+                    state[t] = truncate_to_s_type(m)
+                    break
+
 
 _delimiters_cache = []
 
@@ -2617,8 +3338,8 @@ Those letters are:
     r - means "raw string"
     u - means "unicode string"
 
-'u' was added in Python 3.2, and 'f' was added in Python 3.6.
-A new one, 't', may be added soon, see PEP 750.
+'u' was added in Python 3.2, 'f' was added in Python 3.6,
+and 't' was added in Python 3.14 (PEP 750).
 
 What combinations are valid?  There are some rules:
     * u cannot be used with any other prefix character.
@@ -2749,6 +3470,7 @@ Big supports all the new prefixes that adds, too.
 # we want, and when we're done we just export the symbols
 # we want to keep and throw the rest away.
 class Workspace:
+    # string prefixes valid on every version of Python big supports.
     all_string_prefixes = [
         '',
         'b',
@@ -2777,27 +3499,28 @@ class Workspace:
         'U',
         ]
 
+    # Python 3.14 added t-strings (PEP 750), and with them these
+    # prefixes.  big builds both grammar *dicts* eagerly--they're
+    # small and cheap--then picks the right one for the running
+    # interpreter (python_delimiters), and maps every version to
+    # its own grammar (python_delimiters_version).  Compiling a
+    # grammar into its state machine is the expensive part, so
+    # that's deferred until the first split_delimiters call that
+    # needs it; see _make_python_grammar_cache below.
+    t_string_prefixes = [
+        'rt',
+        'rT',
+        'Rt',
+        'RT',
+        't',
+        'T',
+        'tr',
+        'tR',
+        'Tr',
+        'TR',
+        ]
 
     assert sys.version_info.major >= 3
-
-    if (sys.version_info.major > 3) or (sys.version_info.minor >= 14): # pragma: nocover
-        all_string_prefixes.extend((
-            'rt',
-            'rT',
-            'Rt',
-            'RT',
-            't',
-            'T',
-            'tr',
-            'tR',
-            'Tr',
-            'TR',
-            ))
-        all_string_prefixes.sort()
-
-    pep_701_f_strings_in_the_grammar = (sys.version_info.major > 3) or (sys.version_info.minor >= 12)
-
-    python_delimiters = split_delimiters_default_delimiters.copy()
 
     # In Python "raw" strings, backslash still escapes a quote character.  This is legal:
     #     r'abc\'def'
@@ -2805,187 +3528,194 @@ class Workspace:
     # it quotes the closing quote mark, and it does.  The same is true for triple-quoted strings;
     # even in a raw triple-quoted string, you can escape single-quote marks.
 
-    all_quote_delimiters = [Delimiter(quotes, escape='\\', multiline=len(quotes) == 3, quoting=True) for quotes in ("'", '"', "'''", '"""')]
+    # Python's tokenizer only recognizes '\n' and '\r' as line
+    # boundaries.  The rest of big's linebreaks--vertical tab,
+    # form feed, '\x85', ' ', and friends--are plain text
+    # inside Python's strings and comments, as far as Python is
+    # concerned.  Declaring them literal in those delimiters
+    # matches Python's actual behavior, while leaving big's
+    # definition of "linebreak" intact: they're still linebreaks,
+    # this grammar just declares them literal text here.
+    exotic_linebreaks = tuple(c for c in str_linebreaks_without_crlf if c not in ('\n', '\r'))
 
-    for prefix in all_string_prefixes:
-        for d in all_quote_delimiters:
-            python_delimiters[prefix + d.close] = d
+    # single-line strings declare the exotic linebreaks literal
+    # (multiline=False would otherwise reject them, and real
+    # Python doesn't); triple-quoted strings are multiline, where
+    # linebreaks are already plain text.
+    all_quote_delimiters = []
+    for quotes in ("'", '"', "'''", '"""'):
+        multiline = len(quotes) == 3
+        all_quote_delimiters.append(
+            Delimiter(quotes, escape='\\', multiline=multiline, quoting=True,
+                literal=(() if multiline else exotic_linebreaks),
+                ))
 
-    # this only works if the lines you parse include the trailing newline characters.
-    python_delimiters['#'] = Delimiter('\n', escape=None, multiline=False, quoting=True)
-
-    _python_delimiters_cache = _delimiters_to_state_and_tokens(tuple(python_delimiters.items()), False)
-
-    # now we're gonna do a little manual surgery
-    # on the computed state transitions for _python_delimiters_cache.
-    # there's no way to express this using the Delimiters API (yet?), sorry.
+    # -- f-strings, through the front door --
     #
-    # the hacks all have to do with { inside f-strings:
-    # * although f-strings are "quoting", { is still active inside.
-    # * however, this version of the { delimiter doesn't allow *nested* { (directly).
-    # * also, {{ and }} is ignored inside f-strings.  this means we have to handle
-    #   these tokens everywhere: inside f-strings, we flush 'em, and everywhere
-    #   else we have to "truncate to the first { and resplit" so they get treated
-    #   like two {'s or two }'s like they should.
-
-    initial_state, all_tokens = _python_delimiters_cache
-
-    # we're gonna add these three tokens.
-    # every state (every dict reachable from initial_state)
-    # needs to have correct actions mapped for these three new tokens.
-    all_tokens.add('{{')
-    all_tokens.add('}}')
-    all_tokens.add(':')
-    all_tokens.add('!')
-
-    # most states will handle {{ and }} by splitting off the
-    # first character and handling that separately,
-    # then (re-)parsing the remaining text starting with the second character.
-    truncate_to_one_lcurly_and_resplit = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR('{')
-    truncate_to_one_rcurly_and_resplit = _ACTION_TRUNCATE_TO_S_AND_RESPLIT_STR('}')
-
-    initial_state['{{'] = truncate_to_one_lcurly_and_resplit
-    initial_state['}}'] = truncate_to_one_rcurly_and_resplit
-
-    # fstring_lcurly is a special tweaked state
-    # for { inside an f-string.  (*before* the colon or the ending }.)
+    # an f-string is a quoting delimiter, except '{' still opens
+    # an {interpolation} inside it--and '{{' and '}}' are literal
+    # text.  inside the interpolation:
     #
     #        +-- inside an f-string,
     #        |
     #        |   +-- inside curly braces,
     #        |   |
-    #       vv   v
+    #        |   |   +-- ':' *changes* to the format-spec
+    #        |   |   |   sub-language...
+    #       vv   v   v
     # print(f'foo{abc:xyz}')
-    #             ^^^
+    #             ^^^ ^^^
+    #              |   |
+    #              |   +-- ...where most delimiters are inert,
+    #              |       but '{' opens a nested field.
     #              |
-    #              +-- the text before the colon or } is in fstring_lcurly.
-    fstring_lcurly = initial_state['{'].copy()
-
-    # fstring_exclamation_mark is a special tweaked state
-    # used after the ! inside the { inside an f-string.
+    #              +-- ...and before it, this is an ordinary
+    #                  expression: every delimiter works.
     #
-    #        +-- inside an f-string,
-    #        |
-    #        |   +-- inside curly braces,
-    #        |   |
-    #        |   |   +-- and after the colon,
-    #        |   |   |
-    #       vv   v   v
-    # print(f'foo{abc!a}')
-    #                ^^
-    #                 |
-    #                 +-- this text here is in state fstring_exclamation_mark.
-    fstring_exclamation_mark = _ACTION_GOTO_STATE()
-    # technically, once we enter this state, the only allowable next characters
-    # are "a", "s", and "r".  after that you must have either ":" or "}".
-    # but we're lazy.  so we just copy the behavior from a quoted string.
-    fstring_exclamation_mark.update(initial_state['"'])
-    # reminder: _ACTION_FLUSH means "this character has no special meaning, add it to 'text' and move on."
-    fstring_exclamation_mark['"'] = _ACTION_FLUSH
-    fstring_exclamation_mark['}}'] = truncate_to_one_rcurly_and_resplit
-    # } should pop out of this state back to the previous nested state.
-    fstring_exclamation_mark['}'] = _ACTION_POP
-
-    # fstring_colon is a special tweaked state used
-    # after the : inside the { inside an f-string.
+    # '!' likewise changes to the conversion field ("!r"); a ':'
+    # after that changes to the format spec.  the interpolation,
+    # the conversion, and the format spec are all ended by the
+    # same '}', so they're "change" targets, not nested
+    # delimiters.
     #
-    #        +-- inside an f-string,
-    #        |
-    #        |   +-- inside curly braces,
-    #        |   |
-    #        |   |   +-- and after the colon,
-    #        |   |   |
-    #       vv   v   v
-    # print(f'foo{abc:xyz}')
-    #                 ^^^
-    #                  |
-    #                  +-- this text here is in state fstring_colon.
-    fstring_colon = _ACTION_GOTO_STATE()
-    # this state behaves mostly like a quoted string;
-    # it ignores most delimiters.
-    fstring_colon.update(initial_state['"'])
-    # reminder: _ACTION_FLUSH means "this character has no special meaning, add it to 'text' and move on."
-    fstring_colon['"'] = _ACTION_FLUSH
-    fstring_colon['#'] = _ACTION_FLUSH
-    fstring_colon['\n'] = _ACTION_FLUSH
-    fstring_colon['{{'] = truncate_to_one_lcurly_and_resplit
-    fstring_colon['}}'] = truncate_to_one_rcurly_and_resplit
-    # } should pop out of this state back to the previous nested state.
-    fstring_colon['}'] = _ACTION_POP
-    # { should nest into a normal { state, not this funny f-string one.
-    fstring_colon['{'] = initial_state['{']
+    # (technically, after '!' the only legal characters are "a",
+    # "s", and "r", followed by ':' or '}'.  but we're lazy, so
+    # the conversion field just acts like a quoted single-line
+    # string.)
+    #
+    # the format spec is shared by single- and triple-quoted
+    # f-strings, so it must be multiline.
 
-    # comment_state is used to handle comments anywhere.
-    # allow \r as well as \n to end a comment.
-    comment_state = initial_state['#']
-    comment_state['\r'] = comment_state['\n']
+    curly_braces = split_delimiters_default_delimiters['{']
 
-    # all these tokens are flushed (ignored and appended to 'text')
-    # when inside a state representing being inside a string.
-    tokens_flushed_inside_strings = ('{{', '}}', '#', '\n')
+    fstring_format_spec = Delimiter('}', quoting=True, escape='\\',
+        nested={'{': curly_braces})
 
-    for open, d in initial_state.items():
-        is_dict = isinstance(d, dict)
-        if is_dict:
-            # *everybody* flushes colon and exclamation mark.
-            # (*except* fstring_curly and fstring_exclamation_mark.
-            # we'll manually fix those after the loop.)
-            d['!'] = d[':'] = _ACTION_FLUSH
+    fstring_conversion = Delimiter('}', quoting=True, escape='\\', multiline=False,
+        change={':': fstring_format_spec})
 
-        if ('"' in open) or ("'" in open):
-            # it's a state for a string delimiter
-            assert is_dict
+    # '!=' is declared literal so the != operator survives:
+    # in f'{a != b}', the '!' must not start a conversion field.
+    # (multisplit tokenizes greedily, so '!=' wins over '!'.
+    # real python uses the same rule: a conversion is '!' not
+    # followed by '='.)
+    fstring_interpolation = Delimiter('}',
+        literal='!=',
+        change={':': fstring_format_spec, '!': fstring_conversion})
 
-            for t in tokens_flushed_inside_strings:
-                d[t] = _ACTION_FLUSH
+    # (a plain loop, not a comprehension: comprehensions can't
+    # see class-body names like fstring_interpolation.)
+    all_fstring_quote_delimiters = []
+    for quotes in ("'", '"', "'''", '"""'):
+        multiline = len(quotes) == 3
+        all_fstring_quote_delimiters.append(
+            Delimiter(quotes, escape='\\', multiline=multiline, quoting=True,
+                nested={'{': fstring_interpolation},
+                literal=('{{', '}}') + (() if multiline else exotic_linebreaks),
+                ))
+    del quotes
+    del multiline
 
-            if 'f' in open.lower():
-                # this state specifically represents
-                # being inside an f-string delimiter,
-                # use the special state for { inside f-strings.
-                d['{'] = fstring_lcurly
-        elif is_dict:
-            # this delimiter doesn't open a string,
-            # it's some other open delimiter.
-            # (open delimiters are the only guys who get dicts.)
-            d['{{'] = truncate_to_one_lcurly_and_resplit
-            d['}}'] = truncate_to_one_rcurly_and_resplit
+    def build_python_delimiters(prefixes, brace_prefix_characters,
+        all_quote_delimiters=all_quote_delimiters,
+        all_fstring_quote_delimiters=all_fstring_quote_delimiters,
+        exotic_linebreaks=exotic_linebreaks,
+        ):
+        python_delimiters = split_delimiters_default_delimiters.copy()
 
-    # now fix ! and : just for fstring_lcurly
-    fstring_lcurly['!'] = fstring_exclamation_mark
-    fstring_lcurly[':'] = fstring_colon
+        for prefix in prefixes:
+            lowered = prefix.lower()
+            if any((c in lowered) for c in brace_prefix_characters):
+                # f-string (or t-string, in the t-aware grammar):
+                # braces are live inside.
+                quote_delimiters = all_fstring_quote_delimiters
+            else:
+                quote_delimiters = all_quote_delimiters
+            for d in quote_delimiters:
+                python_delimiters[prefix + d.close] = d
 
-    # and fix : for fstring_exclamation_mark.
-    fstring_exclamation_mark[':'] = fstring_colon
+        # this only works if the lines you parse include the trailing newline characters.
+        # (a comment ends at '\n' or '\r', whichever comes first;
+        # the exotic linebreaks are comment text, like Python says.)
+        python_delimiters['#'] = Delimiter(('\n', '\r'), escape=None, multiline=False, quoting=True,
+            literal=exotic_linebreaks)
+
+        return python_delimiters
+
+    # t-strings (3.14+) have the same brace semantics as
+    # f-strings--that's the second argument.
+    python_delimiters_3_6 = build_python_delimiters(all_string_prefixes, 'f')
+    python_delimiters_3_14 = build_python_delimiters(all_string_prefixes + t_string_prefixes, 'ft')
 
 
-python_delimiters = Workspace.python_delimiters
-_python_delimiters_cache = Workspace._python_delimiters_cache
+
+python_delimiters_3_6 = Workspace.python_delimiters_3_6
+python_delimiters_3_14 = Workspace.python_delimiters_3_14
 del Workspace
 
+
+def _make_python_grammar_cache(delimiters):
+    # compiling a python grammar into its state machine costs
+    # real time--several milliseconds per grammar--so we don't
+    # do it at import.  this returns a zero-argument callable
+    # that builds the cache on first call and returns the
+    # memoized result thereafter.  (the entries for the small
+    # default-delimiters grammars just wrap their prebuilt
+    # caches in a lambda; see below.)
+    cache = None
+    def get_cache():
+        nonlocal cache
+        if cache is None:
+            cache = _delimiters_to_state_and_tokens(tuple(delimiters.items()), False)
+        return cache
+    return get_cache
+
 _delimiters_cache.append(
-    (python_delimiters, _python_delimiters_cache, 4)
+    (python_delimiters_3_6, _make_python_grammar_cache(python_delimiters_3_6))
     )
+_delimiters_cache.append(
+    (python_delimiters_3_14, _make_python_grammar_cache(python_delimiters_3_14))
+    )
+
+# python_delimiters is the grammar of the *running* interpreter.
+if (sys.version_info.major, sys.version_info.minor) >= (3, 14): # pragma: nocover
+    python_delimiters = python_delimiters_3_14
+else: # pragma: nocover
+    python_delimiters = python_delimiters_3_6
 
 export('python_delimiters')
 
-python_delimiters_version = { f"3.{minor}": python_delimiters for minor in range(6, 14) }
+# python_delimiters_version maps a Python version string to the
+# delimiters for *that version's* grammar, independent of the
+# running interpreter.  the only grammar fork in big's supported
+# range is t-strings, added in 3.14.
+python_delimiters_version = { f"3.{minor}": python_delimiters_3_6 for minor in range(6, 14) }
+python_delimiters_version["3.14"] = python_delimiters_3_14
 export('python_delimiters_version')
 
 @export
 class SplitDelimitersValue:
-    __slots__ = ['text', 'open', 'close', 'change', 'yields']
+    __slots__ = ['text', 'open', 'close', 'change']
 
-    def __init__(self, text, open, close, change, yields):
+    def __init__(self, text, open, close, change):
         self.text = text
         self.open = open
         self.close = close
         self.change = change
-        assert yields in (3, 4)
-        self.yields = yields
+
+    @property
+    def yields(self):
+        # Deprecated.  In big 0.13, split_delimiters could yield
+        # objects that iterated as either three or four values,
+        # and .yields told you which.  As of 0.14 it's always four,
+        # so this always returns 4.  Kept for backwards
+        # compatibility; it will be removed at the same time as the
+        # deprecated "yields" parameter to split_delimiters, no
+        # sooner than August 2027.
+        return 4
 
     def __repr__(self):
-        return f"SplitDelimitersValue(text={self.text!r}, open={self.open!r}, close={self.close!r}, change={self.change!r}, yields={self.yields!r})"
+        return f"SplitDelimitersValue(text={self.text!r}, open={self.open!r}, close={self.close!r}, change={self.change!r})"
 
     def __eq__(self, other):
         return (
@@ -2994,25 +3724,22 @@ class SplitDelimitersValue:
             and (self.open == other.open)
             and (self.close == other.close)
             and (self.change == other.change)
-            and (self.yields == other.yields)
             )
 
     def __iter__(self):
         yield self.text
         yield self.open
         yield self.close
-        if self.yields == 4:
-            yield self.change
+        yield self.change
 
 
-@export
-def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yields):
+def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes):
     """
     Internal generator function returned by the real split_delimiters.
 
     This function operates by iterating over "text" and reacting to
     tokens found in "all_tokens".  It splits text using multisplit(),
-    using all_tokens as the separator list, and specifying keep=AS_PAIRS
+    using all_tokens as the separator list, and specifying keep=True
     so we can examine the string we split on.  We'll refer to that
     separator string as the "token" below.
 
@@ -3021,8 +3748,8 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
           (entering new delimiter),
         * one of the _ACTION_* constants above, or
         * an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT.
-        * an instance of _ACTION_GOTO_STATE, which is a subclass
-          of dict.
+        * an instance of _ACTION_CHANGE_STATE, which wraps a
+          state dict.
 
     The _ACTION_* constants above dictate:
         * _ACTION_POP means pop the current state.
@@ -3046,10 +3773,12 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
           separator and proceed from there.  (_ACTION_FLUSH_1_AND_RESPLIT
           is only used for delimiters with quoting=True.)
 
-    If the entry is an instance of _ACTION_GOTO_STATE, we *switch to* that
-    state, we don't *push* that state.  (It's a horrible hack, to handle
-    : inside f-strings.  Inside { inside an f-string, before the :, #
-    means "line comment", and after the : it's ignored.)
+    If the entry is an instance of _ACTION_CHANGE_STATE, we *switch to*
+    the state it wraps, we don't *push* it.  This implements a
+    Delimiter's "change" tokens: e.g. the : inside { inside an
+    f-string.  Inside { inside an f-string, before the :, #
+    means "line comment", and after the : it's ignored.  The
+    current delimiter continues--its close still pops.
 
     If the entry is an instance of _ACTION_TRUNCATE_TO_S_AND_RESPLIT,
     then this token starts with one of our current delimiters (close or escape).
@@ -3099,7 +3828,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
 
     consumed = 0
 
-    i = multisplit(text, all_tokens, keep=AS_PAIRS, separate=True)
+    i = multisplit(text, all_tokens, keep=True, separate=True)
     resplit = False
 
     while True:
@@ -3120,7 +3849,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
 
                     # if delimiter is longer than 1 character, resplit.
                     append(delimiter[0:1])
-                    i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                    i = multisplit(text[consumed:], all_tokens, keep=True, separate=True)
                     break
 
             if s:
@@ -3158,31 +3887,29 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 # if want_debug:
                 #     print(f"    new {action=}")
 
-            if isinstance(action, dict):
-                if isinstance(action, _ACTION_GOTO_STATE):
-                    # don't "push" the state, just switch to this state.
-                    # (used for colon inside curly braces inside an f-string.)
-                    # the colon itself doesn't map
-                    s = join(buffer)
-                    clear()
-                    s_length = len(s)
-                    s_empty = s[s_length:]
-                    yield SplitDelimitersValue(s, s_empty, s_empty, delimiter, yields)
-                    consumed += len(delimiter)
-                    current = action
-                    stack[-1] = (stack[-1][0], delimiter)
-                else:
-                    # action is a new state, push it.
-                    # flush open delimiter
-                    s = join(buffer)
-                    clear()
-                    delimiter_length = len(delimiter)
-                    delimiter_empty = delimiter[delimiter_length:]
-                    yield SplitDelimitersValue(s, delimiter, delimiter_empty, delimiter_empty, yields)
-                    consumed += len(delimiter)
-                    # and push
-                    push((current, delimiter))
-                    current = action
+            if isinstance(action, _ACTION_CHANGE_STATE):
+                # don't "push" the state, just switch to this state.
+                # (used for colon inside curly braces inside an f-string.)
+                s = join(buffer)
+                clear()
+                s_length = len(s)
+                s_empty = s[s_length:]
+                yield SplitDelimitersValue(s, s_empty, s_empty, delimiter)
+                consumed += len(delimiter)
+                current = action.state
+                stack[-1] = (stack[-1][0], delimiter)
+            elif isinstance(action, dict):
+                # action is a new state, push it.
+                # flush open delimiter
+                s = join(buffer)
+                clear()
+                delimiter_length = len(delimiter)
+                delimiter_empty = delimiter[delimiter_length:]
+                yield SplitDelimitersValue(s, delimiter, delimiter_empty, delimiter_empty)
+                consumed += len(delimiter)
+                # and push
+                push((current, delimiter))
+                current = action
             elif action is _ACTION_POP:
                 # flush close delimiter
                 s = join(buffer)
@@ -3191,7 +3918,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 s_empty = s[s_length:]
                 delimiter_length = len(delimiter)
                 delimiter_empty = delimiter[delimiter_length:]
-                yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
+                yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty)
                 consumed += len(delimiter)
                 # and pop
                 current, _ = pop()
@@ -3203,7 +3930,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
             #     s_empty = s[s_length:]
             #     delimiter_length = len(delimiter)
             #     delimiter_empty = delimiter[delimiter_length:]
-            #     yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty, yields)
+            #     yield SplitDelimitersValue(s, s_empty, delimiter, delimiter_empty)
             #     consumed += len(delimiter)
             #     # and pop twice
             #     current, _ = pop()
@@ -3233,7 +3960,7 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
                 raise RuntimeError(f"index {consumed}: unhandled action {action!r}")
 
             if resplit:
-                i = multisplit(text[consumed:], all_tokens, keep=AS_PAIRS, separate=True)
+                i = multisplit(text[consumed:], all_tokens, keep=True, separate=True)
                 resplit = False
                 break
         else:
@@ -3246,24 +3973,24 @@ def split_delimiters(text, all_tokens, current, stack, empty, str_or_bytes, yiel
         if s:
             s_length = len(s)
             s_empty = s[s_length:]
-            yield SplitDelimitersValue(s, s_empty, s_empty, s_empty, yields)
+            yield SplitDelimitersValue(s, s_empty, s_empty, s_empty)
 
 
 _split_delimiters = split_delimiters
 
 _split_delimiters_default_delimiters_cache = _delimiters_to_state_and_tokens(tuple(split_delimiters_default_delimiters.items()), False)
 _delimiters_cache.append(
-    (split_delimiters_default_delimiters, _split_delimiters_default_delimiters_cache, 3)
+    (split_delimiters_default_delimiters, (lambda cache=_split_delimiters_default_delimiters_cache: cache))
     )
 
 _split_delimiters_default_delimiters_bytes_cache = _delimiters_to_state_and_tokens(tuple(split_delimiters_default_delimiters_bytes.items()), True)
 _delimiters_cache.append(
-    (split_delimiters_default_delimiters_bytes, _split_delimiters_default_delimiters_bytes_cache, 3)
+    (split_delimiters_default_delimiters_bytes, (lambda cache=_split_delimiters_default_delimiters_bytes_cache: cache))
     )
 
 
 @export
-def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state=(), yields=None):
+def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state=(), yields=4):
     """
     Splits a string s at delimiter substrings.
 
@@ -3299,7 +4026,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     yourself!)
 
     Yields a object of type SplitDelimitersValue.  This object
-    contains five fields:
+    contains four fields:
 
         text
             The text before the next opening, closing, or changing
@@ -3314,33 +4041,39 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
         change
             The trailing change delimiter.
 
-        yields
-            The yields value passed in to split_delimiters.
+    Iterating over a SplitDelimitersValue object yields these four
+    values in that order, so you can unpack it directly:
 
-    At least one of these three strings will always be non-empty.
-    (Only one of open, close, and change will ever be non-empty in
-    a single SplitDelimitersValue object.)  If s doesn't end with
-    an opening or closing delimiter, the final tuple yielded will
-    have empty strings for open, close, and change.
+        for text, open, close, change in big.split_delimiters(s):
+            ...
 
-    The yields parameter to split_delimiters affects iteration over
-    a SplitDelimitersValue object.  yields may be None, 3, or 4:
+    A "change" delimiter changes the semantics of the *current*
+    delimiter, without entering a new nested delimiter.  The
+    canonical example is the colon inside curly braces inside a
+    Python f-string: before the colon, '#' means "line comment";
+    after it, '#' is just another character.
 
-    * If yields is 3, when iterating over a SplitDelimitersValue
-      object, it will yield text, open, and close in that order.
-    * If yields is 4, when iterating over a SplitDelimitersValue
-      object, it will yield text, open, close, and change in that order.
-    * If yields is None, split_delimiters will use a value of 4
-      if the delimiters argument is python_delimiters, and a value
-      of 3 otherwise.
+    At least one of text, open, close, and change will always be
+    non-empty.  (Only one of open, close, and change will ever be
+    non-empty in a single SplitDelimitersValue object.)  If s
+    doesn't end with an opening, closing, or changing delimiter,
+    the final value yielded will have empty strings for open,
+    close, and change.
 
-    (The yields parameter exists because previously split_delimiters
-    always yielded an tuple containing three string values.
-    python_delimiters required adding the fourth string value, change.
-    Eventually split_delimiters will always yield an object yielding
-    four values, but big is allowing for a transition period to
-    minimize code breakage.  See the release notes for big version
-    0.12.5 for more information.)
+    The yields parameter is deprecated, and will be removed no
+    sooner than August 2027.
+
+    In big 0.12.5 through 0.13 it selected between yielding three
+    values--the pre-0.12.5 behavior--and yielding all four.  As
+    promised in the 0.12.5 release notes, that transition period
+    is over: split_delimiters always yields four values now, and
+    the only permitted value for yields is 4.  (Code that
+    dutifully migrated to yields=4 keeps working; simply remove
+    the argument at your leisure.)  Relatedly, the SplitDelimitersValue
+    object has a deprecated "yields" attribute, which likewise
+    told you whether the object iterated as three or four values;
+    it now always returns 4, and will be removed at the same time
+    as the yields parameter.
 
     You may not specify backslash ('\\\\') as an open delimiter.
 
@@ -3353,6 +4086,9 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     See the Delimiter object for how delimiters are defined, and how
     you can define your own delimiters.
     """
+    if yields != 4:
+        raise ValueError("as of big 0.14, split_delimiters always yields four values, so yields must be 4.  (The parameter is deprecated, and will be removed no sooner than August 2027.)")
+
     initial_state = all_tokens = None
 
     is_bytes = isinstance(s, bytes)
@@ -3376,22 +4112,18 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
     s_length = len(s)
     empty = s[s_length:]
 
-    for d, cache, default_yields in _delimiters_cache:
-        if delimiters == d:
-            initial_state, all_tokens = cache
-            if yields is None:
-                yields = default_yields
+    for d, get_cache in _delimiters_cache:
+        # identity first: the overwhelmingly common case is being
+        # handed the exported grammar object itself, and == on a
+        # grammar dict compares every Delimiter, deeply.
+        if (delimiters is d) or (delimiters == d):
+            initial_state, all_tokens = get_cache()
             break
 
     if not initial_state:
         initial_state, all_tokens = _delimiters_to_state_and_tokens(tuple(delimiters.items()), is_bytes)
     assert initial_state
     assert all_tokens
-
-    if yields is None:
-        yields = 3
-    elif not yields in (3, 4):
-        raise ValueError("yields must be None, 3, or 4")
 
     stack = []
     push = stack.append
@@ -3409,7 +4141,7 @@ def split_delimiters(s, delimiters=split_delimiters_default_delimiters, *, state
 
             raise ValueError(f"delimiter #{i} specified in state is invalid: {delimiter!r}")
 
-    return _split_delimiters(s, all_tokens, current, stack, empty, str_or_bytes, yields)
+    return _split_delimiters(s, all_tokens, current, stack, empty, str_or_bytes)
 
 
 
@@ -3428,7 +4160,7 @@ class LineInfo:
     if any.
 
     line_number is the line number of this line.
-    `
+
     column_number is the starting column of the
     accompanying line string (the second entry
     in the 2-tuple yielded by lines).
@@ -3493,7 +4225,7 @@ class LineInfo:
         elif not isinstance(end, line_type):
             raise TypeError(f"end must be same type as line or None, not {end!r}")
 
-        if not ((match is None) or isinstance_re_pattern(match)):
+        if not ((match is None) or _isinstance_re_pattern(match)):
             raise TypeError("match must be None or re.Pattern")
 
         self.lines = lines
@@ -3648,12 +4380,6 @@ class lines:
         split at linebreak characters.  (If s is neither str nor bytes,
         separators must be None.)
 
-        separators is either None or an iterable of separator strings,
-        as per the separators argument to multisplit.  If s is str or bytes,
-        it will be split using multisplit, using these separators.  If
-        separators is None--which is the default value--and s is str or bytes,
-        s will be split at linebreak characters.
-
         line_number is the starting line number given to the first LineInfo
         object.  This number is then incremented for every subsequent line.
 
@@ -3682,6 +4408,17 @@ class lines:
         functions are now deprecated, and will be removed
         no sooner than March 2027.
         """
+        # one warning covers the whole pipeline: every lines_*
+        # modifier consumes an iterator that started here.
+        # (warnings.warn doesn't halt anything--by default Python
+        # doesn't even *show* DeprecationWarnings outside __main__.)
+        warnings.warn(
+            "big's lines, LineInfo, and the lines_* modifier functions"
+            " are deprecated, and will be removed no sooner than"
+            " March 2027.  Use big.string instead; see 'Migrating from"
+            " lines to string' in big's README.",
+            DeprecationWarning, stacklevel=2)
+
         if not isinstance(line_number, int):
             raise TypeError("line_number must be int")
         if not isinstance(column_number, int):
@@ -3702,7 +4439,7 @@ class lines:
         if is_bytes or is_str:
             if not separators:
                 separators = linebreaks if is_str else bytes_linebreaks
-            self.i = multisplit(s, separators, keep=AS_PAIRS, separate=True, strip=False)
+            self.i = multisplit(s, separators, keep=True, separate=True, strip=False)
             self.is_pairs = True
             self.s_is_bytes = is_bytes
         else:
@@ -4011,7 +4748,7 @@ def lines_grep(li, pattern, *, invert=False, flags=0, match='match'):
     if not match.isidentifier():
         raise ValueError('match must be a valid identifier')
 
-    if not isinstance_re_pattern(pattern):
+    if not _isinstance_re_pattern(pattern):
         pattern = re.compile(pattern, flags=flags)
     search = pattern.search
 
@@ -4388,43 +5125,273 @@ def lines_filter_empty_lines(li):
 
 
 
-@export
-def wrap_words(words, margin=79, *, two_spaces=True):
+# --8<-- start big word wrap trio --8<--
+# --8<-- requires big license --8<--
+# --8<-- requires big word wrap trio imports --8<--
+# --8<-- requires big _iterate_over_bytes --8<--
+# --8<-- requires big linebreaks --8<--
+
+def _expand_tabs(s, column, tab_width, tab, space, first_column=1):
+    """
+    Expands the tabs in s to spaces and returns the result.
+    s is assumed to be a single line, starting at 'column';
+    linebreak characters don't reset the column here (that's
+    expand_tabs's job).
+
+    Tab stops sit every tab_width columns, counted from
+    first_column: with a first_column of 1 and the default
+    tab_width of 8, a tab advances to column 9, 17, 25, ...
+    (This is the same arithmetic big.string uses for its
+    column numbers.)
+
+    tab and space supply the correct type of those two characters
+    ('\\t' and ' ', or b'\\t' and b' ').
+    """
+    segments = s.split(tab)
+    if len(segments) == 1:
+        return s
+    result = []
+    append = result.append
+    for i, segment in enumerate(segments):
+        if i:
+            delta = tab_width - ((column - first_column) % tab_width)
+            append(space * delta)
+            column += delta
+        append(segment)
+        column += len(segment)
+    return s[:0].join(result)
+
+
+def expand_tabs(s, *, column=1, first_column=1, tab_width=8):
+    """
+    Expands the tabs in s to spaces and returns the result.
+    If s contains no tabs, returns s unchanged.
+
+    s may be str or bytes, and may contain multiple lines.
+
+    'column' is the column of the first character of s.
+    'first_column' is the column the count resets to after a
+    linebreak--the column your lines start at.  (These follow
+    big.string, which uses column_number and first_column_number
+    the same way.)  column may not be less than first_column,
+    and first_column may not be negative.
+
+    Tab stops sit every tab_width columns, counted from
+    first_column: with the default first_column of 1 and the
+    default tab_width of 8, a tab advances to column 9, 17, 25...
+    This too matches big.string's arithmetic.  A tab's width
+    depends on the column where it lands, so if s is going to be
+    placed anywhere other than the left edge of the page,
+    expanding its tabs correctly requires knowing where it
+    starts.
+
+    Lines are separated as str.splitlines splits them
+    (for bytes, bytes.splitlines); the linebreak characters
+    are preserved in the result.
+    """
+    if (not isinstance(first_column, int)) or (first_column < 0):
+        raise ValueError(f"first_column must be a non-negative int, not {first_column!r}")
+    if (not isinstance(column, int)) or (column < first_column):
+        raise ValueError(f"column must be an int >= first_column ({first_column}), not {column!r}")
+    if isinstance(s, bytes):
+        tab = b'\t'
+        space = b' '
+    else:
+        tab = '\t'
+        space = ' '
+    if tab not in s:
+        return s
+    result = []
+    append = result.append
+    for line in s.splitlines(keepends=True):
+        append(_expand_tabs(line, column, tab_width, tab, space, first_column))
+        column = first_column
+    return s[:0].join(result)
+
+
+def _normalize_indents(indent, name, margin, tab_width, left_column, indent_type):
+    """
+    Validates, normalizes, and measures an "indent" argument for wrap_words.
+
+    indent is an indent argument to wrap_words (either indent or code_indent).
+    name is a string identifying which indent argument this is (used for
+      error messages).
+    margin is the word wrap margin--we confirm the longest indent fits.
+    tab_width and left_column govern tab expansion: tabs in an indent
+      are expanded to spaces, at the indent's true position (an indent
+      always starts its line, at left_column).
+    indent_type is the type (str or bytes) indent should be.
+
+    Returns a 2-tuple:
+        (indents, columns)
+    indents is a tuple of strings: indent, normalized as a tuple,
+        with any tabs expanded.
+    columns is a list of ints, the same length as indents,
+        with the measured width of each one.
+    """
+    if isinstance(indent, indent_type):
+        indents = (indent,)
+    elif isinstance(indent, (list, tuple)):
+        indents = indent
+        for i in indents:
+            if not isinstance(i, indent_type):
+                raise TypeError(f"{name} must be {indent_type.__name__}, or a list or tuple of {indent_type.__name__}, not {i!r}")
+    else:
+        raise TypeError(f"{name} must be {indent_type.__name__}, or a list or tuple of {indent_type.__name__}, not {indent!r}")
+
+    # forbidden is a membership-testable object containing
+    # characters forbidden to be in the indent--linebreaks.
+    # for str, forbidden is a set, as that's cheapest.
+    # for bytes it's the joined bytes object--iterating a bytes yields ints, and
+    # int-in-bytes membership tests the byte value
+    if indent_type is bytes:
+        indent_iter = _iterate_over_bytes
+        forbidden = set(bytes_linebreaks)
+        tab = b'\t'
+        space = b' '
+    else:
+        indent_iter = iter
+        forbidden = set(linebreaks)
+        tab = '\t'
+        space = ' '
+
+    expanded = []
+    columns = []
+    append = columns.append
+    for i in indents:
+        characters = set(indent_iter(i))
+        intersection = characters & forbidden
+        if intersection:
+            raise ValueError(f"{name} {i!r} contains linebreak characters {intersection!r}")
+
+        i = _expand_tabs(i, left_column, tab_width, tab, space)
+        expanded.append(i)
+        column = len(i)
+        if column >= margin:
+            raise ValueError(f"{name} {i!r} leaves no room for words inside margin {margin}")
+        append(column)
+
+    return tuple(expanded), columns
+
+
+def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True):
     """
     Combines 'words' into lines and returns the result as a string.
     Similar to textwrap.wrap.
 
     'words' should be an iterator yielding str or bytes strings, and
     these strings should already be split at word boundaries.
-    Here's an example of a valid argument for words:
-        "this is an example of text split at word boundaries".split()
+    Here's an example of a valid argument for 'words':
+        ["this", "is", "an", "example", "of",
+         "text", "split", "at", "word", "boundaries"]
 
     A single '\n' indicates a line break.
-    If you want a paragraph break, embed two '\n' characters in a row.
+    A double '\n\n' indicates a paragraph break.
+    Two line breaks in a row ('\n', '\n') doesn't count as
+    a paragraph break ('\n\n').
+    A single '\t' indicates a tab: the next word is placed at the
+    next tab stop, as governed by tab_width and left_column.  A tab
+    renders as spaces--wrap_words is the final rendering, and it
+    knows what column everything lands at, so its output contains
+    no tabs.  No space is added around a tab (the tab IS the
+    separation); consecutive tabs advance consecutive stops; if
+    the word after a tab doesn't fit on the line, the word wraps
+    and the tab dies with the line, just like a space would.
+    Any other whitespace-only strings are unsupported, and if
+    you pass in a "words" array to wrap_words containing one,
+    its behavior is undefined.
+
+    Implicitly supports "code lines" as defined by split_text_with_code.
+    (A "code line" just shows up in words as one unbroken word surrounded
+    by line breaks.)  Tabs inside a code line are expanded to spaces
+    when the line is rendered, at the column where they actually land.
 
     'margin' specifies the maximum length of each line. The length of
     every line will be less than or equal to 'margin', unless the length
     of an individual element inside 'words' is greater than 'margin'.
 
+    'left_column' is the 1-based "virtual left column": the column
+    your output will start at, if you're going to place it somewhere
+    other than the left edge of the page.  It only affects how tabs
+    are rendered--tab stops live at fixed columns of the page
+    (9, 17, 25, ... with the default tab_width of 8), so text that
+    starts at column 5 reaches its first tab stop after four
+    characters, not eight.  'margin' is unaffected: it's the width
+    of the block wrap_words produces, wherever you put it.
+
     If 'two_spaces' is true, elements from 'words' that end in
     sentence-ending punctuation ('.', '?', and '!') will be followed
     by two spaces, not one.
 
-    Elements in 'words' are not modified; any leading or trailing
-    whitespace will be preserved.  You can use this to preserve
-    whitespace where necessary, like in code examples.
+    'indent' is a value used to prefix every line in the wrapped
+    paragraphs.  It may be a single string, in which case every line
+    gets prefixed with 'indent'.  It may also be a list or tuple of
+    strings, in which case the first line of a paragraph gets indent[0],
+    the second indent[1], etc; once we run out, we use indent[-1] for
+    all subsequent lines in the paragraph.  The line counter resets
+    every time we start a new paragraph.  Blank lines separating
+    paragraphs never get indented.  'indent' strings may not contain
+    linebreak characters.
+
+    'code_indent' is an indent used only for paragraphs made up of
+    code lines.  If code_indent is None, code lines and normal lines
+    both use the 'indent' prefix string(s).  Otherwise, code_indent
+    accepts the same sorts of values as 'indent', and uses them the
+    same way--but 'code_indent' only applies to paragraphs made up
+    of code lines.  ('indent' will still be used for paragraphs made
+    up of text.)
+
+    An indent string reduces the space available for the paragraph;
+    if your margin is 70, and your indent string is 5 characters,
+    you effectively have a margin of only 65.  Tabs inside an indent
+    are expanded to spaces at the indent's true position (an indent
+    always starts its line, at left_column).  If the length of your
+    indent is equal to or greater than your margin, wrap_words raises
+    ValueError.
+
+    Elements in 'words' are not modified--except for tab expansion;
+    any leading or trailing whitespace will be preserved.  You can
+    use this to preserve whitespace where necessary; this is the
+    mechanism used to preserve code lines.
 
     The objects yielded by words can be a subclass of either
     str or bytes, though wrap_words will only return str or bytes.
     All the objects yielded by words must have the same base class
-    (str or bytes).
+    (str or bytes).  If they're bytes, indent and code_indent must
+    be bytes too (or lists or tuples of bytes).
+
+    If 'words' is empty, raises ValueError.
+    (Note that split_text_with_code('') returns [''].)
     """
+    if (not isinstance(left_column, int)) or (left_column < 1):
+        raise ValueError(f"left_column must be a positive int, not {left_column!r}")
+
     words = iter(words)
     col = 0
     empty = None
     lastword = None
     text = []
+    append = text.append
     first_word = True
+
+    indents = widths = code_indents = None
+    last_indent = 0
+    line_number = 0
+    pending_tabs = 0
+
+    new_paragraph = True
+    new_line = True
+    code_paragraph = False
+
+    def next_tab_stops(col, tabs):
+        # the 0-based line offset of the next word, after
+        # advancing 'tabs' tab stops from the offset 'col'.
+        # tab stops live at fixed 1-based columns of the page:
+        # 1 + (k * tab_width).
+        absolute = left_column + col
+        for _ in range(tabs):
+            absolute += tab_width - ((absolute - 1) % tab_width)
+        return absolute - left_column
 
     for word in words:
         if first_word:
@@ -4432,311 +5399,145 @@ def wrap_words(words, margin=79, *, two_spaces=True):
             if isinstance(word, bytes):
                 empty = lastword = b''
                 sentence_ending_punctuation = (b'.', b'?', b'!')
-                double_space = b'  '
-                one_space = b' '
+                space1 = b' '
+                space2 = b'  '
                 linebreak = b'\n'
+                tab = b'\t'
             else:
                 empty = lastword = ''
                 sentence_ending_punctuation = ('.', '?', '!')
-                double_space = '  '
-                one_space = ' '
+                space1 = ' '
+                space2 = '  '
                 linebreak = '\n'
+                tab = '\t'
+            if indent or (code_indent is not None):
+                indent_type = bytes if isinstance(word, bytes) else str
+                if indent:
+                    indents, widths = _normalize_indents(
+                        indent, 'indent', margin, tab_width, left_column, indent_type)
+                else:
+                    indents, widths = (empty,), (0,)
+                last_indent = len(indents) - 1
+
+                if code_indent is None:
+                    code_indents = indents
+                    code_widths = widths
+                    last_code_indent = last_indent
+                else:
+                    code_indents, code_widths = _normalize_indents(
+                        code_indent, 'code_indent', margin, tab_width, left_column, indent_type)
+                    last_code_indent = len(code_indents) - 1
 
         if word.isspace():
+            if word == tab:
+                # a tab word: not a line break, not a paragraph
+                # break--column advancement, resolved when we
+                # place the next word.
+                pending_tabs += 1
+                continue
             lastword = word
+            append(word)
+
+            pending_tabs = 0
+            new_line = True
             col = 0
-            text.append(word)
+
+            new_paragraph = len(word) > 1
+            if not new_paragraph:
+                line_number += 1
             continue
 
-        l = len(word)
+        if new_paragraph:
+            new_paragraph = False
+            code_paragraph = word[:1].isspace()
+            line_number = 0
+            lastword = empty
 
-        if two_spaces and lastword.endswith(sentence_ending_punctuation):
-            space = double_space
-            len_space = 2
-        else:
-            space = one_space
-            len_space = 1
-
-        if (l + len_space + col) > margin:
-            if col:
-                text.append(linebreak)
+        if code_paragraph:
+            pending_tabs = 0
+            if code_indents:
+                index = min(line_number, last_code_indent)
+                append(code_indents[index])
+                col = code_widths[index]
+            else:
                 col = 0
-        elif col:
-            text.append(space)
-            col += len_space
+            if tab in word:
+                # a code line's tabs expand at render time, at the
+                # columns where they actually land.
+                word = _expand_tabs(word, left_column + col, tab_width, tab, space1)
+            append(word)
+            continue
 
-        text.append(word)
+        # text paragraph
+        l = len(word)
+        if not l:
+            continue
+
+        tabs = pending_tabs
+        pending_tabs = 0
+
+        if not new_line:
+            if tabs:
+                # tab(s) glue this word to the line at a tab
+                # stop--if it fits.  if it doesn't, the word
+                # wraps, and the tabs die with the line, just
+                # like a space would.
+                target = next_tab_stops(col, tabs)
+                if (target + l) > margin:
+                    append(linebreak)
+                    new_line = True
+                    line_number += 1
+                    tabs = 0
+                else:
+                    append(space1 * (target - col))
+                    col = target
+            elif col:
+                if two_spaces and lastword.endswith(sentence_ending_punctuation):
+                    space = space2
+                    len_space = 2
+                else:
+                    space = space1
+                    len_space = 1
+
+                wrap = (col + len_space + l) > margin
+                if wrap:
+                    append(linebreak)
+                    new_line = True
+                    line_number += 1
+                else:
+                    append(space)
+                    col += len_space
+
+        if new_line:
+            new_line = False
+            if not indents:
+                col = 0
+            else:
+                index = min(line_number, last_indent)
+                prefix = indents[index]
+                append(prefix)
+                col = widths[index]
+            if tabs:
+                # tabs at the start of a line (only a hand-built
+                # stream gets here): advance from the line's
+                # start.  no wrap check--like an over-long word,
+                # an over-margin stop just overflows.
+                target = next_tab_stops(col, tabs)
+                append(space1 * (target - col))
+                col = target
+
+        append(word)
         col += len(word)
         lastword = word
 
     if first_word:
         raise ValueError("no words to wrap")
-    return empty.join(text)
+
+    s = empty.join(text)
+    return s
 
 
-
-_code_paragraph = "code paragraph"
-_text_paragraph = "text paragraph"
-
-@state.accessor()
-class _column_wrapper_splitter:
-    def __init__(self, is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces):
-        self.is_bytes = is_bytes
-        if is_bytes:
-            self.empty = b''
-            self.tab_string = b'\t'
-            self.space_string = b' '
-            self.linebreak_string = b'\n'
-            self.paragraph_string = b'\n\n'
-            self.make_iterator = _iterate_over_bytes
-        else:
-            self.empty = ''
-            self.tab_string = '\t'
-            self.space_string = ' '
-            self.linebreak_string = '\n'
-            self.paragraph_string = '\n\n'
-            self.make_iterator = iter
-        self.tab_width = tab_width
-        self.allow_code = allow_code
-        self.code_indent = code_indent
-        self.convert_tabs_to_spaces = convert_tabs_to_spaces
-
-        self.words = []
-
-        self.leading = []
-        self.word = []
-        self.code = []
-
-        # used to regulate line and paragraph breaks.
-        # can be _code_paragraph, _text_paragraph, or None.
-        # (if None, we've already handled the appropriate break.)
-        self.previous_paragraph = None
-
-        self.state_manager = state.StateManager(self.state_initial)
-
-    def emit(self, c):
-        self.words.append(c)
-
-    def line_break(self):
-        self.words.append(self.linebreak_string)
-
-    def paragraph_break(self):
-        self.words.append(self.paragraph_string)
-
-    def write(self, c):
-        # write consumes c and makes calls as appropriate to
-        # self.state().
-        #
-        # first, write aggregates together all consecutive
-        # non-line-breaking whitespace characters, which it
-        # stores in 'leading'.  if the next character is
-        # a linebreak, it passes that single linebreak as 'word'.
-        # otherwise it aggregates all consecutive non-whitespace
-        # characters together, and passes those in as 'word'.
-        #
-        # thus we only call self.state() with two types of 'word':
-        #     * a word, which is non-whitespace, and
-        #     * a single '\n'.
-        # all other whitespace is passed in as 'leading'.
-        #
-        # so for example, this input:
-        #
-        #   'hello there\nhow are you?\n\n  \n\ti am fine.\n  so there!'
-        #
-        # will result in self.state being called with these words,
-        # and with whitespace being set to these values:
-        #    leading   word
-        #    -------   ------
-        #    ''        'hello'
-        #    ' '       'there'
-        #    ''        '\n'
-        #    ''        'how'
-        #    ' '       'are'
-        #    ' '       'you?'
-        #    ''        '\n'
-        #    ''        '\n'
-        #    '  '      '\n'
-        #    '\t'      'i'
-        #    ' '       'am'
-        #    ' '       'fine.'
-        #    ''        '\n'
-        #    '  '      'so'
-        #    ' '       'there!'
-        #
-        # consecutive calls to write() behave the same as calling write()
-        # once with both inputs concatenated together.  this:
-        #     self.write('abc')
-        #     self.write('def')
-        # is the same as calling
-        #     self.write('abcdef')
-        #
-        # you should call close() after the last write() call.
-
-        leading = self.leading
-        word = self.word
-        write_word = None
-        write_linebreak = False
-        append_c_to_leading = False
-        empty = self.empty
-        linebreak_string = self.linebreak_string
-
-        if not c.isspace():
-            word.append(c)
-            return
-
-        if word:
-            write_word = empty.join(word)
-            word.clear()
-
-        if c == linebreak_string:
-            if write_word:
-                write_linebreak = True
-            else:
-                write_word = c
-        else:
-            append_c_to_leading = True
-
-        if write_word:
-            if leading:
-                l = empty.join(leading)
-                leading.clear()
-            else:
-                l = empty
-
-            self.state(l, write_word)
-            write_word = None
-
-            if write_linebreak:
-                self.state(empty, linebreak_string)
-                write_linebreak = False
-
-        if append_c_to_leading:
-            leading.append(c)
-            append_c_to_leading = False
-
-    def close(self):
-        # flush the current word, if any.
-        if self.word:
-            empty = self.empty
-            self.state(empty.join(self.leading), empty.join(self.word))
-            self.leading.clear()
-            self.word.clear()
-        # flush the final code line, if any.
-        # (a code line is normally only emitted when we see the
-        # linebreak that ends it--but at EOF there might not be one.)
-        if (self.state == self.state_in_code_line) and self.code:
-            self.emit(self.empty.join(self.code))
-            self.code.clear()
-
-    def state_paragraph_start(self, leading, word):
-        """
-        Initial state.  Also the state we return to
-        after encountering two '\n's in a row after
-        a text line.
-        """
-        if word == self.linebreak_string:
-            return
-        if self.previous_paragraph:
-            self.paragraph_break()
-            self.previous_paragraph = None
-        self.state = self.state_line_start
-        self.state(leading, word)
-
-    state_initial = state_paragraph_start
-
-    def state_line_start(self, leading, word):
-        if word == self.linebreak_string:
-            # two '\n's in a row.
-            if self.previous_paragraph == _code_paragraph:
-                # we could still be in a code block.
-                # remember the whitespace and continue.
-                # we don't need to save the leading whitespace.
-                self.code.append(word)
-                return
-
-            self.state = self.state_paragraph_start
-            return
-
-        if self.allow_code:
-            col = 0
-            tab_width = self.tab_width
-            for c in self.make_iterator(leading):
-                if c == self.tab_string:
-                    col = col + tab_width - (col % tab_width)
-                else:
-                    # space, and any unusual whitespace
-                    # (\r, \v, \f, nbsp...), counts as width 1.
-                    col += 1
-            if col >= self.code_indent:
-                # code line!
-                if self.previous_paragraph == _text_paragraph:
-                    self.paragraph_break()
-                    assert not self.code
-                else:
-                    if self.code:
-                        for c in self.code:
-                            self.line_break()
-                        self.code.clear()
-
-                self.state = self.state_code_line_start
-                self.state(leading, word)
-                return
-
-        if self.previous_paragraph == _code_paragraph:
-            self.paragraph_break()
-        self.state = self.state_text_line_start
-        self.state(leading, word)
-
-    def state_text_line_start(self, leading, word):
-        self.previous_paragraph = _text_paragraph
-        self.state = self.state_in_text_line
-        self.state(leading, word)
-
-    def state_in_text_line(self, leading, word):
-        if word == self.linebreak_string:
-            self.state = self.state_line_start
-            return
-        self.emit(word)
-
-    def state_code_line_start(self, leading, word):
-        self.previous_paragraph = _code_paragraph
-        self.col = 0
-        self.state = self.state_in_code_line
-        self.state(leading, word)
-
-    def state_in_code_line(self, leading, word):
-        if word == self.linebreak_string:
-            self.emit(self.empty.join(self.code))
-            self.code.clear()
-            self.state = self.state_line_start
-            self.state(self.empty, word)
-            return
-
-        tab_width = self.tab_width
-        convert_tabs_to_spaces = self.convert_tabs_to_spaces
-        col = self.col
-        tab_string = self.tab_string
-        space_string = self.space_string
-        for c in self.make_iterator(leading):
-            if c == tab_string:
-                delta = tab_width - (col % tab_width)
-                col += delta
-                if convert_tabs_to_spaces:
-                    self.code.append(space_string * delta)
-                else:
-                    self.code.append(c)
-            else:
-                # space, and any unusual whitespace
-                # (\r, \v, \f, nbsp...), counts as width 1.
-                col += 1
-                self.code.append(c)
-        self.code.append(word)
-        self.col = col + len(word)
-
-
-
-@export
-def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True):
+def split_text_with_code(s, *, code_indent=4, tab_width=8):
     """
     Splits the string s into individual words,
     suitable for feeding into wrap_words.
@@ -4746,38 +5547,140 @@ def split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, conv
     Paragraphs indented by less than code_indent will be
     broken up into individual words.
 
-    If `allow_code` is true, paragraphs indented by at least
-    code_indent spaces will preserve their whitespace:
-    internal whitespace is preserved, and the linebreak is
-    preserved.  (This will preserve the formatting of code
-    examples, when these words are rejoined into lines
-    by wrap_words.)
+    code_indent must be an int.  If it's nonzero, lines indented
+    by at least code_indent columns are "code lines": paragraphs
+    of them preserve their whitespace, internal and leading, and
+    their linebreaks.  (This preserves the formatting of code
+    examples, when these words are rejoined into lines by
+    wrap_words.)  Code lines are emitted verbatim, tabs included;
+    wrap_words expands their tabs at render time, when it knows
+    what column the line lands at.  If code_indent is 0, there
+    are no code lines: everything is just text.
+
+    In text, a tab survives as its own '\\t' word: a run of
+    whitespace containing k tabs becomes exactly k '\\t' words,
+    in order--the rest of the whitespace is just separation,
+    and is thrown away as usual.  wrap_words renders a '\\t'
+    word by placing the next word at the next tab stop.
 
     s can be str, bytes, or a subclass of either, though
     split_text_with_code will only return str or bytes.
 
+    The only whitespace-only words split_text_with_code will
+    ever emit are '\\n' (line break), '\\n\\n' (paragraph break),
+    and '\\t' (tab).
+
+    split_text_with_code is inflexible about line endings;
+    it only recognizes '\\n' (or b'\\n') as ending a line.
+
     if s is empty, returns a list containing an empty string.
     """
-    is_bytes = isinstance(s, bytes)
-    if is_bytes:
-        iterable = _iterate_over_bytes(s)
+
+    if isinstance(code_indent, bool):
+        # bool sneaks through the index protocol; "we must
+        # remain strong."
+        raise TypeError(f"code_indent must be an int, not {code_indent!r}")
+    code_indent = operator.index(code_indent)
+    if code_indent < 0:
+        raise ValueError(f"code_indent must be non-negative, not {code_indent!r}")
+
+    if isinstance(s, bytes):
         empty = b''
+        tab = b'\t'
+        linebreak = b'\n'
+        paragraph_break = b'\n\n'
+        iterate_over_characters = _iterate_over_bytes
     else:
-        iterable = s
         empty = ''
+        tab = '\t'
+        linebreak = '\n'
+        paragraph_break = '\n\n'
+        iterate_over_characters = iter
 
-    cws = _column_wrapper_splitter(is_bytes, tab_width, allow_code, code_indent, convert_tabs_to_spaces)
+    linebreak_tuple = (linebreak,)
+    code_paragraph = "code paragraph"
+    text_paragraph = "text paragraph"
 
-    for c in iterable:
-        cws.write(c)
-    cws.close()
-    return_value = cws.words
-    if not return_value:
-        return [empty]
-    return return_value
+    # the kind of paragraph the previous nonblank line belonged to:
+    # code_paragraph, text_paragraph, or None (haven't seen one yet).
+    previous_paragraph = None
+
+    # how many blank lines we've seen since the previous nonblank line.
+    blank_lines = 0
+
+    words = []
+
+    # only '\n' ends a line.  every other whitespace character--
+    # including '\r'--is just whitespace, width 1.
+    for line in s.split(linebreak):
+        line = line.rstrip()
+        if not line:
+            blank_lines += 1
+            continue
+
+        if code_indent:
+            # measure the line's indent, expanding tabs.
+            stripped = line.lstrip()
+            col = 0
+            len_indent = len(line) - len(stripped)
+            for i, c in enumerate(iterate_over_characters(line)):
+                if i == len_indent:
+                    break
+                if c == tab:
+                    col += tab_width - (col % tab_width)
+                else:
+                    # space, and any unusual whitespace
+                    # (\r, \v, \f, nbsp...), counts as width 1.
+                    col += 1
+
+            if col >= code_indent:
+                # it's a code line.
+                if previous_paragraph is text_paragraph:
+                    words.append(paragraph_break)
+                elif previous_paragraph is code_paragraph:
+                    # in a code paragraph, linebreaks are just that--
+                    # line breaks.  if you want to finish the current
+                    # code line, emit a line break.  if you want an
+                    # empty line in the middle of a code paragraph,
+                    # emit two linebreaks in a row.  (if you want two
+                    # empty lines, emit three linebreaks.)
+                    #
+                    # as a rule, code paragraphs start with a code line,
+                    # then have one or more line breaks before the next
+                    # code line.  you never have two code lines in a row.
+                    # the paragraph break that ends a code paragraph can
+                    # come after either a code line or a linebreak.
+                    words.extend(linebreak_tuple * (blank_lines + 1))
+
+                # reproduce the line as a single word, verbatim--
+                # tabs included.  wrap_words expands them at render
+                # time, when it knows what column the line lands at.
+                words.append(empty + line)
+                previous_paragraph = code_paragraph
+                blank_lines = 0
+                continue
+
+        # not a code line.
+        if ((previous_paragraph is code_paragraph)
+            or ((previous_paragraph is text_paragraph) and blank_lines)):
+            words.append(paragraph_break)
+        # split the line into words.  each tab survives as its own
+        # '\t' word, in order: a run of whitespace containing k tabs
+        # becomes exactly k '\t' words.
+        first_segment = True
+        for segment in line.split(tab):
+            if not first_segment:
+                words.append(tab)
+            first_segment = False
+            words.extend(segment.split())
+        previous_paragraph = text_paragraph
+        blank_lines = 0
+
+    if not words:
+        words.append(empty)
+    return words
 
 
-@export
 class OverflowStrategy(enum.Enum):
     """
     Enum providing constants to specify how merge_columns
@@ -4790,11 +5693,11 @@ class OverflowStrategy(enum.Enum):
     DELAY_ALL = enum.auto()
     # DELAY_MINIMUM = enum.auto()  # not implemented yet
 
-@export
 def merge_columns(*columns, column_separator=None,
     overflow_strategy=OverflowStrategy.RAISE,
     overflow_before=0,
     overflow_after=0,
+    tab_width=8,
     ):
     """
     Merge n column tuples, with each column tuple being
@@ -4810,6 +5713,17 @@ def merge_columns(*columns, column_separator=None,
     widths for that column, not including the column
     separator (if any).
 
+    A column tuple may carry an optional fourth member,
+    relative_tabs, governing how tabs in that column's text are
+    expanded (they're always expanded to spaces, using tab_width).
+    If true (the default), each line's tabs expand in the column's
+    own coordinates--as if the line started at column 1--and the
+    expanded text shifts rigidly into place, so the column's
+    internal alignment survives wherever the column lands.  If
+    false, tabs expand at the column's position on the page (its
+    nominal position: an overflow strategy that shifts lines
+    doesn't move their tab stops).
+
     Note that this function doesn't text-wrap the lines.
 
     column_separator is printed between every column.
@@ -4820,7 +5734,9 @@ def merge_columns(*columns, column_separator=None,
 
         OverflowStrategy.RAISE
 
-            Raise an OverflowError.  The default.
+            Raise an OverflowError.  The default: overflow is
+            an error, and it shouldn't pass silently unless you
+            explicitly silence it by picking another strategy.
 
         OverflowStrategy.INTRUDE_ALL
 
@@ -4831,7 +5747,8 @@ def merge_columns(*columns, column_separator=None,
 
            Delay all columns after the overflowed column,
            not beginning any until after the last overflowed line
-           in the overflowed column.
+           in the overflowed column.  (Help-style tables with an
+           occasional overlong label usually want this one.)
 
     When overflow_strategy is INTRUDE_ALL or DELAY_ALL, and
     either overflow_before or overflow_after is nonzero, these
@@ -4843,21 +5760,28 @@ def merge_columns(*columns, column_separator=None,
     All these objects (text and column_separator) must have the
     same baseclass, str or bytes.
     """
-    assert overflow_strategy in (OverflowStrategy.INTRUDE_ALL, OverflowStrategy.DELAY_ALL, OverflowStrategy.RAISE)
+    # real raises, not asserts: these guard user input, and
+    # asserts vanish under python -O.  (OverflowStrategy.INVALID
+    # used to silently behave as INTRUDE_ALL under -O!)
+    if overflow_strategy not in (OverflowStrategy.INTRUDE_ALL, OverflowStrategy.DELAY_ALL, OverflowStrategy.RAISE):
+        raise ValueError(f"invalid overflow_strategy {overflow_strategy!r}")
     raise_overflow_error = overflow_strategy == OverflowStrategy.RAISE
     delay_all = overflow_strategy == OverflowStrategy.DELAY_ALL
 
-    assert columns
+    if not columns:
+        raise ValueError("no columns")
     is_bytes = isinstance(columns[0][0], bytes)
 
     if is_bytes:
         empty = b''
         space = b' '
         linebreak = b'\n'
+        tab = b'\t'
     else:
         empty = ''
         space = ' '
         linebreak = '\n'
+        tab = '\t'
 
     if column_separator is None:
         column_separator = space
@@ -4892,7 +5816,14 @@ def merge_columns(*columns, column_separator=None,
         else:
             overflow_start = overflow_end = sys.maxsize
 
-    for column_number, (s, min_width, max_width) in enumerate(_columns):
+    # the 1-based column each column starts at, nominally
+    # (as if nothing overflowed)--the phase for expanding
+    # tabs with relative_tabs=False.
+    nominal_left = 1
+
+    for column_number, column in enumerate(_columns):
+        s, min_width, max_width = column[:3]
+        relative_tabs = column[3] if len(column) > 3 else True
 
         # check types, let them raise exceptions as needed
         operator.index(min_width)
@@ -4906,6 +5837,9 @@ def merge_columns(*columns, column_separator=None,
             lines = s
         max_lines = max(max_lines, len(lines))
 
+        tab_phase = 1 if relative_tabs else nominal_left
+        nominal_left += max_width + column_spacing
+
         # loop 1:
         # measure each line length, determining
         #  * maximum line length, and
@@ -4916,6 +5850,8 @@ def merge_columns(*columns, column_separator=None,
         in_overflow = False
 
         for line_number, line in enumerate(lines):
+            if tab in line:
+                line = _expand_tabs(line, tab_phase, tab_width, tab, space)
             line = line.rstrip()
             assert not linebreak in line
             rstripped_lines.append(line)
@@ -5002,6 +5938,248 @@ def merge_columns(*columns, column_separator=None,
     text = linebreak.join(lines)
     return text.rstrip()
 
+# --8<-- end big word wrap trio --8<--
+
+export('expand_tabs')
+export('wrap_words')
+export('split_text_with_code')
+export('OverflowStrategy')
+export('merge_columns')
+
+
+# --8<-- start big format_definition_list --8<--
+# --8<-- requires big license --8<--
+# --8<-- requires big word wrap trio --8<--
+
+_default_definition_list_indent = '  '
+_default_definition_list_spacer = '  '
+
+def format_definition_list(pairs, margin=79, *,
+        definition_left_column=None,
+        definition_relative_tabs=True,
+        indent=_default_definition_list_indent,
+        spacer=_default_definition_list_spacer,
+        tab_width=8,
+        term_relative_tabs=True):
+    """
+    Formats a "definition list" and returns it as a string:
+    terms on the left, definitions on the right, definitions
+    wrapped to fit and aligned in a column.  Sample output:
+
+        -v, --verbose  Print more output.  Repeat
+                       for even more.
+        --color <red|green|blue>
+                       Sets the output color.
+
+    'pairs' is an iterable of (term, definition) pairs of strings.
+    Terms are never wrapped, and may not contain linebreak
+    characters.  Definitions are text: each one is split with
+    split_text_with_code and wrapped with wrap_words, so paragraph
+    breaks, code lines, and tabs work as they do there.
+    A pair with an empty definition is just the term on a line
+    by itself.
+
+    'margin' is the target width, as per wrap_words.
+
+    'indent' is a string prefixed to every line.  Counts towards
+    the margin (if your margin is 70, and your indent is 5 characters,
+    your "effective margin" is 65).
+
+    'spacer' is the fill material between a term and its definition,
+    in the manner of TeX's leaders: conceptually the spacer repeats,
+    phase-locked to the start of the term column, from the end of
+    each term to the definition column--so the repeats line up
+    vertically from line to line, and a line with no term (a wrapped
+    continuation line, or a code line) fills the whole span.  The
+    default spacer is two spaces, which renders as the classic help
+    table above.  A visible spacer renders leaders, like a table of
+    contents: spacer=':' gives you
+
+        x:::::::::abcde
+        y so long:this is the text
+        ::::::::::for y no fooling
+
+    A multi-character spacer tiles, clipped at the front so the
+    columns still line up.  The spacer may not be empty: it's the
+    fill material, and there's no such thing as filling with
+    nothing.
+
+    The indent for the definitions on the right (the "definition
+    column") is computed dynamically.  It's one 'spacer' past the
+    widest "term" that's no wider than a third of the effective
+    margin.  A term wider than that "hangs": it gets the line
+    to itself, and its definition starts on the next line, in the
+    definition column.  Either way, a term on the same line as its
+    definition always has at least one full spacer after it.
+
+    'definition_left_column' overrides the computed column: it's
+    the 1-based column (indent included) where the first character
+    of every definition goes.  Fussy users may know exactly what
+    they want.  The hang rule still applies, now purely geometric:
+    a term hangs iff it can't fit on the line with a full spacer
+    after it.  A definition_left_column that leaves no room for
+    the spacer, or no room for definitions inside the margin,
+    raises ValueError.
+
+    Tabs are permitted in the terms and the indent; they're
+    expanded to spaces, using 'tab_width'.  Tabs in the indent
+    expand at the indent's true position (it starts every line,
+    at column 1).  Tabs in a term expand in the term's own
+    coordinates--as if the term started at column 1--and the
+    expanded term shifts rigidly into place, so the term's
+    internal alignment survives wherever the term lands; pass
+    term_relative_tabs=False to expand them at the term's true
+    position on the page instead.  definition_relative_tabs works
+    the same way for the definitions: by default (True) each
+    definition is laid out in its author's own coordinates--tab
+    stops counted from the definition column, exactly as the
+    author saw them--and shifts rigidly into place; pass False
+    to land the definition's tabs on the tab stops of the page.
+    Tabs are disallowed in the spacer: the spacer repeats and
+    shifts around, and a tab's width depends on where it lands.
+
+    You may use either str or bytes, but all arguments must be
+    consistently either str or bytes.
+
+    If pairs is empty, returns an empty str.
+    """
+    pairs = list(pairs)
+    if not pairs:
+        return ''
+
+    if isinstance(pairs[0][0], bytes):
+        str_type = bytes
+        empty = b''
+        tab = b'\t'
+        linebreak = b'\n'
+        forbidden = set(bytes_linebreaks)
+        characters = _iterate_over_bytes
+        if indent is _default_definition_list_indent:
+            indent = b'  '
+        if spacer is _default_definition_list_spacer:
+            spacer = b'  '
+    else:
+        str_type = str
+        empty = ''
+        tab = '\t'
+        linebreak = '\n'
+        forbidden = set(linebreaks)
+        characters = iter
+
+    for name, s in (('indent', indent), ('spacer', spacer)):
+        if not isinstance(s, str_type):
+            raise TypeError(f"{name} must be {str_type.__name__}, not {s!r}")
+        if set(characters(s)) & forbidden:
+            raise ValueError(f"{name} {s!r} contains linebreak characters")
+    if not spacer:
+        raise ValueError("spacer must not be empty")
+    if tab in spacer:
+        raise ValueError(f"spacer {spacer!r} contains tabs")
+
+    space = b' ' if str_type is bytes else ' '
+
+    # an indent starts every line, at column 1: expand its
+    # tabs there.
+    indent = _expand_tabs(indent, 1, tab_width, tab, space)
+    indent_width = len(indent)
+
+    # validate the terms, and expand their tabs: in their own
+    # coordinates (term_relative_tabs, the default), or at the
+    # column where they actually land, right after the indent.
+    term_column = 1 if term_relative_tabs else 1 + indent_width
+    expanded = []
+    widths = []
+    for term, definition in pairs:
+        if not isinstance(term, str_type):
+            raise TypeError(f"terms must be {str_type.__name__}, not {term!r}")
+        if set(characters(term)) & forbidden:
+            raise ValueError(f"term {term!r} contains linebreak characters")
+        term = _expand_tabs(term, term_column, tab_width, tab, space)
+        expanded.append((term, definition))
+        widths.append(len(term))
+    pairs = expanded
+
+    if definition_left_column is None:
+        # the widest term no wider than a third of the effective
+        # margin decides the definition column; wider terms hang.
+        hang_threshold = (margin - indent_width) // 3
+        column = 0
+        for width in widths:
+            if (width <= hang_threshold) and (width > column):
+                column = width
+        ribbon_width = column + len(spacer)
+    else:
+        # the fussy user knows exactly where they want the
+        # definitions.  1-based, indent included.
+        if (not isinstance(definition_left_column, int)) or (definition_left_column < 1):
+            raise ValueError(f"definition_left_column must be a positive int, not {definition_left_column!r}")
+        ribbon_width = definition_left_column - 1 - indent_width
+        if ribbon_width < len(spacer):
+            raise ValueError(f"definition_left_column {definition_left_column} leaves no room for the spacer")
+
+    # a term fits on the same line as its definition iff at least
+    # one full spacer separates them; wider terms hang.
+    fit_limit = ribbon_width - len(spacer)
+
+    definition_width = margin - indent_width - ribbon_width
+    if definition_width < 1:
+        raise ValueError(f"the definition column leaves no room for definitions inside margin {margin}")
+
+    # the ribbon: the spacer tiled across the span from the start
+    # of the term column to the definition column.  a term line
+    # shows the ribbon from its own width onward, so the repeats
+    # line up vertically no matter how wide the term is.
+    # (the spacer contains no tabs, so its len is its width.)
+    ribbon = (spacer * ((ribbon_width // len(spacer)) + 1))[:ribbon_width]
+
+    definition_indent = indent + ribbon
+    len_definition_indent = len(definition_indent)
+
+    lines = []
+    append = lines.append
+    for (term, definition), width in zip(pairs, widths):
+        if definition:
+            if definition_relative_tabs:
+                # lay the definition out in its author's own
+                # coordinates--virtual column 1--and shift the
+                # resulting lines rigidly into the definition
+                # column.  (they're tab-free, so the shift is
+                # safe.)  the author's tabs line up the way they
+                # did when the author wrote them.
+                wrapped = wrap_words(
+                    split_text_with_code(definition, tab_width=tab_width),
+                    definition_width, tab_width=tab_width)
+                if wrapped:
+                    wrapped = linebreak.join(
+                        (definition_indent + line) if line.strip() else line
+                        for line in wrapped.split(linebreak))
+            else:
+                # the definition's tabs land on the tab stops of
+                # the *page*: render it in place.
+                wrapped = wrap_words(
+                    split_text_with_code(definition, tab_width=tab_width),
+                    margin, indent=definition_indent, tab_width=tab_width)
+        else:
+            wrapped = empty
+        if not wrapped:
+            append(indent + term)
+            continue
+        if width > fit_limit:
+            append(indent + term)
+            append(wrapped)
+            continue
+        # the first wrapped line starts with definition_indent,
+        # which renders exactly as wide as indent + term + the
+        # rest of the ribbon.  slice those off and put these there
+        # instead.
+        append(indent + term + ribbon[width:] + wrapped[len_definition_indent:])
+    return linebreak.join(lines)
+
+# --8<-- end big format_definition_list --8<--
+
+export('format_definition_list')
+
+
 @export
 def int_to_words(i, flowery=True, ordinal=False):
     """
@@ -5022,11 +6200,11 @@ def int_to_words(i, flowery=True, ordinal=False):
     competition.  int_to_words(1) returns the string 'one',
     but int_to_words(1, ordinal=True) returns the string 'first'.
 
-    Numbers >= 10**75 (one quadrillion vigintillion)
+    Numbers >= 10**75 (one trillion vigintillion)
     are only converted using str(i).  Sorry!
     """
     if not isinstance(i, int):
-        raise ValueError("i must be int")
+        raise TypeError(f"i must be int, not {type(i).__name__}")
 
     if (i >= 10**75) or (i <= -10**75):
         return str(i)
@@ -5040,7 +6218,7 @@ def int_to_words(i, flowery=True, ordinal=False):
             "zeroth",
             "first", "second", "third", "fourth", "fifth",
             "sixth", "seventh", "eighth", "ninth", "tenth",
-            "eleventh", "twelveth", "thirteenth", "fourteenth", "fifteenth",
+            "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth",
             "sixteenth", "seventeenth", "eighteenth", "nineteenth",
             )
     else:
@@ -5069,22 +6247,25 @@ def int_to_words(i, flowery=True, ordinal=False):
     if i >= 100:
         if i >= 10**12:
             quantities = (
-            # note!        v  leading spaces!
+            # note!            v  exactly ONE leading space--it's the separator!
+            # (the alignment padding lives *outside* the quotes.  it
+            # used to live inside for the shorter names, and leaked
+            # into the output: "one   decillion".)
             (10**63,      " vigintillion"),
             (10**60,    " novemdecillion"),
             (10**57,     " octodecillion"),
-            (10**54,     " septdecillion"),
+            (10**54,   " septendecillion"),
             (10**51,      " sexdecillion"),
-            (10**48,      " qindecillion"),
+            (10**48,     " quindecillion"),
             (10**45, " quattuordecillion"),
             (10**42,      " tredecillion"),
             (10**39,      " duodecillion"),
             (10**36,       " undecillion"),
-            (10**33,       "   decillion"),
-            (10**30,       "   nonillion"),
-            (10**27,       "   octillion"),
-            (10**24,       "  septillion"),
-            (10**21,       "  sextillion"),
+            (10**33,         " decillion"),
+            (10**30,         " nonillion"),
+            (10**27,         " octillion"),
+            (10**24,        " septillion"),
+            (10**21,        " sextillion"),
             (10**18,       " quintillion"),
             (10**15,       " quadrillion"),
             (10**12,          " trillion"),
@@ -5140,6 +6321,12 @@ def int_to_words(i, flowery=True, ordinal=False):
 # as per PEP 263
 _python_source_code_encoding_line_bytes_re = re.compile(b"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
 _python_source_code_encoding_line_str_re   = re.compile( "^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+
+# a "blank" line for PEP 263 purposes: whitespace, a comment, or
+# nothing.  identical to tokenize.blank_re, which tokenize uses to
+# decide whether line 2 may carry the magic coding comment.
+_python_source_blank_line_bytes_re = re.compile(br'^[ \t\f]*(?:[#\r\n]|$)')
+_python_source_blank_line_str_re   = re.compile( r'^[ \t\f]*(?:[#\r\n]|$)')
 
 
 # BOMs were harvested from
@@ -5299,10 +6486,22 @@ def decode_python_script(script, *,
             if len(lines) > 2:
                 break
 
-        for line in lines:
+        # PEP 263, exactly as CPython's tokenize.detect_encoding
+        # implements it: the magic comment must be on line 1 or
+        # line 2; the first match wins; and line 2 is only
+        # consulted if line 1 is blank or a comment line.
+        if encoded:
+            blank_re = _python_source_blank_line_bytes_re
+        else:
+            blank_re = _python_source_blank_line_str_re
+        for line_number, line in enumerate(lines[:2]):
             match = encoding_re.match(line)
             if match:
                 source_code_encoding = match.group(1)
+                break
+            if (not line_number) and (not blank_re.match(line)):
+                # line 1 is real code: line 2 doesn't count.
+                break
 
     if source_code_encoding is not None:
         assert source_code_encoding # the regular expression should ensure it's never empty
@@ -5311,8 +6510,20 @@ def decode_python_script(script, *,
 
     if bom_encoding:
         # script used both a BOM and a source code encoding!  they better agree!
-        if source_code_encoding and (bom_encoding != source_code_encoding.lower()):
-            raise UnicodeDecodeError(source_code_encoding, script, 0, len(script), "source code encoding line doesn't match BOM encoding")
+        # normalize both names through codecs, so spelling variants
+        # agree ("utf8", "UTF_8", and "utf-8" are all the same
+        # encoding)--and accept an endianness-unqualified magic
+        # comment for an endian BOM (a "utf-16" comment agrees
+        # with a utf-16-le BOM; the BOM's *job* is supplying the
+        # endianness).
+        if source_code_encoding:
+            try:
+                cookie_name = codecs.lookup(source_code_encoding).name
+            except LookupError:
+                raise UnicodeDecodeError(source_code_encoding, script, 0, len(script), "unknown encoding") from None
+            bom_name = codecs.lookup(bom_encoding).name
+            if not ((cookie_name == bom_name) or bom_name.startswith(cookie_name + '-')):
+                raise UnicodeDecodeError(source_code_encoding, script, 0, len(script), "source code encoding line doesn't match BOM encoding")
         encoding = bom_encoding
     elif source_code_encoding:
         encoding = source_code_encoding
@@ -5339,9 +6550,25 @@ def decode_python_script(script, *,
 
 @export
 class Pattern:
+    """
+    A drop-in replacement for re.Pattern that preserves str
+    subclasses.
+
+    Python's re module converts str subclasses to plain str when
+    returning matched strings.  Pattern preserves the subclass:
+    its methods return Pattern.Match objects whose strings are
+    slices of the *original* string, so if you search or match
+    against a big.string, the strings you get back are big.string
+    slices, retaining their line and column information.
+
+    Pattern supports the same interface as re.Pattern; see the
+    Python documentation for the full API.  (Exceptions: sub,
+    subn, and Match.expand construct new strings, so they return
+    plain str/bytes.)
+    """
     def __init__(self, s, flags=0):
         if not isinstance(s, (str, bytes)):
-            raise TypeError(f's must be str, not {type(s).__name__}')
+            raise TypeError(f's must be str or bytes, not {type(s).__name__}')
         if not isinstance(flags, int):
             raise TypeError(f'flags must be an int, not {type(flags).__name__}')
         self.s = s
@@ -5438,6 +6665,14 @@ class Pattern:
 
     @BoundInnerClass
     class Match:
+        """
+        The Match object returned by Pattern's methods.  Wraps an
+        re.Match; every matched string it returns is a slice of
+        the original string, preserving str subclasses (like
+        big.string).  Supports the same interface as re.Match.
+        (Exception: expand constructs a new string, so it returns
+        plain str/bytes.)
+        """
         def __init__(self, pattern, match, string):
             self.pattern = self.re = pattern
             self.match = match
@@ -5552,9 +6787,6 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
     # of those two cases this is.
     blank_lines = []
 
-    if linebreaks:
-        linebreaks = frozenset(linebreaks)
-
     first_line = True
 
     for line in lines:
@@ -5562,8 +6794,18 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
             first_line = False
             if isinstance(line, bytes):
                 tab = b'\t'
+                # we occluded the global "linebreaks" with our
+                # parameter, so we test whether we still have the
+                # default value by comparing to str_linebreaks,
+                # which is the same object.  for bytes lines, the
+                # default means the *bytes* linebreaks.  (this is
+                # the same dance strip_line_comments does.)
+                if linebreaks is str_linebreaks:
+                    linebreaks = bytes_linebreaks
             else:
                 tab = '\t'
+            if linebreaks:
+                linebreaks = frozenset(linebreaks)
         lstripped = line.lstrip()
         if not lstripped:
             if not linebreaks:
@@ -5572,16 +6814,22 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
                 # count the linebreak characters at the end of line,
                 # and preserve them if any.  otherwise use line[0:0]
                 # to represent the empty line.
-                trailing_linebreaks = []
-                trailing_linebreaks_append = trailing_linebreaks.append
+                #
+                # scan backwards by one-character *slices*: works
+                # for both str and bytes (indexing a bytes yields
+                # ints, which would never be in a set of bytes
+                # strings), and counts a tally rather than an
+                # index (an enumerate here used to be off by one
+                # when the line was 100% linebreak characters,
+                # emptying it instead of preserving it).
                 count = 0
-                for count, c in enumerate(reversed(line)):
-                    if c not in linebreaks:
+                for i in range(len(line) - 1, -1, -1):
+                    if line[i:i+1] not in linebreaks:
                         break
+                    count += 1
                 if not count:
                     line = line[0:0]
                 else:
-                    length = len(line)
                     line = line[len(line) - count:]
 
             blank_lines.append(line)
@@ -5643,13 +6891,6 @@ def strip_indents(lines, *, tab_width=8, linebreaks=linebreaks):
             yield 0, line
 
 
-##
-## TODO
-## * support linebreaks
-## * rescan generator function
-## * fixup non-generator function that returns the generator
-##
-
 def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes):
     "The generator function returned by the public strip_line_comments function."
     state = None
@@ -5671,7 +6912,7 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
             i = iter( ((empty, line, empty),) )
 
         # initialize these in case i never yields anything
-        leading_quote = segment = trailing_quote = ''
+        leading_quote = segment = trailing_quote = empty
 
         previous_lengths = 0
         offset = 0
@@ -5708,14 +6949,13 @@ def strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, 
             segment = line[:offset]
 
             if linebreaks:
-                # count the linebreak characters at the end of line,
-                # and preserve them if any.  otherwise use line[0:0]
-                # to represent the empty line.
-                trailing_linebreaks = []
-                trailing_linebreaks_append = trailing_linebreaks.append
-                for count, c in enumerate(line_reverser(line)):
+                # preserve the linebreak characters
+                # at the end of the original line, if any.
+                count = 0
+                for c in line_reverser(line):
                     if c not in linebreaks:
                         break
+                    count += 1
                 if count:
                     segment += line[len(line) - count:]
 
@@ -5796,18 +7036,21 @@ def strip_line_comments(lines, line_comment_markers, *,
     the line.
     """
 
-    # check line_comment_markers
+    # check line_comment_markers.  normalize to a tuple first,
+    # so any iterable works--sets, generators, etc.
+    original_line_comment_markers = line_comment_markers
+    if isinstance(line_comment_markers, bytes):
+        line_comment_markers = tuple(_iterate_over_bytes(line_comment_markers))
+    elif line_comment_markers is not None:
+        line_comment_markers = tuple(line_comment_markers)
     if not line_comment_markers:
         bad_value = True
-    elif isinstance(line_comment_markers, bytes):
-        bad_value = False
-        line_comment_markers = _iterate_over_bytes(line_comment_markers)
-        is_bytes = True
     else:
-        is_bytes = isinstance(line_comment_markers[0], bytes)
-        bad_value = not (is_bytes or isinstance(line_comment_markers[0], str))
+        first = line_comment_markers[0]
+        is_bytes = isinstance(first, bytes)
+        bad_value = not (is_bytes or isinstance(first, str))
     if bad_value:
-        raise ValueError(f"line comment markers must be str, bytes, or an non-empty iterable of str or bytes, not {line_comment_markers!r}")
+        raise ValueError(f"line comment markers must be str, bytes, or a non-empty iterable of str or bytes, not {original_line_comment_markers!r}")
 
     # call split_quoted_string to validate quotes, multiline_quotes, and escape, if specified.
     not_empty = quotes or multiline_quotes
@@ -5829,7 +7072,7 @@ def strip_line_comments(lines, line_comment_markers, *,
     if is_bytes and (linebreaks is str_linebreaks):
         linebreaks = bytes_linebreaks
 
-    line_comment_pattern = __separators_to_re(tuple(line_comment_markers), separators_is_bytes=is_bytes, separate=True, keep=True)
+    line_comment_pattern = __separators_to_re(line_comment_markers, separators_is_bytes=is_bytes, separate=True, keep=True)
     line_comment_splitter = re.compile(line_comment_pattern).split
 
     return _strip_line_comments(lines, line_comment_splitter, quotes, multiline_quotes, escape, linebreaks, is_bytes)

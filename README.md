@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.13.4.](#0134)
+The current version is [0.14.](#014)
 
 *Think big!*
 
@@ -100,6 +100,19 @@ from big.all import *
 
 but that's up to you.  Me, I generally use `import big.all as big` .
 
+One caution about `import *`: since **big.all** exports its submodules
+by name, `from big.all import *` binds the names `time`, `types`,
+`itertools`, `heap`, and `log` in your namespace--to *big's* submodules.
+If your module also uses the standard library's `time`, `types`, or
+`itertools`, whichever import runs *last* wins, and the loser fails at
+runtime with a confusing `AttributeError`.  This is the usual hazard of
+`import *`, but worth naming, since these collide with modules you
+probably use.  Happily, if you keep your imports sorted, the problem
+fixes itself: `from big.all import *` sorts ahead of `import itertools`,
+`import time`, and `import types`, so the standard library wins every
+collision.  (No promises that every future submodule of big will sort
+quite so conveniently.)
+
 **big** is licensed using the
 [MIT license.](https://opensource.org/licenses/MIT)
 You're free to use it and even ship it in your own programs,
@@ -109,24 +122,26 @@ as long as you leave my copyright notice on the source code.
 
 Although **big** is *crammed full* of fabulous code, a few of
 its subsystems rise above the rest.  If you're curious what
-**big** might do for you, here are the six things in **big**
+**big** might do for you, here are the seven things in **big**
 I'm proudest of:
 
 * [**`linked_list`**](#linked_list)
 * [**`string`**](#string)
 * [**Bound inner classes**](#bound-inner-classes)
 * [**The `multi-` family of string functions**](#The-multi--family-of-string-functions)
+* [**`Log`**](#the-big-log)
+* [**`split_delimiters` and `python_delimiters`**](#split_delimiterss-delimiters--state-yields4)
+* [**Snippets: `big.snip`**](#bigsnip)
+
+And here are seven little functions/classes I use all the time:
+
 * [`big.state`](#bigstate)
-* [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
-
-And here are six little functions/classes I use all the time:
-
 * [`eval_template_string`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
-* [`iterator_context`](#iterator_contextiterator-start0)
-* [`Log`](#logdestinations-options)
+* [**Enhanced `TopologicalSorter`**](#enhanced-topologicalsorter)
 * [`ModuleManager`](#ModuleManager)
 * [`pushd`](#pushddirectory)
 * [`re_partition`](#re_partitiontext-pattern-count1--flags0-reversefalse)
+* [`timestamp_human`](#timestamp_humantnone-want_microsecondsnone--tzinfonone) and [`timestamp_3339Z`](#timestamp_3339ztnone-want_microsecondsnone)
 
 
 # Index
@@ -134,6 +149,24 @@ And here are six little functions/classes I use all the time:
 ### Modules
 
 <dl><dd>
+
+[`accessor(attribute='state', state_manager='state_manager')`](#accessorattributestate-state_managerstate_manager)
+
+[`apply_snippets(s, snippets, comment='#')`](#apply_snippetss-snippets-comment)
+
+[`ascii_format_dict(*, closed=False)`](#ascii_format_dict-closedfalse)
+
+[`ascii_linebreaks`](#ascii_linebreaks)
+
+[`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf)
+
+[`ascii_whitespace`](#ascii_whitespace)
+
+[`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
+
+[`ASCIIFormatter`](#asciiformatter)
+
+[`atomic_write(path, mode='w', *, encoding=None, errors=None, newline=None)`](#atomic_writepath-modew--encodingnone-errorsnone-newlinenone)
 
 [`big.all`](#bigall)
 
@@ -157,9 +190,13 @@ And here are six little functions/classes I use all the time:
 
 [`big.scheduler`](#bigscheduler)
 
+[`big.snip`](#bigsnip)
+
 [`big.state`](#bigstate)
 
 [`big.template`](#bigtemplate)
+
+[`big.test`](#bigtest)
 
 [`big.text`](#bigtext)
 
@@ -171,23 +208,9 @@ And here are six little functions/classes I use all the time:
 
 [`big.version`](#bigversion)
 
-</dd></dl>
-
-### Functions, classes, and values
-
-<dl><dd>
-
-[`accessor(attribute='state', state_manager='state_manager')`](#accessorattributestate-state_managerstate_manager)
-
-[`ascii_linebreaks`](#ascii_linebreaks)
-
-[`ascii_linebreaks_without_crlf`](#ascii_linebreaks_without_crlf)
-
-[`ascii_whitespace`](#ascii_whitespace)
-
-[`ascii_whitespace_without_crlf`](#ascii_whitespace_without_crlf)
-
 [`bound_inner_base(cls)`](#bound_inner_basecls)
+
+[`bound_to(cls)`](#bound_tocls)
 
 [`BoundInnerClass`](#boundinnerclasscls)
 
@@ -195,7 +218,7 @@ And here are six little functions/classes I use all the time:
 
 [`BOUNDINNERCLASS_OUTER_SLOTS`](#boundinnerclass_outer_slots)
 
-[`bound_to(cls)`](#bound_tocls)
+[`Buffer(destination=None)`](#bufferdestinationnone)
 
 [`bytes_linebreaks`](#bytes_linebreaks)
 
@@ -205,9 +228,14 @@ And here are six little functions/classes I use all the time:
 
 [`bytes_whitespace_without_crlf`](#bytes_whitespace_without_crlf)
 
-[`combine_splits(s, *split_arrays)`](#combine_splitss-split_arrays)
+[`Callable(callable)`](#callablecallable)
 
 [`ClassRegistry()`](#classregistry)
+
+[`Clock`](#clock)
+
+[`combine_splits(s, *split_arrays)`](#combine_splitss-split_arrays)
+
 
 [`CycleError()`](#cycleerror)
 
@@ -219,25 +247,33 @@ And here are six little functions/classes I use all the time:
 
 [`datetime_set_timezone(d, timezone)`](#datetime_set_timezoned-timezone)
 
-[`default_clock()`](#default_clock)
-
 [`decode_python_script(script, *, newline=None, use_bom=True, use_source_code_encoding=True)`](#decode_python_scriptscript--newlinenone-use_bomtrue-use_source_code_encodingtrue)
 
-[`Delimiter(close, *, escape='', multiline=True, quoting=False)`](#delimiterclose--escape-multilinetrue-quotingfalse)
+[`default_clock()`](#default_clock)
+
+[`default_fix(o, fault)`](#default_fixo-fault)
+
+[`Delimiter(close, *, escape='', multiline=True, quoting=False, nested=None, literal=(), change=None)`](#delimiterclose--escape-multilinetrue-quotingfalse-nestednone-literal-changenone)
 
 [`dispatch(state_manager='state_manager', *, prefix='', suffix='')`](#dispatchstate_managerstate_manager--prefix-suffix)
 
+[`duration_human(t, *, long=True, want_microseconds=None)`](#duration_humant--longtrue-want_microsecondsnone)
+
 [`encode_strings(o, *, encoding='ascii')`](#encode_stringso--encodingascii)
+
+[`extract_snippets(s, *names, comment='#')`](#extract_snippetss-names-comment)
+
+[`eval_template_string(s, globals, locals=None, *, ...)`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
 
 [`Event(scheduler, event, time, priority, sequence)`](#eventscheduler-event-time-priority-sequence)
 
 [`Event.cancel()`](#eventcancel)
 
-[`eval_template_string(s, globals, locals=None, *, ...)`](#eval_template_strings-globals-localsnone--parse_expressionstrue-parse_commentsfalse-parse_whitespace_eaterfalse)
+[`expand_tabs(s, *, column=1, first_column=1, tab_width=8)`](#expand_tabss--column1-first_column1-tab_width8)
 
-[`Formatter(template, map=None, *, stretch=True, width=79, **kwargs)`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
+[`fgrep(path, text, *, case_insensitive=False, encoding=None, enumerate=False)`](#fgreppath-text--case_insensitivefalse-encodingnone-enumeratefalse)
 
-[`fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`](#fgreppath-text--encodingnone-enumeratefalse-case_insensitivefalse)
+[`File(path, initial_mode="at", *, buffering=True, encoding=None, subsequent_mode=None)`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone)
 
 [`file_mtime(path)`](#file_mtimepath)
 
@@ -245,7 +281,17 @@ And here are six little functions/classes I use all the time:
 
 [`file_size(path)`](#file_sizepath)
 
+[`FileHandle(handle, *, autoflush=False)`](#filehandlehandle--autoflushfalse)
+
+[`Filter(filter=None, *, accepts=None, name=None, types=None)`](#filterfilternone--acceptsnone-namenone-typesnone)
+
+[`format_definition_list(pairs, margin=79, *, definition_left_column=None, definition_relative_tabs=True, indent='  ', spacer='  ', tab_width=8, term_relative_tabs=True)`](#format_definition_listpairs-margin79--definition_left_columnnone-definition_relative_tabstrue-indent---spacer---tab_width8-term_relative_tabstrue)
+
+[`format_dict_to_ascii(d)`](#format_dict_to_asciid)
+
 [`format_map(s, mapping)`](#format_maps-mapping)
+
+[`Formatter(template, map=None, *, relaxed=False, stretch=True, width=79, **kwargs)`](#formattertemplate-mapnone--relaxedfalse-stretchtrue-width79-kwargs)
 
 [`generate_tokens(s)`](#generate_tokenss)
 
@@ -257,11 +303,13 @@ And here are six little functions/classes I use all the time:
 
 [`get_int_or_float(o, default=_sentinel)`](#get_int_or_floato-default_sentinel)
 
-[`grep(path, pattern, *, encoding=None, enumerate=False, flags=0)`](#greppath-pattern--encodingnone-enumeratefalse-flags0)
+[`grep(path, pattern, *, case_insensitive=None, encoding=None, enumerate=False, flags=0)`](#greppath-pattern--case_insensitivenone-encodingnone-enumeratefalse-flags0)
 
 [`Heap(i=None)`](#heapinone)
 
 [`Heap.append(o)`](#heapappendo)
+
+[`Heap.append_and_popleft(o)`](#heapappend_and_poplefto)
 
 [`Heap.clear()`](#heapclear)
 
@@ -269,19 +317,17 @@ And here are six little functions/classes I use all the time:
 
 [`Heap.extend(i)`](#heapextendi)
 
-[`Heap.remove(o)`](#heapremoveo)
-
 [`Heap.popleft()`](#heappopleft)
-
-[`Heap.append_and_popleft(o)`](#heapappend_and_poplefto)
 
 [`Heap.popleft_and_append(o)`](#heappopleft_and_appendo)
 
 [`Heap.queue`](#heapqueue)
 
+[`Heap.remove(o)`](#heapremoveo)
+
 [`int_to_words(i, *, flowery=True, ordinal=False)`](#int_to_wordsi--flowerytrue-ordinalfalse)
 
-[`Interpolation(expression, *filters, debug='')`](#interpolationexpression-filters-debug)
+[`Interpolation(expression, *filters, debug='', format=None)`](#interpolationexpression-filters-debug-formatnone)
 
 [`is_bound(cls)`](#is_boundcls)
 
@@ -289,11 +335,11 @@ And here are six little functions/classes I use all the time:
 
 [`is_unboundinnerclass(cls)`](#is_unboundinnerclasscls)
 
-[`IteratorContext`](#iterator_contextiterator-start0)
-
 [`iterator_context(iterator, start=0)`](#iterator_contextiterator-start0)
 
-[`iterator_filter(iterator, *, ...)`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone)
+[`iterator_filter(iterator, *, ...)`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone-call_everynone)
+
+[`IteratorContext`](#iterator_contextiterator-start0)
 
 [`linebreaks`](#linebreaks)
 
@@ -495,51 +541,53 @@ And here are six little functions/classes I use all the time:
 
 [`linked_list_reverse_iterator.truncate()`](#linked_list_reverse_iteratortruncate)
 
+[`List(list)`](#listlist)
+
+[`literal_eval(s)`](#literal_evals)
+
 [`Log(*destinations, **options)`](#logdestinations-options)
 
-[`Log.box(s)`](#logboxs)
+[`Log` properties](#log-properties)
 
-[`Log.Callable(callable)`](#logcallablecallable)
+[`Log.child(name='', buffered=True, *, format=..., paused=None, **kwargs)`](#logchildname-bufferedtrue--format-pausednone-kwargs)
 
-[`Log.close(block=True)`](#logcloseblocktrue)
+[`Log.close(wait=True)`](#logclosewaittrue)
 
-[`Log.Destination`](#logdestination)
-
-[`Log.Destination.Buffer(destination=None)`](#logdestinationbufferdestinationnone)
-
-[`Log.enter(message)`](#logentermessage)
+[`Log.enter(message='', **kwargs)`](#logentermessage-kwargs)
 
 [`Log.exit()`](#logexit)
 
-[`Log.File(path, initial_mode="at", *, flush=False)`](#logfilepath-initial_modeat--flushfalse)
+[`Log.flush(wait=True)`](#logflushwaittrue)
 
-[`Log.FileHandle(handle, *, flush=False)`](#logfilehandlehandle--flushfalse)
-
-[`Log.flush(block=True)`](#logflushblocktrue)
-
-[`Log.List(list)`](#loglistlist)
+[`Log.log(*args, format=Optional('log'), flush=False, **kwargs)`](#loglogargs-formatoptionallog-flushfalse-kwargs)
 
 [`Log.map_destination(o)`](#logmap_destinationo)
 
-[`Log.print(*args, end='\n', sep=' ', flush=False, format='print')`](#logprintargs-endn-sep--flushfalse-formatprint)
+[`Log.pause()` and `Log.resume()`](#logpause-and-logresume)
 
-[`Log.Print()`](#logprint)
+[`Log.print(*args, sep=' ', end='\\n', format=Optional('print'), flush=False)`](#logprintargs-sep--endn-formatoptionalprint-flushfalse)
 
 [`Log.reset()`](#logreset)
 
-[`Log.Sink()`](#logsink)
+[`Log.route(formatter, *destinations)`](#logrouteformatter-destinations)
 
-[`Log.TmpFile(*, flush=False)`](#logtmpfile-flushfalse)
+[`Log.write(s, format=Optional('preformatted'), flush=False)`](#logwrites-formatoptionalpreformatted-flushfalse)
 
-[`Log.write(formatted)`](#logwriteformatted)
+[`LogDestination(types=True)`](#logdestinationtypestrue)
 
-[`merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`LogDestination.mappers`](#logdestinationmappers)
+
+[`LogFormatter(format_dict, types, *, name=None)`](#logformatterformat_dict-types--namenone)
+
+[`merge_columns(*columns, column_separator=" ", overflow_strategy=OverflowStrategy.RAISE, overflow_before=0, overflow_after=0, tab_width=8)`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 
 [`metadata.version`](#metadataversion)
 
 [`ModuleManager()`](#modulemanager)
 
 [`multipartition(s, separators, count=1, *, reverse=False, separate=True)`](#multipartitions-separators-count1--reversefalse-separatetrue)
+
+[`multireplace(s, replacements, count=-1, *, reverse=False)`](#multireplaces-replacements-count-1--reversefalse)
 
 [`multisplit(s, separators, *, keep=False, maxsplit=-1, reverse=False, separate=False, strip=False)`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 
@@ -551,11 +599,19 @@ And here are six little functions/classes I use all the time:
 
 [`OldLog(clock=None)`](#oldlogclocknone)
 
+[`Optional(name)`](#optionalname)
+
 [`parse_template_string(s, *, ...)`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape)
 
 [`parse_timestamp_3339Z(s, *, timezone=None)`](#parse_timestamp_3339zs--timezonenone)
 
 [`Pattern(s, flags=0)`](#patterns-flags0)
+
+[`pluralize(i, singular, plural=None)`](#pluralizei-singular-pluralnone)
+
+[`prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, ascii=False)`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12--asciifalse)
+
+[`Print()`](#print)
 
 [`pure_virtual()`](#pure_virtual)
 
@@ -565,19 +621,17 @@ And here are six little functions/classes I use all the time:
 
 [`PushbackIterator.push(o)`](#pushbackiteratorpusho)
 
-[`prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12)`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12)
-
 [`pushd(directory)`](#pushddirectory)
 
 [`python_delimiters`](#python_delimiters)
 
 [`python_delimiters_version`](#python_delimiters_version)
 
-[`read_python_file(path, *, newline=None, use_bom=True, use_source_code_encoding=True)`](#read_python_filepath--newlinenone-use_bomtrue-use_source_code_encodingtrue)
-
 [`re_partition(text, pattern, count=1, *, flags=0, reverse=False)`](#re_partitiontext-pattern-count1--flags0-reversefalse)
 
 [`re_rpartition(text, pattern, count=1, *, flags=0)`](#re_rpartitiontext-pattern-count1--flags0)
+
+[`read_python_file(path, *, newline=None, use_bom=True, use_source_code_encoding=True)`](#read_python_filepath--newlinenone-use_bomtrue-use_source_code_encodingtrue)
 
 [`Regulator()`](#regulator)
 
@@ -597,47 +651,49 @@ And here are six little functions/classes I use all the time:
 
 [`Scheduler(regulator=default_regulator)`](#schedulerregulatordefault_regulator)
 
-[`Scheduler.schedule(o, time, *, absolute=False, priority=DEFAULT_PRIORITY)`](#schedulerscheduleo-time--absolutefalse-prioritydefault_priority)
-
 [`Scheduler.cancel(event)`](#schedulercancelevent)
+
+[`Scheduler.non_blocking()`](#schedulernon_blocking)
 
 [`Scheduler.queue`](#schedulerqueue)
 
-[`Scheduler.non_blocking()`](#schedulernon_blocking)
+[`Scheduler.schedule(o, time, *, absolute=False, priority=DEFAULT_PRIORITY)`](#schedulerscheduleo-time--absolutefalse-prioritydefault_priority)
 
 [`search_path(paths, extensions=('',), *, case_sensitive=None, preserve_extension=True, want_directories=False, want_files=True)`](#search_pathpaths-extensions--case_sensitivenone-preserve_extensiontrue-want_directoriesfalse-want_filestrue)
 
 [`SingleThreadedRegulator()`](#singlethreadedregulator)
 
-[`split_delimiters(s, delimiters={...}, *, state=(), yields=None)`](#split_delimiterss-delimiters--state-yieldsnone)
-
-[`split_quoted_strings(s, quotes=('"', "'"), *, escape='\\', multiline_quotes=(), state='')`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
-
-[`split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
-
-[`split_title_case(s, *, split_allcaps=True)`](#split_title_cases--split_allcapstrue)
+[`Sink()`](#sink)
 
 [`SinkEvent`](#sinkevent)
 
-[`SinkEndEvent`](#sinkendevent)
-
-[`SinkEnterEvent`](#sinkenterevent)
-
-[`SinkExitEvent`](#sinkexitevent)
-
-[`SinkLogEvent`](#sinklogevent)
-
-[`SinkStartEvent`](#sinkstartevent)
-
-[`SinkWriteEvent`](#sinkwriteevent)
+[`SinkFormatter`](#sinkformatter)
 
 [`SpecialNodeError`](#specialnodeerror)
+
+[`split_delimiters(s, delimiters={...}, *, state=(), yields=4)`](#split_delimiterss-delimiters--state-yields4)
+
+[`split_quoted_strings(s, quotes=('"', "'"), *, escape='\\', multiline_quotes=(), state='')`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
+
+[`split_text_with_code(s, *, code_indent=4, tab_width=8)`](#split_text_with_codes--code_indent4-tab_width8)
+
+[`split_title_case(s, *, split_allcaps=True)`](#split_title_cases--split_allcapstrue)
+
+[`sync_snippets(source, destination, filter=None, *, comment='#')`](#sync_snippetssource-destination-filternone--comment)
 
 [`State()`](#state)
 
 [`StateManager(state, *, on_enter='on_enter', on_exit='on_exit', state_class=None)`](#statemanagerstate--on_enteron_enter-on_exiton_exit-state_classnone)
 
 [`Statement(statement)`](#statementstatement)
+
+[`str_linebreaks`](#str_linebreaks)
+
+[`str_linebreaks_without_crlf`](#str_linebreaks_without_crlf)
+
+[`str_whitespace`](#str_whitespace)
+
+[`str_whitespace_without_crlf`](#str_whitespace_without_crlf)
 
 [`string(s='', *, ...)`](#strings--sourcenone-line_number1-column_number1-first_column_number1-tab_width8)
 
@@ -649,25 +705,45 @@ And here are six little functions/classes I use all the time:
 
 [`string.generate_tokens()`](#stringgenerate_tokens)
 
+[`string.literal_eval()`](#stringliteral_eval)
+
+[`string.multireplace(replacements, count=-1, *, reverse=False)`](#stringmultireplacereplacements-count-1--reversefalse)
+
 [`strip_indents(lines, *, tab_width=8, linebreaks=linebreaks)`](#strip_indentslines--tab_width8-linebreakslinebreaks)
 
 [`strip_line_comments(lines, line_comment_markers, *, escape='\\', quotes=(), multiline_quotes=(), linebreaks=linebreaks)`](#strip_line_commentslines-line_comment_markers--escape-quotes-multiline_quotes-linebreakslinebreaks)
 
-[`str_linebreaks`](#str_linebreaks)
+[`test.explain(tb, write)`](#testexplaintb-write)
 
-[`str_linebreaks_without_crlf`](#str_linebreaks_without_crlf)
+[`test.ExplainResult`](#testexplainresult)
 
-[`str_whitespace`](#str_whitespace)
+[`test.finish()`](#testfinish)
 
-[`str_whitespace_without_crlf`](#str_whitespace_without_crlf)
+[`test.main()`](#testmain)
+
+[`test.preload(package)`](#testpreloadpackage)
+
+[`test.raises` and `test.raises_regex`](#testraises-and-testraises_regex)
+
+[`test.register_type_equality(type, function)`](#testregister_type_equalitytype-function)
+
+[`test.run(name=None, module=None, permutations=None)`](#testrunnamenone-modulenone-permutationsnone)
+
+[`test.stats`](#teststats)
+
+[`test.suite()`](#testsuite)
+
+[`TextFormatter(format_dict=None, *, formats=None, indent='    ', name=None, prefix=None, width=79)`](#textformatterformat_dictnone--formatsnone-indent-----namenone-prefixnone-width79)
+
+[`ThreadSafeRegulator()`](#threadsaferegulator)
 
 [`timestamp_3339Z(t=None, want_microseconds=None)`](#timestamp_3339ztnone-want_microsecondsnone)
 
 [`timestamp_human(t=None, want_microseconds=None, *, tzinfo=None)`](#timestamp_humantnone-want_microsecondsnone--tzinfonone)
 
-[`ThreadSafeRegulator()`](#threadsaferegulator)
-
 [`TMPFILE`](#tmpfile)
+
+[`TmpFile(prefix='{name}', *, buffering=True, encoding=None, timestamp_format=None)`](#tmpfileprefixname--bufferingtrue-encodingnone-timestamp_formatnone)
 
 [`TopologicalSorter(graph=None)`](#topologicalsortergraphnone)
 
@@ -699,6 +775,8 @@ And here are six little functions/classes I use all the time:
 
 [`touch(path)`](#touchpath)
 
+[`toy_multisplit(s, separators)`](#toy_multisplits-separators)
+
 [`TransitionError`](#transitionerror)
 
 [`translate_filename_to_exfat(s)`](#translate_filename_to_exfats)
@@ -717,6 +795,8 @@ And here are six little functions/classes I use all the time:
 
 [`UndefinedIndexError`](#undefinedindexerror)
 
+[`unicode_format_dict(*, closed=False)`](#unicode_format_dict-closedfalse)
+
 [`unicode_linebreaks`](#unicode_linebreaks)
 
 [`unicode_linebreaks_without_crlf`](#unicode_linebreaks_without_crlf)
@@ -733,7 +813,7 @@ And here are six little functions/classes I use all the time:
 
 [`whitespace_without_crlf`](#whitespace_without_crlf)
 
-[`wrap_words(words, margin=79, *, two_spaces=True)`](#wrap_wordswords-margin79--two_spacestrue)
+[`wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True)`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
 
 </dd></dl>
 
@@ -820,12 +900,25 @@ Compare this to functions:
   passed in as the second argument to `__new__` and  `__init__`,
   after `cls` and `self` respectively.
 
+`BoundInnerClass` only binds `__new__` and `__init__` methods the
+decorated class *itself* defines.  Methods inherited from base
+classes are left alone: a regular base class's methods receive
+only the arguments you pass in, and a bound parent class injects
+`outer` into its own methods itself.
+
 Note that this has an implication for all subclasses.
 If class ***B*** is decorated with `BoundInnerClass`,
 and class ***S*** is a subclass of ***B***, such that
 `issubclass(`***S***`, `***B***`)`,
 class ***S*** *must* be decorated with either
 `BoundInnerClass` or `UnboundInnerClass`.
+
+Base classes are matched by class *identity*, never by name.
+In particular, an inner class may inherit from a same-named
+inner class of an ancestor outer class--`class MyApp(BaseApp)`
+defining `class Config(BaseApp.Config)`--and bare
+`super().__init__()` delivers `outer` automatically, exactly
+as it does for any other bound base.
 </dd></dl>
 
 #### `UnboundInnerClass(cls)`
@@ -923,7 +1016,7 @@ Example:
 
 ```Python
 class Foo:
-    __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
+    __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
 
     @BoundInnerClass
     class Bar:
@@ -1071,11 +1164,69 @@ the default value is `o`.
 
 Converts `o` into a number, preferring an int to a float.
 
-If `o` is already an int or float, returns `o` unchanged.  Otherwise,
-tries `int(o)`.  If that conversion succeeds, returns the result.
-Otherwise, tries `float(o)`.  If that conversion succeeds, returns
-the result.  Otherwise returns the default value.  If you don't
-pass in an explicit default value, the default value is `o`.
+`get_int_or_float` is designed for converting strings: it's a
+sort of poor man's `ast.literal_eval`.  If `o` is a string
+(`str`, `bytes`, or `bytearray`) that reads as an int, returns
+that int; if it reads as a float instead, returns that float.
+(Anything `float()` accepts "reads as a float", including
+`"inf"` and `"nan"`.)
+
+If `o` is already an int, returns `o` unchanged.  If `o` is
+already a float, returns `int(o)` if that's equal to `o`,
+otherwise returns `o` unchanged.  (Infinities and NaNs are
+returned unchanged.)
+
+Anything else--including number-like objects such as
+`decimal.Decimal` and `fractions.Fraction`--is outside
+`get_int_or_float`'s purview: it returns the default value.
+If you don't pass in an explicit default value, the default
+value is `o`.
+</dd></dl>
+
+#### `literal_eval(s)`
+
+<dl><dd>
+
+Wrapper around
+[`ast.literal_eval`](https://docs.python.org/3/library/ast.html#ast.literal_eval)
+that preserves `big.string` provenance.
+
+`literal_eval(s)` evaluates `s` exactly like `ast.literal_eval`.
+If `s` is an ordinary `str`, or the result isn't a `str`, the
+result is exactly `ast.literal_eval`'s result.
+
+If `s` is a `big.string` and the result is a `str`,
+`literal_eval` tries to preserve provenance, in one of three
+ways, best-first:
+
+* If the decoded value appears verbatim in `s`—there are no
+  escape sequences—the result is a true slice of `s`.  Both
+  `where` and `context` work, and every character knows its
+  true position.
+* If the literal contains escape sequences, the result is
+  assembled from verbatim slices of `s`, splicing in a
+  synthesized character for each escape sequence.  Every
+  character still reports a true line and column—a decoded
+  escape reports the position of its escape sequence—but
+  `context` is unavailable, as the result is no longer one
+  contiguous slice of the original.
+* If `s` opens with a quoted string whose contents are exactly
+  the decoded value—an escape-free literal followed by trailing
+  text `ast.literal_eval` tolerates, like a comment—the result
+  is that true slice, found by reparsing the source with big's
+  own [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state).
+  `where` and `context` both work.
+
+If the decoded value can't be honestly mapped back onto the
+source—implicit string concatenation (`"a" "b"`), or a literal
+whose escape sequences make the value differ from the source
+text, followed by trailing text—`literal_eval` returns
+a plain `str`.  This is `big.string`'s standing policy: a
+position is a promise, and failing loudly (plain `str` has no
+`.where`) beats reporting positions that are confidently wrong.
+
+In every case the value is character-for-character identical to
+`ast.literal_eval`'s result; only the type and metadata vary.
 </dd></dl>
 
 #### `ModuleManager()`
@@ -1092,18 +1243,46 @@ instance at the end of your module to finalize.
 `ModuleManager` provides two methods, both of which can be used
 as decorators or called with string arguments:
 
-`mm.export(*args)` adds symbols to `__all__`.  When used as a
-decorator, adds the decorated function or class by name.  When
-called with strings, adds those strings to `__all__`.
+`mm.export(*args, force=False)` adds symbols to `__all__`.
+When used as a decorator, adds the decorated function or class
+by name.  When called with strings, adds those strings to
+`__all__`.  Exporting a name that's already in `__all__` raises
+`ValueError`--it's nearly always a bug (a stale hand-rolled
+`__all__`, or a stray decorator on an internal function).  If
+the redundancy is intentional, pass `force=True`: it never
+raises, and `__all__` still only lists each name once.
 
-`mm.delete(*args)` marks symbols for deletion.  When used as a
-decorator, marks the decorated function or class for deletion.
-When called with strings, marks those names for deletion.
+`mm.delete(*args, force=False)` marks symbols for deletion.
+When used as a decorator, marks the decorated function or class
+for deletion.  When called with strings, marks those names for
+deletion.  Deleting a name that's already scheduled for deletion
+raises `ValueError`, unless you use `force=True`.
 
 When the `ModuleManager` instance is called, it deletes all
 symbols on the deletions list from the module namespace.
 It also automatically deletes itself, and any module-level
 references to its `export` and `delete` methods.
+</dd></dl>
+
+#### `pluralize(i, singular, plural=None)`
+
+<dl><dd>
+
+Returns a string counting `i` things, using the correct
+English grammatical number: `'1 apple'`, `'3 apples'`.
+
+`i` should be a number.  `singular` should be the singular form
+of the noun.  If `plural` is `None` (the default), the plural
+form is the singular form plus `'s'`; for a noun with an
+irregular plural, pass it in explicitly:
+
+```Python
+>>> big.pluralize(2, 'box', 'boxes')
+'2 boxes'
+```
+
+Uses the plural form for every count except exactly 1.
+(Zero is `'0 apples'`, 1.5 is `'1.5 apples'`.)
 </dd></dl>
 
 #### `pure_virtual()`
@@ -1169,7 +1348,82 @@ Functions for working with files, directories, and I/O.
 
 </dd></dl>
 
-#### `fgrep(path, text, *, encoding=None, enumerate=False, case_insensitive=False)`
+#### `atomic_write(path, mode='w', *, encoding=None, errors=None, newline=None)`
+
+<dl><dd>
+
+A context manager that writes a file atomically: readers of `path`
+see either the old contents or the new contents, never a mixture,
+no matter when the writer crashes or the machine loses power.
+
+Yields a file object open for writing.  Write the new contents
+to it as usual:
+
+```Python
+with big.atomic_write(path) as f:
+    f.write(everything)
+```
+
+If the nested block exits normally, the new contents atomically
+replace the old file at `path` (or create it, if it didn't exist).
+If the nested block raises, the file at `path` is completely
+untouched, and the partially-written new contents are removed.
+
+How it works: `atomic_write` writes to a temporary file in the
+same directory as `path`.  On success, the temporary file is
+flushed, fsync'ed, and renamed over `path` with `os.replace`,
+which is atomic.  ("The same directory" matters: rename is only
+atomic within one filesystem.)  On failure, the temporary file
+is unlinked.
+
+`path` should be a `str`, `bytes`, or `os.PathLike` object.
+
+`mode` selects how you write the new contents:
+
+* `'w'`, `'wt'`, or `'wb'` -- write.  The new file starts empty;
+  you write it from scratch.
+* `'a'`, `'at'`, or `'ab'` -- append.  The old contents (if any)
+  are preserved, and you write additional contents after them.
+* `'r+'`, `'r+t'`, or `'r+b'` -- update in place.  The old contents
+  are preserved and the file is positioned at the start, so you can
+  read and rewrite them; like `open`, `'r+'` requires `path` to
+  already exist.
+
+For append and update, `atomic_write` copies the existing file into
+the temporary file before handing it to you, so that even an append
+or an in-place edit is atomic: readers see the whole old file or the
+whole new file, never a mixture.  Note the cost: this means copying
+the entire original file first, before writing.  "atomic" append is
+a poor fit for a hot loop (e.g. appending one line at a time to a
+large log)--each call to `atomic_write` will recopy the *entire file.*
+
+`encoding`, `errors`, and `newline` work as they do for `open`, and
+like `open`, they're only permitted in text mode.
+
+Permissions: if a file already exists at `path`, the new file
+inherits its permissions.  If `path` is new, it gets the same
+default permissions an ordinary `open` would give it (respecting
+the umask)--not the private permissions temporary files usually
+get.
+
+Closing the yielded file object yourself is harmless, though it
+means `atomic_write` can't fsync the contents (`close` already
+flushed them; the rename is still atomic).
+
+If `path` exists it must be a regular file.  `atomic_write` raises
+if it's a directory (`IsADirectoryError`), a symbolic link, or
+another special file (`OSError`)--rather than let `os.replace` do
+something surprising, like replace a symlink with the new file
+(detaching the link from its target).  This check samples the path,
+so it's necessarily racy: if the path is swapped for a directory or
+symlink after the check, the final rename simply fails on its own.
+The check just turns the common mistake into a clear error up front.
+
+Caveat: the hard link count isn't preserved--replacing one name of
+a multiply-linked file detaches it from the other names.
+</dd></dl>
+
+#### `fgrep(path, text, *, case_insensitive=False, encoding=None, enumerate=False)`
 
 <dl><dd>
 
@@ -1196,13 +1450,18 @@ manner.
 Returns a list of lines in the file containing `text`.  The lines are either
 strings or bytes objects, depending on the type of `pattern`.  The lines
 have their newlines stripped but preserve all other whitespace.
+Lines are split according to big's own definition of linebreaks (see
+[`linebreaks`](#linebreaks) and [`bytes_linebreaks`](#bytes_linebreaks)
+in `big.text`)--which is exactly what `str.splitlines` and
+`bytes.splitlines` split on.  In particular, binary-mode lines may end
+in `\r\n`, `\r`, or `\n`, and all three are recognized and stripped.
 
 If `enumerate` is true, returns a list of tuples of (line_number, line).
 The first line of the file is line number 1.
 
 For simplicity of implementation, the entire file is read in to memory
-at one time.  If `case_insensitive` is true, `fgrep` also makes a lowercased
-copy.
+at one time.  If `case_insensitive` is true, `fgrep` also makes a
+case-folded copy.
 </dd></dl>
 
 #### `file_mtime(path)`
@@ -1229,7 +1488,7 @@ Returns the size of the file at `path`, as an integer representing the
 number of bytes.
 </dd></dl>
 
-#### `grep(path, pattern, *, encoding=None, enumerate=False, flags=0)`
+#### `grep(path, pattern, *, case_insensitive=None, encoding=None, enumerate=False, flags=0)`
 
 <dl><dd>
 
@@ -1257,20 +1516,37 @@ If `pattern` uses a bytes object, the file is opened in binary mode.
 `flags` is passed in as the `flags` argument to `re.compile` if `pattern`
 is a string or bytes.  (It's ignored if `pattern` is an `re.Pattern` object.)
 
+`case_insensitive` controls case sensitivity explicitly, and may be
+`None` (the default), `True`, or `False`:
+
+* `None` means make no effort in either direction.  A `str` or
+  `bytes` pattern is compiled with `flags` exactly as given; `flags`
+  is 0 by default, which means case-sensitive.  A precompiled
+  pattern keeps whatever flags it already has.
+* `True` forces a case-insensitive search, adding `re.IGNORECASE`.
+* `False` forces a case-sensitive search, removing `re.IGNORECASE`.
+
+When `case_insensitive` is `True` or `False`, the pattern is
+(re)compiled to honor it--even a precompiled `re.Pattern`.  (One
+limitation: an inline `(?i)` flag baked into the pattern text itself
+isn't affected by `case_insensitive=False`; it lives in the pattern,
+not the flags.)  Passing `case_insensitive=True` is equivalent to
+adding `re.IGNORECASE` to `flags` yourself, if `pattern` is `str` or `bytes`.
+
 Returns a list of lines in the file matching the pattern.  The lines
 are either strings or bytes objects, depending on the type of `text`.
 The lines have their newlines stripped but preserve all other whitespace.
+Lines are split according to big's own definition of linebreaks (see
+[`linebreaks`](#linebreaks) and [`bytes_linebreaks`](#bytes_linebreaks)
+in `big.text`)--which is exactly what `str.splitlines` and
+`bytes.splitlines` split on.  In particular, binary-mode lines may end
+in `\r\n`, `\r`, or `\n`, and all three are recognized and stripped.
 
 If `enumerate` is true, returns a list of tuples of `(line_number, line)`.
 The first line of the file is line number 1.
 
 For simplicity of implementation, the entire file is read in to memory
 at one time.
-
-Tip: to perform a case-insensitive pattern match, pass in the
-`re.IGNORECASE` flag into flags for this function (if pattern is a string
-or bytes) or when creating your regular expression object (if pattern is
-an `re.Pattern` object.
 
 (In older versions of Python, `re.Pattern` was a private type called
 `re._pattern_type`.)
@@ -1295,6 +1571,12 @@ the original directory after the nested block.
 You can change directories in the nested block;
 this won't affect pushd restoring the original current
 working directory upon exiting the nested block.
+
+The original directory is captured when the block is
+*entered*, not when the pushd object is constructed.
+(Like the shell builtin: pushd pushes the directory you're
+in right now.)  This also means a single pushd object can
+be reused.
 
 You can safely nest `with pushd` blocks.
 </dd></dl>
@@ -1336,6 +1618,11 @@ If the parent directory doesn't exist,
 `safe_mkdir` creates that directory,
 then creates `path`.
 
+A symlink at `path` that doesn't lead to a directory--a
+symlink to a file, or a dangling symlink--counts as a file:
+it's unlinked.  A symlink that leads to a directory is left
+alone; a directory exists at `path`, which is the goal.
+
 This function can still fail:
 
 * `path` could be on a read-only filesystem.
@@ -1350,6 +1637,11 @@ This function can still fail:
 <dl><dd>
 
 Unlinks `path`, if `path` exists and is a file.
+
+A symlink at `path` that doesn't lead to a directory--a
+symlink to a file, or a dangling symlink--counts as a file.
+(Unlinking it removes the symlink itself, never its target.)
+A symlink that leads to a directory is left alone.
 </dd></dl>
 
 
@@ -1361,6 +1653,15 @@ Search a list of directories for a file.  Given a sequence
 of directories, an optional list of file extensions, and a
 filename, searches those directories for a file with that
 name and possibly one of those file extensions.
+
+Returns a function:
+
+```Python
+    search(filename)
+```
+
+which returns either a `pathlib.Path` object on success (it found a
+matching file) or `None` on failure (it couldn't find a matching file).
 
 `search_path` accepts the paths and extensions as parameters and
 returns a *search function*.  The search function accepts one
@@ -1400,6 +1701,11 @@ only Windows platforms are case-insensitive by convention;
 all other platforms that support Python are case-sensitive
 by convention.
 
+(Caveat: on Windows, the underlying filesystem globbing is itself
+case-insensitive, and `search_path` doesn't attempt to compensate.
+`case_sensitive=True` on Windows still finds files whose names
+match case-insensitively.)
+
 If `preserve_extension` is true (the default), the search function
 checks the filename to see if it already ends with one of the
 extensions.  If it does, the search is restricted to only files
@@ -1417,15 +1723,6 @@ can't both be false.)  By default, `want_files` is true and
 `paths` and `extensions` are both tried in order, and the search
 function returns the first match it finds.  All extensions are
 tried in a path entry before considering the next path.
-
-Returns a function:
-
-```Python
-    search(filename)
-```
-
-which returns either a `pathlib.Path` object on success or `None`
-on failure.
 
 </dd></dl>
 
@@ -1762,6 +2059,7 @@ containing metadata about the iteration.
 `ctx` supports the following attributes:
 
 </dd><dt>
+
 `ctx.countdown`
 </dt><dd>
    contains the "opposite" value of `ctx.index`.
@@ -1771,43 +2069,54 @@ containing metadata about the iteration.
    be `0`, `1`, `2`, and `3` in that order, and `ctx.countdown`
    will be `3`, `2`, `1`, and `0` in that order.)  `ctx.countdown`
    requires the iterator to support `__len__`; if it doesn't,
-   `ctx.countdown` will be undefined.
+   `ctx.countdown` will be undefined, and accessing it will raise
+   `AttributeError` (so `hasattr(ctx, 'countdown')` tells you
+   whether it's available).
 </dd><dt>
+
 `ctx.current`
 </dt><dd>
    contains the current value yielded by the
    iterator (`o` as described above).
 </dd><dt>
+
 `ctx.index`
 </dt><dd>
    contains the index of this value.  The first
    time the iterator yields a value, this will be `start`;
    the second time, it will be `start + 1`, etc.
 <dl><dt>
+
 `ctx.is_first`
 </dt><dd>
    is true only for the first value yielded,
    and false otherwise.
 </dd><dt>
+
 `ctx.is_last`
 </dt><dd>
    is true only for the last value yielded,
    and false otherwise.  (If the iterator only yields
    one value, `is_first` and `is_last` will both be true.)
 </dd><dt>
+
 `ctx.length`
 </dt><dd>
    contain the total number of items that will be yielded.
    `ctx.length` requires the iterator to support `__len__`;
-   if it doesn't, `ctx.length` will be undefined.
+   if it doesn't, `ctx.length` will be undefined, and accessing
+   it will raise `AttributeError` (so `hasattr(ctx, 'length')`
+   tells you whether it's available).
 </dd><dt>
+
 `ctx.next`
 </dt><dd>
    contains the next value to be yielded by
    this iterator if there is one.  (If `o` is the last
-   value yielded by the iterator, `ctx.previous` will be
+   value yielded by the iterator, `ctx.next` will be
    an `undefined` value.)
 </dd><dt>
+
 `ctx.previous`
 </dt><dd>
    contains the previous value yielded if
@@ -1819,7 +2128,7 @@ containing metadata about the iteration.
 
 </dd></dl>
 
-#### `iterator_filter(iterator, *, stop_at_value=undefined, stop_at_in=None, stop_at_predicate=None, stop_at_count=None, reject_value=undefined, reject_in=None, reject_predicate=None, only_value=undefined, only_in=None, only_predicate=None)`
+#### `iterator_filter(iterator, *, stop_at_value=undefined, stop_at_in=None, stop_at_predicate=None, stop_at_count=None, reject_value=undefined, reject_in=None, reject_predicate=None, only_value=undefined, only_in=None, only_predicate=None, call_every=None)`
 
 <dl><dd>
 
@@ -1848,9 +2157,19 @@ A rule ending in `_in` passes if the yielded value is `in` the argument
 A rule ending in `_predicate` takes a callable as its argument; it passes
 if calling the argument with the yielded value returns a true value.
 
-There is one additional rule: `stop_at_count`, an integer.  The iterator
+There are two additional rules:
+
+* `stop_at_count`, an integer.  The iterator
 becomes exhausted after yielding `stop_at_count` items.  If `stop_at_count`
 is initially `<= 0`, the iterator is initialized in an exhausted state.
+
+* `call_every`, a 2-tuple of `(callable, number)`.  This calls the
+`callable` callable--without arguments--after every `number` values
+yielded.  Passing in `call_every=(foo, 4)`
+for an iterator that yields 14 values would call `foo()` after
+yielding 4 values, again after yielding 8 values, and a third
+time after yielding 12 values.
+
 </dd></dl>
 
 #### `PushbackIterator(iterable=None)`
@@ -1908,16 +2227,36 @@ you may still call `J.push(33)`, or `J.push('xyz')`, or `J.push(None)`, etc.
 
 <dl><dd>
 
-A lightweight, high-performance text-oriented thread-safe logging module,
-intended for debug-print-style use.  Not a full-fledged
-application logger like Python's
-[`logging`](https://docs.python.org/3/library/logging.html) module.
+The best version of debug prints you ever saw.
 
-`Log` is flexible in where output is written (stdout, files,
-lists, arbitrary callables, or custom
-[`Destination`](#logdestination) objects)
-and when (by default it runs in a background thread for
-minimal overhead).
+`Log` is a lightweight, thread-safe logging object intended for
+*print-style debugging*.  It's deliberately **not** a full-fledged
+"enterprise" application logger like Python's
+[`logging`](https://docs.python.org/3/library/logging.html) module--no
+severity levels, no handler configuration files.  You are the writer
+*and* the reader; `Log` just makes the story you print to yourself
+enormously better: elapsed times, thread names, nesting with
+indentation, call-out boxes, effortless redirection, and pause/resume
+instead of commenting your prints out.
+
+The cheapest log is the one that's off:
+
+```Python
+if log:
+    log(f"boiler state: {pprint.pformat(hopper)}")
+```
+
+A `Log` handle is true while logging to it would actually deliver:
+it has real destinations, it\'s open, and it isn\'t paused (directly
+or by an ancestor).  Remove the last destination, close the log, or
+pause it, and it\'s false--guarding with `if log:` means the f-string
+is *never even evaluated* when the log is dark, whatever made it
+dark.  Logging you can afford to leave in.
+
+Internally, `Log` routes messages from `LogFormatter` objects (rendering
+policy) to `LogDestination` objects (output mechanism), running all work
+through a job queue with fault handling--a misbehaving destination is
+retried, then dropped; your program never crashes because of its log.
 
 See the [**The big `Log`**](#the-big-log) tutorial for an
 introduction and examples.
@@ -1939,651 +2278,814 @@ In Python 3.6 this is a compatibility function that calls
 and converts the result to integer nanoseconds.
 </dd></dl>
 
+#### `default_fix(o, fault)`
+
+<dl><dd>
+
+The default "fix" callback used by [`Log`](#logdestinations-options).
+Does nothing, and returns `None`--meaning "I didn't fix it".
+
+When a `LogFormatter` or `LogDestination` raises an exception, `Log` calls
+the log's `fix` callback, passing in the offending object and the
+exception.  If `fix` returns a true value, the failed operation is
+retried (up to `retries` times).  If the fault can't be fixed, the
+offending object is removed from the log's routing, and the log
+carries on without it.
+
+The drop itself is silent, on purpose: the log exists to serve *your*
+logging, never its own--it will never inject a message you didn't
+write into your output.  If you want to know when a formatter or
+destination dies, `fix` is your hook: it's consulted on every fault,
+and if it returns false, the drop follows immediately--so a `fix`
+that records (or prints, or logs elsewhere) before declining is a
+complete death notification.  One subtlety: a `fix` that keeps
+returning true until `retries` is exhausted is *not* called again
+for the final drop--if you always return true, count your own calls.
+</dd></dl>
+
+#### `LogDestination.mappers`
+
+<dl><dd>
+
+A class attribute of [`LogDestination`](#logdestinationtypestrue)--a
+single shared list of callables extending
+[`Log.map_destination`](#logmap_destinationo).
+Each mapper is called with a prospective destination object; it should
+return a [`LogDestination`](#logdestinationtypestrue), or `None` meaning
+"not mine, keep looking".  Append your mapper to
+`LogDestination.mappers`; user-registered mappers run before the
+built-in mappings.
+</dd></dl>
+
 #### `Log(*destinations, **options)`
 
 <dl><dd>
 
-A lightweight, high-performance text-oriented thread-safe log object
-intended for debug-print-style use.  To use, create
-a `Log` instance, then call it to log messages:
+The log object.  Messages logged to it are formatted by a
+[`LogFormatter`](#logformatterformat_dict-types--namenone) and routed to
+one or more [`LogDestination`](#logdestinationtypestrue) objects.
 
-```Python
-    j = Log()
-    j("Hello, world!")
-```
+`destinations` may be `LogDestination` objects, or any value
+[`map_destination`](#logmap_destinationo) understands: `print`,
+a callable, a list, a path (`str`, `bytes`, or `pathlib.Path`),
+a text file object, [`TMPFILE`](#tmpfile), or `None`.
+If you don't pass any destinations, the log prints.
 
-Calling the `Log` instance is equivalent to calling
-[`Log.print`](#logprintargs-end-sep--flushfalse-formatprint).
+Keyword-only options:
 
-`Log` has three states: *initial* (just created or reset),
-*logging* (actively accepting messages), and *closed*
-(ignoring all writes).  The log transitions from initial
-to logging automatically the first time a message is logged.
+* `buffered` (default `False`) -- buffer messages in the root session
+  until flushed.
+* `clock` (default [`Clock`](#clock)) -- a `Clock` subclass, or a
+  plain callable returning integer nanoseconds (it's wrapped
+  automatically).
+* `fix` (default [`default_fix`](#default_fixo-fault)) -- the
+  fault-repair callback; see `default_fix`.
+* `formatter` -- an explicit `LogFormatter`; default is
+  `TextFormatter()`.  All formatter configuration--`formats`,
+  `prefix`, `width`, `indent`--lives on the formatter: construct
+  your own
+  [`TextFormatter`](#textformatterformat_dictnone--formatsnone-indent-----namenone-prefixnone-width79)
+  and pass it in.  (For example,
+  `formatter=TextFormatter(formats={"start": None, "end": None})`
+  turns off the banners.)
+* `name` (default `\'Log\'`) -- the log\'s name, shown in banners.
+* `paused` (default `False`) -- start out paused.
+* `retries` (default `1`) -- fault retry budget; see `default_fix`.
+* `threaded` (default `True`) -- run the log\'s work in a worker
+  thread.  (`threading=` is accepted as a deprecated alias.)
 
-See the [**The big `Log`**](#the-big-log) for
-an in-depth tutorial on how to use `Log`, including examples.
+A `Log` is a context manager; leaving the `with` block closes it.
+`bool(log)` is true if the log has at least one true destination--
+so `if log: log(...)` skips even evaluating the log message\'s
+arguments when the log is dark.
 
-**Destinations**
-
-Positional arguments to the `Log` constructor define destinations
-for log messages.  The log sends every formatted message to
-every destination.
-
-If you construct a `Log` and don't specify any positional arguments,
-it will send logged messages to `builtins.print`.
-
-Destinations can be any of the following:
-
-`print` (or `builtins.print`) — Log messages are printed using
-`print(s, end='')`.  Equivalent to
-[`Log.Print()`](#logprint).
-
-`bytes`, `str` or `pathlib.Path` — Log messages are buffered locally
-and written to the named file.  Equivalent to
-[`Log.File(path)`](#logfilepath-initial_modeat--flushfalse).
-
-`list` — Log messages are appended to the list.  Equivalent to
-[`Log.List(list)`](#loglistlist).
-
-`io.TextIOBase` — Log messages are written to the file-like object.
-Equivalent to
-[`Log.FileHandle(handle)`](#logfilehandlehandle).
-
-`callable` — The callable is called with every formatted log message.
-Equivalent to
-[`Log.Callable(callable)`](#logcallablecallable).
-
-[`TMPFILE`](#tmpfile) — A special sentinel value.  Log messages are
-written to a timestamped temporary file.
-
-[`Log.Destination`](#logdestination) — Used directly as a destination.
-
-You can also call [`Log.map_destination`](#logmap_destinationo)
-to manually convert any of the above types to the appropriate
-`Destination` object.
-
-**Keyword-only options**
-
-Keyword-only parameters for the `Log` constructor
-specify configuration for the log.  `Log` accepts
-the following keyword-only parameters:
-
-`name` — The name for this log.  Default is `'Log'`.
-
-`threading` — If true (the default), log messages are sent to
-a background thread for formatting and writing, reducing
-overhead in the calling thread.  If false, messages are
-formatted and written immediately, using a lock for thread
-safety.  `Log` is always thread-safe regardless of this setting.
-
-`indent` — Number of spaces to indent per nesting level when
-using [`Log.enter`](#logentermessage).  Default is `4`.
-
-`width` — Width in characters used for formatting separator
-lines.  Default is `79`.
-
-`clock` — A function returning nanoseconds since some
-arbitrary past event, expressed as an integer.
-Default is [`default_clock`](#default_clock).
-
-`timestamp_clock` — A function returning seconds
-since the UNIX epoch, expressed as a float.
-Default is `time.time`.
-
-`timestamp_format` — A function that formats values
-returned by `timestamp_clock` into a human-readable
-string.  Default is [`big.time.timestamp_human`](#timestamp_humantnone-want_microsecondsnone--tzinfonone).
-
-`prefix` — A format string used to format text inserted at the
-beginning of every log message.  Default is
-[`prefix_format(3, 10, 12)`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12).
-
-`formats` — A dict mapping format names to format dicts.
-A format dict has a `"template"` key (a template string with
-`{}`-style placeholders) and an optional `"line"` key (a fill
-character for separator lines).
-`Log` has six built-in formats: `"print"`, `"box"`, `"enter"`,
-`"exit"`, `"start"`, and `"end"`.  User-defined formats are
-automatically added as methods on the `Log` instance.  To
-suppress the start or end log banners, set `"start"` or
-`"end"` to `None` in the formats dict; this also works for
-the `"enter"` and `"exit"` formats to suppress the enter
-and exit banners.
-
-All keyword-only options are also available as read-only
-properties on the `Log` instance.
-
-**Read-only properties**
-
-In addition to the constructor options above, `Log` exposes
-these read-only properties:
-
-`dirty` — `True` if any formatted text has been written to the
-log since it was started or last flushed.
-
-`closed` — `True` if the log is in the "closed" state.
-
-`start_time_ns` — The time reported by `Log.clock`
-when the log was started, in nanoseconds.
-
-`start_time_epoch` — The wall-clock time reported by
-`Log.timestamp_clock` when the log was
-started, as seconds since the UNIX epoch.
-
-`end_time_epoch` — The wall-clock time when the log was
-closed, as seconds since the UNIX epoch.
-
+Logs start *lazily*: until the first message is actually logged,
+`Log` never touches your destinations--no file is opened, no
+temporary filename is computed, and no start banner is printed.
 </dd></dl>
 
-#### `Log.box(s)`
+#### `Log.log(*args, format=Optional('log'), flush=False, **kwargs)`
 
 <dl><dd>
 
-Logs `s` to the log, formatted with a three-sided box around
-it to call attention to the message.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Logs a message.  Positional arguments become lines of the message;
+keyword arguments are rendered as additional `name=value` lines.
+`format` selects a named format from the formatter\'s format tree.
+If `flush` is true, flushes the log afterwards.
 </dd></dl>
 
-#### `Log.close(block=True)`
+#### `Log.print(*args, sep=' ', end='\\n', format=Optional('print'), flush=False)`
 
 <dl><dd>
 
-Closes the log.  This ensures the log is in the "closed" state,
-in which all writes are silently ignored.  To write to the log
-again after closing, call [`Log.reset()`](#logreset).
-
-* If the log is in "logging" state, it gets closed in an orderly
-  fashion.  This includes logging an "end" banner, if an `"end"`
-  format is defined.
-* If the log is in "initial" state, it goes directly to closed state,
-  and no `"end"` banner will be logged.
-* If the log is already "closed", this is a no-op.
-
-If `block` is true (the default), `close` won't return
-until after the log is fully closed.  If false, the log
-may be closed asynchronously.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Logs a message with `print` semantics: arguments are joined with
+`sep` and terminated with `end`.  Calling the log object directly--
+`log("hello")`--calls `print`.
 </dd></dl>
 
-#### `Log.enter(message)`
+#### `Log.write(s, format=Optional('preformatted'), flush=False)`
 
 <dl><dd>
 
-Logs `message` to the log formatted with a box, then indents
-subsequent log output.  Call [`Log.exit()`](#logexit) to
-outdent.  Nesting may be arbitrarily deep.
+Logs a preformatted string, verbatim: no prefix, no formatting,
+no whitespace cleanup, no appended newline--you own every byte.
+(Its `preformatted` format declares `"verbatim": True`, which any
+format may do to skip the render pipeline's rstrip-and-newline
+cleanup.)
+</dd></dl>
 
-`Log.enter` returns a context manager; if used with a `with`
-statement, [`Log.exit()`](#logexit) will be called automatically
-upon exiting the block.
+#### `Log.enter(message='', **kwargs)`
 
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+<dl><dd>
+
+Opens a nested block in the log: prints an "enter" banner, and
+indents every message logged until the matching
+[`exit()`](#logexit) call.  Blocks nest.
+
+Returns a context manager: exiting it closes the block, so
+`with log.enter("subsystem"):` works, as do bare `enter()`/`exit()`
+pairs.  If the log is closed or paused, returns an inert context
+manager that does nothing.
 </dd></dl>
 
 #### `Log.exit()`
 
 <dl><dd>
 
-Outdents the log from the most recent
-[`Log.enter()`](#logentermessage) call.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Closes the most deeply nested [`enter()`](#logentermessage-kwargs)
+block: prints an "exit" banner (with the elapsed time inside the
+block) and removes one level of indent.  Extra `exit()` calls are
+harmless no-ops.
 </dd></dl>
 
-#### `Log.flush(block=True)`
+#### `Log.child(name='', buffered=True, *, format=..., paused=None, **kwargs)`
 
 <dl><dd>
 
-Flushes the log, if it is in "logging" state and is dirty.
-A log is "dirty" if any formatted text has been written
-since the log was started or last flushed.
-
-If `block` is true (the default), `flush` won't return
-until after the log is flushed.  If false, the log may
-be flushed asynchronously.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Creates and returns a child log handle--like
+[`enter()`](#logentermessage-kwargs), but without the automatic
+nesting-stack bookkeeping.  The child is its own context manager and
+must be closed independently.  Child messages are buffered by default,
+so a child\'s output is contiguous in the log even when other threads
+log concurrently.
 </dd></dl>
 
-#### `Log.map_destination(o)`
+#### `Log.close(wait=True)`
 
 <dl><dd>
 
-Class method.  Maps `o` to the appropriate
-[`Destination`](#logdestination) object using the same
-conversion rules as the `Log` constructor's positional
-arguments (e.g. `builtins.print` becomes `Log.Print()`,
-a `str` becomes `Log.File(path)`, etc.).
-
-Returns the `Destination` object, or raises `TypeError`
-if `o` is not a recognized type.
+Closes the log: unwinds any open `enter()` blocks (deepest first),
+prints the end banner, and flushes all destinations.  If `wait` is
+true and the log is threaded, blocks until the worker thread has
+finished the log\'s outstanding work.  Closing is idempotent.
 </dd></dl>
 
-#### `Log.print(*args, end='\n', sep=' ', flush=False, format='print')`
+#### `Log.flush(wait=True)`
 
 <dl><dd>
 
-Logs a message, with an interface similar to `builtins.print`.
+Flushes the log: buffered sessions push their messages upstream, and
+every destination is flushed (e.g. a buffered
+[`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone)
+writes its accumulated output to disk).
+</dd></dl>
 
-The arguments are formatted into a string as
-`sep.join(str(a) for a in args) + end`, then logged
-using the specified `format` (default `"print"`).
+#### `Log.pause()` and `Log.resume()`
 
-Calling the `Log` instance directly (e.g. `log("message")`)
-is equivalent to calling this method.
+<dl><dd>
 
-If `flush` is true, the log is flushed immediately
-after logging this message.
+Pause and resume the log.  A paused log ignores its logging
+methods--`write`, `print`, `__call__`, `log`, and `enter`: no
+messages, no banners, no destination activity--the runtime equivalent
+of commenting out your debug prints.  One deliberate exception:
+`exit()` still closes the deepest open `enter()` block, and emits
+its exit banner--nesting tracks your program's structure, paused
+or not.  (Likewise, closing an `enter()` context manager closes
+the block.)
 
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Pause is *hierarchical*: pausing a handle silences its entire
+subtree--including child handles held elsewhere--and pausing a child
+handle silences just that subtree.
+
+Pause state is a counter: `pause()` increments, `resume()` decrements
+(clamping at zero); the log is paused while it\'s nonzero.  `pause()`
+returns a context manager that calls `resume()` on exit.
+
+The read-only property `Log.paused` is `True`/`False` (or `None` if
+the log is closed).  The settable property `Log.paused_on_reset` is
+the paused state [`reset()`](#logreset) restores.
+</dd></dl>
+
+#### `Log.destinations`
+
+<dl><dd>
+
+The destinations of the log's main formatter, as a list.  *Settable*:
+assign a list or tuple of destinations (anything
+[`Log.map_destination`](#logmap_destinationo) understands) to
+reconfigure the log live.  Duplicates are a `ValueError`--including
+the same file reached by different spellings of its path.
+
+Destinations *removed* by the assignment are flushed first--pending
+buffered content is the user's data, written, never dropped--then
+ended and unregistered.  Destinations *added* while the log is
+running receive a "recap": the start banner, and the enter banner of
+each open block whose banner has already been delivered, so the
+newcomer's output reads as a coherent log from the top.  (A buffered
+block's contents haven't been delivered to anyone yet; they arrive
+for everybody, newcomers included, when the block flushes.)
+
+Every `LogDestination` also has an `owner` property: the `Log` it's
+currently attached to, or `None`.
+
+(Destinations routed to other formatters via
+[`route()`](#logrouteparent-children) are not affected.)
 </dd></dl>
 
 #### `Log.reset()`
 
 <dl><dd>
 
-Resets the log to its initial state.
-
-* If the log is in "initial" state, this is a no-op.
-* If the log is in "logging" state, the log is closed, then reset.
-* If the log is in "closed" state, the log is reset.
-
-`Log.reset()` is the only way to reopen a closed log.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Closes and reopens the log: a fresh session with a fresh start time.
+The next message logged prints a new start banner and restarts every
+destination--for example,
+[`TmpFile`](#tmpfileprefixname--bufferingtrue-encodingnone-timestamp_formatnone)
+computes a fresh filename.  If the process is exiting, `reset` does
+nothing.
 </dd></dl>
 
-#### `Log.write(formatted)`
+#### `Log.route(formatter, *destinations)`
 
 <dl><dd>
 
-Writes a pre-formatted string directly to the log with no
-further formatting or modification.
+Adds another route to the log: `formatter` renders every message,
+and the rendered output is written to each of `destinations`.
+A log may have any number of formatter routes--e.g. a
+`TextFormatter` writing to the screen *and* an
+[`ASCIIFormatter`](#asciiformatter) writing bytes to a file.
 
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Routing is type-checked: every destination must accept the types the
+formatter renders (`str`, `bytes`, [`SinkEvent`](#sinkevent), ...).
+Destinations that want `SinkEvent`s (like
+[`Sink`](#sink)) are automatically routed to a companion
+[`SinkFormatter`](#sinkformatter).
 </dd></dl>
 
-
-#### `Log.Destination`
+#### `Log.map_destination(o)`
 
 <dl><dd>
 
-Base class for objects that perform the actual logging for a
-[`Log`](#logdestinations-options).  A `Destination` is owned
-by a `Log`, and the `Log` sends it events by calling named
-methods.
-
-All `Destination` subclasses must implement the `write` method:
-
-```Python
-    write(elapsed, thread, formatted)
-```
-
-Subclasses may also optionally override these seven methods:
-
-```Python
-    flush()
-    reset()
-    start(start_time_ns, start_time_epoch)
-    end(elapsed)
-    log(elapsed, thread, format, message, formatted)
-    enter(elapsed, thread, message, formatted)
-    exit(elapsed, thread, message, formatted)
-```
-
-The default implementations of `log`, `enter`, and `exit`
-all call `self.write(elapsed, thread, formatted)`.
-Subclasses need not call the base class method for any of these
-seven methods.
-
-Subclasses may also override `register(owner)`, but *must*
-call the base class implementation via `super().register(owner)`.
-Subclasses must also call the base class `__init__` without
-arguments.
-
-The meaning of the arguments to the various `Destination` methods:
-
-* `elapsed` is the elapsed time since the log was started/reset,
-in nanoseconds.
-
-* `thread` is the `threading.Thread` handle for the thread that
-logged the message.  This can be `None` for messages that aren't
-logged from any particular thread; currently this includes the
-"start banner" (using format `"start"`) and the "end banner"
-(using format `"end"`).
-
-* `formatted` is the formatted log message.  This is always a `str`.
-
-* `format` is the name of the format applied to `message` to
-produce `formatted`.
-
-* `message` is the original message passed in to a `Log` method.
-This can be an empty string if no text was actually logged.
-(The "start banner" and "end banner" also specify empty
-strings for their `message` arguments.)
-
-* `owner` is the `Log` object that owns this `Destination`.
-
-`Log` guarantees events are sent in this order:
-
-```
-    register → start → [write | log | enter | exit | flush]* → [flush] → end
-```
-
-* `register` is always the first event sent; it's sent exactly
-  once, when the destination is added to the `Log`, in the constructor.
-
-* `start` is lazily sent immediately before the first message
-  is logged (one of `write`, `log`, or `enter`).  If no message
-  is ever logged, `start` is never sent.
-
-* `flush` is only sent if the log is dirty.  The log is
-  only considered "dirty" if any non-empty `formatted` strings
-  were sent to the log.
-
-* When the log is closed, if `start` was ever sent, it sends an
-  optional `flush` (if the log is dirty, followed by `end`.
-
-* If the log is reset, if `start` was ever sent,
-  the log is immediately closed--possibly sending `flush`,
-  always sending `end`--followed by a `reset` event.
-  `reset` should reset the destination to its initial state.
-
-* If the log is closed but `start` was never sent,
-  `Log` doesn't bother sending *any* messages to the
-  destinations.  No `flush`, and no `end`.  And if a
-  log in this state is reset, no `reset` event is sent.
-  (Nothing has happened, so there's no point in
-  notifying the destinations of meaningless non-events.)
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+Static method.  Maps a value to a
+[`LogDestination`](#logdestinationtypestrue):
+`LogDestination` objects pass through; `print` maps to
+[`Print`](#print); callables map to
+[`Callable`](#callablecallable); lists map to [`List`](#listlist);
+`str`/`bytes`/`pathlib.Path` map to
+[`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone);
+text file objects map to [`FileHandle`](#filehandlehandle--autoflushfalse);
+[`TMPFILE`](#tmpfile) maps to a `TmpFile`; `None` maps to
+`NoneType`.  User-registered
+[`LogDestination.mappers`](#logdestinationmappers) run first.
 </dd></dl>
 
-#### `Log.Destination.Buffer(destination=None)`
+#### `Log` properties
 
 <dl><dd>
 
-A [`Destination`](#logdestination) that buffers log messages
-before sending them to another `Destination`.
-
-Every formatted log message is stored in an internal buffer.
-When the log is flushed, `Buffer` concatenates all buffered
-messages into one string, writes that string to the underlying
-`Destination`, and flushes it.
-
-If `destination` is `None` (the default), `Buffer` wraps a
-[`Log.Print()`](#logprint) destination.  Otherwise,
-`destination` is mapped using
-[`Log.map_destination`](#logmap_destinationo).
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+* `clock` -- the underlying clock callable (default
+  [`default_clock`](#default_clock)).
+* `closed` -- true if the log has been closed.
+* `dirty` -- true if the log has unflushed messages.
+* `formatter` -- the log\'s default formatter.
+* `name` -- the log\'s name.
+* `nesting` -- a tuple of the currently open `enter()` blocks.
+* `paused`, `paused_on_reset` -- see [`Log.pause()`](#logpause-and-logresume).
+* `start_time_ns`, `start_time_epoch` -- when this log (session)
+  started, in monotonic nanoseconds and seconds-since-the-epoch.
+* `threaded` -- whether the log runs a worker thread.
+* `timestamp_clock` -- the wall-clock callable (default `time.time`).
 </dd></dl>
 
-#### `Log.Callable(callable)`
+#### `Clock`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) wrapping a callable.
-
-Calls `callable(formatted)` for every formatted log message.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+The default clock class for [`Log`](#logdestinations-options).
+Captures `initial` (monotonic nanoseconds) and `epoch` (wall time)
+at construction; calling it returns the current monotonic time.
+Also provides `delta_to_seconds(delta)` and
+`time_to_timestamp(time)`.  Subclass it (or just pass a plain
+nanoseconds-returning callable to `Log(clock=)`) to control time
+in tests.
 </dd></dl>
 
-#### `Log.File(path, initial_mode="at", *, flush=False)`
+#### `LogDestination(types=True)`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) that writes to a file in
-the filesystem.  `path` may be a `bytes`, `str` or `pathlib.Path`
-object.  (`bytes` objects are decoded to `str` using `os.fsdecode`.)
+Abstract base class for log outputs.  A destination receives
+*rendered* messages via `write(o)`, plus lifecycle calls:
+`start(session)` when logging begins, `end()` when the log closes,
+and `flush()`.  `types` declares what types `write` accepts
+(`True` means anything; otherwise a set of types such as
+`{str}`, `{bytes}`, or `{SinkEvent}`)--routing is type-checked
+against the formatter.
 
-If `flush` is false (the default), formatted log messages are
-buffered internally.  When the log is flushed, `File`
-concatenates all buffered messages, opens the file, writes
-them with one write call, and closes it.
+Subclasses should implement `__eq__` and `__hash__`; duplicate
+destinations are rejected at routing time.
 
-If `flush` is true, the file is opened and kept open.  Every
-formatted log message is written and flushed immediately.
-On `close`, the file is closed; on `reset`, it is reopened.
+If your `start()` (or `flush()`) does fallible work--opening a
+file, connecting a socket--do that work *before* calling
+`super().start()` (and before discarding any buffered state).  A
+failing lifecycle call goes through the log\'s fault handling: if
+`fix()` repairs the problem, the *same call is retried*--and the
+retry only works if the failed attempt didn\'t already commit.
+(Committing first turns the retry into "can\'t start, it was
+already started".)  Fallible work first, state changes after
+success.
 
-The first time the file is opened, it uses `initial_mode`
-(default `"at"`).  After the first time, `File` always uses
-mode `"at"`.
+Built-in destinations:
 
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+* [`Buffer`](#bufferdestinationnone), [`Callable`](#callablecallable),
+  [`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone),
+  [`FileHandle`](#filehandlehandle--autoflushfalse),
+  [`List`](#listlist), `NoneType`, [`Print`](#print),
+  [`Sink`](#sink), and
+  [`TmpFile`](#tmpfileprefixname--bufferingtrue-encodingnone-timestamp_formatnone).
 </dd></dl>
 
-#### `Log.FileHandle(handle, *, flush=False)`
+#### `Buffer(destination=None)`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) wrapping an already-open
-Python file handle (an `io.TextIOBase` instance).
+A destination that buffers rendered messages, then writes them to an
+underlying destination (default: `Print()`) all at once when flushed.
 
-Every formatted log message is written to the file handle
-immediately.  `FileHandle` will never close the handle;
-it only writes to it and flushes it.
-
-If `flush` is true, the file handle is flushed after every
-write.  By default `flush` is false.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+`Buffer` owns the underlying destination\'s lifecycle--`register`,
+`start`, `end`, and `unregister` are forwarded--so stateful
+destinations work underneath it: a
+[`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone)
+opens its file, a [`TmpFile`](#tmpfileprefixname--bufferingtrue-encodingnone-timestamp_formatnone)
+computes its filename, a [`Sink`](#sink) records its start and end
+events.
 </dd></dl>
 
-#### `Log.List(list)`
+#### `Callable(callable)`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) wrapping a Python list.
-
-Appends every formatted log message to `list`.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+A destination wrapping a callable; calls it once per rendered message.
 </dd></dl>
 
-#### `Log.Print()`
+#### `File(path, initial_mode="at", *, buffering=True, encoding=None, subsequent_mode=None)`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) that writes to stdout
-using `builtins.print`.
+A destination writing to a file.  With `buffering=True` (the default)
+messages accumulate in memory and the file is opened, written, and
+closed in one operation per flush.  With `buffering=False` the file
+is opened at start and every message is written and flushed
+immediately.
 
-Calls `builtins.print(formatted, end='', flush=True)` for
-every formatted log message.
-
-This is the default destination when no destinations are
-passed to the [`Log`](#logdestinations-options) constructor.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+The first open uses `initial_mode`; subsequent opens (after a flush
+or a [`reset()`](#logreset)) use `subsequent_mode`, which defaults to
+`initial_mode` with the action changed to append.  A binary mode
+makes this a `bytes` destination (pair it with
+[`ASCIIFormatter`](#asciiformatter)).  Two `File`s are equal if their
+resolved paths are equal.
 </dd></dl>
 
-#### `Log.Sink()`
+#### `FileHandle(handle, *, autoflush=False)`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) that retains all log events
-in order as [`SinkEvent`](#sinkevent) objects.
-
-You may iterate over a `Sink` to yield all events logged so far.
-`Sink` also has a `print` method that prints the events so far
-with some simple formatting.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+A destination wrapping an already-open file object.  Text or binary
+is detected from the handle.
 </dd></dl>
 
-#### `Log.TmpFile(*, flush=False)`
+#### `List(list)`
 
 <dl><dd>
 
-A [`Destination`](#logdestination) subclass of
-[`Log.File`](#logfilepath-initial_modeat--flushfalse)
-that writes to a timestamped temporary file.
-
-The filename is computed approximately as:
-
-    tempfile.gettempdir() / "{Log.name}.{start timestamp}.{pid}.txt"
-
-The filename is recomputed on `register` and `reset` events,
-so resetting the `Log` closes the old file and opens a new one.
-
-The sentinel value [`TMPFILE`](#tmpfile) is a pre-created
-`Log.TmpFile()` instance.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+A destination appending each rendered message to a list.
 </dd></dl>
 
-#### `OldDestination()`
+#### `Print()`
 
 <dl><dd>
 
-A [`Log.Destination`](#logdestination) subclass providing
-backwards compatibility with the old `big.log.Log` interface.
-Deprecated; will be removed no earlier than March 2027.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
-</dd></dl>
-
-#### `OldLog(clock=None)`
-
-<dl><dd>
-
-A drop-in replacement for the old `big.log.Log` class, reimplemented
-on top of the new [`Log`](#logdestinations-options).  Provides
-interface compatibility with the old `Log` to ease the transition
-to the new one.  Deprecated; will be removed no earlier than
-March 2027.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
-</dd></dl>
-
-#### `prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12)`
-
-<dl><dd>
-
-Returns a prefix format string for use with the `prefix`
-option of the [`Log`](#logdestinations-options) constructor.
-
-The returned format string produces a prefix of the form:
-
-```
-    [{elapsed} {thread.name}]
-```
-
-formatted with the specified widths.  For example, the default
-`Log` prefix is `prefix_format(3, 10, 12)`, which produces
-output like:
-
-```
-    [003.0706368860   MainThread]
-```
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
-</dd></dl>
-
-#### `SinkEvent`
-
-<dl><dd>
-
-Base class for log events stored by [`Log.Sink`](#logsink).
-Each subclass represents a different type of event.
-
-All `SinkEvent` objects have these read-only properties:
-
-`type` — A string identifying the event type
-(e.g. `"start"`, `"end"`, `"write"`, `"log"`, `"enter"`, `"exit"`).
-
-`number` — The log's sequence number (incremented on each reset).
-
-`elapsed` — Elapsed time in nanoseconds since the log was started.
-
-`duration` — Time in nanoseconds since the previous event with
-a message.
-
-`thread` — The `threading.Thread` that logged the event, or `None`.
-
-`formatted` — The formatted log message string.
-
-`message` — The original unformatted message, or `None`.
-
-`format` — The format name used, or `None`.
-
-`depth` — The nesting depth at the time of the event.
-
-The subclasses are:
-
-* [`SinkStartEvent`](#sinkstartevent),
-* [`SinkEndEvent`](#sinkendevent),
-* [`SinkWriteEvent`](#sinkwriteevent),
-* [`SinkLogEvent`](#sinklogevent),
-* [`SinkEnterEvent`](#sinkenterevent),
-* and [`SinkExitEvent`](#sinkexitevent).
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
-</dd></dl>
-
-#### `SinkStartEvent`
-
-<dl><dd>
-
-A [`SinkEvent`](#sinkevent) representing the start of a log.
-Has a `configuration` property containing a dict of the
-`Log`'s configuration at start time.
-</dd></dl>
-
-#### `SinkEndEvent`
-
-<dl><dd>
-
-A [`SinkEvent`](#sinkevent) representing the end of a log.
-</dd></dl>
-
-#### `SinkWriteEvent`
-
-<dl><dd>
-
-A [`SinkEvent`](#sinkevent) representing a
-[`Log.write`](#logwriteformatted) call.
-</dd></dl>
-
-#### `SinkLogEvent`
-
-<dl><dd>
-
-A [`SinkEvent`](#sinkevent) representing a
-[`Log.print`](#logprintargs-end-sep--flushfalse-formatprint)
-call (or any format-based log call).
-</dd></dl>
-
-#### `SinkEnterEvent`
-
-<dl><dd>
-
-A [`SinkEvent`](#sinkevent) representing a
-[`Log.enter`](#logentermessage) call.
-</dd></dl>
-
-#### `SinkExitEvent`
-
-<dl><dd>
-
-A [`SinkEvent`](#sinkevent) representing a
-[`Log.exit`](#logexit) call.
+A destination that prints each rendered message.
 </dd></dl>
 
 #### `TMPFILE`
 
 <dl><dd>
 
-A pre-created [`Log.TmpFile()`](#logtmpfile-flushfalse) sentinel
-value.  Pass this as a destination to the
-[`Log`](#logdestinations-options) constructor to log to a
-timestamped temporary file.
-
-See the [**The big `Log`**](#the-big-log) tutorial for more.
+A sentinel value; pass it as a destination to log to an
+automatically-named temporary file (a
+[`TmpFile`](#tmpfileprefixname--bufferingtrue-encodingnone-timestamp_formatnone)).
 </dd></dl>
+
+#### `TmpFile(prefix='{name}', *, buffering=True, encoding=None, timestamp_format=None)`
+
+<dl><dd>
+
+A [`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone)
+subclass that computes a timestamped filename in the system temp
+directory, approximately:
+
+    tempfile.gettempdir() / "{prefix}.{timestamp}.{pid}.{thread}.txt"
+
+The filename is recomputed every time logging starts--so after a
+[`reset()`](#logreset), you get a fresh file.
+</dd></dl>
+
+#### `LogFormatter(format_dict, types, *, name=None)`
+
+<dl><dd>
+
+Abstract base class for rendering policy.  A formatter owns a
+"format tree" (a dict of named formats, each with a template and
+optional values, supporting inheritance via a `\'base\'` key), declares
+the `types` it renders to, and splits its work in two:
+`State.prepare(message)` runs eagerly on the logging thread,
+capturing everything volatile; `render(message)` runs later (on the
+worker thread, if threaded) and does the expensive work.
+</dd></dl>
+
+#### `TextFormatter(format_dict=None, *, formats=None, indent='    ', name=None, prefix=None, width=79)`
+
+<dl><dd>
+
+The standard formatter; renders messages to `str` using
+[`big.template.Formatter`](#formattertemplate-mapnone--relaxedfalse-stretchtrue-width79-kwargs)
+templates.
+
+The default format tree provides: the root template
+(`\'{prefix}{message}\\n\'`), call-out boxes (`box`, `box2`), session
+banners (`start`, `end`), nested-block banners (`enter`, `exit`),
+and `preformatted` (used by `write()`).
+
+The default art is *open unicode*: box-drawing characters, with no
+right-hand borders, and no lid over the enter/exit label cells.
+Open art is immune to the classic misalignment where a viewer
+substitutes box-drawing glyphs from a different-width font--in open
+art, a vertical stroke only ever needs to align with another
+vertical stroke that has identical characters to its left, which
+survives any font.  Four trees are available:
+
+* `unicode_format_dict()` -- open unicode (the default).
+* `unicode_format_dict(closed=True)` -- fully closed
+  boxes: right borders, lids, corners.  Beautiful when your font
+  renders box-drawing characters at the same width as everything
+  else; ragged on the right when it doesn't.
+* `ascii_format_dict()` -- open ASCII.  Pure ASCII
+  always aligns, so this art keeps the enter/exit label lids (the
+  T junctions render as `+`).
+* `ascii_format_dict(closed=True)` -- closed ASCII:
+  fully boxed *and* aligned on every terminal ever made.
+
+These are module-level functions
+([`big.unicode_format_dict`](#unicode_format_dict-closedfalse) and
+[`big.ascii_format_dict`](#ascii_format_dict-closedfalse)); each
+returns a fresh format tree you can pass as `format_dict` (or edit
+first).
+
+In closed art, a line whose content overflows the width runs open--
+its right border is omitted rather than drawn glued onto the
+overflow.
+
+* `formats` merges named formats into the tree.  Each value must be
+  a dict containing a str `\'template\'`--or `None`, which *disables*
+  an existing format (a disabled banner simply doesn\'t print).
+  Templates are validated immediately at construction.
+* `prefix` replaces the default line prefix (see
+  [`prefix_format`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12--indenttrue-asciifalse)).
+* `indent` is the per-nesting-level indent string.
+* `width` is the target line width; rule lines (`{line*}`) pad to it.
+
+Any format name in the tree works as a log method:
+`log.box("hi")` logs with the `box` format.
+</dd></dl>
+
+#### `ASCIIFormatter`
+
+<dl><dd>
+
+A [`TextFormatter`](#textformatterformat_dictnone--formatsnone-indent-----namenone-prefixnone-width79)
+subclass that renders to `bytes` containing ASCII--pair it with a
+binary-mode [`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone).
+Messages containing non-ASCII characters are encoded with backslash
+escapes: `log('café')` renders as `b'caf\\xe9'`.  Nothing fails,
+nothing is lost--a log statement never crashes the program it's
+observing.
+</dd></dl>
+
+#### `SinkFormatter`
+
+<dl><dd>
+
+A [`LogFormatter`](#logformatterformat_dict-types--namenone) that
+renders messages into [`SinkEvent`](#sinkevent) objects instead of
+text--structured logging as "just another formatter".  A
+`SinkFormatter` does *no* text formatting: it isn't a `TextFormatter`
+and has no format tree.  Each event carries the message\'s structured
+fields--elapsed time, nesting depth, thread, format name, and the raw
+message text--but no rendered string.  How to turn those into text,
+if at all, is the consumer\'s business.
+
+You rarely construct one yourself: passing a
+[`Sink`](#sink) (or any `SinkEvent`-typed destination) to `Log`
+automatically routes it through a companion `SinkFormatter`, which
+borrows its parent formatter\'s format *names* so the same log
+methods (`log.box`, `log.enter`, ...) produce the matching events.
+</dd></dl>
+
+#### `Filter(filter=None, *, accepts=None, name=None, types=None)`
+
+<dl><dd>
+
+A [`LogFormatter`](#logformatterformat_dict-types--namenone) that sits
+*downstream* of another formatter, transforming--or dropping--its
+rendered output.  By default a `Filter` consumes and produces `str`,
+so it can sit under any text formatter, or under another `Filter`.
+
+Subclass `Filter` and override `render(value)`: return the value,
+transformed to taste, or `None` to drop this message for the filter\'s
+whole subtree.  Or use `Filter` directly, wrapping a callable with the
+same contract--it\'s handed the rendered value, and returns the
+transformed value or `None`:
+
+```Python
+log.route(log.formatter, a, Filter(boring), c)
+```
+
+To filter other types, pass `accepts` (what the filter consumes)
+and/or `types` (what it produces)--each may be a type, a set of
+types, or `True` meaning anything--or simply annotate your callable:
+the annotation on its first positional parameter declares what the
+filter accepts, and its return annotation declares what it produces.
+An explicit parameter wins over an annotation, and `str` is the
+default when there\'s neither.  So this filter can sit under an
+[`ASCIIFormatter`](#asciiformatter) (which produces `bytes`) and feed
+`str` destinations:
+
+```Python
+def unbyte(b: bytes) -> str:
+    return b.decode('ascii')
+```
+
+Returning `None` is how one filter silences a branch of the routing
+tree without touching the others--so a `Filter` in front of one
+destination lets the *same* log feed destinations at different
+verbosities.  When you wrap a callable, `name` defaults to that
+callable\'s `__name__`.
+</dd></dl>
+
+#### `Sink()`
+
+<dl><dd>
+
+A destination that records the log as a list of
+[`SinkEvent`](#sinkevent) objects.  Useful for tests, and for
+programs that consume their own logs.
+
+Iterating over a `Sink` yields its events, with each event\'s
+`duration` computed as the time until the following event.
+`Sink.print(print=None)` prints them.  A `Sink` *accumulates*:
+after a [`reset()`](#logreset), new events are recorded after the
+old ones, and each event's `session` generation counter tells you
+which session it belongs to.  `Sink.clear()` gives you a clean
+slate.
+</dd></dl>
+
+#### `SinkEvent`
+
+<dl><dd>
+
+Base class of the event objects produced by
+[`SinkFormatter`](#sinkformatter) and [`Sink`](#sink).
+
+Common attributes: `session` (the log generation--1 for a log\'s
+first session; [`reset()`](#logreset) increments it), `ns` and
+`epoch` (the event\'s time), `duration` (nanoseconds until the next
+event; excluded from equality), and `type` (a str).
+
+Subclasses: `SinkStartEvent` and `SinkEndEvent` (the log started /
+ended), and `SinkLogEvent` with its subclasses `SinkWriteEvent`,
+`SinkEnterEvent`, and `SinkExitEvent`--these add `elapsed`, `depth`,
+`format`, `message`, and `thread`.  (There's no rendered-text
+attribute: sink events carry structured data, not formatting.)
+
+Events are ordered by `ns`.
+</dd></dl>
+
+#### `prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, ascii=False)`
+
+<dl><dd>
+
+Builds a prefix template string in the form
+`"{elapsed} {thread.name}│ "` with the given field widths.  The
+default `TextFormatter` prefix is `prefix_format(3, 10, 12)`, which
+renders like:
+
+    003.0706368860   MainThread|
+</dd></dl>
+
+#### `expand_tabs(s, *, column=1, first_column=1, tab_width=8)`
+
+<dl><dd>
+
+Expands the tabs in `s` to spaces and returns the result.
+If `s` contains no tabs, returns `s` unchanged.
+
+`s` may be `str` or `bytes`, and may contain multiple lines.
+
+`column` is the column of the first character of `s`.
+`first_column` is the column the count resets to after a
+linebreak--the column your lines start at.  (These follow
+`big.string`, which uses `column_number` and
+`first_column_number` the same way.)  `column` may not be less
+than `first_column`, and `first_column` may not be negative.
+
+Tab stops sit every `tab_width` columns, counted from
+`first_column`: with the default `first_column` of 1 and the
+default `tab_width` of 8, a tab advances to column 9, 17, 25...
+This too matches `big.string`'s arithmetic.  A tab's width
+depends on the column where it lands, so if `s` is going to be
+placed anywhere other than the left edge of the page, expanding
+its tabs correctly requires knowing where it starts.
+
+Lines are separated as `str.splitlines` splits them (for bytes,
+`bytes.splitlines`); the linebreak characters are preserved in
+the result.
+</dd></dl>
+
+#### `format_definition_list(pairs, margin=79, *, definition_left_column=None, definition_relative_tabs=True, indent='  ', spacer='  ', tab_width=8, term_relative_tabs=True)`
+
+<dl><dd>
+
+Formats a "definition list" and returns it as a string:
+terms on the left, definitions on the right, definitions
+wrapped to fit and aligned in a column.
+
+```
+  -v, --verbose  Print more output.  Repeat
+                 for even more.
+  --color <red|green|blue>
+                 Sets the output color.
+```
+
+`pairs` is an iterable of `(term, definition)` pairs of strings.
+Terms are used verbatim--never wrapped--and may not contain
+linebreak characters.  Definitions are text: each one is split
+with
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
+and wrapped with
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue),
+so paragraph breaks and code lines work as they do there.
+A pair with an empty definition is just the term on a line
+by itself.
+
+`margin` is the target width, as in `wrap_words`.
+
+`indent` is a string prefixed to every line.  It counts towards
+the margin: if your margin is 70 and your indent is 5 characters,
+your "effective margin" is 65.
+
+`spacer` is the fill material between a term and its definition,
+in the manner of TeX's leaders: conceptually the spacer repeats,
+phase-locked to the start of the term column, from the end of
+each term to the definition column--so the repeats line up
+vertically from line to line, and a line with no term (a wrapped
+continuation line, or a code line) fills the whole span.  The
+default spacer is two spaces, which renders as the classic help
+table above.  A visible spacer renders leaders, like a table of
+contents--`spacer=':'` gives you
+
+```
+x:::::::::abcde
+y so long:this is the text
+::::::::::for y no fooling
+```
+
+A multi-character spacer tiles, clipped at the front so the
+columns still line up.  The spacer may not be empty: it's the
+fill material, and there's no such thing as filling with nothing.
+
+The definition column is computed, one `spacer` past the widest
+term that's no wider than a third of the effective margin.  A
+term wider than that "hangs": it gets a line to itself, and its
+definition starts on the next line, in the definition column.
+(This is why there's no overflow strategy here: a wide term
+isn't an error, and this is what it does.)  Either way, a term
+on the same line as its definition always has at least one full
+spacer after it.
+
+`definition_left_column` overrides the computed column: it's the
+1-based column (indent included) where the first character of
+every definition goes.  Fussy users may know exactly what they
+want.  The hang rule still applies, now purely geometric: a term
+hangs iff it can't fit on the line with a full spacer after it.
+A `definition_left_column` that leaves no room for the spacer,
+or no room for definitions inside the margin, raises
+`ValueError`.
+
+Tabs are permitted in the terms and the indent; they're expanded
+to spaces, using `tab_width`.  Tabs in the indent expand at the
+indent's true position (it starts every line, at column 1).
+Tabs in a term expand in the term's own coordinates--as if the
+term started at column 1--and the expanded term shifts rigidly
+into place, so the term's internal alignment survives wherever
+the term lands; pass `term_relative_tabs=False` to expand them
+at the term's true position on the page instead.
+`definition_relative_tabs` works the same way for the
+definitions: by default (True) each definition is laid out in
+its author's own coordinates--tab stops counted from the
+definition column, exactly as the author saw them--and shifts
+rigidly into place; pass False to land the definition's tabs on
+the tab stops of the page.  Tabs are disallowed in the spacer:
+the spacer repeats and shifts around, and a tab's width depends
+on where it lands.
+
+`pairs` may contain str or bytes; as with `wrap_words`, all the
+strings must agree.  If they're bytes, `indent` and `spacer` must
+be bytes too (the defaults adapt).
+
+If `pairs` is empty, returns the empty string.
+
+For more information, see the tutorial on
+[**Word wrapping and formatting.**](#word-wrapping-and-formatting)
+</dd></dl>
+
+#### `unicode_format_dict(*, closed=False)`
+
+<dl><dd>
+
+Returns a fresh unicode format tree, with box-drawing characters.
+This is the default format tree for
+[`TextFormatter`](#textformatterformat_dictnone--formatsnone-indent-----namenone-prefixnone-width79).
+By default the art is *open* (no right borders, no lids over the
+enter/exit label cells), which stays aligned under box-drawing font
+substitution.  Pass `closed=True` for fully closed boxes--beautiful
+when your font renders box-drawing characters at the true monospace
+width, ragged on the right when it doesn't.
+</dd></dl>
+
+#### `ascii_format_dict(*, closed=False)`
+
+<dl><dd>
+
+Returns a fresh pure-ASCII format tree.  This is the default format
+tree for [`ASCIIFormatter`](#asciiformatter).  Pure ASCII always
+aligns, so the open art keeps the enter/exit label lids (the T
+junctions render as `+`); `closed=True` gives fully closed boxes that
+align on every terminal ever made.
+</dd></dl>
+
+#### `format_dict_to_ascii(d)`
+
+<dl><dd>
+
+Returns a copy of a format tree with Unicode box-drawing characters
+translated to ASCII.
+</dd></dl>
+
+#### `Optional(name)`
+
+<dl><dd>
+
+Marks a format name as optional.  `Optional` is a `str` subclass;
+a message logged with `format=Optional('box')` uses the `box` format
+if every routed formatter defines it, and silently falls back to the
+default format otherwise.  (A plain str format name raises
+`ValueError` if it isn't defined.)
+
+Format names may not contain `'.'`--the dot is reserved, so a future
+need for nested format namespaces can give names like `'child.start'`
+nested semantics without breaking any interface.
+</dd></dl>
+
+#### `OldDestination()`
+
+<dl><dd>
+
+*Deprecated.*  A destination providing backwards compatibility with
+the pre-0.13 `big.log` interface: accumulates
+`[start, elapsed, event, depth]` entries for iteration, and provides
+the old `print()` report.  Internally a thin shim consuming
+[`SinkEvent`](#sinkevent)s.
+</dd></dl>
+
+#### `OldLog(clock=None)`
+
+<dl><dd>
+
+*Deprecated.*  A drop-in replacement for the pre-0.13 `big.log.Log`
+class, implemented over the new machinery.  Provided as a
+stepping-stone; please migrate to [`Log`](#logdestinations-options).
+</dd></dl>
+
 
 ## `big.metadata`
 
@@ -2760,8 +3262,16 @@ A `Scheduler` will only call this method while
 
 <dl><dd>
 
-Aborts all current calls to `sleep` on this
-`Regulator`, across all threads.
+Aborts at least one current call to `sleep` on this
+`Regulator`.
+
+A wake must never be lost.  The `Scheduler` calls `wake`
+while holding the lock, but calls `sleep` *after*
+releasing it--so a wake may arrive after a thread has
+committed to sleeping but before it actually sleeps.
+`wake` must be a level, not a pulse: if no thread is
+currently sleeping, the next call to `sleep` must
+return immediately.
 
 A `Scheduler` will only call this method while
 holding this regulator's lock.
@@ -2860,8 +3370,170 @@ than thread-safe `Regulator` implementations.
 
 A thread-safe implementation of `Regulator`
 designed for use in multithreaded programs.
+
+Sleeping and waking are built on the classic
+"double acquire" trick: the blocker is a lock that's
+held ("armed") by default.  `sleep` blocks trying to
+acquire it a second time, with the sleep interval as
+the timeout; `wake` releases it.  This makes `wake`
+a level, not a pulse: a wake with no sleeper parks
+the blocker open, so the next `sleep` returns
+immediately--and its acquire re-arms the blocker in
+the same atomic operation.  A wake can never be lost.
 </dd></dl>
 
+
+## `big.snip`
+
+<dl><dd>
+
+Snippets: marked regions of text files that other files borrow.
+A "snippet" is a run of lines bracketed by two scissors marker
+lines:
+
+```
+# --8<-- start NAME --8<--
+...the body of the snippet...
+# --8<-- end NAME --8<--
+```
+
+Keep one authoritative copy of the code in the world, and sync
+the borrowers: `extract_snippets` pulls snippets out of the
+authoritative file, and `apply_snippets` applies them to a
+borrowing file, like a patch.
+
+Snippets can't nest.  Snippet names can't be empty and can't
+contain `--8<--`.  A marker line may be indented and may have
+trailing whitespace, but the space after its second `--8<--` is
+reserved for future use: for now, anything there is an error.
+
+A snippet's body may declare that it depends on one or
+more other snippets, with a "requires" directive line:
+
+```
+# --8<-- requires NAME --8<--
+```
+
+The directive is ordinary body text--it travels with the
+snippet, so borrowed copies keep their dependency information.
+Requirements resolve transitively, local file only--there is no
+cross-file mechanism--and can't form a cycle.  Reference cycles are an error.
+
+Running the module as a program--`python -m big.snip`--gives you
+the command-line version: `list` prints a file's snippet names,
+`extract` prints `extract_snippets` output, `apply` applies
+snippets to a destination file (only writing it if something
+changed), `check` reports what `apply` would do and exits
+nonzero, for test suites, and `sync` treats the destination as
+its own manifest--every snippet it already carries is updated
+from the source, optionally filtered by name prefixes.  When a
+file is malformed, the error says where: the tool reparses with
+[`big.string`](#strings--sourcenone-line_number1-column_number1-first_column_number1-tab_width8),
+so you get the file, line, and column.  `-c COMMENT` sets the comment leader
+(default `#`), so e.g. `-c //` works with C-family files; it
+may appear anywhere on the command line.  Files are read and
+written as UTF-8 text.
+
+#### `apply_snippets(s, snippets, comment='#')`
+
+<dl><dd>
+
+Applies snippets to `s`, like a patch: returns a copy of `s`
+with every snippet in `snippets` applied.  `snippets` is a
+string of marker-bracketed snippets, one after another--the
+value returned by
+[`extract_snippets`](#extract_snippetss-names-comment).
+
+A snippet `s` already carries is overwritten in place, wherever
+`s` keeps it; everything around it, and the order of the
+snippets in `s`, is preserved.  A snippet `s` lacks is inserted:
+immediately before the snippet that follows it in `snippets`,
+or, if it's the last one, appended at the end of `s`.  (A
+deliberately simple placement rule.  Rearrange the snippets in
+`s` however you like; `apply_snippets` honors your ordering
+forever after.)
+
+End-of-line discipline is preserved: a snippet appended at the
+end of `s` ends with a linebreak only if it ended with one in
+`snippets`.
+
+`s`, `snippets`, and `comment` must all be the same type, `str`
+or `bytes`, and the return value is the same type as `s`.
+`comment` is the comment leader the marker lines start with; it
+defaults to `'#'`.
+
+Raises `ValueError` if `snippets` contains anything besides
+snippets, or if either argument's snippet structure is
+malformed: nested snippets, an unterminated snippet, mismatched
+or out-of-order markers, or two snippets with the same name.
+
+</dd></dl>
+
+#### `extract_snippets(s, *names, comment='#')`
+
+<dl><dd>
+
+Extracts the named snippets from `s` and returns them--
+together with every snippet they require, transitively, in
+source order, marker lines and all, with no blank lines between
+them.  Pass the snippet names as positional arguments--
+`extract_snippets(source, 'B', 'D')`--and the result is the
+union of every name's closure, in source order, ready to feed to
+[`apply_snippets`](#apply_snippetss-snippets-comment)--which
+preserves that order.
+
+Each snippet keeps its own end-of-line discipline: a snippet
+that ended `s` without a trailing linebreak extracts without
+one.
+
+`s`, the names, and `comment` must all be the same type, `str`
+or `bytes`, and the return value is the same type as `s`.
+`comment` is the comment leader the marker lines start with; it
+defaults to `'#'`--pass `comment='//'` for the C family, and so
+on.  (As a convenience, when `s` is `bytes` and `comment` is
+defaulted, it quietly becomes `b'#'`.)
+
+Raises `ValueError` if the snippet (or any snippet it requires)
+isn't in `s`, if the requirements form a cycle, or if `s`'s
+snippet structure is malformed (the same errors as
+`apply_snippets`).
+
+</dd></dl>
+
+#### `sync_snippets(source, destination, filter=None, *, comment='#')`
+
+<dl><dd>
+
+Updates `destination`'s borrowed snippets from `source`, and
+returns the updated destination.  The destination is its own
+manifest: `sync_snippets` reads the names of the snippets
+`destination` already carries, extracts those snippets from
+`source`--together with every snippet they require--and applies
+them back.  (A required snippet the destination doesn't carry
+yet gets installed by the apply.)
+
+`filter`, if not `None`, is a callable: it's called with each of
+destination's snippet names, and only names it approves are
+synced.  Use it to whitelist by project prefix when the
+destination folds together snippets borrowed from several
+sources:
+
+```Python
+sync_snippets(big_text, warehouse,
+              (lambda name: name.startswith('big ')))
+```
+
+`source`, `destination`, and `comment` must all be the same
+type, `str` or `bytes`, and the return value is the same type.
+
+Raises `ValueError` if the destination carries no snippets to
+sync (after filtering), plus everything
+[`extract_snippets`](#extract_snippetss-names-comment) and
+[`apply_snippets`](#apply_snippetss-snippets-comment) raise.
+
+</dd></dl>
+
+</dd></dl>
 
 ## `big.state`
 
@@ -3217,8 +3889,8 @@ function it returns, and decorate with that.  Like so:
 <dl><dd>
 
 Base class for state machine state implementation classes.
-Use of this base class is optional; states can be instances
-of any type except `types.NoneType`.
+Use of this base class is optional; states can be any
+value except `None`.
 
 </dd></dl>
 
@@ -3282,7 +3954,10 @@ observers to the list as needed.
   completes the state transition,
   and then re-raises that first exception.
   (If more than one observer raises an exception, only
-  the first exception is retained and re-raised.)
+  the first exception is retained and re-raised.
+  If `on_enter` *also* raises an exception, the observer's
+  exception still wins--it was first--and the `on_enter`
+  exception is chained to it, as its `__cause__`.)
 
 </dd></dl>
 
@@ -3421,8 +4096,12 @@ and you transition it to `new_state`:
 * Set `state_manager.next` to `None`.
 * If `state_manager.state` has an `on_enter` attribute,
   call `state_manager.state.on_enter()`.
-* If an observer raised an exception,
-  re-raise the first observer exception now.
+* If an observer or `on_enter` raised an exception,
+  re-raise the *first* exception raised now.
+  (If both an observer and `on_enter` raised, the
+  observer's exception came first, so it wins; the
+  `on_enter` exception is chained to it as its
+  `__cause__`.)
 </dd></dl>
 
 
@@ -3430,6 +4109,10 @@ and you transition it to `new_state`:
 
 <dl><dd>
 Exception raised when attempting to execute an illegal state transition.
+
+`TransitionError` subclasses `RuntimeError`: both kinds of illegal
+transition are legal operations attempted at an illegal moment,
+which is `RuntimeError`'s beat.
 
 There are only two types of illegal state transitions:
 
@@ -3468,7 +4151,7 @@ Similar in spirit to Python 3.14+ t-strings.
 
 </dd></dl>
 
-#### `Formatter(template, map=None, *, stretch=True, width=79, **kwargs)`
+#### `Formatter(template, map=None, *, relaxed=False, stretch=True, width=79, **kwargs)`
 
 <dl><dd>
 
@@ -3493,7 +4176,7 @@ the result.  Substitutions in the template use `str.format_map`
 syntax.  The signature of this callable is:
 
 ```Python
-   fn(message=''', **kwargs)
+   fn(message='', **kwargs)
 ```
 
 The `**kwargs` passed in here are also used as values for the
@@ -3524,10 +4207,19 @@ Formatter has two additional features:
           will be repeated, used to format the last two lines of
           the "message" parameter.
 
+        * If the template doesn't contain any "message lines",
+          but you pass in a non-empty string for the "message"
+          when you call the `Formatter` object, normally this will
+          raise `ValueError`.  If you want to permit passing in
+          a message when rendering a `Formatter` without any
+          "message lines", pass in `relaxed=True` to the `Formatter`
+          constructor.
+
     * Values whose keys end with `'*'` (e.g. `"{line*}"`) are special:
       they are "starred interpolations".  Their value is repeated
       zero or more times then truncated until the line is at least
-      "width" characters.  Starred interpolations must not use:
+      "width" characters.  The value is converted with `str()` and
+      must not be empty.  Starred interpolations must not use:
 
         * dotted expressions (`"{line.foo*}"`)
         * indexing (`"{line[3]*}"`)
@@ -3575,18 +4267,21 @@ Parses and evaluates a template string, returning the rendered result.
 
 `s` is parsed using
 [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape),
-then each [`Interpolation`](#interpolation) is evaluated using
+then each [`Interpolation`](#interpolationexpression-filters-debug-formatnone) is evaluated using
 Python's built-in `eval()` with the provided `globals` and
-`locals` dicts.  Filters are applied in order.  The rendered
-string is returned with all interpolations replaced by their
-values.
+`locals` dicts.  Filters are applied in order.  A format
+specification is applied exactly like an f-string's--
+`format(value, spec)`, with the spec taken verbatim--so like
+an f-string, don't pad it with whitespace: `{{x:>10}}`, not
+`{{ x : >10 }}`.  The rendered string is returned with all
+interpolations replaced by their values.
 
 `parse_comments` and `parse_whitespace_eater` may be enabled
 optionally; they are disabled by default.  Statement parsing
 is not supported by `eval_template_string`.
 </dd></dl>
 
-#### `Interpolation(expression, *filters, debug='')`
+#### `Interpolation(expression, *filters, debug='', format=None)`
 
 <dl><dd>
 
@@ -3597,6 +4292,11 @@ is a tuple containing the text of each filter expression, if any.
 If the expression ended with `=`, `debug` contains the text
 of the expression along with the `=` and all whitespace;
 otherwise it is an empty string.
+
+`format` contains the interpolation's *format specification*:
+the text after a top-level `:`, kept verbatim, analogous to the
+format spec of an f-string.  If the interpolation has no
+top-level `:`, `format` is `None`.
 
 See [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape).
 </dd></dl>
@@ -3609,14 +4309,27 @@ Parses a string containing simple template markup, yielding
 its components.
 
 Returns a generator yielding `str` objects (literal text),
-[`Interpolation`](#interpolation) objects (parsed expressions),
+[`Interpolation`](#interpolationexpression-filters-debug-formatnone) objects (parsed expressions),
 and [`Statement`](#statement) objects (parsed statements).
 
 The supported delimiters are:
 
 `{{ ... }}` — An expression.  Parsed into an
-[`Interpolation`](#interpolation) object.  Expressions may
-include filters separated by `|`.
+[`Interpolation`](#interpolationexpression-filters-debug-formatnone) object.  Expressions may
+include filters separated by `|`, and a *format specification*
+after a `:`, analogous to an f-string's:
+
+```
+{{ expression | filter | filter : format }}
+```
+
+Only *top-level* `|` and `:` characters count--characters nested
+inside brackets or quotes belong to the expression or filter
+they're inside, so slices, dict displays, and string literals
+work as expected.  (A top-level lambda needs parentheses, same
+as in an f-string.)  Everything after the first top-level `:` is
+the format specification, preserved verbatim--including
+whitespace and any further `|` or `:` characters.
 
 `{% ... %}` — A statement.  Parsed into a
 [`Statement`](#statement) object.  Quoted strings inside
@@ -3626,8 +4339,10 @@ close delimiter.
 `{# ... #}` — A comment.  The delimiters and all text between
 them are discarded.
 
-`{>}` — The whitespace eater.  These three characters and all
-subsequent whitespace are discarded.
+`{>}`, `{<}`, and `{<>}` — The whitespace eaters.  Each discards
+its own characters plus adjacent whitespace: `{>}` eats all
+whitespace *after* it, `{<}` eats all whitespace *before* it,
+and `{<>}` eats in both directions.
 
 Each delimiter type can be individually enabled or disabled
 via its corresponding boolean keyword-only parameter.
@@ -3644,6 +4359,249 @@ Represents a `{% %}` statement from a parsed template.
 all leading and trailing whitespace.
 
 See [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape).
+</dd></dl>
+
+
+## `big.test`
+
+<dl><dd>
+
+A tiny, low-ceremony test harness.  You can test the way you
+write code, not the way `unittest` insists:
+
+* bare `assert a == b`, never `self.assertWhicheverOne()`,
+* `with raises(ValueError):` instead of `self.assertRaises`,
+* no mandatory base class, no mandatory methods, no mandatory
+  main--plain `def test_foo():` functions are first-class,
+* and on a failing assert you get the *same* rich, type-aware
+  diff `unittest`'s `assertEqual` gives you.  (big reuses
+  unittest's own machinery.)
+
+A test file looks like this:
+
+```Python
+import big.test
+big.test.preload('mypackage')     # local checkout beats installed
+from big.test import raises
+
+import mypackage
+
+def test_frobnicate():
+    got = mypackage.frobnicate('a', 'b')
+    assert got == 'ab'
+
+def test_bad_input_rejected():
+    with raises(ValueError):
+        mypackage.frobnicate('a', None)
+
+if __name__ == '__main__':
+    big.test.main()
+```
+
+and a multi-module test driver looks like this:
+
+```Python
+import big.test
+big.test.preload('mypackage')
+
+import test_basics, test_parsing
+
+with big.test.suite() as run:
+    run(name='mypackage.basics',  module=test_basics)
+    run(name='mypackage.parsing', module=test_parsing)
+```
+
+Leaving the `with` block prints the summary and exits nonzero if
+anything failed.
+
+One habit makes the rich diffs work: **bind, then assert.**
+
+```Python
+got = mypackage.frobnicate('a', 'b')
+assert got == expected
+```
+
+The explainer reads operand values out of the dead frame; it never
+re-evaluates the asserted expression, so no side effects fire.
+That also means it can only *show* operands that are names or
+literals--a call expression inside the assert can't be safely
+shown.  (When it can't produce a diff, it falls back to printing
+the values of the names in the assert.)
+
+`big.test` is stdlib-only, and `unittest.TestCase` classes still
+work if you want them: [`test.run`](#testrunnamenone-modulenone-permutationsnone)
+runs plain test functions and `TestCase` subclasses in one tally.
+For convenience it also re-exports `TestCase`, `skip`, `skipIf`,
+`skipUnless`, and `expectedFailure` from `unittest`.  (On a plain
+test function, a skip decorator raises `unittest.SkipTest` when
+the function is called; `test.run` counts it as a skip.)
+
+`big.test` is *never* imported by `big.all`--not even as a
+submodule, unlike `big.deprecated`--because importing `unittest`
+costs real time, about as much as importing all the rest of big.
+Import it explicitly: `import big.test`.
+
+Importing `big.test` installs a `sys.excepthook` so that even a
+script with bare module-level asserts--no test functions, no
+runner--prints the explanation after an uncaught AssertionError's
+traceback.
+
+</dd></dl>
+
+#### `test.explain(tb, write)`
+
+<dl><dd>
+
+Prints an explanation of a failed bare `assert` to `write`
+(a callable taking a string).  `tb` is the traceback; the assert
+is taken from its deepest frame.  Prints the rich type-aware diff
+if the assertion was `a == b` and both operands are safely
+readable (names or literals), otherwise prints the values of the
+names appearing in the assert.  Prints nothing if it can't help
+(and never raises).
+
+This is the machinery underneath everything else; it's exposed
+for building your own tools.
+</dd></dl>
+
+#### `test.ExplainResult`
+
+<dl><dd>
+
+A `unittest.TextTestResult` subclass that appends
+[`test.explain`'s](#testexplaintb-write) explanation to each
+failure report.  Importing `big.test` installs it as the default
+result class for `unittest.TextTestRunner`, so `TestCase`-based
+tests get explained failures too--even under a plain
+`unittest.main()`.
+</dd></dl>
+
+#### `test.finish()`
+
+<dl><dd>
+
+Prints the final `OK`/`FAILED` summary from
+[`test.stats`](#teststats), with the nonzero counts
+(`OK (skipped=2)`).  If there were failures or errors, exits with
+status 1.  ([`test.suite`](#testsuite) calls this for you.)
+</dd></dl>
+
+#### `test.main()`
+
+<dl><dd>
+
+The standalone-file entry point: put `big.test.main()` at the
+bottom of a test file, under `if __name__ == '__main__':`.
+Runs the file's tests and exits nonzero on failure.
+
+(`main()` deliberately does no command-line processing yet.
+When big grows its command-line argument processing module,
+`main()` will use it.)
+</dd></dl>
+
+#### `test.preload(package)`
+
+<dl><dd>
+
+Puts the local checkout of `package` on `sys.path`, so the tests
+run against the source tree instead of an installed copy.
+
+Searches for `package`/`__init__.py` in the directory containing
+the running script (`sys.argv[0]`), then in each parent directory.
+Raises `FileNotFoundError` if it's not found.  Imports `package`
+and confirms it came from the checkout.  Returns the directory
+added to `sys.path`, as a `pathlib.Path`.
+
+(big's own test suite can't use this to find big--it lives in the
+very package being located--so it bootstraps with its own copy of
+this logic.  Every *other* package is paradox-free.)
+</dd></dl>
+
+#### `test.raises` and `test.raises_regex`
+
+<dl><dd>
+
+The bare-function spellings of `assertRaises` and
+`assertRaisesRegex`:
+
+```Python
+with raises(ValueError):
+    mypackage.frobnicate('a', None)
+
+with raises(TypeError) as cm:
+    mypackage.frobnicate(1, 2)
+assert 'frobnicate' in str(cm.exception)
+
+with raises_regex(ValueError, 'colou?r'):
+    mypackage.paint('plaid')
+```
+
+They *are* `unittest`'s own methods, borrowed from an internal
+helper instance, so the callable form works too:
+`raises(TypeError, fn, arg)`.
+</dd></dl>
+
+#### `test.register_type_equality(type, function)`
+
+<dl><dd>
+
+Teaches the explainer how to diff your own type, exactly like
+unittest's `TestCase.addTypeEqualityFunc`.  `function(a, b, msg=None)`
+should raise an `AssertionError` (with a nice message) when
+`a != b`.  After this, a failing `assert a == b` on two of your
+objects prints that message.
+</dd></dl>
+
+#### `test.run(name=None, module=None, permutations=None)`
+
+<dl><dd>
+
+Runs the tests in `module`.  Discovers:
+
+* plain `def test_*()` functions that take no required arguments
+  (a function with required parameters is yours to call by hand,
+  so discovery skips it), and
+* `unittest.TestCase` subclasses.
+
+`module` may be a module object, a module name (test files pass
+`__name__`), or `None` for the `__main__` module.
+
+`name`, if given, is printed in a `Testing {name}...` banner.
+`permutations`, if given, is a zero-argument callable returning a
+number to report in the `Ran N tests` line (for tests that try
+every permutation of something).
+
+Adds the counts to [`test.stats`](#teststats), for
+[`test.finish`](#testfinish).
+Returns `(tests_run, failures_and_errors)`.
+</dd></dl>
+
+#### `test.stats`
+
+<dl><dd>
+
+The running tally, a dict: `failures`, `errors`, `skipped`,
+`expected failures`, `unexpected successes`.
+[`test.run`](#testrunnamenone-modulenone-permutationsnone) adds to
+it; [`test.finish`](#testfinish) summarizes it.
+</dd></dl>
+
+#### `test.suite()`
+
+<dl><dd>
+
+A context manager for a multi-module test driver.  Entering
+returns the [`test.run`](#testrunnamenone-modulenone-permutationsnone)
+callable; leaving the block calls [`test.finish`](#testfinish):
+
+```Python
+with big.test.suite() as run:
+    run(name='mypackage.basics',  module=test_basics)
+    run(name='mypackage.parsing', module=test_parsing)
+```
+
+If the block raises, the exception propagates and `finish()`
+isn't called.
 </dd></dl>
 
 
@@ -3846,7 +4804,7 @@ stripped characters.  (So, don't use the string's `.split`
 method if you want to use `combine_splits`.  Instead, consider
 big's
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-with `keep=True` or `keep=ALTERNATING`.)
+with `keep=True`, flattening the 2-tuples it yields.)
 
 </dd></dl>
 
@@ -3897,15 +4855,22 @@ function.
 
 </dd></dl>
 
-#### `Delimiter(close, *, escape='', multiline=True, quoting=False)`
+#### `Delimiter(close, *, escape='', multiline=True, quoting=False, nested=None, literal=(), change=None)`
 
 <dl><dd>
 
 Class representing a delimiter for
-[`split_delimiters`](#split_delimiterss-delimiters--state-yieldsnone).
+[`split_delimiters`](#split_delimiterss-delimiters--state-yields4).
 
-`close` is the closing delimiter character.  It must be a valid
-string or bytes object, and cannot be a backslash ('"\\"' or `b"\\"`).
+`close` is the closing delimiter: either a string or bytes object,
+or a tuple of them--alternatives, any one of which closes the
+delimiter.  (For example, `python_delimiters` defines its line
+comment as `Delimiter(('\n', '\r'), quoting=True, multiline=False)`:
+a comment ends at whichever linebreak comes first.)  No close
+delimiter may be empty or a backslash (`"\\"` or `b"\\"`).
+The `closes` property always presents the close delimiters as a
+tuple, even if `close` was passed as a single string--and a single
+string and a 1-tuple compare equal.
 
 If `escape` is true, it should be a string;
 when inside this delimiter, you can escape the trailing
@@ -3922,6 +4887,72 @@ If `escape` is true, `quoting` must also be true.
 If `multiline` is true, the closing delimiter may be on the current line
 or any subsequent line.  If `multiline` is false, the closing delimiter
 must appear on the current line.
+
+Three more parameters define what the text *inside* the
+delimiter means.  Together they're expressive enough to define
+grammars as intricate as [`python_delimiters`](#python_delimiters)
+as plain data--f-strings included:
+
+<dl><dt>
+
+`nested`
+
+</dt><dd>
+
+A mapping of open delimiter strings to `Delimiter` objects:
+delimiters that are live *inside* this delimiter.  For a quoting
+delimiter, `nested` delimiters are the exceptions to the
+quoting--it's how a Python f-string, which quotes, still opens a
+`{`interpolation`}`.  For a non-quoting delimiter, every
+top-level delimiter of the grammar is already live inside, and
+`nested` adds to (or overrides) those.  (A `None` value is
+reserved for future use, and currently rejected.)
+
+</dd><dt>
+
+`literal`
+
+</dt><dd>
+
+A token--or, like `close`, a tuple of them--that is plain text
+inside this delimiter, even where it'd otherwise collide with a
+meaningful token: how `'{{'` inside an f-string means a literal
+`'{'` rather than two interpolations.  The `literal` property
+always presents the tokens as a tuple.
+
+</dd><dt>
+
+`change`
+
+</dt><dd>
+
+A mapping of tokens to `Delimiter` objects: seeing the token
+*changes* what the inside of the current delimiter means, without
+opening a nested delimiter.  The current delimiter continues, and
+its close still closes it--so a change target must have the same
+`close` as its host.  This is how the `':'` inside an f-string
+`{`interpolation`}` switches the text after it into the
+format-spec sub-language.  The token is reported in the `change`
+field of the values yielded by
+[`split_delimiters`.](#split_delimiterss-delimiters--state-yields4)
+
+</dd></dl>
+
+`nested`, `literal`, and `change` can also be *assigned to*, as
+attributes--but only until the first time the `Delimiter` is used
+in a compiled grammar.  After that the `Delimiter` is frozen, and
+assigning raises `ValueError`; to make a variant, modify a
+`copy()`, which is always unfrozen.  Assignment exists so you can
+construct grammars with reference cycles: build the `Delimiter`
+objects, then close the loop by assigning at the end.  (Cycles
+via `nested` are rarer than you'd think: inside a *non-quoting*
+delimiter the grammar's whole top level is already live, no
+back-reference needed.  Explicit cycles only come up when a chain
+of *quoting* delimiters loops privately.)
+
+Equality on `Delimiter` objects is deep (and cycle-safe): two
+independently-built grammars with the same structure compare
+equal.
 
 </dd></dl>
 
@@ -4021,7 +5052,7 @@ as well as certain Irish, French, and Italian names:
 
 ```
     Peter O'Toole
-    Lord D'Arcy
+    D'Artagnan
 ```
 
 If specified, `apostrophes` should be a `str`
@@ -4133,7 +5164,7 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 </dd></dl>
 
 
-#### `merge_columns(*columns, column_separator=" ", overflow_response=OverflowResponse.RAISE, overflow_before=0, overflow_after=0)`
+#### `merge_columns(*columns, column_separator=" ", overflow_strategy=OverflowStrategy.RAISE, overflow_before=0, overflow_after=0, tab_width=8)`
 
 <dl><dd>
 
@@ -4151,6 +5182,17 @@ with newline characters separating lines. `min_width`
 and `max_width` are the minimum and maximum permissible widths
 for that column, not including the column separator (if any).
 
+A column tuple may carry an optional fourth member,
+`relative_tabs`, governing how tabs in that column's text are
+expanded (they're always expanded to spaces, using `tab_width`).
+If true (the default), each line's tabs expand in the column's
+own coordinates--as if the line started at column 1--and the
+expanded text shifts rigidly into place, so the column's
+internal alignment survives wherever the column lands.  If
+false, tabs expand at the column's position on the page (its
+nominal position: an overflow strategy that shifts lines
+doesn't move their tab stops).
+
 Note that this function does not text-wrap the text of the
 columns.  The text in the columns should already be broken
 into lines and separated by newline characters.  (Lines in
@@ -4163,12 +5205,14 @@ handled with the `overflow_strategy`, described below.)
 with one or more lines that are wider than that column's `max_width`.
 The supported values are:
 
-* `OverflowStrategy.RAISE`: Raise an OverflowError.  The default.
+* `OverflowStrategy.RAISE`: Raise an OverflowError.  The default:
+  overflow is an error, and it shouldn't pass silently unless you
+  explicitly silence it by picking another strategy.
 * `OverflowStrategy.INTRUDE_ALL`: Intrude into all subsequent columns
   on all lines where the overflowed column is wider than its `max_width`.
 * `OverflowStrategy.DELAY_ALL`: Delay all columns after the overflowed
   column, not beginning any until after the last overflowed line
-  in the overflowed column.
+  in the overflowed column.  (Help-style tables usually want this one.)
 
 When `overflow_strategy` is `INTRUDE_ALL` or `DELAY_ALL`, and
 either `overflow_before` or `overflow_after` is nonzero, these
@@ -4226,9 +5270,9 @@ together, behaving like one big separator.  If `separate` is true,
 they're kept separate.  Example:
 
 ```Python
->>> multipartition('aXYbYXc', ('X', 'Y',),          separate=False)
+>>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=False)
 ('a', 'XY', 'b', 'YX', 'c')
->>> multipartition('aXYbYXc', ('X', 'Y',),          separate=True )
+>>> multipartition('aXYbYXc', ('X', 'Y',), count=4, separate=True )
 ('a', 'X', '', 'Y', 'b', 'Y', '', 'X', 'c')
 >>> multipartition('aXYbYXc', ('X', 'Y',), count=2, separate=True )
 ('a', 'X', '', 'Y', 'bYXc')
@@ -4237,6 +5281,79 @@ they're kept separate.  Example:
 If `reverse` is true, multipartition behaves like `str.rpartition`.
 It partitions starting on the right, scanning backwards through s
 looking for separators.
+
+For more information, see the tutorial on
+[**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
+</dd></dl>
+
+#### `multireplace(s, replacements, count=-1, *, reverse=False)`
+
+<dl><dd>
+
+Like `str.replace`, but supports multiple replacement strings,
+and replaces them all in a single pass.
+
+`s` can be either `str` or `bytes`.
+
+`replacements` should be a mapping (e.g. a `dict`) mapping
+old strings to the new strings replacing them.  Every key
+and every value must be the same type as `s`, keys cannot
+be empty, and `replacements` cannot itself be empty.
+
+Returns a copy of `s` with every occurrence of every key
+replaced by that key's value.  `multireplace` makes only one
+pass over `s`: text that has already been replaced is never
+itself examined for further replacements.  For example:
+
+```Python
+>>> big.multireplace('ab', {'a': 'b', 'b': 'a'})
+'ba'
+```
+
+Calling `str.replace` repeatedly gets this wrong:
+`'ab'.replace('a', 'b').replace('b', 'a')` returns `'aa'`,
+because the second `replace` re-replaces the output of the first.
+
+`multireplace` is *greedy:* if two or more keys match at the
+same location in `s`, `multireplace` replaces using the longest
+matching key.  For example:
+
+```Python
+>>> big.multireplace('a category', {'cat': 'dog', 'category': 'taxonomy'})
+'a taxonomy'
+```
+
+not `'a dogegory'`.
+
+`count` should be either an integer or `None`.  If `count` is an
+integer greater than -1, `multireplace` will replace no more
+than `count` times, like the `count` parameter to `str.replace`.
+
+`reverse` controls the direction `multireplace` scans in.
+Scanning from the end of the string (`reverse=True`) has two
+effects.  First, if `count` is a number greater than 0, the
+replacements start at the end of the string rather than the
+beginning.  Second, if there are overlapping instances of keys
+in the string, `multireplace` will prefer the rightmost key
+rather than the leftmost:
+
+```Python
+>>> big.multireplace('xa0bx', {'a0': 'A', '0b': 'B'})
+'xAbx'
+>>> big.multireplace('xa0bx', {'a0': 'A', '0b': 'B'}, reverse=True)
+'xaBx'
+```
+
+You can pass in instances of subclasses of `bytes` or `str`
+for `s` and the keys and values of `replacements`, but the
+base class for all of them must be the same (`str` or `bytes`).
+
+`multireplace` supports [`big.string`:](#the-big-string) if `s`
+is a `big.string` object, the result is reassembled with
+[`string.cat`,](#stringcatstrings) so it's a `big.string` too,
+and every unchanged segment still knows its original file,
+line, and column.  (Also available as the method
+[`string.multireplace`.](#stringmultireplacereplacements-count-1--reversefalse))
 
 For more information, see the tutorial on
 [**The `multi-` family of string functions.**](#The-multi--family-of-string-functions)
@@ -4265,8 +5382,8 @@ are slices of the original object, or in some cases adjacent slices joined
 with `+`.  All slices are yielded in left-to-right order; this even includes
 zero-length strings, which are sliced from the contextually correct spot.
 
-If `keep` is true (or `ALTERNATING`), and `strip` is false, joining these
-strings together will recreate `s`.
+If `keep` is true and `strip` is false, joining all the
+yielded strings together will recreate `s`.
 
 `multisplit` is *greedy:* if two or more separators start at the same
 location in `s`, `multisplit` splits using the longest matching separator.
@@ -4279,42 +5396,18 @@ big.multisplit('wxabcyz', ('a', 'abc'))
 yields `'wx'` then `'yz'`.
 
 `keep` indicates whether or not multisplit should preserve the separator
-strings in the strings it yields.  It supports four values:
+strings in the strings it yields.  It supports two values:
 
 <dl><dt>
 
 false (the default)
 </dt><dd>
 
-Discard the separators.
+Yield just the split strings, discarding the separators.
 
 </dd><dt>
 
-true (apart from `ALTERNATING` and `AS_PAIRS`)
-</dt><dd>
-
-Append the separators to the end of the split strings.
-You can recreate the original string by using `"".join`
-to join the strings yielded by `multisplit`.
-
-</dd><dt>
-
-`ALTERNATING`
-</dt><dd>
-
-Yield alternating strings in the output: strings consisting
-of separators, alternating with strings consisting of
-non-separators.  If "separate" is true, separator strings
-will contain exactly one separator, and non-separator strings
-may be empty; if "separate" is false, separator strings will
-contain one or more separators, and non-separator strings
-will never be empty, unless "s" was empty.
-You can recreate the original string by using `"".join`
-to join the strings yielded by `multisplit`.
-
-</dd><dt>
-
-`AS_PAIRS`
+true
 </dt><dd>
 
 Yield 2-tuples containing a non-separator string and its
@@ -4324,6 +5417,62 @@ empty, and if "s" ends with a separator string, *both*
 strings in the final 2-tuple will be empty.
 </dd></dl>
 
+`keep` also supports three symbolic values.  These values
+are *deprecated,* and will be removed no sooner than August
+2027; passing any of them emits a `DeprecationWarning`:
+
+<dl><dt>
+
+`AS_PAIRS`
+</dt><dd>
+
+The old namefor what is now `keep=True`,
+the 2-tuple `(string, separator)` form.
+
+</dd><dt>
+
+`ALTERNATING`
+</dt><dd>
+
+Yield alternating strings in the output: strings consisting
+of separators, alternating with strings consisting of
+non-separators.  The first and last will be non-separators,
+which means this always yields an *odd* number of substrings.
+If `separate` is true, separator strings
+will contain exactly one separator, and non-separator strings
+may be empty; if `separate` is false, separator strings will
+contain one or more separators, and non-separator strings
+will never be empty, unless `s` was empty.
+
+You can recreate the original string by using `"".join`
+to join the strings yielded.
+
+You can recreate this format using `keep=True` with the following:
+```Python
+flat = list(itertools.chain.from_iterable(big.multisplit(s, seps, keep=True)))
+flat.pop()
+```
+
+</dd><dt>
+
+`JOINED`
+</dt><dd>
+
+Each separator is appended to its preceding string.
+
+You can recreate this format using `keep=True` with the following:
+```Python
+(a + b  for (a, b) in big.multisplit(s, seps, keep=True))
+```
+
+</dd></dl>
+
+> **Note:** In big 0.13 and earlier, `keep=True` meant what `JOINED`
+  now means: separators appended to their preceding strings.  0.14
+  changed its meaning to the 2-tuple form.  (Why?  The 2-tuple form
+  can be mechanically converted into any other form, making it the
+  ur-form that's useful in every situation.  It's just a better API
+  this way--you don't need any of that other junk, I promise.)
 
 `separate` indicates whether multisplit should consider adjacent
 separator strings in `s` as one separator or as multiple separators
@@ -4424,14 +5573,14 @@ the *rightmost* separator rather than the *leftmost.*  Consider this
 example, where `reverse` is false:
 
 ```
-multisplit("A x x Z", (" x ",), keep=big.ALTERNATING) => "A", " x ", "x Z"
+multisplit("A x x Z", (" x ",), keep=True) => ("A", " x "), ("x Z", "")
 ```
 
 If you pass in a true value for `reverse`, `multisplit` will prefer
 the rightmost overlapping separator:
 
 ```
-multisplit("A x x Z", (" x ",), keep=big.ALTERNATING, reverse=True) => "A x", " x ", "Z"
+multisplit("A x x Z", (" x ",), keep=True, reverse=True) => ("A x", " x "), ("Z", "")
 ```
 
 For more information, see the tutorial on
@@ -4514,7 +5663,8 @@ their line number and column number information.
 `Pattern` supports the same interface as `re.Pattern`.
 See the Python documentation for
 [`re.Pattern`](https://docs.python.org/3/library/re.html#re.Pattern)
-for the full API.
+for the full API.  (Exceptions: `sub`, `subn`, and `Match.expand`
+construct new strings, so they return plain `str`/`bytes`.)
 </dd></dl>
 
 
@@ -4523,22 +5673,11 @@ for the full API.
 <dl><dd>
 
 A delimiters mapping suitable for use as the `delimiters`
-argument for  [`split_delimiters`](#split_delimiterss-delimiters--state-yieldsnone).
+argument for  [`split_delimiters`](#split_delimiterss-delimiters--state-yields4).
 `python_delimiters` defines *all* the delimiters for Python, and
 is able to correctly split any modern Python text at its delimiter boundaries.
 
-`python_delimiters` changes the rules a little bit for `split_delimiters`:
-
-* When you use `split_delimiters` with `python_delimiters`, it yields *four*
-  values, not three.  The fourth value is `change`.  See `split_delimiters`
-  for more information.
-
-* If you make a copy of `python_delimiters` and modify it, you will break
-  its semantics.  Internally `python_delimiters` is really just a symbolic
-  token, and `split_delimiters` uses a secret, internal-only, manually
-  modified set of delimiters.  This was necessary because the `Delimiters`
-  object isn't sophisticated enough (yet) to express all the semantics
-  needed for `python_delimiters`.
+One rule of thumb:
 
 * When you call `split_delimiters` and pass in `python_delimiters`,
   you *must* include the linebreak characters in the `text` string(s)
@@ -4552,7 +5691,9 @@ Here's a list of all the delimiters recognized by `python_delimiters`:
 * `()`, `{}`, and `[]`.
 * All four string delimiters: `'`, `"`, `'''`, and `"""`.
 * All possible string prefixes, including all valid combinations of
-  `b`, `f`, `r`, and `u`, in both lower and upper case.
+  `b`, `f`, `r`, and `u`, in both lower and upper case.  (On
+  Python 3.14 and newer, also `t`, for t-strings--which get the
+  same special `{`interpolation`}` handling as f-strings.)
 * Inside f-strings:
     * The quoting markers `{{` and `}}` are passed through in `text`
       unmodified.
@@ -4587,8 +5728,12 @@ delimiters based on Python 3.12.  If you instead wanted to parse using the
 semantics from Python 3.8, you would instead pass in `python_delimiters_version['3.8']`
 as the `delimiters` argument to `split_delimiters`.
 
-There are entries in `python_split_delimiters` for every version of
-Python supported by big (currently 3.6 to 3.13).
+There are entries in `python_delimiters_version` for every version of
+Python supported by big (currently 3.6 to 3.14).  Each entry maps to
+the grammar for *that* version of Python, independent of the running
+interpreter; the only grammar fork in that range is t-strings, added
+in Python 3.14, so `'3.6'` through `'3.13'` all map to one (t-free)
+grammar and `'3.14'` maps to the t-aware one.
 
 </dd></dl>
 
@@ -4721,7 +5866,7 @@ with `re.compile` using the `flags` you passed in.
 `string` should be the same type as `pattern` (or `pattern.pattern`).
 </dd></dl>
 
-#### `split_delimiters(s, delimiters={...}, *, state=(), yields=None)`
+#### `split_delimiters(s, delimiters={...}, *, state=(), yields=4)`
 
 <dl><dd>
 
@@ -4762,7 +5907,7 @@ that open and close delimiters match, you don't need to check them
 yourself!)
 
 Yields a object of type `SplitDelimitersValue`.  This object
-contains five fields:
+contains four fields:
 
 <dl><dt>
 
@@ -4797,40 +5942,42 @@ A string, the trailing closing delimiter.
 
 A string, the trailing change delimiter.
 
-</dd><dt>
-
-`yields`
-
-</dt><dd>
-
-An integer, either 3 or 4.
-
 </dd></dl>
 
+
+Iterating over a `SplitDelimitersValue` object yields these four
+values in that order, so you can unpack it directly:
+
+```Python
+for text, open, close, change in big.split_delimiters(s):
+    ...
+```
+
+A *change* delimiter changes the semantics of the *current*
+delimiter, without entering a new nested delimiter.  The canonical
+example is the colon inside curly braces inside a Python f-string:
+before the colon, `#` means "line comment"; after it, `#` is just
+another character.
 
 At least one of the four strings will always be non-empty.
 (Only one of `open`, `close`, and `change` will ever be non-empty in
 a single `SplitDelimitersValue` object.)  If `s` doesn't end with
-an opening or closing delimiter, the final value yielded will
-have empty strings for `open`, `close`, and `change`.
+an opening, closing, or changing delimiter, the final value yielded
+will have empty strings for `open`, `close`, and `change`.
 
-The `yields` parameter to `split_delimiters` affects iteration over
-a `SplitDelimitersValue` object.  `yields` may be None, 3, or 4:
-
-* If `yields` is 3, when iterating over a `SplitDelimitersValue`
-  object, it will yield `text`, `open`, and `close` in that order.
-* If `yields` is 4, when iterating over a `SplitDelimitersValue`
-  object, it will yield `text`, `open`, `close`, and `change` in that order.
-* If yields is `None` (the default), `split_delimiters` will use
-  a value of 4 if its `delimiters` argument is `python_delimiters`,
-  and a value of 3 otherwise.
-
-(The `yields` parameter exists because previously `split_delimiters`
-always yielded an tuple containing three string values.  `python_delimiters`
-required adding the fourth string value, `change`.  Eventually
-`split_delimiters` will always yield an object yielding four values,
-but big is allowing for a transition period to minimize code breakage.
-See the release notes for [big version 0.12.5](#0125) for more information.)
+The `yields` parameter is *deprecated*, and will be removed no
+sooner than August 2027.  In big
+0.12.5 through 0.13 it selected between yielding three values--the
+pre-0.12.5 behavior--and yielding all four.  As promised in
+[the 0.12.5 release notes,](#0125) that transition period is
+over: `split_delimiters` always yields four values now, and the
+only permitted value for `yields` is 4.  (Code that dutifully
+migrated to `yields=4` keeps working; simply remove the argument
+at your leisure.)  Relatedly, the `SplitDelimitersValue` object
+has a *deprecated* `yields` attribute, which likewise once told
+you whether the object iterated as three or four values; it now
+always returns 4, and will be removed at the same time as the
+`yields` parameter.
 
 You may not specify backslash ('\\\\') as an open delimiter.
 
@@ -4883,6 +6030,11 @@ quote delimiters inside a quoted string, like the
 backslash ('\\') character inside strings in Python.
 By default, `escape` is `'\\'`.  (If `s` is `bytes`,
 `escape` defaults to `b'\\'`.)
+`escape` works inside both `quotes` and `multiline_quotes`,
+and shields exactly one following character, like backslash
+in Python.  So inside a `"""` string, `\"""` is an escaped
+quote mark followed by two live quote marks--just like
+Python--and doesn't close the string.
 
 `state` is a string.  It sets the initial state of
 the function.  The default is an empty string (`str`
@@ -4923,29 +6075,43 @@ Note:
 * `split_quoted_strings` only supports the opening and
   closing markers for a string being the same string.
   If you need the opening and closing markers to be
-  different strings, use [`split_delimiters`](#split_delimiterss-delimiters--state).
+  different strings, use [`split_delimiters`](#split_delimiterss-delimiters--state-yields4).
 
 </dd></dl>
 
-#### `split_text_with_code(s, *, tab_width=8, allow_code=True, code_indent=4, convert_tabs_to_spaces=True)`
+#### `split_text_with_code(s, *, code_indent=4, tab_width=8)`
 
 <dl><dd>
 
 Splits `s` into individual words,
 suitable for feeding into
-[`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).
 
 `s` may be either `str` or `bytes`.
 
 Paragraphs indented by less than `code_indent` will be
 broken up into individual words.
 
-If `allow_code` is true, paragraphs indented by at least
-`code_indent` spaces will preserve their whitespace:
-internal whitespace is preserved, and the newline is
-preserved.  (This will preserve the formatting of code
+`code_indent` must be an int.  If it's nonzero, lines indented
+by at least `code_indent` columns are "code lines": paragraphs
+of them preserve their whitespace, internal and leading, and
+their linebreaks.  (This preserves the formatting of code
 examples when these words are rejoined into lines by
-[`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).)
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).)
+Code lines are emitted verbatim, tabs included; `wrap_words`
+expands their tabs at render time, when it knows what column
+the line lands at.  If `code_indent` is 0, there are no code
+lines: everything is just text.
+
+In text, a tab survives as its own `'\t'` word: a run of
+whitespace containing k tabs becomes exactly k `'\t'` words,
+in order--the rest of the whitespace is just separation, and
+is thrown away as usual.  `wrap_words` renders a `'\t'` word
+by placing the next word at the next tab stop.
+
+The only whitespace-only words `split_text_with_code` will
+ever emit are `'\n'` (line break), `'\n\n'` (paragraph break),
+and `'\t'` (tab).
 
 For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
@@ -5129,6 +6295,39 @@ If lines end with linebreak characters, they will be preserved
 even when a comment is stripped.
 </dd></dl>
 
+#### `toy_multisplit(s, separators)`
+
+<dl><dd>
+
+A toy version of [`multisplit`.](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+
+`s` should be `str` or `bytes`.  `separators` should be a list or
+tuple of `str` (or `bytes`, matching `s`); if `separators` is
+itself a single `str` or `bytes`, every character (or byte) in it
+is a separator.  `separators` must be non-empty and must not
+contain the empty string.
+
+Returns a list of 2-tuples of
+
+```
+(string, separator)
+```
+
+where `string` is a (possibly empty) substring of `s` containing
+no separators, and `separator` is the separator that followed it.
+The final 2-tuple's separator is always the empty string.
+Splitting is greedy: at each position, the longest matching
+separator wins.  The result is identical to
+
+```Python
+list(multisplit(s, separators, keep=True, separate=True))
+```
+
+Why use this instead of `multisplit`?  It has no startup time.
+It's also available as a snippet.
+
+</dd></dl>
+
 #### `unicode_linebreaks`
 
 <dl><dd>
@@ -5214,7 +6413,7 @@ Equivalent to [`whitespace`](#whitespace) without `'\r\n'`.
 
 </dd></dl>
 
-#### `wrap_words(words, margin=79, *, two_spaces=True)`
+#### `wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True)`
 
 <dl><dd>
 
@@ -5230,19 +6429,81 @@ Here's an example of a valid argument for `words`:
 ```
 
 A single `'\n'` indicates a line break.
-If you want a paragraph break, embed two `'\n'` characters in a row.
+A double `'\n\n'` indicates a paragraph break.
+Two line breaks in a row (`'\n'`, `'\n'`) doesn't count as
+a paragraph break (`'\n\n'`).
+A single `'\t'` indicates a tab: the next word is placed at the
+next tab stop, as governed by `tab_width` and `left_column`.  A
+tab renders as spaces--`wrap_words` is the final rendering, and
+it knows what column everything lands at, so its output contains
+no tabs.  No space is added around a tab (the tab IS the
+separation); consecutive tabs advance consecutive stops; if the
+word after a tab doesn't fit on the line, the word wraps and the
+tab dies with the line, just like a space would.
+Any other whitespace-only strings are unsupported, and if
+you pass in a `words` array to `wrap_words` containing one,
+its behavior is undefined.
 
 `margin` specifies the maximum length of each line. The length of
 every line will be less than or equal to `margin`, unless the length
 of an individual element inside `words` is greater than `margin`.
 
+`left_column` is the 1-based "virtual left column": the column
+your output will start at, if you're going to place it somewhere
+other than the left edge of the page.  It only affects how tabs
+are rendered--tab stops live at fixed columns of the page
+(9, 17, 25, ... with the default `tab_width` of 8), so text that
+starts at column 5 reaches its first tab stop after four
+characters, not eight.  `margin` is unaffected: it's the width
+of the block `wrap_words` produces, wherever you put it.
+
 If `two_spaces` is true, elements from `words` that end in
 sentence-ending punctuation (`'.'`, `'?'`, and `'!'`)
 will be followed by two spaces, not one.
 
-Elements in `words` are not modified; any leading or trailing
-whitespace will be preserved.  You can use this to preserve
-whitespace where necessary, like in code examples.
+`indent` prefixes the wrapped lines.  It may be a single string,
+used for every line, or a list or tuple of strings: the first
+line gets `indent[0]`, the second line `indent[1]`, and so on;
+once the indents run out, the last one repeats for the remaining
+lines.  A paragraph break resets the sequence, so the first line
+of every paragraph gets `indent[0]`.  The blank lines separating
+paragraphs are never indented.
+
+`code_indent` controls code lines.  A line that starts with
+whitespace is a code line: the elements
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
+emits for code carry their own leading indentation, and ordinary
+wrapped lines always start with a word.  By default
+(`code_indent=None`) code lines get no separate treatment: they
+consume from `indent` like any other line--mid-paragraph they
+count against the sequence, and a paragraph that opens with a
+code line gets `indent[0]`.  Pass a string, or a list or tuple
+of strings--same shape and rules as `indent`--and code lines
+draw from `code_indent`'s own sequence instead, no longer
+consuming from `indent`.  `code_indent=''` means code lines get
+no indent at all.
+
+Indents count against `margin`: a line's indent plus its words
+fit in `margin` columns.  Tabs in an indent are expanded to
+spaces at the indent's true position (an indent always starts
+its line, at `left_column`), using `tab_width`.  Trailing
+whitespace in an indent is preserved--for an indent like `'* '`,
+that's the point.  An indent as wide as `margin` raises
+`ValueError`, as does an indent containing any linebreak
+character (as defined by `linebreaks` / `bytes_linebreaks`).
+
+Elements in `words` are not modified--except for tab expansion;
+any leading or trailing whitespace will be preserved.  You can
+use this to preserve whitespace where necessary, like in code
+examples.  Tabs inside a code line are expanded to spaces when
+the line is rendered, at the column where they actually land.
+
+If `words` yields bytes, `indent` and `code_indent` must be
+bytes too (or lists or tuples of bytes).
+
+If `words` is empty, raises `ValueError`.  (Note that
+`split_text_with_code` never returns an empty list--for empty
+input it returns `['']`, which `wrap_words` is happy to wrap.)
 
 For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
@@ -5342,6 +6603,81 @@ to `timezone`.
 
 Returns a new `datetime.datetime` object identical
 to `d` but with its `tzinfo` set to `timezone`.
+</dd></dl>
+
+#### `duration_human(t, *, long=True, want_microseconds=None)`
+
+<dl><dd>
+
+Returns an elapsed time formatted as a human-readable string,
+breaking it into days, hours, minutes, and seconds.  The long
+format reads like prose, joined with Oxford comma rules--two
+units get a bare `and`, three or more get commas with `, and`
+before the last:
+
+```Python
+>>> big.duration_human(90)
+'1 minute and 30 seconds'
+>>> big.duration_human(90061)
+'1 day, 1 hour, 1 minute, and 1 second'
+```
+
+Pass in a false value for `long` to get the short format:
+
+```Python
+>>> big.duration_human(90, long=False)
+'1m 30s'
+>>> big.duration_human(90061, long=False)
+'1d 1h 1m 1s'
+```
+
+`t` should be a number of seconds, either `int` or `float`,
+or a `datetime.timedelta` object.
+
+Days are the largest unit; a long duration is a large number
+of days (`'365 days and 6 hours'`).  Units are included starting
+at the largest nonzero unit and stopping at the last nonzero
+unit; zero units in the middle are included, so every rendered
+duration reads unambiguously:
+
+```Python
+>>> big.duration_human(3600, long=False)
+'1h'
+>>> big.duration_human(3601, long=False)
+'1h 0m 1s'
+```
+
+A zero duration is `'0 seconds'` (or `'0s'`).  A negative
+duration is formatted like a positive one, with a leading `'-'`.
+
+`want_microseconds` controls sub-second precision, and may be
+`None` (the default), `True`, or `False`:
+
+* `True` means seconds are rendered with microsecond precision.
+  Fractional seconds appear only when nonzero, rounded to
+  microsecond precision, with trailing zeroes removed
+  (`'1.5 seconds'`, never `'1.500000 seconds'`).
+* `False` means seconds are rendered as whole seconds: the
+  duration is rounded to the nearest second, ties rounding up
+  (away from zero).
+* `None` means `want_microseconds` decides for itself: it's
+  `True` if the total duration is less than one minute, and
+  `False` otherwise.  While a duration is short enough that
+  fractions of a second matter, you get them; once it grows a
+  minutes column, you don't:
+
+```Python
+>>> big.duration_human(1.5)
+'1.5 seconds'
+>>> big.duration_human(90061.5)
+'1 day, 1 hour, 1 minute, and 2 seconds'
+>>> big.duration_human(90061.5, want_microseconds=True)
+'1 day, 1 hour, 1 minute, and 1.5 seconds'
+```
+
+The integer arithmetic is exact, so rounding can never produce
+a nonsense duration like `'59.9999999 seconds'` or
+`'60 seconds'`: 59.9999999 seconds renders as `'1 minute'`.
 </dd></dl>
 
 #### `parse_timestamp_3339Z(s, *, timezone=None)`
@@ -5461,6 +6797,20 @@ and column information.  For documentation of the standard
 `str` methods, see the Python documentation for
 [`str`](https://docs.python.org/3/library/stdtypes.html#str).
 
+**Provenance and mutation:** methods that return *substrings*
+of the original--slicing, `partition`, `split`, `strip`,
+`replace`, and friends--always return `big.string` objects with
+true positions.  But methods that *change the text*
+(`capitalize`, `casefold`, `expandtabs`, `format`, `format_map`,
+`lower`, `swapcase`, `title`, `upper`) return a plain `str`
+when the text actually changes.  There's no honest position to
+report for synthesized text, and `big.string` prefers failing
+loudly (plain `str` has no `.where`) over reporting approximate
+positions.  When such a method doesn't change the text, you get
+the original `big.string` back, provenance intact.  (To expand
+tabs *with* provenance, use `detab()`, which synthesizes only
+the spaces.)
+
 Keyword-only parameters to the constructor:
 
 * `source` — A human-readable string describing where this
@@ -5499,14 +6849,32 @@ Read-only properties:
   in the format `"<source> line <n> column <n>"` (or without the
   source if none was specified).
 
+`string.expandtabs` deliberately keeps `str.expandtabs`'s exact
+behavior: `big.string` starts as "a str that knows its own
+provenance", and a shadowed `str` method must never produce
+different text than `str` would.  The improvement is opt-in,
+under a distinct name: `string.detab(tabsize=None)` expands
+each tab according to its own origin's coordinates--the column
+the tab sits at *in its source*, tab stops anchored at its
+origin's `first_column_number`, the same arithmetic `where`
+uses--rather than `str.expandtabs`'s assumption that everything
+starts at column 0 of nowhere.  By default each tab uses its
+origin's `tab_width`; pass an int to override (`tabsize <= 0`
+removes tabs, as with `str`).  The result is a `big.string`: the
+expanded spaces are synthesized text, and the characters around
+them keep their provenance, so `where` still points into the
+original source.
+
 If you pass a `big.string` into Python modules implemented in C,
 the returned substrings will be plain `str` objects.  big provides
-wrappers for two of these, drop-in replacements where the returned
-substrings will be `big.string` slices of the original string:
+wrappers for three of these, drop-in replacements where the returned
+substrings will be `big.string` objects preserving provenance:
 
 * [`string.generate_tokens`](#stringgenerate_tokens), a wrapper for
-  [`tokenize.generate_tokens`](https://docs.python.org/3/library/tokenize.html#tokenize.generate_tokens), and
-* [`string.compile`](#stringcompileflags0), a wrapper for `re.compile`.
+  [`tokenize.generate_tokens`](https://docs.python.org/3/library/tokenize.html#tokenize.generate_tokens),
+* [`string.compile`](#stringcompileflags0), a wrapper for `re.compile`, and
+* [`string.literal_eval`](#stringliteral_eval), a wrapper for
+  [`ast.literal_eval`](https://docs.python.org/3/library/ast.html#ast.literal_eval).
 
 See the [**The big `string`**](#the-big-string) tutorial for more.
 </dd></dl>
@@ -5548,6 +6916,36 @@ preserving `big.string` slices in the yielded `TokenInfo` objects.
 Equivalent to calling
 [`big.tokens.generate_tokens`](#generate_tokenss) with this
 string.
+</dd></dl>
+
+
+#### `string.literal_eval()`
+
+<dl><dd>
+
+Wraps
+[`ast.literal_eval`](https://docs.python.org/3/library/ast.html#ast.literal_eval),
+preserving provenance when the result is a `str`.
+Equivalent to calling
+[`big.builtin.literal_eval`](#literal_evals) with this string;
+see that entry for the full description of how provenance
+is preserved.
+</dd></dl>
+
+
+#### `string.multireplace(replacements, count=-1, *, reverse=False)`
+
+<dl><dd>
+
+Calls
+[`big.multireplace`](#multireplaces-replacements-count-1--reversefalse)
+with this string.  The result is reassembled with
+[`string.cat`,](#stringcatstrings) so it's a `big.string` too,
+and every unchanged segment still knows its original file, line,
+and column.  (The `string.multisplit` and `string.multipartition`
+methods don't need this help: they return slices, which carry
+their provenance naturally.  Replacing is the only member of the
+`multi-` family that builds new text.)
 </dd></dl>
 
 
@@ -6207,7 +7605,8 @@ direction.
 <dl><dd>
 
 Removes and returns the value at `index` relative to the current
-position (default `0`).
+position.  If `index` is `0` (the default), removes the current
+node and the iterator advances forwards to the next node.
 </dd></dl>
 
 #### `linked_list_iterator.rremove(value, default=undefined)`
@@ -6285,21 +7684,24 @@ tutorial for more.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.before`](#linked_list_iteratorbeforecount1).
+Behaves like [`linked_list_iterator.before`](#linked_list_iteratorbeforecount1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.append(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.prepend`](#linked_list_iteratorprependvalue).
+Behaves like [`linked_list_iterator.prepend`](#linked_list_iteratorprependvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.before(count=1)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.after`](#linked_list_iteratoraftercount1).
+Behaves like [`linked_list_iterator.after`](#linked_list_iteratoraftercount1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.copy()`
@@ -6313,14 +7715,16 @@ Returns a copy of the reverse iterator, pointing at the same node.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rcount`](#linked_list_iteratorrcountvalue).
+Behaves like [`linked_list_iterator.rcount`](#linked_list_iteratorrcountvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.cut(stop=None, *, lock=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rcut`](#linked_list_iteratorrcutstopnone--locknone).
+Behaves like [`linked_list_iterator.rcut`](#linked_list_iteratorrcutstopnone--locknone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.exhaust()`
@@ -6334,14 +7738,16 @@ Advances the reverse iterator to point to head.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rextend`](#linked_list_iteratorrextenditerable).
+Behaves like [`linked_list_iterator.rextend`](#linked_list_iteratorrextenditerable)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.find(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rfind`](#linked_list_iteratorrfindvalue).
+Behaves like [`linked_list_iterator.rfind`](#linked_list_iteratorrfindvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.insert(index, object)`
@@ -6356,7 +7762,8 @@ index direction.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.is_special`](#linked_list_iteratoris_special).
+Behaves like [`linked_list_iterator.is_special`](#linked_list_iteratoris_special)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.linked_list`
@@ -6370,63 +7777,72 @@ Returns the `linked_list` this iterator belongs to.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rmatch`](#linked_list_iteratorrmatchpredicate).
+Behaves like [`linked_list_iterator.rmatch`](#linked_list_iteratorrmatchpredicate)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.move(where, stop=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rmove`](#linked_list_iteratorrmovewhere-stopnone).
+Behaves like [`linked_list_iterator.rmove`](#linked_list_iteratorrmovewhere-stopnone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.next(default=undefined, *, count=1)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.previous`](#linked_list_iteratorpreviousdefaultundefined--count1).
+Behaves like [`linked_list_iterator.previous`](#linked_list_iteratorpreviousdefaultundefined--count1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.pop(index=0)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rpop`](#linked_list_iteratorrpopindex0).
+Behaves like [`linked_list_iterator.rpop`](#linked_list_iteratorrpopindex0)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.prepend(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.append`](#linked_list_iteratorappendvalue).
+Behaves like [`linked_list_iterator.append`](#linked_list_iteratorappendvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.previous(default=undefined, *, count=1)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.next`](#linked_list_iteratornextdefaultundefined--count1).
+Behaves like [`linked_list_iterator.next`](#linked_list_iteratornextdefaultundefined--count1)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rcount(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.count`](#linked_list_iteratorcountvalue).
+Behaves like [`linked_list_iterator.count`](#linked_list_iteratorcountvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rcut(stop=None, *, lock=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.cut`](#linked_list_iteratorcutstopnone--locknone).
+Behaves like [`linked_list_iterator.cut`](#linked_list_iteratorcutstopnone--locknone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.remove(value, default=undefined)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rremove`](#linked_list_iteratorrremovevalue-defaultundefined).
+Behaves like [`linked_list_iterator.rremove`](#linked_list_iteratorrremovevalue-defaultundefined)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.reset()`
@@ -6440,56 +7856,64 @@ Resets the reverse iterator to point to tail.
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.extend`](#linked_list_iteratorextenditerable).
+Behaves like [`linked_list_iterator.extend`](#linked_list_iteratorextenditerable)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rfind(value)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.find`](#linked_list_iteratorfindvalue).
+Behaves like [`linked_list_iterator.find`](#linked_list_iteratorfindvalue)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rmatch(predicate)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.match`](#linked_list_iteratormatchpredicate).
+Behaves like [`linked_list_iterator.match`](#linked_list_iteratormatchpredicate)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rmove(where, stop=None)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.move`](#linked_list_iteratormovewhere-stopnone).
+Behaves like [`linked_list_iterator.move`](#linked_list_iteratormovewhere-stopnone)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rpop(index=0)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.pop`](#linked_list_iteratorpopindex0).
+Behaves like [`linked_list_iterator.pop`](#linked_list_iteratorpopindex0)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rremove(value, default=undefined)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.remove`](#linked_list_iteratorremovevalue-defaultundefined).
+Behaves like [`linked_list_iterator.remove`](#linked_list_iteratorremovevalue-defaultundefined)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rsplice(other)`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.splice`](#linked_list_iteratorspliceother).
+Behaves like [`linked_list_iterator.splice`](#linked_list_iteratorspliceother)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.rtruncate()`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.truncate`](#linked_list_iteratortruncate).
+Behaves like [`linked_list_iterator.truncate`](#linked_list_iteratortruncate)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.special`
@@ -6503,14 +7927,16 @@ Identical to [`linked_list_iterator.special`](#linked_list_iteratorspecial).
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rsplice`](#linked_list_iteratorrspliceother).
+Behaves like [`linked_list_iterator.rsplice`](#linked_list_iteratorrspliceother)
+with the directions reversed.
 </dd></dl>
 
 #### `linked_list_reverse_iterator.truncate()`
 
 <dl><dd>
 
-Behaves like [`linked_list_iterator.rtruncate`](#linked_list_iteratorrtruncate).
+Behaves like [`linked_list_iterator.rtruncate`](#linked_list_iteratorrtruncate)
+with the directions reversed.
 </dd></dl>
 
 
@@ -6788,13 +8214,23 @@ the offsets, they just get a plain old `str` object.
 
 Fixing this in CPython would be worthwhile, but it'd be a lot of work and it
 would only benefit the future.  We want to solve our problem today.  So big
-provides workarounds for the two worst offenders: `re` and `tokenize`.
+provides workarounds for the three worst offenders: `re`, `tokenize`,
+and `ast.literal_eval`.
 big's `string` object has a `compile` method that is a drop-in replacement
 for `re.compile`, and all the methods you call on it will return `string`
 objects instead of `str` objects.  The `string` object also has a method
 called `generate_tokens` that produces the same output as `tokenize.generate_tokens`,
 except (of course!) all the strings returned in its `TokenInfo` objects
-are `string` objects.
+are `string` objects.  And it has a `literal_eval` method that evaluates
+the string just like `ast.literal_eval`—but if the result is a `str`,
+it comes back as a `string` that knows where it came from, whenever
+that's honestly possible.  (`re` and
+`tokenize` only *locate* substrings, so their wrappers preserve provenance
+perfectly.  `literal_eval` *transforms* its input—decoded escape sequences
+produce characters that don't exist in the source—so its wrapper preserves
+provenance on a best-effort basis, returning a plain `str` when the value
+can't be truthfully mapped back onto the source; see its documentation
+for the details.)
 
 Unfortunately, there's one more wrinkle.  The objects returned by CPython's
 `re` module don't let you instantitate them, nor subclass them.
@@ -6806,6 +8242,62 @@ of `re.Pattern`, and `isinstance` tests will fail.  **big** was forced
 to reimplement these objects, and we ensure they behave identically
 to the originals, but CPython makes this facet of incompatibility unfixable.
 
+
+### Migrating from `lines` to `string`
+
+`lines`, `LineInfo`, and the `lines_*` modifier functions are
+deprecated, and will be removed no sooner than March 2027.  `string`
+replaces them--and the migration makes your code smaller, because
+everything `LineInfo` tracked by hand travels *inside* the string now.
+
+The core translation:
+
+| the `lines` pipeline | the `string` way |
+|---|---|
+| `lines(s, source=f)` | `string(s, source=f).splitlines(True)` |
+| `info.line_number`, `info.column_number` | `line.line_number`, `line.column_number` (any slice knows) |
+| `info.leading` / `info.trailing` / clipping | just `strip()`--the stripped slice keeps true positions |
+| `lines_strip_indent(li)` | [`strip_indents(lines)`](#strip_indentslines--tab_width8-linebreakslinebreaks) |
+| `lines_strip_line_comments(li, markers)` | [`strip_line_comments(lines, markers)`](#strip_line_commentslines-line_comment_markers--escape-quotes-multiline_quotes-linebreakslinebreaks) |
+| `lines_filter_empty_lines(li)` | `(line for line in lines if line.strip())` |
+| `lines_grep(li, pattern)` | `string(pattern).compile()`, then test each line--matches keep positions |
+| error messages from `info` fields | `f"{line.where}: ..."` |
+
+A worked example.  The old pipeline:
+
+```Python
+for info, line in big.lines_strip_indent(big.lines(text, source='demo.txt')):
+    if not line:
+        continue
+    print(info.indent, info.line_number, info.column_number, line)
+```
+
+becomes:
+
+```Python
+s = big.string(text, source='demo.txt')
+for depth, line in big.strip_indents(s.splitlines(True)):
+    stripped = line.strip()
+    if not stripped:
+        continue
+    print(depth, stripped.line_number, stripped.column_number, stripped)
+```
+
+These print identical values--`strip_indents` reports the same depths,
+and the stripped slice reports the same line and column `LineInfo`
+used to track.  But notice what *isn't* there: no `LineInfo`, no
+clipping bookkeeping, no metadata object riding alongside every line.
+When you need to report an error, any slice can speak for itself:
+
+```Python
+raise SyntaxError(f"{stripped.where}: frobnitz expected")
+# demo.txt line 4 column 5: frobnitz expected
+```
+
+And the modifiers you used to chain become ordinary Python--filters
+are generator expressions, grep is a compiled `Pattern` whose matches
+keep their positions, and any custom modifier you wrote is now just a
+loop over strings that already know where they live.
 
 </dd></dl>
 
@@ -6861,14 +8353,14 @@ as well as a reference to your value. This classic design makes its
 performance predictable: inserting and removing elements anywhere in
 the list is O(1), whereas accessing elements by index is O(n).
 
-There are acutally two types of node in a big `linked_list`: "data"
+There are actually two types of node in a big `linked_list`: "data"
 nodes, which store a value, and "special" nodes, which don't store a
-value.  Why are these "special" nodes needed?  Several reasons.
-First, `linked_list` makes a design choice that's uncommon
-but not exactly rare for linked lists: the "head" and "tail" nodes
-are "special" nodes in the linked list.  When you create a new
-`linked_list` object, it contains *two* nodes, not *zero:* the
-newly-created list already contains "head" and "tail" nodes.
+value.  Why are these "special" nodes needed?  First, `linked_list`
+makes a design choice that's uncommon but not exactly rare for
+linked lists: the "head" and "tail" nodes are "special" nodes in
+the linked list (rather than being references to the real first and
+last nodes).  When you create a new `linked_list` object, it already
+contains *two* nodes, not *zero:* one "head" node, and one "tail" node.
 This makes for a nice implementation; *every* insert and delete
 simply updates four references, rather than needing lots of
 "if we're pointed at the head" special cases all over the place.
@@ -6953,23 +8445,26 @@ performance win.  The relevant methods:
 * `splice` lets you move *all* the nodes of one `linked_list`
   into another.  After splicing linked list A into linked list B,
   A will be empty, and B will contain all of A's nodes, in order.
-* `rcut` and `rsplice` are "reversed" versions of `cut` and `splice`.
+* `move` is like a `cut` followed immediately by a `splice` back
+  into the same list.  But `move` is easier... and a lot faster!
+* `rcut`, `rsplice`, and `rmove` are "reversed" versions of
+  `cut`, `splice`, and `move` respectively.
 
 
 ### `linked_list` iterators
 
-While developing `linked_list`, it occured to me: the usual use
+While developing `linked_list`, it occured to me: the classic use
 case for a linked list involves an arbitrarily-long sequence of
 data, which you iterate over and process.  For example, compilers
 generally represent the program being compiled as a linked list
 of "basic blocks".
 
-When using a linked list for these sorts of use cases, you
-generally operate on a pointer to the linked list node under
-current consideration.  In Python parlance, you iterate over the
-list, getting a reference to each node in the list in turn.
-You perform your computation on that node, then iterate to the
-next one.
+When using a linked list for this class of problem, you generally
+operate on a pointer to the linked list node under current
+consideration.  In Python parlance, you iterate over the list,
+getting a reference to each node in the list in turn.  You perform
+your computation on that node, then iterate, moving on to the next
+one.
 
 However, you often want to *modify* the list while you're doing
 this.  You may want to remove the node, or insert new nodes,
@@ -7045,8 +8540,8 @@ relative to the beginning (or end) of the list.  Also, as
 a rule, methods that operate on one or more nodes always
 operate on the *current* node.
 
-Here are some examples.  In these examples, `it` is always
-a forwards iterator:
+Here are just a few examples.  In these examples, `it`
+is always a forwards iterator:
 
 * `it.pop` pops and returns the value the iterator currently
   points at, then moves the iterator *back* one node.
@@ -7061,6 +8556,7 @@ a forwards iterator:
 * `it.truncate` deletes all values at or after the current
   node.  When `it.truncate` is done, `it` will be pointing
   at "tail", and `it[-1]` will be unchanged.
+
 
 #### Magic methods
 
@@ -7091,7 +8587,7 @@ We'll create a new empty linked list, then create an iterator
 over that linked list, and call `next` on it twice:
 
 ```Python
-t = LinkedList((1,))
+t = linked_list((1,))
 it = iter(t)
 value_a = next(it, None)
 value_b = next(it, None)
@@ -7218,10 +8714,13 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
   iterator with `next()` enough times, the iterator will yield that value.
     * If you use an iterator to prepend a new value, and nobody deletes that value, and you subsequently advance
       that iterator with `previous()` enough times, the iterator will yield that value.
-* As a rule, actions on iterators that act on multiple nodes include the node they're pointing at.
+* When traversing the list with an iterator using `next()` and/or `previous()`, iterators will skip past
+  `"special"` nodes, but they always stop at head and tail.
+* Operations on iterators that act on multiple nodes tend to include the node they're pointing at.
 * iterator[0] *always* refers to the node the iterator is currently pointing at, even if it's a special
   node.  If the index is non-zero, it skips over special nodes.
-* You can't ever insert a node *before* head.  You can't ever insert a node *after* tail.
+* You can't ever insert a node *before* head, or *after* tail.  You can't ever remove head or tail.
+* Any operation involving an empty range (start==stop) is a no-op and doesn't raise.
 
 
 </dd></dl>
@@ -7233,705 +8732,362 @@ and `fi.rextend(X)` and `ri.extend(X)` would also do the same thing
 
 ### tl;dr
 
-Here's the "elevator pitch" for why you want to use `Log`.
-
 Do you ever do print-style debugging?  Of course you do.
-The big `Log` makes print-style debugging so much better!
+big's `Log` is the best print-style debugging log you've ever seen.
+
+`Log` is deliberately *not* an "enterprise" logger.  There are no
+severity levels, no handler hierarchies, no configuration files.
+Just lightning-fast logging, with timestamps, hierarchy,
+support for multiple threads, pretty Unicode boxes, and minimal
+overhead.
 
    * `Log` automatically prepends each log message with the
-     elapsed time so far, as well as the name of the thread
-     that logged the message.
-   * Want to write to a file instead?  Maybe a temporary file
-     with a dynamically-generated filename, so old logs don't
-     get overwritten?  Maybe you want to buffer all the output
-     until the program exits, then print it all at once?  Or
-     maybe you're done with debugging and you just want to switch
-     all logging off?  `Log` makes it effortless to switch between
-     all these options--or even to log to multiple places at the
-     same time.  You can easily write to a temporary file *and*
-     print to the screen, or any combination of outputs.
-     And the API is so easy, it's even easy to remember.
-   * `Log` adds some nice formatting options; you can call
-     attention to one message by calling the `box` method,
-     which draws a box around the value in the output.  You
-     can also indent and dedent the log output using the `enter`
-     and `exit` methods.
-   * If your program is multithreaded, you've probably observed
-     print statements interleaving.  Python's `print()` doesn't
-     format the entire message then write it to stdout all at
-     once; it does it a bit at a time, including the ending newline.
-     `Log` only writes complete messages.
-   * By default `Log` uses threading, which means it spends a lot
-     less time in each call than calling `print` would.  So, less
-     overhead for your program, not to mention less Heisenberg-uncertainty
-     around synchronization due to the time spent in `print`.
-     (Yes, `print` is written in C, so its code runs very fast.  But
-     logging using a `Log` in threaded mode does *way* less work.
-     According to the wall clock, logging using `Log` consumes way
-     less time in your thread than logging using `print`.)
+     elapsed time so far, and the name of the thread that
+     logged the message.
+   * `Log` gives your output *shape*.  `log.enter("subsystem")`
+     prints a banner and indents everything until `log.exit()`--
+     so your log nests the way your program nests.  `log.box(s)`
+     prints an eye-catching call-out box.
+   * Want to write to a file instead?  Maybe a temporary file with a
+     dynamically-generated filename, so old logs don't get
+     overwritten?  Buffer everything and write it all at once?
+     Log to a file *and* the screen?  It's one argument to the
+     constructor.
+   * Multithreaded programs are where debug prints go to die--and
+     where `Log` shines.  All the work runs through one queue, so
+     messages never interleave mid-line, and nested blocks stay
+     contiguous.  And `Log` itself does all its work in a separate
+     thread by default, so it takes up minimal time in your actual
+     work threads.
+   * Done debugging?  Don't delete your log lines--*pause* the log,
+     or construct it with no destinations.  Which brings us to the
+     single most important idiom:
 
-### Overview
 
-big's `Log` object is a high-performance logging mechanism, suitable
-for debugging.  It has a very convenient interface, and it's easy to get
-up and logging with very little configuration.  It's thread-safe,
-ensuring logged messages are rendered atomically (unlike calling `print`
-from multiple threads, which can interleave messages.)  And with default
-parameters, logging a message is very quick--perhaps 5x faster than
-calling `print`.
+### The most important idiom
 
-Although it's really designed for "print-style" debugging--where you
-print out all the state in your program that you need to diagnose a
-problem--it's usable for classic application logging, like Python's
-`logging` module.  That said, it has a very different interface, and
-is missing a lot of features as compared to the `logging` module, so
-it's hardly a drop-in replacement.
+```Python
+if log:
+    log(f"boiler state: {pprint.pformat(hopper)}")
+```
 
-### tl;dr
+A `Log` is *true* when it's configured to produce output,
+and *false* when it has been silenced.  Prepend your log calls
+with `if log:` and the message arguments are **never even evaluated.**
+I used to comment out all my log calls when I wanted to turn
+logging off--now I just configure that same log object to be
+false, and I'm done.
 
-The downside of feature-rich classes and functions is that it can be
-hard to remember how to use them.  So here's all you need to remember
-to be productive with `Log`:
+Anything that quiets the log makes it evaluate to false--pausing,
+closing, or not being configured to write anywhere.
 
-> When you create your `Log` object, just pass in the objects where you
-> want the log to go--`print`, a file path, an open file handle,
-> a `list`, whatever.  Then call that `Log` object to log messages;
-> it behaves like `print`.
 
-### Getting started
-
-Let's start by showing you a whole Python script that exercises
-many of the big `Log` features.  We'll show you the script, then
-its output, and then we'll go over it line by line and discuss
-each of the features independently.
-
-Here's the script:
+### Quick start
 
 ```Python
 import big.all as big
 
-j = big.Log()
-j.print("Hello, world!  2 + 2 =", 2 + 2)
-j("Hello, world, round 2!  4 + 4 =", 4 + 4)
-j.write("This was written without formatting!\nLine breaks work too!\n")
-j.box(f"Today's important number is {6 * 7}!")
-with j.enter("Newline subsystem"):
-    j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
+log = big.Log()
+
+log("Hello, world!")
+with log.enter("parsing"):
+    log("phase one")
+    log.box("something noteworthy!")
+log("all done")
+log.close()
 ```
 
-If you copy that to a new file, and run it (with big installed), you'll see
-this on the output:
+This prints something like:
 
 ```
-===============================================================================
-Log start at 2026/02/15 13:46:51.410751 PST
-===============================================================================
-[000.0004777570   MainThread] Hello, world!  2 + 2 = 4
-[000.0004971740   MainThread] Hello, world, round 2!  4 + 4 = 8
-This was written without formatting!
-Line breaks work too!
-[000.0005088170   MainThread] +------------------------------------------------
-[000.0005088170   MainThread] | Today's important number is 42!
-[000.0005088170   MainThread] +------------------------------------------------
-[000.0005117220   MainThread] +-----+------------------------------------------
-[000.0005117220   MainThread] |start| Newline subsystem
-[000.0005117220   MainThread] +-----+------------------------------------------
-[000.0005174830   MainThread]     Line one!
-[000.0005174830   MainThread]     And here's line two.
-[000.0005174830   MainThread]       Leading spaces are preserved too!
-[000.0005174830   MainThread]     And here's the final line
-[000.0005208190   MainThread] +-----+------------------------------------------
-[000.0005208190   MainThread] | end | Newline subsystem
-[000.0005208190   MainThread] +-----+------------------------------------------
-===============================================================================
-Log finish at 2026/02/15 13:46:51.411292 PST
-===============================================================================
+000.0000000000             │ ╔═════════════════════════════════════════════════
+000.0000000000             │ ║ Log start at 2026/07/12 17:36:16.985964 PDT
+000.0000000000             │ ╚═════════════════════════════════════════════════
+000.0000845460   MainThread│ Hello, world!
+000.0003936510             │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0003936510             │ ┃enter┃ parsing
+000.0003936510             │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0004167140   MainThread│     phase one
+000.0004868770   MainThread│     ┌─────────────────────────────────────────────
+000.0004868770   MainThread│     │ something noteworthy!
+000.0004868770   MainThread│     └─────────────────────────────────────────────
+000.0022459870             │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0022459870             │ ┃exit ┃ parsing
+000.0022459870             │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0027115580   MainThread│ all done
+000.0029511810             │ ╔═════════════════════════════════════════════════
+000.0029511810             │ ║ Log finish at 2026/07/12 17:36:16.988915 PDT
+000.0029511810             │ ╚═════════════════════════════════════════════════
 ```
 
-Let's break it down, line by line.
+Notice you didn't have to explicitly *start* the log.  Logs start lazily,
+on the first message.  If you never log, `Log` never opens your file,
+never computes a tempfile name, never prints a banner--nothing happens.
 
-To use `Log`, simply instantiate a `Log` object:
+(However, the "log start" time *is* the time when you create the `Log`
+object.  Also, banners aren't "from" a thread conceptually, they're "from"
+the log itself, so their thread column is blank.)
+
+
+### Quick start, line by line
+
+We're gonna go over every line in the "Quick start" section and
+walk you through it.
+
+Apart from the import, the first line of the "Quick start" makes the log object:
+```Python
+log = big.Log()
+```
+
+Without arguments, `Log` will call Python's `print` to print every line of the log.
+See the *Destination* section below to see how to change that.
+
+Also, by default a `Log` uses "threaded" mode.  Every time you send a message to
+the log, it's bundled up and shipped across to a worker thread that does the actual
+logging.  This minimizes how much time logging takes up in your threads.  (And in
+Python's glorious free-threaded future, all the work will be done by one of your
+lazy spare CPU cores!  Put 'em to work!)
+
+The next line actually writes to the log:
+```Python
+log("Hello, world!")
+```
+
+Yup, to log, you just call the log handle itself.  Behaves exactly like Python's
+`print` function--takes `sep` and `end`.  (Not `file` though, sorry.)
+
+This line produced the following output:
+
+```
+000.0000000000             │ ╔═════════════════════════════════════════════════
+000.0000000000             │ ║ Log start at 2026/07/12 17:36:16.985964 PDT
+000.0000000000             │ ╚═════════════════════════════════════════════════
+000.0000845460   MainThread│ Hello, world!
+```
+
+This includes the log start banner.  `Log` doesn't print *anything* until your first
+actual log message.  The start time of the log is the time the `Log` constructor 
+was created.  After that, we can see the call to `log()` itself happened 85 microseconds
+later, from the `MainThread`, and the message was `Hello, world!`
+
+
+Next two lines:
+```Python
+with log.enter("parsing"):
+    log("phase one")
+```
+
+We're using a `with` statement, so `log.enter` must be a Python "context manager".
+What "enter" means is, we're "entering" a nested logging block.  This does three things:
+
+* Prints a banner at the beginning and end of the nested block.
+* Messages logged inside the nested block get indented.
+* Buffers up the contents of the nested block, only sending it to the log when it's done.
+
+This last one means: when you log from multiple threads, messages from the other threads
+don't interrupt your nested blocks.  If we simply interleaved messages from every thread
+when they arrived, the lovely indented block of the "enter" would get interrupted with
+outdented junk from these other miscreant threads.
+
+This doesn't produce any output--yet!--so let's go on to the next line:
 
 ```Python
-j = big.Log()
+    log.box("something noteworthy!")
 ```
 
-With all default parameters, your `Log` will send the log
-to stdout via `builtins.print`.  However, it'll use a separate
-thread to do the actual printing.  Logging a message will lightly
-pre-format the message, then send it to the `Log` object's
-internal thread; that thread finishes the formatting and sends
-it to `print`.
+`box` is a method that "calls out" this log message through formatting.  By default,
+it draws a three-sided box around the message using Unicode line-drawing characters.
 
-The usual method call to log a message is the `Log.print` method:
+Since this is the last line inside the `with` statement, let's show you the output
+of the entire `with log.enter` block here:
+
+```
+000.0003936510             │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0003936510             │ ┃enter┃ parsing
+000.0003936510             │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0004167140   MainThread│     phase one
+000.0004868770   MainThread│     ┌─────────────────────────────────────────────
+000.0004868770   MainThread│     │ something noteworthy!
+000.0004868770   MainThread│     └─────────────────────────────────────────────
+000.0022459870             │ ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+000.0022459870             │ ┃exit ┃ parsing
+000.0022459870             │ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+You can see the enter and exit banners, and the `phase one` message and the box
+are both indented.  And again: if this program was multithreaded, this entire
+series of banners and log messages would get added to the log atomically.
+
+We're gonna combine together the last two lines:
 
 ```Python
-j.print("Hello, world!  2 + 2 =", 2 + 2)
+log("all done")
+log.close()
 ```
 
-`Log.print` has a similar signature to `builtins.print`, although it
-doesn't support the `file` parameter.
-
-This is so common, there's a shortcut: calling the `Log` instance
-itself behaves identically to calling the `print` method:
-
-```Python
-j("Hello, world, round 2!  4 + 4 =", 4 + 4)
-```
-
-The three lines we've examined so far produce these first five lines of the output:
+You've seen calling the log object before.  Calling `close()` on the log
+closes it, naturally.  This writes out the log:
 
 ```
-===============================================================================
-Log start at 2026/02/15 13:14:13.648816 PST
-===============================================================================
-[000.0004797210   MainThread] Hello, world!  2 + 2 = 4
-[000.0005004200   MainThread] Hello, world, round 2!  4 + 4 = 8
+000.0027115580   MainThread│ all done
+000.0029511810             │ ╔═════════════════════════════════════════════════
+000.0029511810             │ ║ Log finish at 2026/07/12 17:36:16.988915 PDT
+000.0029511810             │ ╚═════════════════════════════════════════════════
 ```
 
-As you can see, `Log` automatically adds a "start" banner showing the current
-local time that the log was started.  (There's a symmetric "end" banner produced
-when the log is closed.)  These banners are only emitted if some logging
-operation produces non-empty formatted output.
+Once the log is closed, it ignores log messages--it's not an error to
+use a closed handle, but the log messages are simply dropped on the floor.
 
-Also, every printed log message gets a "prefix", showing the elapsed time
-so far (since the start of the log) and the thread that logged the message.
-The default prefix is fixed width; it's the thing enclosed in `'[...]'` at
-the start of each line (after the start banner).
-
-(Obviously, if you run this script, *your* times will be different.  Yours
-will be in the future... unless you've borrowed Guido's time machine.)
-
-Let's explore the other `Log` methods that append messages to the log.
-The simplest one is `write`, which only takes one `str` argument, and writes that
-string to the log without any further formatting whatsoever:
-
-```Python
-j.write("This was written without formatting!\nLine breaks work too!\n")
-```
-
-This is useful in case you've carefully formatted some text by hand and
-you want to dump it straight into the log.  (Or you simply want to suppress
-the per-line prefix.)  Passing an empty string to `Log.write` is a no-op;
-it does not start the log and it does not emit banners.
-
-`Log` also supports a method called `box` that writes a message with a three-sided
-box drawn around it:
-
-```Python
-j.box(f"Today's important number is {6 * 7}!")
-```
-
-If you want to call attention to a logged message,  use `box` instead of `print`.
-Note that the `box` method also only takes a single `str` object.  (But formatting
-it is no problem--just use an f-string!)
-
-The above two lines in the script produce these five lines in the output:
-
-```
-This was written without formatting!
-Line breaks work too!
-[000.0005261250   MainThread] +------------------------------------------------
-[000.0005261250   MainThread] | Today's important number is 42!
-[000.0005261250   MainThread] +------------------------------------------------
-```
-
-You can see, the message logged with `Log.write` doesn't get the "prefix".
-And it's easy to pick out the "boxed" message due to the lines `Log` draws
-around it.
-
-Let's finish up, examining the final two lines of the script.
-
-`Log` supports two intertwined methods, `enter` and `exit`.  `enter`
-logs a message in a box, then adds an indent that applies to subsequent
-messages. `exit` outdents, then re-logs the message from the most recent
-`enter` in another box.  This is a great way to add some structure to
-your log, showing visually how your program enters and exits conceptual
-subsystems (modules, functions, classes, algorithms, what have you).
-
-For convenience, `Log.enter` also returns a "context manager".  If you use
-a call to `Log.enter` as the argument to a `with` statement, it'll automatically
-call `Log.exit` when you exit the `with` statement.   We use that feature in
-the example script.
-
-The last line demonstrates one more feature of `Log`.  All `Log` methods
-that write to the log support newline characters, not just `Log.write`.
-But when you log a message using the other methods--methods that write
-the "prefix"--the lines are split up before they're formatted for the
-log, and each line gets the prefix.
-
-Here are the last two lines of the script:
-
-```Python
-with j.enter("Newline subsystem"):
-    j("Line one!\nAnd here's line two.\n  Leading spaces are preserved too!\nAnd here's the final line")
-```
-
-Those two lines produce these *thirteen* lines in the output:
-
-```
-[000.0005117220   MainThread] +-----+------------------------------------------
-[000.0005117220   MainThread] |enter| Newline subsystem
-[000.0005117220   MainThread] +-----+------------------------------------------
-[000.0005174830   MainThread]     Line one!
-[000.0005174830   MainThread]     And here's line two.
-[000.0005174830   MainThread]       Leading spaces are preserved too!
-[000.0005174830   MainThread]     And here's the final line
-[000.0005208190   MainThread] +-----+------------------------------------------
-[000.0005208190   MainThread] |exit | Newline subsystem
-[000.0005208190   MainThread] +-----+------------------------------------------
-===============================================================================
-Log finish at 2026/02/15 13:46:51.411292 PST
-===============================================================================
-```
-
-Notice how the logged message inside the "enter" / "exit" section are indented by
-four spaces.  If you nested another `with j.enter` inside the first one, text
-logged inside that would be indented by eight spaces.
-
-Once the script exited, `Log` automatically closed the log for you, including
-writing the "end" banner with the end time of the log.
-
-
-### Other methods
-
-Log has three more methods; none of these write messages to the log.
-
-`Log.flush(block=True)` flushes the log.  In some configurations, the log will
-buffer up messages, instead of sending them right away.  A `flush` call
-will flush all buffered messages.  If `block` is true (the default), the
-`flush` call won't exit until all messages have been flushed.  If `block`
-is false, `flush` may start the flushing process but won't necessarily
-wait until it's complete.
-
-`Log.close(block=True)` closes the log.  If the log is dirty, it flushes
-first.  When a log is closed, it *ignores* all attempts to write log
-messages to the log.  No error is reported--the messages are simply
-ignored.  The only way to re-open a closed log is to call its `reset`
-method.  If a log is still in its initial state when you close it, it
-closes directly without emitting the start banner, end banner, or any
-destination events besides `register`.  The `block` parameter works
-the same as it does for `flush`.
-
-`Log.reset()` resets a log to its initial state.  Resetting the log is the
-only way to re-open a closed log.  After reset, the log behaves like a
-fresh log and won't emit the start banner until some operation produces
-non-empty formatted output.
-
-Every `Log` also registers an "atexit" handler.  The "atexit" handler
-closes the `Log` if it hasn't been closed already.
+However, you *can* restart a closed log, with the `reset()` method.
+This brings the log back to life, pointed at all the same destinations.
+You can also reset a non-closed log, which effectively closes and
+reopens it.
 
 
 ### Destinations
 
-All our logging so far has just gone to `builtins.print`, which means it
-shows up on `stdout`.  But what if you want to send the log somewhere else?
-
-All *positional* arguments to the `Log` constructor specify *destinations.*
-A *destination* is simply an object that the log sends messages to.  You
-can specify as many destinations as you like when creating your `Log`
-instance; however you can't add or remove destinations later.
-
-As we've already seen, if you don't specify any destinations when you
-construct the `Log`, the default is to log to `builtins.print`.  You
-can explicitly configure your log to to this by passing in `print`
-as a positional argument:
+A `Log` can write to one or more places simultaneously.
+We call such a place a "destination".  Anything sensible
+works as a destination, and you can just pass them in to
+the `Log` constructor, as many as you want:
 
 ```Python
-j = Log(print)
+log = big.Log()                          # no explicit destinations? implicitly calls print.
+log = big.Log(print)                     # print?  *explicitly* calls print.
+log = big.Log("/tmp/my.log")             # path to a file?  append to it.
+log = big.Log(big.TMPFILE)               # TMPFILE constant?  a timestamped temporary file.
+log = big.Log(array)                     # Python list?  append to it.
+log = big.Log(my_function)               # Python callable?  call it with every message.
+log = big.Log(sys.stderr)                # an open file object?  write messages to it.
+log = big.Log(None)                      # nothing!  and bool(Log(None)) is False.
+log = big.Log("/tmp/my.log", print)      # append to a file *and* calls print.
 ```
 
-But there are lots of other options!  If you specify an list, `Log` will
-append all the logged message strings to that list:
+File logging is buffered by default: output accumulates in memory and
+is written in one open-write-close when the log is flushed or closed.
+
+You can control exactly where your data goes and how it gets there.
+For example: if you don't want buffering when writing to files, pass
+in a `big.File(path, buffering=False)` destination to open the file
+up front and flush every message as it happens--slower, but nothing
+is lost if your program dies mid-run.
+
+You can write your own custom destinations, if big doesn't provide
+enough already!
+
+### Writing to the log, and formatting
+
+Couldn't be easier.  The `Log` itself is callable, just call it.
+It behaves like Python's `print` function; it takes `*args`,
+and `sep` and `end` and `flush`.  (Okay, it doesn't take `file`.)
 
 ```Python
-a = []
-j = Log(a)
+log = big.Log()
+log('Hello, world!')
 ```
 
-If you specify a string, `Log` will assume that string represents a
-filename, and append the log to that file:
+This will produce normal output in the log:
+```
+000.0058273670   MainThread│ Hello, world!
+```
+
+But there are a couple more methods.  They mostly differ in how
+the message is formatted.
+
+Every message is formatted using a template.  Some templates
+are for built-in log banners, like the "log start" or "enter" banners.
+But there are other formats for other styles of logging.
+
+You saw `box` above, which draws a box around the message to draw
+attention to it.  There's also `write`, which writes a message without
+any formatting, and `log`, which is like `print`.  But `box`, `write`,
+and `print` only take one string to log, unlike `print` which takes
+`*args` and `sep` and `end` and all that.
+
+You can also create your own arbitrary formats, and specify which format
+you want to use with any of the above logging functions with the `format=`
+keyword-only parameter:
 
 ```Python
-j = Log('/tmp/log.txt')
+formatter = big.TextFormatter(formats={
+    "phase": {"template": "{prefix}{line*}\\n{prefix}== {message}\\n{prefix}{line*}\\n"},
+    })
+log = big.Log(formatter=formatter)
+log.log('indexing', format='phase')
 ```
 
-(You can also specify a `pathlib.Path` object--that works the same.)
+This also binds a method with that format name you can call directly.
+Because we made a `"phase"` format, we now also have a `phase` method:
+```Python
+log.phase("indexing")
+```
 
-When writing to a file, `Log` will buffer up messages until the log
-is flushed, then open the file, flush *all* messages with one big
-write, and close the file.
+### Pause and resume
 
-Some more options:
+`log.pause()` silences the log--no messages, no banners, no
+destination activity--until `log.resume()`.  It's the runtime
+equivalent of commenting out your prints, minus the part where your
+codebase fills up with commented-out prints.  `pause()` returns a
+context manager that resumes on exit, and pausing nests correctly.
 
-* If you pass in an open file handle (like the result of calling `open`),
-  `Log` will write log messages to the file handle.
-* If you pass in a callable, `Log` will call the callable once for every
-  formatted message, with just one argument, the formatted log message.
-* There's a special sentinel value in the `big.log` module: `big.log.TMPFILE`.
-  If you specify that as a destination, `Log` will send the log to a
-  file with a dynamically generated name in your configured temporary
-  directory.  The filename starts with the name of the log; this is
-  followed by the start time, then the process ID, and finally ends with
-  `.txt`.  Every time the log resets it switches to a new filename.
-* A destination of `None` doesn't log anywhere.  If you want to
-  create a `Log` object that doesn't actually write the log anywhere,
-  construct it as `big.Log(None)`.
-
-If you pass in multiple destinations, `Log` will send all the
-log messages to *all* of them.  You could log to `TMPFILE`, `print`,
-and an array, all at the same time!
-
-Finally, if you like the "buffer-until-flush" behavior of files,
-but want to use that with another destination, wrap that destination
-with a call to `Log.Buffer()`.  Without an argument, `Log.Buffer()`
-buffers all messages until flush, then writes them all to
-`builtins.print`.  If you specify a destination (as a positional
-parameter), *that* destination is where the log messages are sent
-when the log is flushed.  See the *Custom Destinations* section
-below for more information on this and similar advanced techniques.
+`log.reset()` closes and reopens the log: fresh start time, fresh
+banners, and a fresh filename for `TMPFILE` logs.
 
 
-### Configuration via keyword-only parameters
+### Threads and faults
 
-You configure your `Log` instance by supplying keyword
-arguments to the `Log` constructor.  Note that, like
-the list of destinations, these can only be specified
-as arguments to the constructor; you can't change any
-of these settings once the `Log` instance is initialized.
+By default a `Log` runs its formatting and writing on a worker
+thread, so logging costs your program almost nothing at the call
+site.  Message content is captured *at the moment you log*
+(so mutable objects render as they were, not as they became), and
+everything downstream happens in order on the queue.  Pass
+`threaded=False` to do all the work inline instead--output appears
+immediately, which is sometimes what you want when debugging a crash.
 
-The most important setting is the `threading`
-parameter.  This configures whether or not the `Log`
-instance uses a worker thread to do all the actual
-logging.  By default `threading` is true, which means
-the log uses an external thread to format and write
-the log messages.  Log messages and other operations
-are sent to that thread via a `queue.Queue`, which
-ensures log messages are sent to the log in a
-high-performance and thread-safe way.
-
-If you pass in `threading=False` to the `Log` constructor,
-the log won't use an external thread.  Instead, every
-logging call will write to the log immediately; it
-uses a `threading.Lock` to guarantee atomicity.
-
-You can set the name of the log with the `name`
-parameter.  This is shown in the start and end banners.
-
-`indent` defaults to 4; this is how many spaces `enter`
-indents the log.  `width` defaults to 79; this is the
-column that "line" formats are truncated at.
-
-`clock` is the clock used to compute the time at which
-log messages were logged.  It should return an integer,
-which is the number of nanoseconds since some previous
-event.  By default it uses `time.monotonic_ns`.  (Well,
-on Python 3.7+ anyway.  On Python 3.6 it simulates
-`time.monotonic_ns` by calling `time.monotonic` and
-multiplying it by a billion.)
-
-`timestamp_clock` is the clock used to produce timestamps
-used in the log.  It should return a float, which is the
-number of seconds since the UNIX epoch.  The default value
-is `time.time`.  `timestamp_format` is a callable that should
-convert a `timestamp_clock` value into a pleasing human-readable
-format; the default value is `big.time.timestamp_human`.
-
-`prefix` is the string that will be inserted in front
-of every line of a logged message (except `Log.write`).
-It's formatted using the *Line formatting* rules as
-described in the next section.  The `formats` parameter
-establishes the formatting applied to log messages of
-various types; this is quite involved, so see the *Formats*
-section below for documentation on that.
+A log must never take your program down.  If a destination or
+formatter raises, `Log` calls your `fix` callback (see
+[`default_fix`](#default_fixo-fault)); if the fault can't be fixed,
+the offender is quietly dropped from the routing and the log carries
+on.  Your program never crashes because of its own debug logging.
 
 
-### Line formatting
+### Structured logging: Sink
 
-Several configuration settings for `Log` use what's called
-"line formatting".  This formatting method lets you substitute
-in dynamic values at runtime when writing to the log; the values
-are recomputed and substituted every time `Log` formats a message
-for the log.  For example, the `prefix` is freshly reformatted
-for every log message.
-
-The formatting is done using the `format` method on the
-string.
-
-Here are the values you can substitute when formatting the `prefix`:
-
-  * `elapsed`:
-            The elapsed time since the log was started,
-            as float-seconds.
-  * `format`:
-            The format being applied to this log message.
-  * `line`:
-            The string used for repeating horizontal lines.  See next section, *Formats*.
-  * `name`:
-            The "name" of the log passed in to the Log constructor.
-  * `thread`:
-            A handle to the thread that logged this message.
-  * `time`:
-            The time of the log message, as float-seconds-since-epoch.
-  * `timestamp`:
-            The `time` value, formatted using the "timestamp_format"
-            callable passed in to the Log constructor.
-
-There are three more (`line`, `message`, and `prefix`) you can use when
-formatting a "format", see next section.
-
-### Formats and format dicts
-
-The formatting of the various formatted log messages
-is specified using a "format".  `Log` supports those six formats,
-and has default values for each of those formats; you can change
-how those messages are formatted, or add your own.
-
-The `formats` parameter to the `Log` constructor should specify a
-dict.  A key in this dict is the name of a format; a custom format name
-must be a valid Python identifier, and can't collide with an existing
-`Log` method name.  The matching value should be a "format dict",
-which specifies the formatting to use for this message.
-
-A "format dict" in turn supports only two fields, and one is optional.
-The required one is `"template"`, which should be a string; this string
-is formatted with the "line formatting" rules specified in the
-previous section, with some additional values.  The optional one
-is `"line"`, and you'll see what that's used for in a moment.
-
-The string value of `"template"` is allowed to be a multi-line string.
-Each line will be split up and formatted independently, using the
-"line formatting" approach above.  But a template supports three additional
-values:
-
-  * `line`:
-            The value of the "line" value from the format dict.
-            If `{line}` is the last thing on a template line
-            (either immediately before a '\n', or immediately
-            before the end of the template string), the "line" value
-            will be repeatedly appended to the formatted string
-            until the line is >= `Log.width`, and then the line
-            will then be truncated at `Log.width` characters.
-            This is how `box` and the other methods draw those
-            horizontal lines.
-  * `message`:
-            The message that was logged.  You can specify multiple
-            lines containing `{message}`, however, all lines
-            containing `{message}` must be contiguous.  The message
-            will be split by lines, and then the template lines
-            containing `{message}` will be "zipped" together with
-            the lines of the message. For example, the first template
-            line containing `{message}` will get the first line of
-            the message, the second template line containing `{message}`
-            will get the second line of the message, etc.  If there
-            are more template lines than lines in the message, it skips
-            the subsequent template lines; if there are more lines in the
-            message than template lines, the last template line is repeated.
-  * `prefix`:
-            A string pre-formatted using the `prefix` format
-            string passed in to the `Log` constructor.
-
-### Predefined and user-defined formats
-
-`Log` comes with six pre-defined formats:
-
-  * `print`: used (by default) by `Log.print` and `Log.__call__`
-  * `box`: used by `Log.box`
-  * `enter`: used by `Log.enter`
-  * `exit`: used by `Log.exit`
-  * `start`: used to produce the "start banner" whenever the log is started
-  * `end`: used to produce the "end banner" whenever the log is closed
-
-You can override the default formatting for these by passing in a new format
-dict for that value to the `formats` parameter to the `Log` constructor.
-For example, to remove the prefix for lines printed by `Log.print`
-and `Log.__call__`, construct your `Log` as follows:
+Want the log as *data* instead of text?  Pass a [`Sink`](#sink):
 
 ```Python
-j = big.Log(..., formats={"print": {"template": "{message}"}})
+sink = big.Sink()
+log = big.Log(sink)
+log("interesting")
+log.close()
+
+for event in sink:
+    if event.type == 'log':
+        print(event.elapsed, event.message, event.duration)
 ```
 
-You can also suppress the `start`, `end`, `enter`, and `exit` banners by
-setting any of those formats to `None` in the `formats` dict you pass in.
-This log won't print the start and end banners:
+A `Sink` receives [`SinkEvent`](#sinkevent) objects--one object
+per log message, and special objects for start, end, enter, and exit
+events.  These objects carry the elapsed time, nesting depth, thread,
+format name, and raw message text of the message--but not the rendered
+version, as sink events contain structured, unformatted data.
+This gives you the raw data from the log, in its original format,
+in case you want to do your own analysis or formatting.
 
-```Python
-j = big.Log(..., formats={"start": None, "end": None})
-```
+### Sharp edges
 
-You can also add your own formats!  Here's some sample code that defines
-a new format we'll call "critical":
-
-```Python
-j = big.Log(formats={"critical": {"template": "{prefix} =critical=start{line}\n{prefix} == {message}\n{prefix} =critical=end{line}", "line": "=-"}})
-```
-
-You'll notice, the template contains several newline characters, but
-doesn't *end* with a newline.  `Log` automatically adds a trailing newline
-character for you.
-
-How do you use it?  `Log.print` and `Log.__call__` both take a
-`format` keyword-only parameter, which specifies the format to apply
-to the message.  So you can use it like this:
-
-```Python
-j("My hair is on fire!", format="critical")
-```
-
-However, `Log` also adds a method to the log instance for every user-defined
-format.  You can just call `j.peanut` directly:
-
-```Python
-j.critical("We're almost out of coffee!")
-```
-
-This line, using the `"critical"` format specified above, produces the
-following output in the log:
-
-```
-[000.0002390010   MainThread]  =critical=start=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-[000.0002390010   MainThread]  == We're almost out of coffee!
-[000.0002390010   MainThread]  =critical=end=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-```
-
-(And yes, you *could* use custom formats to simulate "log levels" with `Log`.)
-
-### Custom Destinations
-
-`Log` supports sending the log to lots of different kinds of
-objects, called "destinations".  The actual implementation
-wraps each of these diverse object types in a wrapper object
-that handles logging to that "destination" object.  These wrapper
-objects are all subclasses of a base class called `Log.Destination`.
-You can write your own `Destination` subclasses, and `Log` will
-happily send the log to those too!
-
-First, declare your subclass.  You probably need to write an
-`__init__`; that's fine, but you *must* call the base class init.
-
-```Python
-class MyDestination(Log.Destination):
-    def __init__(self, o):
-        super().__init__()
-        ...
-```
-
-The methods on `Destination` subclasses called by the `Log` object
-are referred to as "events".  They generally map to method calls
-on the `Log` object, and represent the user calling that method on
-the `Log`.
-
-Second, all `Destination` subclasses *must* implement a `write`
-method, like so:
-
-```Python
-    def write(elapsed, thread, formatted):
-        ...
-```
-
-The `elapsed` parameter is the elapsed time since the log was
-started / reset, in nanoseconds.  The `thread` parameter is the
-`threading.Thread` handle for the thread that wrote this message,
-or `None` if the message isn't associated with a particular thread
-(like the "start banner" and "end banner" messages).  Finally,
-`formatted` is the formatted string to be written to the log.
-`Destination.write` is called directly to implement `Log.write`.
-
-Next there are seven optional `Destination` methods
-representing higher-level events sent by the `Log` object:
-
-```Python
-    def log(self, elapsed, thread, format, message, formatted):
-        ...
-
-    def flush(self):
-        ...
-
-    def reset(self):
-        ...
-
-    def start(self, start_time_ns, start_time_epoch):
-        ...
-
-    def end(self, elapsed):
-        ...
-
-    def enter(self, elapsed, thread, message):
-        ...
-
-    def exit(self, elapsed, thread):
-        ...
-```
-
-`Destination.log` is called for `Log.print`, `Log.__call__`, and the
-`start`, `end`, `enter`, and `exit` banners when those banners produce
-non-empty formatted text.  `Destination.enter` and `Destination.exit` are
-separate events that bracket changes in indentation depth.  `Destination.start`
-and `Destination.end` report lifecycle changes for the log itself.
-If you don't override `Destination.log`, the base class implementation calls
-`self.write(elapsed, thread, formatted)`.
-
-`Destination` also supports optional methods handling the two `Log` methods
-that don't send a log message:
-
-```Python
-    def reset(self):
-        ...
-
-    def flush(self):
-        ...
-```
-
-Finally, `Destination` objects support a `register` method,
-which is called when they're passed in to the `Log` constructor.
-If you override this method, you *must* call the base class
-method, passing in the `owner` parameter, like so:
-
-```Python
-    def register(self, owner):
-        super().register(owner)
-        ...
-```
-
-`Log` objects obey a certain lifecycle.  If the log ever produces non-empty
-formatted output, the `Destination` methods will be called in this order:
-
-```
-register
-  |
-  v
-start
-  |
-  +<---------------------------------+
-  |                                  |
-  v                                  |
-write | log | enter | exit | flush   |
-  |                                  |
-  |                                  |
-  +----------------------------------+
-  |
-  v
-[flush]
-  |
-  v
-end
-```
-
-The final `flush`, before `end`, is optional; it's only called
-if the `Log` is dirty.  If a log is created and then closed without ever
-producing non-empty formatted output, destinations only receive the initial
-`register` event.
-
-### Final notes on `Log`
-
-There's no guarantee that log messages will be logged in strict
-chronological order.  It *usually* happens that way, but it's
-not guaranteed.  If two threads both send a message at the same
-time, they might arrive in any order--and it's possible the
-later of the two arrives first.  This is a known behavior,
-and is unlikely to change in future versions.
+  * Message *content* is captured at log time, but with `threaded=True`
+    the rendering happens slightly later, on the worker thread.
+    `log.flush()` (or `close()`) waits for everything logged so far.
+  * If two threads log at exactly the same moment, the order the two
+    messages appear in the log is not guaranteed.  Either way, each
+    message is intact and timestamped.
+  * The format names `'start'`, `'end'`, `'enter'`, and `'exit'`
+    are reserved for `Log` itself; logging a message with one of
+    those formats raises `ValueError`.
 
 </dd></dl>
+
 
 ## Bound inner classes
 
@@ -8292,10 +9448,26 @@ in the **big** test suite.
 __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
 ```
 
+* Base classes are matched by class *identity*, never by name.  A
+  same-named inner class inheriting from an ancestor outer's inner
+  class--`class MyApp(BaseApp)` defining
+  `class Config(BaseApp.Config)`--chains normally: bare
+  `super().__init__()` delivers `outer` automatically.
+
 * Binding only goes one level deep.  If you had a bound inner class `C`
   define inside another bound inner class `B`, which in turn was defined
   inside a class `A`, the constructor for `C` would be called with
   the `B` object, but not the `A` object.
+
+* A bound inner class holds a *strong* reference to its outer
+  instance--exactly like a bound method holds `__self__`.  The
+  tempting one-liner `Outer().Inner()` therefore just works: the
+  bound class keeps the temporary alive.  Two consequences worth
+  knowing: a bound class (or any instance of one, via its class)
+  keeps its outer alive as long as it lives; and the resulting
+  outer → cache → bound class → outer reference cycle means outer
+  instances that ever bound an inner class are reclaimed by the
+  cycle collector, not by reference counting.
 
 * You can't use pickle to serialize instances of bound inner classes.
   Sorry, but bound inner classes don't support pickle.
@@ -8326,6 +9498,12 @@ __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_OUTER_SLOTS
   simply automate for users.  So, it's unsupported.
 
 </dd></dl>
+
+  The *outer* instance, though, copies, deepcopies, and pickles just
+  fine--even after its inner classes have been bound.  `BoundInnerClass`'s
+  internal cache doesn't travel with it; the duplicate simply re-binds
+  its inner classes, lazily, on first access, exactly like a fresh
+  instance.
 
 * If you support Python 3.6, and you define bound inner child classes,
   you'll need to wrap all the bound inner base classes of those child
@@ -8395,6 +9573,7 @@ text splitting functions.  For example, **big** uses
 [`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
 to implement
 [`multipartition`,](#multipartitions-separators-count1--reversefalse-separatetrue)
+[`multireplace`,](#multireplaces-replacements-count-1--reversefalse)
 [`normalize_whitespace`,](#normalize_whitespaces-separatorsnone-replacementnone)
 [`lines`,](#bigtext)
 and several other functions.
@@ -8504,8 +9683,7 @@ information, see the documentation regarding those parameters below.
 <dl><dd>
 
 `keep` indicates whether or not `multisplit` should preserve the separator
-strings in the strings it yields.  It supports four values: false, true,
-and the special values `ALTERNATING` and `AS_PAIRS`.
+strings in the strings it yields.  It's either false or true.
 
 When `keep` is false, `multisplit` throws away the separator strings;
 they won't appear in the output.
@@ -8517,77 +9695,77 @@ they won't appear in the output.
     ['apple', 'banana', 'cookie']
 ```
 
-When `keep` is true, `multisplit` keeps the separators, appending them to
-the end of the separated string:
-
-```Python
-    >>> list(big.multisplit('apple$banana~cookie', ('$', '~'), keep=True))
-    ['appleX', 'bananaY', 'cookie']
-```
-
-When `keep` is `ALTERNATING`, `multisplit` keeps the separators as separate
-strings.  The first string yielded is always a non-separator string, and
-from then on it always alternates between a separator string and a non-separator
-string.  Put another way, if you store the output of `multisplit` in a list,
-entries with an even-numbered index (0, 2, 4, ...) are always non-separator strings,
-and entries with an odd-numbered index (1, 3, 5, ...) are always separator strings.
-
-```Python
-    >>> list(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=big.ALTERNATING))
-    ['apple', 'X', 'banana', 'Y', 'cookie']
-```
-
-Note that `ALTERNATING` always emits an odd number of strings, and the first and
-last strings yielded are always non-separator strings.  Like `str.split`,
-if the string you're splitting starts or ends with a separator string,
-`multisplit` will emit an empty string at the beginning or end, to preserve
-the "always begin and end with non-separator string" invariant:
-
-```Python
-    >>> list(big.multisplit('1a1z1', ('1',), keep=big.ALTERNATING))
-    ['', '1', 'a', '1', 'z', '1', '']
-```
-
-Finally, when `keep` is `AS_PAIRS`, `multisplit` keeps the separators as separate
-strings.  But it doesn't yield bare strings; instead, it yields 2-tuples of strings.
-Every 2-tuple contains a non-separator string followed by a separator string.
+When `keep` is true, `multisplit` keeps the separators as separate
+strings.  It doesn't yield bare strings; instead, it yields 2-tuples of
+strings.  Every 2-tuple contains a non-separator string followed by a
+separator string.
 
 If the original string starts with a separator, the first 2-tuple will contain
 an empty non-separator string and the separator:
 
 ```Python
-    >>> list(big.multisplit('^apple-banana^cookie', ('-', '^'), keep=big.AS_PAIRS))
+    >>> list(big.multisplit('^apple-banana^cookie', ('-', '^'), keep=True))
     [('', '^'), ('apple', '-'), ('banana', '^'), ('cookie', '')]
 ```
 
 The last 2-tuple will *always* contain an empty separator string:
 
 ```Python
-    >>> list(big.multisplit('apple*banana+cookie', ('*', '+'), keep=big.AS_PAIRS))
+    >>> list(big.multisplit('apple*banana+cookie', ('*', '+'), keep=True))
     [('apple', '*'), ('banana', '+'), ('cookie', '')]
-    >>> list(big.multisplit('apple*banana+cookie***', ('*', '+'), keep=big.AS_PAIRS, strip=True))
+    >>> list(big.multisplit('apple*banana+cookie***', ('*', '+'), keep=True, strip=True))
     [('apple', '*'), ('banana', '+'), ('cookie', '')]
 ```
 
-(This rule means that `AS_PAIRS` always emits an *even* number of strings.
-Contrast that with `ALTERNATING`, which always emits an *odd* number of strings,
-and the last string it emits is always a non-separator string.  Put another
-way: if you ignore the tuples, the list of strings emitted by `AS_PAIRS` is the
-same as those emitted by `ALTERNATING`, except `AS_PAIRS` appends an empty
-string.)
-
 Because of this rule, if the original string ends with a separator,
 and `multisplit` doesn't `strip` the right side, the final tuple
-emitted by `AS_PAIRS` will be a 2-tuple containing two empty strings:
+emitted will be a 2-tuple containing two empty strings:
 
 ```Python
-    >>> list(big.multisplit('appleXbananaYcookieX', ('X', 'Y'), keep=big.AS_PAIRS))
+    >>> list(big.multisplit('appleXbananaYcookieX', ('X', 'Y'), keep=True))
     [('apple', 'X'), ('banana', 'Y'), ('cookie', 'X'), ('', '')]
 ```
 
 This looks strange and unnecessary.  But it *is* what you want.
 This odd-looking behavior is discussed at length in the section below, titled
 [Why do you sometimes get empty strings when you split?](#why-do-you-sometimes-get-empty-strings-when-you-split)
+
+The 2-tuple form is lossless, and every other form you might want is a
+mechanical transformation of it.  Joining the 2-tuples with `a + b`
+reproduces the old (big 0.13) meaning of `keep=True`, separators appended
+to their preceding strings:
+
+```Python
+    >>> ["".join(t) for t in big.multisplit('apple$banana~cookie', ('$', '~'), keep=True)]
+    ['apple$', 'banana~', 'cookie']
+```
+
+Flattening the 2-tuples, then discarding the always-empty trailing
+separator, produces the alternating form: non-separator and separator
+strings, alternately, beginning and ending with a non-separator string.
+(Historically this was `keep=ALTERNATING`.)
+
+```Python
+    >>> import itertools
+    >>> flat = list(itertools.chain.from_iterable(big.multisplit('appleXbananaYcookie', ('X', 'Y'), keep=True)))
+    >>> flat.pop()  # discard the always-empty trailing separator
+    ''
+    >>> flat
+    ['apple', 'X', 'banana', 'Y', 'cookie']
+```
+
+`AS_PAIRS` is the old spelling of what `keep=True`
+now means--pass `keep=True` instead.  `ALTERNATING` yields the alternating
+form directly (without the trailing empty string)--transform the 2-tuples
+instead.  And `JOINED` is the old (0.13) meaning of `keep=True`, separators
+appended to their preceding strings; it exists to ease migration.
+
+> **Note:** In big 0.13 and earlier, `keep=True` meant separators appended
+  to their preceding strings, as in the `"".join` example above.  0.14
+  changed its meaning to the 2-tuple form.
+  Also, the symbolic constants for `keep` are *deprecated,* and will be
+  removed no sooner than August 2027; passing any of them emits
+  a `DeprecationWarning`.  
 
 The behavior of `keep` can be affected by the value of `separate`.
 For more information, see the next section, on `separate`.
@@ -8619,9 +9797,6 @@ adjacent separators:
 
 ```Python
     >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=True))
-    ['appleX', 'Y', 'bananaY', 'X', 'Y', 'cookie']
-
-    >>> list(big.multisplit('appleXYbananaYXYcookie', ('X', 'Y'), separate=True, keep=big.AS_PAIRS))
     [('apple', 'X'), ('', 'Y'), ('banana', 'Y'), ('', 'X'), ('', 'Y'), ('cookie', '')]
 ```
 
@@ -8766,8 +9941,14 @@ def str_rsplit(s, sep=None, maxsplit=-1):
 
 def str_splitlines(s, keepends=False):
     linebreaks = big.ascii_linebreaks if isinstance(s, bytes) else big.linebreaks
-    l = list(big.multisplit(s, linebreaks,
-        keep=keepends, separate=True, strip=False))
+    if keepends:
+        # keep=True yields (line, end) 2-tuples;
+        # keepends means gluing each end back on.
+        l = [line + end for line, end in big.multisplit(s, linebreaks,
+            keep=True, separate=True, strip=False)]
+    else:
+        l = list(big.multisplit(s, linebreaks,
+            keep=False, separate=True, strip=False))
     if l and not l[-1]:
     	# yes, ''.splitlines() returns an empty list
         l.pop()
@@ -8776,8 +9957,11 @@ def str_splitlines(s, keepends=False):
 def _partition_to_multisplit(s, sep, reverse):
     if not sep:
         raise ValueError("empty separator")
+    # flatten the keep=True 2-tuples, and drop the
+    # always-empty trailing separator
     l = tuple(big.multisplit(s, (sep,),
-        keep=big.ALTERNATING, maxsplit=1, reverse=reverse, separate=True))
+        keep=True, maxsplit=1, reverse=reverse, separate=True))
+    l = tuple(x for pair in l for x in pair)[:-1]
     if len(l) == 1:
         empty = b'' if isinstance(s, bytes) else ''
         if reverse:
@@ -8902,60 +10086,15 @@ splitting the strings we've been playing with, using these parameters:
     ['', '1', '2', '3', '']
 ```
 
-This "emit an empty string" behavior also has ramifications when `keep` isn't false.
-The behavior of `keep=True` is easy to predict; `multisplit` just appends the separators
-to the previous string segment:
+This "emit an empty string" behavior also has ramifications when `keep` is true.
+The behavior here seemed so strange, initially I thought it was wrong.
+But I've given it a *lot* of thought, and I've convinced myself that
+this is correct:
 
 ```Python
     >>> list(big.multisplit('1,2,,3', (',',), keep=True, separate=True, strip=False))
-    ['1,', '2,', ',', '3']
-    >>> list(big.multisplit(',1,2,3,', (',',), keep=True, separate=True, strip=False))
-    [',', '1,', '2,', '3,', '']
-```
-
-The principle here is that, when you use `keep=True`, you should be able to reconstitute
-the original string with `''.join`:
-
-```Python
-    >>> ''.join(['1,', '2,', ',', '3'])
-    '1,2,,3'
-    >>> ''.join([',', '1,', '2,', '3,', ''])
-    ',1,2,3,'
-```
-
-`keep=big.ALTERNATING` is much the same, except we insert the separators as their
-own segments, rather than appending each one to the previous segment:
-
-```Python
-    >>> list(big.multisplit('1,2,,3', (',',), keep=big.ALTERNATING, separate=True, strip=False))
-    ['1', ',', '2', ',', '', ',', '3']
-    >>> list(big.multisplit(',1,2,3,', (',',), keep=big.ALTERNATING, separate=True, strip=False))
-    ['', ',', '1', ',', '2', ',', '3', ',', '']
-```
-
-Remember, `ALTERNATING` output always begins and ends with a non-separator string.
-If the string you're splitting begins or ends with a separator, the output
-from `multisplit` specifying `keep=ALTERNATING` will correspondingly begin or end
-with an empty string.
-
-And, as with `keep=True`, you can also recreate the original string by passing
-these arrays in to `''.join`:
-
-```Python
-    >>> ''.join(['1', ',', '2', ',', '', ',', '3'])
-    '1,2,,3'
-    >>> ''.join(['', ',', '1', ',', '2', ',', '3', ',', ''])
-    ',1,2,3,'
-```
-
-Finally there's `keep=big.AS_PAIRS`.  The behavior here seemed so strange,
-initially I thought it was wrong.  But I've given it a *lot* of thought, and
-I've convinced myself that this is correct:
-
-```Python
-    >>> list(big.multisplit('1,2,,3', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
     [('1', ','), ('2', ','), ('', ','), ('3', '')]
-    >>> list(big.multisplit(',1,2,3,', (',',), keep=big.AS_PAIRS, separate=True, strip=False))
+    >>> list(big.multisplit(',1,2,3,', (',',), keep=True, separate=True, strip=False))
     [('', ','), ('1', ','), ('2', ','), ('3', ','), ('', '')]
 ```
 
@@ -8967,52 +10106,58 @@ That tuple at the end, just containing two empty strings:
 
 It's *so strange.*  How can that be right?
 
-In short, it's similar to the `str.split` situation.
-When called with `keep=AS_PAIRS`,
-[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
-guarantees that the final tuple will contain an empty separator string.
-If the string you're splitting ends with a separator, it *must* emit
-the empty non-separator string, followed by the empty separator string.
+Here's the strongest argument that it's correct.  The number of
+*fields* a split yields must not depend on `keep`.  `keep` only adds
+information about the separators; it must never change how many fields
+the string splits into.  Now split `',1,2,3,'` with `keep=False` (and
+`separate=True, strip=False`), as in the first example above: you get
+`['', '1', '2', '3', '']`--five fields, and that trailing empty field
+isn't big's invention, it's `str.split` parity:
 
-Think of it this way: with the tuple of empty strings there, you can easily
-convert one `keep` format into any another.  (Provided that you know
-what the separators were--either the source `keep` format was not false,
-or you only used one separator string when calling `multisplit`).
-Without that tuple of empty strings at the end, you'd also have to have an
-`if` statement to add or remove empty stuff from the end.
+```Python
+    >>> ',1,2,3,'.split(',')
+    ['', '1', '2', '3', '']
+```
+
+Python itself asserts that a string ending with a separator has an
+empty final field.  So the 2-tuple form of the *identical* split must
+also have five entries--and the fifth is that same empty final field,
+paired with the separator that follows it, which is nothing: `('', '')`.
+Drop the strange tuple, and `keep=True` would claim the string has
+*fewer fields* than `keep=False` says it has, for the same split.
+The tuple isn't an artifact; it's the empty field every split
+vocabulary already agrees exists, wearing 2-tuple clothing.
+
+When called with `keep=True`,
+[`multisplit`](#multisplits-separatorsnone--keepfalse-maxsplit-1-reversefalse-separatefalse-stripfalse)
+therefore guarantees that the final tuple will contain an empty
+separator string.  If the string you're splitting ends with a
+separator, it *must* emit the empty non-separator string, followed
+by the empty separator string.
+
+There's a practical bonus, too: with the tuple of empty strings there,
+you can easily convert the 2-tuples into any other format you might
+want, without needing an `if` statement to add or remove empty stuff
+from the end.
 
 I'll demonstrate this with a simple example.  Here's the output of
 `multisplit` splitting the string `'1a1z1'` by the separator `'1'`,
-in each of the four `keep` formats:
+and the mechanical conversion of the 2-tuples into every other
+format you might want:
 
 ```Python
->>> list(big.multisplit('1a1z1', '1', keep=False))
-['', 'a', 'z', '']
->>> list(big.multisplit('1a1z1', '1', keep=True))
-['1', 'a1', 'z1', '']
->>> list(big.multisplit('1a1z1', '1', keep=big.ALTERNATING))
-['', '1', 'a', '1', 'z', '1', '']
->>> list(big.multisplit('1a1z1', '1', keep=big.AS_PAIRS))
-[('', '1'), ('a', '1'), ('z', '1'), ('', '')]
-```
-
-Because the `AS_PAIRS` output ends with that tuple of empty
-strings, we can mechanically convert it into any of the other
-formats, like so:
-
-```Python
->>> result = list(big.multisplit('1a1z1', '1', keep=big.AS_PAIRS))
+>>> result = list(big.multisplit('1a1z1', '1', keep=True))
 >>> result
 [('', '1'), ('a', '1'), ('z', '1'), ('', '')]
 >>> [s[0] for s in result] # convert to keep=False
 ['', 'a', 'z', '']
->>> [s[0]+s[1] for s in result] # convert to keep=True
+>>> [s[0]+s[1] for s in result] # the old (0.13) keep=True: separators appended
 ['1', 'a1', 'z1', '']
->>> [s for t in result for s in t][:-1] # convert to keep=big.ALTERNATING
+>>> [s for t in result for s in t][:-1] # the old ALTERNATING form
 ['', '1', 'a', '1', 'z', '1', '']
 ```
 
-If the `AS_PAIRS` output *didn't* end with that tuple of empty strings,
+If the 2-tuple output *didn't* end with that tuple of empty strings,
 you'd need to add an `if` statement to restore the trailing empty
 strings as needed.
 
@@ -9640,10 +10785,10 @@ into two-byte segments and operate on those.
 
 **big** contains three functions used to reflow and format text
 in a pleasing manner.  In the order you should use them, they are
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue),
-[`wrap_words(),`](#wrap_wordswords-margin79--two_spacestrue),
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8),
+[`wrap_words(),`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue),
 and optionally
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0).
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8).
 This trio of functions gives you the following word-wrap superpowers:
 
 * Paragraphs of text representing embedded "code" don't get word-wrapped.
@@ -9675,7 +10820,7 @@ In "code" mode:
 * all newline characters are preserved.
 
 Also, whenever
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
 switches between
 "text" and "code" mode, it emits a paragraph break.
 
@@ -9686,9 +10831,9 @@ used by **big.text** functions to represent text.
 It's literally just an array of strings, where the strings
 represent individual word-wrappable substrings.
 
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
 returns a *split text array,* and
-[`wrap_words()`](#wrap_wordswords-margin79--two_spacestrue)
+[`wrap_words()`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
 consumes a *split text array.*
 
 You'll see four kinds of strings in a *split text array:*
@@ -9718,14 +10863,14 @@ would be represented in a Python string as:
 Note the three newlines between the second and third lines.
 
 If you then passed this string in to
-[`split_text_with_code`,](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+[`split_text_with_code`,](#split_text_with_codes--code_indent4-tab_width8)
 it'd return this *split text array:*
 ```Python
 [ 'hello', 'there!', 'this', 'is', 'text.', '\n\n',
   'this', 'is', 'a', 'second', 'paragraph!']
 ```
 
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
 merged the first two lines together into
 a single paragraph, and collapsed the three newlines separating
 the two paragraphs into a "paragraph break" marker
@@ -9754,7 +10899,7 @@ would be represented in a Python string as (broken up into multiple strings for 
 "        print(i**2)\n\nPython is just that easy!"
 ```
 
-[`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
 considers the two lines with initial whitespace as "code" lines,
 and so the text is split into the following *split text array:*
 ```Python
@@ -9786,11 +10931,11 @@ Of course, this algorithm is too simple to do word wrapping.
 Nor does it handle adding two spaces after sentence-ending
 punctuation.  In practice, you shouldn't do this by hand;
 you should use
-[`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).
 
 #### Merging columns
 
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 merges multiple strings into columns on the same line.
 
 For example, it could merge these three Python strings:
@@ -9812,13 +10957,13 @@ column of text.     It's the second        third column.
 ```
 
 (Note that
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 doesn't do its own word-wrapping;
 instead, it's designed to consume the output of
-[`wrap_words`](#wrap_wordswords-margin79--two_spacestrue).)
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).)
 
 Each column is passed in to
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 as a "column tuple":
 
 ```Python
@@ -9831,11 +10976,11 @@ as a "column tuple":
 
 As you saw above, `s` can contain newline characters,
 and
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 obeys those when formatting each column.
 
 For each column,
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 measures the longest
 line of each column.  The width of the column is determined
 as follows:
@@ -9852,18 +10997,18 @@ as follows:
 #### Overflow
 
 What is "overflow"?  It's a condition
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 may encounter when the text in a column is wider than that
 column's `max_width`.
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 needs to consider both "overflow lines",
 lines that are longer than `max_width`, and "overflow columns",
 columns that contain one or more overflow lines.
 
 What does
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 do when it encounters overflow?
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 supports three "strategies" to deal with this condition, and you can specify
 which one you want using its `overflow_strategy` parameter.  The three
 strategies are:
@@ -9981,9 +11126,1442 @@ others.  Views are completely independent from each other.
 </dd></dl>
 
 
-## Release history
+## Thread safety in big
 
-#### 0.13.4
+<dl><dd>
+
+big's policy, stated once so every module doesn't have to:
+**nothing in big is thread-safe unless it explicitly says so.**
+
+The three things that explicitly say so:
+
+* [`linked_list`](#linked_listiterable--locknone) — opt-in:
+  pass `lock=True` to the constructor (or supply your own lock).
+  Without a lock, a `linked_list` is as thread-unsafe as a `list`.
+* [`Scheduler`](#schedulerregulatordefault_regulator) — delegated:
+  thread safety comes from the
+  [`Regulator`](#regulator) you construct it with.  The default
+  `SingleThreadedRegulator` provides none;
+  [`ThreadSafeRegulator`](#threadsaferegulator) provides it.
+* [`Log`](#the-big-log) — by design: all work funnels through one
+  internal job queue, and the threaded and unthreaded configurations
+  share one execution model.
+
+Everything else makes no thread-safety guarantees.  Two useful
+notes, though:
+
+* big's *immutable* objects — [`string`](#the-big-string),
+  [`Version`](#versions-none--epochnone-releasenone-release_levelnone-serialnone-postnone-devnone-localnone),
+  [`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse-nestednone-literal-changenone),
+  the whitespace/linebreak tuples — are safe to *share* between
+  threads once constructed, like any immutable Python value.  (Some
+  cache lazily-computed values, like `string`'s line and column
+  numbers; those caches are benign under concurrent access--every
+  thread that races computes and stores the same values.)
+* Mutable containers — [`Heap`](#heapi--keynone-reversefalse),
+  [`TopologicalSorter`](#topologicalsortergraphnone),
+  an unlocked `linked_list` — need external locking if you share
+  them, exactly as their stdlib counterparts do.
+
+</dd></dl>
+
+## Borrowable snippets
+
+<dl><dd>
+
+big doesn't just *ship* [`big.snip`](#bigsnip)--it uses it.  big's
+own source publishes some of its machinery as snippets: regions of
+code bracketed by scissors marker lines, for other projects to
+borrow.  Copy one in with `python -m big.snip apply`, and re-sync
+it whenever you like with `python -m big.snip sync`--your copy
+will update itself!  Requirements resolve automatically, including
+the `big license` snippet, so it's all nice and legal.  Any other
+dependencies get brought along too.  You get self-contained,
+dependency-free code, and a tool that keeps it fresh.
+
+These are the snippets you'll be interested in, by source file.
+
+### `big/itertools.py`
+
+<dl><dt>
+
+`big iterator context and filter`
+
+</dt><dd>
+
+[`iterator_context`](#iterator_contextiterator-start0) and its
+[`IteratorContext`](#iterator_contextiterator-start0),
+[`iterator_filter`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone-call_everynone), and the `undefined` singleton
+they share.
+
+</dd></dl>
+
+
+### `big/text.py`
+
+<dl><dt>
+
+`big format_definition_list`
+
+</dt><dd>
+
+[`format_definition_list`](#format_definition_listpairs-margin79--definition_left_columnnone-definition_relative_tabstrue-indent---spacer---tab_width8-term_relative_tabstrue).  (Which would have
+formatted this very list, if this list weren't Markdown.)
+
+</dd><dt>
+
+`big gently_title`
+
+</dt><dd>
+
+[`gently_title`](#gently_titles--apostrophesnone-double_quotesnone),
+plus the private lookup tables it needs.
+
+</dd><dt>
+
+`big toy_multisplit`
+
+</dt><dd>
+
+[`toy_multisplit`](#toy_multisplits-separators), the tiny no-options
+`multisplit`.
+
+</dd><dt>
+
+`big word wrap trio`
+
+</dt><dd>
+
+The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue),
+[`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8), and
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)--plus `OverflowStrategy` and
+[`expand_tabs`](#expand_tabss--column1-first_column1-tab_width8).
+
+</dd></dl>
+
+</dd></dl>
+
+# Release history
+
+## 0.14
+
+*2026/07/16*
+
+<dl><dd>
+
+The biggest release yet!
+
+I worked on this release with Claude Fable 5.  Claude was invaluable,
+and Fable 5's code review uncovered many of the smaller bugs and
+polish items in big 0.14!  Note however that the interfaces and
+functionality are mostly designed by me; Claude did varying amounts
+of the implementation.  Items annotated with a robot emoji (🤖)
+were worked on by both me and Claude.
+
+### Breaking changes to existing APIs
+
+* 🤖 **`multisplit`'s `keep=True` is now `AS_PAIRS`**.
+  In 0.13 and previous, `keep=True` was a distinct output
+  format, where the string and the separator were joined
+  together.  That's been displaced.  This format now has
+  its own own symbolic name, `JOINED`, and `keep=True` is
+  now what used to be called `AS_PAIRS` format.  
+
+  Why?  Because it's the only one I ever use.  And it's all
+  you ever need--every other output format for `keep` can be
+  computed from `AS_PAIRS` format.
+
+  When I initially wrote `multisplit`, it was both filling a
+  need, and a bit of research.  I'd never had a multi-splitter
+  before, and I didn't know what functionality I'd need.  So I
+  threw in the kitchen sink.  And even so, I still didn't hit
+  on `AS_PAIRS` format for like six months.  Once I added it,
+  it became--and remains--the only non-false `keep` format
+  I ever use.  Well, okay, I *did* use `ALTERNATING` for
+  something recently.  But it could just as easily have
+  used `AS_PAIRS`, which is good, because...
+
+  I'm going to drop support for the alternate output formats.
+  `keep` still supports `ALTERNATING`, `AS_PAIRS`, and `JOINED`
+  as of today, but they're officially deprecated.  I plan to
+  remove them no sooner than August 2027.  After that, `keep`
+  will only consider its argument as a boolean, either true
+  or false.  A false value will mean discard the separators
+  as it does today, a true value will mean return a 2-tuple
+  containing the split string and the separator.  (I added
+  `DeprecationWarning` exceptions as appropriate.)
+
+* 🤖 **`split_delimiters` now always yields four values.**  As
+  promised in 0.12.5, every
+  [`SplitDelimitersValue`](#split_delimiterss-delimiters--state-yields4)
+  now iterates as `(text, open, close, change)`, with any grammar.
+  Code unpacking three values fails loudly ("too many values to
+  unpack"), which is the polite kind of breakage.  The `yields`
+  parameter survives one more year, *deprecated*: it defaults to
+  4, and 4 is the only value it accepts (anything else raises
+  `ValueError`)--so code that dutifully migrated to `yields=4`
+  keeps working after upgrading, and has a year to drop the
+  argument.  The `SplitDelimitersValue` object's `yields`
+  attribute survives on the same deprecated footing: it once told
+  you whether the object iterated as three or four values, and now
+  always returns 4.  Both the parameter and the attribute will be
+  removed no sooner than August 2027.
+
+### The `Log` rewrite
+
+`big.log` was a new module in 0.13,
+and was already a pretty good time.  But it's gotten a 
+*total overhaul* for 0.14 🤖.  The new `Log` has a far more
+sophisticated and streamlined internal model.  It's pretty
+snazzy!
+
+Two public base classes were renamed along the way, so they
+carry their subsystem's name in big's shared `big.all` namespace.
+The formatter base class `Formatter` became
+[`LogFormatter`](#logformatterformat_dict-types--namenone)--it
+collided with `big.template.Formatter`, new in 0.13--and, for
+symmetry (and because the whole `Log` API changed anyway, so
+you're already rewriting), the destination base class
+`Destination` became
+[`LogDestination`](#logdestinationtypestrue).  The user-extensible
+destination-mapper registry moved with it: the module-level
+`Destination_mappers` list is now the `LogDestination.mappers`
+class attribute, append your mappers there.  Throughout these
+notes, both classes are referred to by their new names even when
+describing 0.13 behavior.
+
+The high-level view of the new `Log` internal architecture:
+
+* In 0.13, the `Log` object managed formatting, and formatted every message
+  itself.  This conceptually only allowed for one format at a time.  But
+  `LogDestination` objects received both the formatted text and the raw message,
+  specifically to allow them to log the raw message, or reformat it
+  themselves... the responsibilities were a jumbled mess.
+  This is significantly improved:
+    * The new [`LogFormatter`](#logformatterformat_dict-types--namenone) object
+      is responsible for formatting.  A *formatter* transforms a log message
+      from one type into another, but the output is still a "log message".
+    * [`LogDestination`](#logdestinationtypestrue) objects don't get to reformat
+      anymore.  They only get formatted messages, and their only responsibility
+      is to send them to an output.
+    * Internally, `LogFormatter` objects feed `LogDestination` objects,
+      routed N×M and type-checked.
+* *All* work is run through an internal job queue--one execution model,
+  whether the log is threaded or not.
+* Threaded-friendly fault handling: a misbehaving formatter
+  or destination is retried, then surgically dropped.  Your program
+  never crashes because of its own debug logging.
+
+Other improvements in `Log` in 0.14:
+
+* `if log: log(...)` is the recommended idiom for writing log messages
+  with next-to-no runtime impact when logging is turned off.  A `Log`
+  handle is true while logging to it would actually deliver--it has
+  destinations, it's open, and it isn't paused (directly or by an
+  ancestor)--and false the moment any of those stops being true, so
+  this idiom means Python doesn't even *evaluate* the log message
+  arguments.  Practically free!
+* [`enter`](#logentermessage-kwargs)/[`exit`](#logexit) blocks nest,
+  indent their contents, and work as context managers.  Now your log
+  can have nested structure, reflecting the actual structure of your
+  program.
+* Logs start lazily: if you never log, `Log` never touches your
+  destinations--never opens a file, never prints a banner.
+* The other methods have changed a bit too:
+  [`pause`/`resume`](#logpause-and-logresume), [`reset`](#logreset),
+  `close(wait=)`, `flush(wait=)`, `dirty`, and a settable
+  `paused_on_reset` flag to the constructor.
+* Like 0.13, formats live in a flat namespace: a dict mapping
+  a format's name (`str`) to its value.  `'.'` is reserved in
+  format names: if we ever need to create nested formats,
+  `'child.start'` can acquire nested semantics as a pure
+  addition, with no interface change and no collision with
+  any existing names.  (`SinkLogEvent.format` carries the
+  plain name too--e.g. `'enter'`.)
+* A flat, template-based format tree
+  ([`TextFormatter`](#textformatterformat_dictnone--formatsnone-indent-----namenone-prefixnone-width79)):
+  The `formats=` dict parameter lets you override built-in formats.
+  You can disable a format by setting it to `None`.  Format names
+  are automatically mapped to log methods (`'box'` format creates
+  `log.box(...)`, etc).
+* The default "ASCII art" for the log is now the *"open" Unicode*
+  format--box-drawing characters with no right borders and no
+  attempt to line up column markers with line-drawing horizontal
+  lines.  (Current rendering of Unicode line-drawing characters often
+  switches fonts, and the two fonts used to render have different
+  charater widths, which throws off the columnar output and makes
+  it look *worse* not better.)  Four predefined formats are available:
+  the module-level builders
+  [`unicode_format_dict()`](#unicode_format_dict-closedfalse) /
+  [`ascii_format_dict()`](#ascii_format_dict-closedfalse), each with a
+  `closed=True` variant if you want the right borders and such.
+  Each returns a fresh format tree you can pass as `format_dict=`.
+  By the way, log lines that overflow the right border just
+  overwrite it, instead of pushing it out to the right.
+* Structured logging: [`SinkFormatter`](#sinkformatter) renders
+  messages into [`SinkEvent`](#sinkevent) objects--structured
+  logging is just another formatter--and [`Sink`](#sink) collects
+  them.  Passing a `Sink` to `Log` routes it automatically.
+  A `SinkFormatter` does no text formatting at all (it isn't a
+  `TextFormatter`); its events carry the message's structured
+  fields, never a rendered string.
+  (SinkEvents existed in 0.13; the 0.14 shapes are incompatible.
+  `number` is now `session`--a generation counter, incremented by
+  `reset()`.  Constructors changed--every event now carries `ns`
+  and `epoch`--and `duration` is computed at iteration time and
+  ignored by `==`.)
+* [`ASCIIFormatter`](#asciiformatter) renders `bytes`--non-ASCII
+  characters become backslash escapes.  `log('café')` renders
+  `b'caf\\xe9'`; binary-mode
+  [`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone)
+  destinations accept bytes.
+* `TextFormatter` no longer mutates the `format_dict` you pass it;
+  it deep-copies first, then mutates.
+  (`prefix=` used to overwrite into your dict; `formats=` added and
+  deleted in it--a module-level house style shared by two formatters
+  compounded each other's edits).
+* `Log.destinations` is now a *settable* property: assign a list to
+  reconfigure the log live.  Removed destinations are flushed (their
+  buffered content is written, never dropped), ended, and
+  unregistered; added destinations receive a "recap" of the
+  already-delivered banners, so a late joiner's output reads as a
+  coherent log; and every `LogDestination` gained an `owner` property
+ (the `Log` it's attached to, or `None`).
+* `write()` is now verbatim: no per-line rstrip, no appended
+  newline--"completely as-is" means *completely* as-is.  The
+  render pipeline's cleanup is skipped for any format that declares
+  `"verbatim": True` in its format dict (as `preformatted` now
+  does); your own formats can too.
+* Formatter configuration lives entirely on the formatter now:
+  `Log`'s 0.13 constructor conveniences `prefix=`, `indent=`,
+  `width=`, and `formats=` are all gone--construct your own
+  `TextFormatter` (or whatever) and pass it as `formatter=` to
+  use it by default.
+* Pause is hierarchical: pausing a handle silences its entire
+  subtree, including child handles held elsewhere.  (It used to be
+  per-session: a held child handle logged straight through a paused
+  root.)
+* The reserved banner formats (`start`/`end`/`enter`/`exit`) are
+  reserved even when smuggled through `Optional`--counterfeit
+  banners are a `ValueError` under any spelling.
+* The old `Log` API lives on as *deprecated* shims:
+  [`OldLog`](#oldlogclocknone) and
+  [`OldDestination`](#olddestination), now implemented over the
+  new machinery.
+* 🤖 The old `Log` could crash on Python 3.12 and earlier during a
+  threaded log's shutdown, in the job queue's drain path: it
+  used `isinstance(job.involved, threading.Lock)`, but
+  `threading.Lock` is a factory function (not a class) before
+  Python 3.13, so that `isinstance` raises `TypeError`.  (The
+  path only runs when a shutdown blocker is released mid-drain,
+  which is why it hid so long.)  Fixed by testing against
+  `type(threading.Lock())`, which is a real type on every
+  version.  Found by driving `big.log` to 100% test coverage.
+
+We've kept the old 0.13 version of `Log` for you; it's at
+ `big.deprecated.Log`. But we also fixed a bug:
+* 🤖 `Log` generated garbage for fractional seconds for any event
+ past the one-second
+ mark: its time formatter computed the fraction as `t - seconds`--
+ subtracting the second *count* from a nanosecond timestamp--
+ instead of `t % 1_000_000_000`.  An event at 1.5 seconds printed
+ as `01.149999999`.  Sub-second events were always formatted
+ correctly, which is how a bug this loud hid in a
+ performance-analysis class: nobody ever measured anything slow
+ enough.  We'll remove the deprecated version no sooner than
+ August 2027.
+
+### New modules
+
+#### big.test
+
+[`big.test`](#bigtest) is a tiny, low-ceremony
+test harness.  Write plain `def test_foo():` functions with bare
+`assert a == b` (no base class, no `self.assertWhicheverOne()`),
+and a failing assert still explains itself with the same rich,
+type-aware diff `unittest.assertEqual` produces--big borrows
+unittest's own machinery, reading the operands out of the dead
+frame without re-evaluating anything.  `with raises(ValueError):`
+replaces `assertRaises`; `preload()` puts your local checkout
+ahead of the installed copy; `run()` runs plain functions and
+`unittest.TestCase` classes in one tally; and a multi-module
+driver is a context manager: `with big.test.suite() as run: ...`
+prints the summary and sets the exit code when the block ends.
+Stdlib-only.  Deliberately *never* imported by `big.all`
+(importing `unittest` costs as much as importing everything
+else in big combined).  big's own test suite now runs on it.
+
+(Why write my own?  This style makes it easy to hoist your test
+functions out of the unit test suite and into a temporary file
+to test in isolation.)
+
+
+#### big.snip
+
+[`big.snip`](#bigsnip) implements "snippets", little clippable
+regions of course.  The idea is, you make little bits of your
+source code easy for other projects to borrow without having to
+depend on your whole project.  You mark the borrowable sections
+of your file by bracketing it with "scissors" marker lines
+(`# --8<-- start NAME --8<--` / `# --8<-- end NAME --8<--`).
+Snippets also support "requirements", other snippets from the same
+file that your snippet needs in order to work; these get automatically
+pulled along when you snip.  
+
+**big** itself publishes snippets from *big.text* and *big.itertools*,
+see the new
+[**Borrowable snippets**](#borrowable-snippets) section.
+
+The module provides three functions, making it easy to manage snippets:
+
+  * [`extract_snippets`](#extract_snippetss-names-comment)
+    pulls oe or more snippets out of the source text, along with their
+    requirements.
+
+  * [`apply_snippets`](#apply_snippetss-snippets-comment)
+    applies some already-snipped-out snippets to a destination text,
+    like a patch.
+
+  * [`sync_snippets`](#sync_snippetssource-destination-filternone--comment)
+    synchronizes the snippets used in the destination with the possibly-fresher
+    ones in the source.
+
+The `big.snip` submodule also has a built-in command-line tool
+to manage snippets; run it with `python3 -m big.snip`.
+
+### New features
+
+* [`format_definition_list`](#format_definition_listpairs-margin79--definition_left_columnnone-definition_relative_tabstrue-indent---spacer---tab_width8-term_relative_tabstrue)
+  is a ew function in *big.text*.
+  It renders the classic two-column help-table shape: terms on the
+  left, definitions wrapped and aligned in a computed column on
+  the right.  It's built on top of big's classic word-wrap trio
+  (`split_text_with_code`, `word_wrap`, and `merge_columns`).
+
+* `parse_template_string` has two new features--or, three, depending
+  on how you count them.
+
+  * Its existing whitespace eater `{>}` has grown two
+    siblings: alongside `{>}` (which eats all whitespace *after*
+    itself) there's now `{<}` (eats all whitespace *before* itself)
+    and `{<>}` (eats in both directions).  All three live under the
+    existing `parse_whitespace_eater` flag, and
+    `eval_template_string` inherits them automatically.
+
+  * `parse_template_string` interpolations now support a *format
+    specification*, analogous to an f-string's: the text after a
+    top-level `:`--`{{ expression | filter : format }}`--lands
+    verbatim in the new `Interpolation.format` attribute (`None`
+    when there's no colon).  Only a *top-level* colon counts:
+    colons nested in brackets or quotes still belong to the
+    expression or filter they're inside, so slices, dict displays,
+    and string literals are unaffected.  `eval_template_string`
+    applies it exactly like an f-string--`format(value, spec)`--so
+    `{{x:>10}}` right-aligns in ten columns, filters and all.
+
+* 🤖 **`python_delimiters` now walks in through the front door.**
+  Since its introduction in 0.12.5, `python_delimiters` was a bit
+  of a hack, because the `Delimiter` API couldn't express f-strings.
+  So, if you passed `python_delimiters` in to `split_delimiters`,
+  it had a hard-coded hack: it recognized the value and swapped in
+  a secret internal grammar, hand-patched by a page of state-machine
+  surgery.  0.14 makes
+  [`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse-nestednone-literal-changenone)
+  expressive enough, the surgery is unnecessary (and removed!), and
+  `python_delimiters` is now ordinary data--copy it, modify the copy,
+  and your variant grammar keeps all of Python's semantics.
+
+  What `Delimiter` grew:
+    * `close` accepts a tuple of alternatives, any one of which
+      closes the delimiter (a line comment ends at `'\n'` *or*
+      `'\r'`).
+    * `nested=` names delimiters that are live *inside* this
+      one--for a quoting delimiter, the exceptions to the quoting
+      (an f-string quotes, except `'{'` opens an interpolation).
+    * `literal=` names tokens that are plain text inside this
+      one, overriding any collision (`'{{'` inside an f-string
+      body is a literal brace, not two interpolations).
+    * `change=` names tokens that *change* what the inside of the
+      current delimiter means without pushing a new delimiter--the
+      close stays, and a change target must share it.  (The `':'`
+      and `'!'` inside an f-string interpolation; the token
+      appears in the `change` field `split_delimiters` yields.
+      The output side has carried that field since 0.12.5--the
+      input side finally has a spelling for it.)
+    * `nested`, `literal`, and `change` are also *assignable*, so
+      grammars with reference cycles can be built and then closed
+      by assignment--until the first time a `Delimiter` is used
+      in a compiled grammar, which freezes it (modify a `copy()`
+      instead).  Equality is deep and cycle-safe.
+
+* 🤖 A new member of the `multi-` family:
+  [`multireplace`](#multireplaces-replacements-count-1--reversefalse)
+  is `str.replace` with multiple replacement strings, applied in a
+  single pass--text that has already been replaced is never itself
+  examined for further replacements, so
+  `multireplace('ab', {'a': 'b', 'b': 'a'})` returns `'ba'`, where
+  chained `str.replace` calls would return `'aa'`.  Like its
+  siblings it's greedy (the longest matching key wins), supports
+  `str` and `bytes`, and takes `count` and `reverse`.  (Built on
+  `multisplit(keep=True)`, naturally.)  It supports `big.string`
+  too: a `big.string` input is reassembled with `string.cat`, so
+  every unchanged segment keeps its file, line, and column--also
+  available as the method `string.multireplace`.  Suggested and
+  designed by Claude--and it was almost right the first time!
+
+* 🤖 And an old member of the `multi-` family comes out of hiding:
+  [`toy_multisplit`](#toy_multisplits-separators), the tiny,
+  no-options multisplit the test suite has always used to validate
+  `multisplit`, is now exported.  It returns exactly
+  `list(multisplit(s, separators, keep=True, separate=True))`--
+  the canonical 2-tuple form--and nothing else: no `keep`, no
+  `maxsplit`, no `reverse`, no `strip`.  Its virtue is smallness:
+  one dependency-free function, fast to start (nothing to
+  precompile), and easy to embed in another project--it's also
+  published as a snippet, `big toy_multisplit`.
+
+* 🤖 New in `big.file`:
+  [`atomic_write`](#atomic_writepath-modew--encodingnone-errorsnone-newlinenone)
+  is a context manager that writes a file atomically.  Supports writing
+  a new file, but also appending and updating (expensive, as it has to
+  make a copy of the old file first).  If everything goes right,
+  users either see the old file or the new file, never a file in an
+  in-between state.  If anything goes wrong, the original file is
+  left untouched.  Suggested and designed by Claude--and it was perfect
+  the first time!
+
+* 🤖 New in `big.time`:
+  [`duration_human`](#duration_humant--longtrue-want_microsecondsnone)
+  formats an elapsed time--an int or float number of seconds, or
+  a `datetime.timedelta`--as a human-readable string.  The long
+  format reads like prose, with Oxford comma rules:
+  `duration_human(90061)` returns
+  `'1 day, 1 hour, 1 minute, and 1 second'`, and
+  `duration_human(90061, long=False)` returns
+  `'1d 1h 1m 1s'`.  Sub-second precision is controlled by
+  `want_microseconds`: `True` renders microseconds, `False`
+  rounds to whole seconds, and the default, `None`, decides for
+  itself--microseconds while the total duration is under a
+  minute, whole seconds once it isn't.  The natural companion to
+  `timestamp_human`, and to `Log`, which is all about elapsed
+  time.  Its helper is exported too:
+  [`pluralize`](#pluralizei-singular-pluralnone)
+  in `big.builtin` counts things with the correct English
+  grammatical number--`pluralize(3, 'apple')` returns
+  `'3 apples'`, with an optional third argument for irregular
+  plurals.
+
+* Also in `big.template`:
+    a behavior change in
+    [`Formatter`](#formattertemplate-mapnone--relaxedfalse-stretchtrue-width79-kwargs):
+    when a line with starred interpolations *overflows* the width, the
+    starred interpolations and everything after them are now omitted
+    (previously they collapsed to zero width and any trailing template
+    text was glued onto the overflowing content).  A line that fits
+    exactly still renders in full.  And
+    [`Formatter`](#formattertemplate-mapnone--relaxedfalse-stretchtrue-width79-kwargs)
+    gained a `relaxed=` parameter (a template with no `{message}` lines
+    may discard a message instead of raising).  And in `big.itertools`:
+    [`iterator_filter`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone-call_everynone)
+    gained `call_every=`, calling a callable after every N values
+    yielded--fired on the consumer's next request, without waiting for
+    the wrapped iterator to produce anything, and including a final call
+    when the total is an exact multiple of N.
+
+* Three changes in the word-wrap "trio" (`split_text_with_code`,
+  `word_wrap`, and `merge_columns`):
+
+    * 🤖 The text trio now supports tabs intelligently.  The core idea: a tab
+      stops being pre-rendered whitespace and becomes a deferred
+      column-advance, resolved at final rendering, when the true
+      column is known--and columns are 1-based, like every text
+      editor, so tab stops sit at columns 9, 17, 25...  In text,
+      [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
+      emits each tab as its own `'\t'` word (a behavior change: a tab
+      in text used to be a plain word separator), and code lines keep
+      their tabs verbatim;
+      [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+      renders both as spaces at the columns where they actually land,
+      guided by the new `left_column` parameter (the 1-based "virtual
+      left column" for output you'll place somewhere other than the
+      left page edge).  The `convert_tabs_to_spaces` parameter of
+      `split_text_with_code` is gone--both of its modes are worse
+      than the new mechanism--and so is `allow_code`, which was
+      redundant: `code_indent` (now strictly an int) already says it,
+      with 0 meaning "no code lines".  `big.string` got the same
+      religion, opt-in: the new `string.detab` method expands
+      each tab according to its own origin's coordinates (the same
+      arithmetic `where` uses) and returns a `big.string`--the
+      characters around the synthesized spaces keep their
+      provenance--while the shadowed `string.expandtabs` deliberately
+      keeps `str`'s exact context-free behavior, because a `str`
+      method on a drop-in `str` replacement must never produce
+      different text than `str` would.  The positional expander is
+      exported as
+      [`expand_tabs`](#expand_tabss--column1-first_column1-tab_width8):
+      like `str.expandtabs`, but it takes the 1-based `column` the
+      string starts at.
+      [`format_definition_list`](#format_definition_listpairs-margin79--definition_left_columnnone-definition_relative_tabstrue-indent---spacer---tab_width8-term_relative_tabstrue)
+      grew `term_relative_tabs` and `definition_relative_tabs`
+      (default True: terms and definitions lay out in their author's
+      own coordinates and shift rigidly into place, preserving the
+      author's alignment; False lands their tabs on the page's
+      stops), plus `definition_left_column`, which lets fussy users
+      name the exact column where definitions start.  And a
+      [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+      column tuple takes an optional fourth member, `relative_tabs`,
+      with the same meaning and the same default.
+
+    * [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+      learned to indent 🤖.  The new `indent` parameter prefixes the
+      wrapped lines: pass a single string for every line, or a list
+      or tuple--the first line gets the first indent, the last one
+      repeats when they run out, and a paragraph break resets the
+      sequence.  (So `('usage: ', '       ')` renders a usage line
+      with a hanging indent in one call.)  The new `code_indent`
+      parameter gives code lines--lines that start with whitespace--
+      their own indent sequence; by default they just consume `indent`
+      like any other line, and `code_indent=''` strips them of
+      indenting entirely.  Blank lines between paragraphs are never
+      indented, and linebreak characters in an indent are a
+      `ValueError`.  Indents count against `margin`, and tabs in an
+      indent are expanded using the new `tab_width` parameter.
+
+* New in *big.builtins:* `literal_eval`.  A wrapper around
+    `ast.literal_eval` that
+    preserves [`big.string`](#the-big-string) provenance.  It joins
+    `string.compile` and `string.generate_tokens` as the third
+    "big.string wrapper for a C module that loses provenance"—but unlike
+    `re` and `tokenize`, which merely *locate* substrings, `literal_eval`
+    *transforms* its input, so it preserves provenance on a graduated
+    best-effort basis: a literal with no escape sequences decodes to a
+    true slice of the source (`where` and `context` both work); a
+    literal with escapes decodes to a spliced string where every
+    character still reports a true line and column (a decoded escape
+    reports the position of its escape sequence); an escape-free
+    literal followed by trailing text `ast.literal_eval` tolerates (a
+    comment, say) is rescued by reparsing the source with big's own
+    `split_quoted_strings`--if the quoted contents are exactly the
+    decoded value, that's a true slice, and the comparison is the
+    proof; and anything that can't be honestly mapped back onto the
+    source (implicit string concatenation, an escaped literal with a
+    trailing comment) decodes to a plain `str`--per big.string's
+    standing policy, failing loudly beats reporting positions that are
+    confidently wrong.  In every case the decoded value is
+    character-for-character identical to `ast.literal_eval`'s result.
+
+    Available as `big.literal_eval(s)` and as the method
+    `string.literal_eval()`.
+
+
+### Bugs squashed
+
+* 🤖 `merge_columns` validated its arguments with `assert`, and
+  asserts vanish under `python -O`: there,
+  `OverflowStrategy.INVALID`--a real, exported enum member--
+  silently behaved as `INTRUDE_ALL`, and calling with zero columns
+  gave a bare IndexError.  Both guards are now real ValueErrors,
+  under any interpreter.  (The test suite runs these cases under
+  `-O` semantics too.)
+
+* 🤖 `strip_indents` mishandled blank-line linebreak preservation
+  three different ways: a line that was 100% linebreak characters
+  (a bare `'\n'`--the most common blank line there is) lost its
+  linebreak entirely, thanks to an off-by-one in the backwards
+  scan; bytes lines *never* preserved linebreaks (iterating a
+  bytes yields ints, which were never found in a set of bytes
+  strings); and the `linebreaks` parameter's default--the *str*
+  linebreaks--was never swapped for `bytes_linebreaks` when the
+  lines were bytes (the same dance `strip_line_comments` already
+  did).  All three fixed; the scan now walks one-character slices,
+  which is type-agnostic and counts a tally instead of an index.
+
+* 🤖 `decode_python_script` now implements PEP 263 exactly as
+  CPython's `tokenize.detect_encoding` does.  It used to honor a
+  magic coding comment on line *three* (PEP 263 permits only the
+  first two lines), used the *last* comment when lines 1 and 2
+  both had one (CPython uses the first), and consulted line 2
+  even when line 1 was real code (CPython only reads line 2 when
+  line 1 is blank or a comment).  All three rules now match
+  tokenize, verified by contrast-testing against it.  Also, the
+  BOM-vs-magic-comment agreement check now normalizes both names
+  through `codecs.lookup`, so every spelling of the BOM's encoding
+  agrees (`utf8`, `UTF_8`, `utf-8`)--here big is deliberately
+  *more* correct than tokenize, whose alias handling is a string
+  prefix hack that rejects `utf8`--and an endianness-unqualified
+  comment (`utf-16`) agrees with an endian BOM (`utf-16-le`),
+  since supplying the endianness is the BOM's job.
+
+* [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
+  was rewritten 🤖 as a straightforward line scanner (it was a
+  character-at-a-time state machine).  Same behavior, much less
+  machinery--and it fixes a real bug: a code paragraph followed by a
+  text paragraph followed by another code paragraph used to either
+  crash with `AssertionError` or pollute the output with stray
+  linebreak words, depending on the blank lines around the text.
+
+* 🤖 In `split_delimiters`, a token that *starts with* a valid open
+  delimiter raised `SyntaxError` inside non-quoting delimiters
+  instead of opening it.  With delimiters `'x'`&rarr;`'y'` and
+  `'a'`&rarr;`'xz'`, splitting `'qxzy'` greedily tokenizes `'xz'`
+  (it's `'a'`'s close) and then declared it illegal--even though
+  `'x'` opens a delimiter right there.  Quoting delimiters have
+  always handled exactly this collision with a
+  truncate-and-resplit fixup; the fixup is now applied uniformly,
+  for every state and every meaningful token.  (The machinery
+  that does this, `_resolve_foreign_tokens`, replaces both the
+  old per-delimiter fixups and a page of the f-string surgery's
+  hand-patching--a first installment on making `python_delimiters`
+  expressible through the front door of the `Delimiter` API.)
+
+* Speaking of `split_delimiters`, there were several correctness
+  fixes to `python_delimiters`, all 🤖:
+
+  * `python_delimiters`' documented
+    no-linebreaks-inside-single-quoted-strings rule was only
+    half-enforced: `'\r'` inside a single-quoted string raised
+    `SyntaxError`, but `'\n'` was silently flushed--an unterminated
+    single-quoted string would quietly swallow the rest of the
+    script.  (The f-string surgery blanketed a `'\n'`-means-nothing
+    rule into *every* string state, clobbering the single-line
+    check the grammar had correctly installed.)  The same asymmetry
+    existed inside f-string format specs, in the other direction:
+    the spec state is shared by single- and triple-quoted
+    f-strings, so it permits linebreaks--but only `'\n'` was made
+    legal, so a `'\r'` in a format spec raised.  Both directions
+    are now symmetric: linebreaks in single-quoted strings raise,
+    linebreaks in format specs don't.
+
+  * `python_delimiters` now agrees with CPython's tokenizer about
+    *exotic* linebreak characters.  Python only recognizes `'\n'`
+    and `'\r'` as line boundaries; the other characters big defines
+    as linebreaks--vertical tab, form feed, `'\x85'`, `' '`,
+    and friends--are plain text inside Python's strings and
+    comments, and `python_delimiters` used to reject them there
+    (`multiline=False` forbade *every* big linebreak).  The grammar
+    now declares them `literal` tokens of the single-line string
+    and comment delimiters: they're still linebreaks by big's
+    definition, this grammar just declares them literal text where
+    Python does.  (A literal `'\n'` or `'\r'` in a single-quoted
+    string still raises, exactly like real Python.)
+
+  * `python_delimiters` no longer misparses `!=` inside an f-string
+    `{`interpolation`}`.  `f'{a != b}'` used to report a `'!'`
+    conversion field and treat `= b` as its text; but that `!=` is
+    the not-equals operator.  Real Python's rule is "a conversion
+    is `'!'` not *followed* by `'='`"--and declaring `'!='` a
+    `literal` token of the interpolation delimiter implements
+    exactly that rule, because tokenization is greedy.  (A real
+    conversion after an expression containing `!=` still works:
+    `f'{a != b!r}'` parses both correctly.)  This bug dates to
+    0.12.5; it became a one-line fix when `python_delimiters`
+    moved to the front door.
+
+* 🤖 `split_quoted_strings`' `escape` didn't protect
+  `multiline_quotes`: an escaped multiline delimiter closed the
+  string anyway.  Nobody noticed because the natural multiline
+  quotes, `'''` and `"""`, were shielded *by accident*--the `'"'`
+  in `quotes` contributed a `\"` separator that happened to cover
+  `\"""` too; a multiline quote that doesn't share a first
+  character with a regular quote (say, `<<<`) got no protection
+  at all.  `escape` now works inside both `quotes` and
+  `multiline_quotes`, with its semantics pinned down and
+  documented: it shields exactly one following character, like
+  backslash in Python, so `\"""` inside a `"""` string is an
+  escaped quote followed by two live quotes and doesn't close
+  the string.
+
+* 🤖 `split_title_case` silently dropped a single-character final
+  word: `'WhenIWasA'` split into `['When', 'I', 'Was']`, and a
+  one-character string split into nothing at all.  The final-flush
+  guard compared against the index of the last character seen
+  rather than the length of the string.  Joining the split now
+  always reconstructs the input, verified exhaustively.
+
+* Multiple updates to `grep` and `fgrep`, all 🤖:
+
+  * `fgrep` and `grep` now split lines according to big's own
+    definition of linebreaks (see `linebreaks` and `bytes_linebreaks`
+    in `big.text`)--which is to say, `splitlines`.  In binary mode
+    that fixes Windows (`\r\n`) and old-Mac (`\r`) files: matched
+    lines no longer carry a stray trailing `\r`.  In text mode, `\v`,
+    `\f`, `\u2028` and friends now count as linebreaks, matching big's
+    worldview.  In both modes, a file ending with a linebreak no
+    longer yields a phantom empty final "line".
+  
+  * Also,
+    `fgrep(case_insensitive=True)` now compares with `str.casefold`
+    rather than `str.lower`--the correct Unicode case-insensitive
+    comparison, so e.g. `'STRASSE'` matches `'straße'`.
+  
+  * 🤖 And `grep` grew a `case_insensitive` parameter, for symmetry
+    with `fgrep`.  It's tri-state: `None` (the default) leaves the
+    pattern's flags untouched, true forces `re.IGNORECASE`, and
+    false forces no `re.IGNORECASE`.  If you passed in a
+    `re.Pattern`, and pass in something besides `None` to
+    `case_insensitive`, `grep` will recompile your pattern to honor
+    the flag.
+
+* Lots of improvements and fixes to bound inner classes, all 🤖:
+
+  * How a bound inner class finds the bound versions of its base
+    classes has been redesigned.  Resolution is now keyed on class
+    *identity*, end to end--names are never consulted.  Previously the
+    first resort was `getattr(outer, base.__name__)`, which worked
+    right up until two classes shared a name.  What this fixes,
+    concretely:
+    * A bound inner class can now inherit from a *same-named* bound
+      inner class of an ancestor outer class--`class MyApp(BaseApp)`
+      defining `class Config(BaseApp.Config)`--with full bound-MRO
+      chaining: call `super().__init__()` (or `super().__new__(cls)`)
+      and the outer instance is passed along automatically.  This
+      never worked before.
+    * Inheriting from another *instance's* bound inner class--
+      `class Anything(o1.Inner)`--used to work only if your subclass
+      happened to share the base's name; under any other name it
+      raised `RuntimeError`.  The spelling of your class names is no
+      longer load-bearing.  (The base injects its own outer, `o1`--
+      that's the point of the pattern.)
+    * A base that merely *shared a name* with another inner class
+      could send binding into infinite recursion (`RecursionError`),
+      or silently bind an unrelated class as a side effect.  That's
+      now structurally impossible: identity resolution only ever walks
+      the inheritance DAG, which has no cycles.
+    * A decorated base whose descriptor isn't anywhere on the outer
+      class's MRO--a genuine configuration error--now always raises a
+      helpful `RuntimeError`; one same-name spelling of this mistake
+      used to bind silently with the wrong lineage.
+
+  A happy side effect: plain (undecorated) base classes--including
+  `object`, which is to say including everybody's--are now recognized
+  instantly and skip resolution entirely, making binding a little
+  faster across the board.  And **one interface change:** if you
+  worked around namesake chaining by passing the outer instance
+  explicitly--`super().__init__(outer, ...)`--remove that argument;
+  the parent receives it automatically now.  (big.log's
+  `TextFormatter.State` did exactly this, and has been updated.)
+
+  * Bound inner classes now hold a **strong** reference to their
+    outer instance--exactly like a bound method holds `__self__`.
+    Previously the reference was weak, and the innocent-looking
+    one-liner `Outer().Inner()` was a trap: the temporary `Outer()`
+    could be garbage-collected between resolving `.Inner` and
+    *calling* it, so whether your code worked depended on when the
+    garbage collector last ran.  (This was field-diagnosed as a
+    weeks-long 1-in-115 flaky test in a library built on
+    BoundInnerClass; an unrelated change shifted it to 1-in-4,
+    thankfully!  A correctness
+    property that depends on collector timing is the worst kind.)
+    The syntax borrows bound methods' look; now it borrows their
+    lifetime guarantee too.
+  
+    This deliberately reverses a 0.13 decision, which traded the
+    reference cycle for the weakref; turns out, the flaky behavior
+    just isn't worth it.
+
+    Consequences: a bound class--or any
+    instance of one, via its class--keeps its outer alive; the outer
+    → cache → bound class → outer cycle is reclaimed by the cycle
+    collector rather than by reference counting; `bound_to()` never
+    returns None for a bound class; and the transient dead-outer
+    `ReferenceError` (introduced earlier in 0.14) is gone, because
+    the condition it detected is now unrepresentable.
+  
+  * Copying an outer instance no longer breaks its bound inner classes.
+    `BoundInnerClass` caches bound classes on the outer instance, and
+    that cache didn't cooperate with duplication: `copy.copy(o)` shared
+    it, so the copy's inner classes were silently bound to the
+    *original*; `copy.deepcopy(o)` crashed on the `threading.Lock`
+    inside the cache; and `pickle.dumps(o)` crashed trying to pickle a
+    dynamically-created bound class.  All three, mind you, only if
+    something had already accessed `o.Inner`--whether your object could
+    be duplicated depended on what had merely *looked* at it.  Now the
+    cache duplicates as a fresh empty cache under copy, deepcopy, and
+    pickle; and--belt and suspenders--every cache remembers which
+    instance it belongs to (by weak reference) and is validated on
+    every access, so a cache transplanted onto the wrong instance by
+    *any* mechanism (say, a user-defined `__deepcopy__` that naively
+    shares `__dict__`) is detected and replaced on first use.  However
+    it was duplicated, a duplicated outer instance simply re-binds its
+    inner classes lazily, exactly like a fresh instance.  (Also, the
+    error message you get when an outer class's `__slots__` won't
+    accommodate the cache now mentions *both* requirements: the cache
+    slot, and weak-reference support.)
+
+  * `BoundInnerClass` now only binds an `__init__` the decorated class
+    *itself* defines--exactly the rule it already followed for `__new__`.
+    Previously an `__init__` inherited from a regular (non-BoundInnerClass) base
+    class was wrapped as though the inner class had defined it, so the
+    outer instance was passed to a method that never asked for it.
+    If you were lucky, you got a baffling `TypeError`; if you were
+    unlucky, the outer instance was silently misfiled into the base's
+    first parameter.  (Inheriting `__init__` from a bound *parent*
+    works exactly as before--the bound parent in the MRO injects
+    `outer` itself, and always did.)
+
+* Some fixes for `TopologicalSorter`, again all 🤖:
+
+  * Every `TopologicalSorter` owns two internal views--the default
+    view (backing the graph-level `ready`/`done`/`reset` convenience
+    API) and the stock view (the pristine template that `view()`
+    copies).  Both were ordinary `View` objects, reachable via
+    `graph.views`--so a well-meaning "close all my views" sweep would
+    close them, permanently crippling the graph with baffling errors
+    blaming a view you never knew you had.  They're now instances of
+    a separate internal view class whose `close()` refuses, with an
+    error message naming the actual rule.  (That class and the public
+    `View` are siblings--both deriving from a shared base--rather than
+    one subclassing the other, so neither "is a" the other.  Views the
+    graph hands *out* remain ordinary and closable--including the ones
+    `view()` copies from the internal stock view.)
+  
+  * `TopologicalSorter`'s cycle *locator* (the depth-first-search that
+    names the cycle's members for the `CycleError`, after Kahn's algorithm
+    has detected that one exists) had no "finished" set--the classic third
+    DFS color.  Acyclic diamond-shaped regions were therefore
+    re-explored once per distinct path through them, which is
+    exponential; a 79-node diamond-ladder graph took ~40 seconds to
+    report its little 2-cycle.  Now fully-explored nodes are never
+    descended into again, the locator is linear, and that same graph
+    reports its cycle in well under a millisecond.  Only the
+    already-have-a-cycle path was affected--acyclic graphs never ran
+    the DFS at all.
+  
+  * `TopologicalSorter`: passing the same node to `done()` twice *in
+    one call*--`view.done('a', 'a')`--marked it done twice, which
+    double-decremented its successors' predecessor counts.  On a
+    diamond graph (`c` depends on `a` and `b`), `done('a', 'a')` made
+    `c` come ready while `b` was still outstanding: an ordering
+    violation, the one thing a topological sorter is sworn to prevent.
+    (Duplicates across *separate* calls were always caught.)  A
+    duplicate node in a single `done()` call is now a `ValueError`,
+    matching the existing errors for unknown and un-yielded nodes.
+    And `done()` now validates all its arguments before mutating
+    anything, so a rejected call--this error or the existing ones--
+    leaves the view exactly as it was.
+  
+  * `TopologicalSorter.copy()` also failed to copy the `dirty` flag--
+    the lazy "should we check for cycles?" bit.  Since the cycle
+    detector trusts a clean flag as *proof* of acyclicity, a copy of a
+    graph currently containing a cycle inherited the cycle but not the
+    suspicion: the original's `ready()` raised `CycleError`, while the
+    clone's returned an empty tuple with a clear conscience--turning
+    the standard `while ts:` consumer loop into a silent infinite
+    loop.  One line: the flag travels with the copy now.
+  
+  * `TopologicalSorter.copy()` cross-wired the view registries of the
+    original and the clone.  A graph notifies its views about every
+    mutation via its `views` list--but the clone's copied views were
+    accidentally registered on the *original* graph, while two
+    orphaned placeholder views sat registered on the clone.  So after
+    a `copy()`, adding a node to the clone was invisible to every view
+    the clone handed out (a consumer loop would spin forever waiting
+    for the missing node), and adding a node to the *original* leaked
+    into the clone's views--`clone.ready()` would happily yield a node
+    that wasn't in the clone's graph at all.  In short: a copied graph
+    only worked if you never mutated either graph again, which is
+    precisely when you don't need a copy.  The clone's views are now
+    constructed against the clone, which registers them correctly from
+    birth.
+
+* Some small fixes for `linked_list`, both 🤖:
+
+   * `linked_list` indexing didn't ignore special nodes like it should.
+     This design is `linked_list`'s signature move--removing a node an
+     iterator points at demotes it to a hidden "special" node instead of
+     unlinking it, so iterators never dangle--and every traversal
+     must skip those special nodes.  Two sites didn't: the primitive
+     under `t[i]` (and `insert`/`pop`/`del t[i]`), and
+     `linked_list.index()` both didn't properly ignore special nodes.
+     Special nodes are special enough to break the rules--but we must
+     be consistent!
+
+   * 🤖 linked_list iterators' `next(default=...)` and
+     `previous(default=...)` tested their internal sentinel with `==`,
+     so a default value with a promiscuous `__eq__`
+     (`unittest.mock.ANY` is the everyday example) was mistaken for
+     "no default supplied"--an exhausted iterator raised `StopIteration`
+     instead of returning the caller's explicit default.  (A hostile
+     `__eq__`, like a numpy array's, crashed instead.)  Switched to `is`,
+     just like `iterator_context` did, and for the same reason.
+
+* 🤖 The `undefined` singleton (`big.itertools.undefined`) didn't
+  survive pickling or deepcopy: those reconstruct objects via
+  `__new__`, bypassing the singleton guard in `__init__`, so a
+  round-trip minted an impostor `Undefined` instance--identical
+  repr, different identity--and every `is undefined` test
+  downstream silently failed.  `Undefined.__reduce__` now routes
+  reconstruction back to the one true `undefined`, which covers
+  pickle, `copy.copy`, and `copy.deepcopy` in a single stroke.
+
+* 🤖 `iterator_filter`'s `stop_at_count=N` consumed at least N+1 values
+  from the wrapped iterator: the quota check ran just before yielding
+  the *next* accepted value, so after the quota filled, the source
+  got pulled again (and repeatedly, if rejection rules kept
+  discarding what it produced) just to discover it was time to stop.
+  Iterators aren't only value streams--pulling one can read a
+  socket or consume an item some other consumer will never see.
+  The quota now stops the filter on the consumer's next resume,
+  *before* the source is touched again: exactly N accepted values
+  are consumed.
+
+* 🤖 `iterator_context` silently dropped its final value if that value
+  had a promiscuous `__eq__`.  The end-of-iteration check compared
+  the lookahead variable against an internal sentinel with `!=`,
+  which asks the *value's* opinion--so anything that claims to equal
+  everything (`unittest.mock.ANY` is the everyday example) claimed
+  to be the sentinel, and the last item of the iteration silently
+  vanished.  (A *hostile* `__eq__`, like a numpy array's, crashed
+  instead.)  Losing specifically the final value is the rottenest
+  failure mode--it's the one a spot-check misses.  The comparison is
+  by identity now, as sentinel comparisons must always be.  (The
+  local sentinel was also renamed: it was called `undefined`,
+  shadowing big.itertools' *exported* `undefined` singleton, which
+  is an unrelated object.)
+
+* 🤖 `Heap` negative indexing returned wrong values for `heap[-3]`
+  through `heap[-9]`.  The small-negative fast path uses `nlargest`,
+  which returns values in *descending* order--a fact the very same
+  method compensates for two branches earlier--and then indexed that
+  descending list with the original negative index.  Work the algebra
+  and it returned the second-largest value for every index in the
+  branch (and something even wronger when the index ran off the end).
+  `heap[-1]` and `heap[-2]` were accidentally correct, which is
+  exactly how this survived: shallow testing checks -1 and -2, both
+  look fine, ship it.  Fixed--the (-i)th-largest value is simply the
+  *last* element of `nlargest(-i)`--and the test suite now sweeps
+  every valid index, positive and negative, across sizes spanning
+  every fast path and the sorted fallback.  Related: `Heap()[-1]` on
+  an empty heap raised `ValueError` (from `max()`) where a list--and
+  every other empty-heap index--raises `IndexError`; it conforms now.
+  And `Heap.__eq__` now returns `NotImplemented` for non-Heap
+  operands instead of `False`, so foreign types that know how to
+  compare against a `Heap` get their reflected `__eq__` consulted,
+  per protocol.  (Ordinary comparisons are unchanged.)
+
+* 🤖 `StateManager`'s first-exception-wins rule had a hole: if an
+  observer raised an exception (remembered, to be re-raised after
+  the transition completes) and then the new state's `on_enter`
+  *also* raised, the on_enter exception propagated and the
+  observer's exception--the first one--was silently lost, not
+  even chained.  Now the first exception always wins: the
+  observer's exception is re-raised with the on_enter exception
+  chained to it as its `__cause__`, so both tracebacks print and
+  nothing is lost.
+
+* 🤖 `ThreadSafeRegulator` had a lost-wakeup race.  `Scheduler`
+  releases the regulator's lock *before* calling `sleep`--correctly,
+  you should never sleep holding a lock--so there's a window where
+  a thread has committed to sleeping but isn't actually waiting
+  yet.  The old `wake` was a set-then-clear *pulse* on a
+  `threading.Event`; a wake landing in that window evaporated,
+  the consumer slept its full original interval, and an event
+  scheduled to occur earlier was delivered late--the exact
+  `sched.scheduler` bug `Scheduler` exists to fix.
+  `ThreadSafeRegulator` is rebuilt on the classic "double acquire"
+  trick: a "blocker" lock, held by default; `sleep` blocks trying
+  to acquire it a second time (with the sleep interval as the
+  timeout) and `wake` releases it.  Now `wake` is a level, not a
+  pulse: a wake with no sleeper parks the blocker open, the next
+  `sleep` returns immediately, and its acquire re-arms the blocker
+  in the same atomic operation.  A wake can never be lost.
+  (The `Regulator.wake` contract is now documented as "aborts at
+  least one current call to `sleep`" rather than all of them--
+  the woken thread re-reads the queue under the lock, which is
+  all correctness requires.)
+
+* 🤖 `Version(release=(1, 2), serial=3)` constructed happily, then
+  `str()` blew an assert--a serial belongs to a pre-release, and
+  the keyword path never checked it against the (defaulted)
+  `'final'` release_level.  (Under `python -O` the assert vanished
+  and it silently printed a *wrong* version, the serial simply
+  evaporating.)  The constructor now rejects a nonzero serial with
+  a final release_level, with a ValueError that says what to do
+  instead.
+
+* 🤖 Equal `Version` objects could hash differently, breaking set and
+  dict membership: `__eq__` compares the normalized comparison
+  tuple (where an unspecified epoch equals epoch 0), but `__hash__`
+  hashed the raw attributes, where `None` and `0` differ.  So
+  `Version("1.0") == Version("0!1.0")`, but a set could hold both.
+  `__hash__` now hashes exactly what `__eq__` compares.
+
+* 🤖 `Version` silently dropped a `dev` or `post` marker with no
+  number: `Version("1.0.dev")` parsed *equal to* `Version("1.0")`,
+  though PEP 440's implicit-number rule (quoted in big's own
+  source!) says it means `1.0.dev0`--which sorts *before* `1.0`.
+  Same for `"1.0.post"`.  Both now apply the implicit `0`; verified
+  against `packaging.version.Version` on every affected form.
+  (Pre-release markers always worked, by a lucky coincidence of the
+  comparison tuple's None-substitution.)
+
+* 🤖 `timestamp_human` didn't convert timezone-aware datetimes to the
+  local timezone, despite its docstring's promise--only *naive*
+  datetimes were converted; aware ones rendered in their own zone.
+  Now every datetime goes through `astimezone`, which handles naive
+  and aware alike.  The previously-undocumented `tzinfo` parameter
+  (the timezone the timestamp is rendered in; None means local) is
+  now documented.
+
+* 🤖 `timestamp_3339Z` never included microseconds for float inputs,
+  even though its docstring always promised them: the is-it-a-float
+  check ran *after* the float had already been replaced with a
+  datetime, so it never fired.  (Its twin, `timestamp_human`, always
+  checked in the right order--the twins had drifted.)
+  `timestamp_3339Z(1.5)` now returns
+  `'1970-01-01T00:00:01.500000Z'`.
+
+* 🤖 `safe_mkdir` and `safe_unlink` were defeated by broken symlinks:
+  `os.path.isfile` follows symlinks, so a dangling symlink squatting
+  on the name looked like "nothing there"--`safe_mkdir` went on to
+  raise `FileExistsError` (despite its documented guarantee), and
+  `safe_unlink` silently left the debris in place.  Now a symlink
+  that doesn't lead to a directory--a symlink to a file, or a
+  dangling one--counts as a file: it's unlinked (the symlink itself,
+  never its target).  A symlink that leads to a directory is left
+  alone by both functions.
+
+* 🤖 `pushd` now captures the current directory when the `with` block
+  is *entered*, not when the object is constructed--matching the
+  shell builtin it's named after, which pushes the directory you're
+  in right now.  Previously, constructing a `pushd` early and
+  entering it later restored the construction-time directory on
+  exit.  (For the idiomatic one-liner, `with big.pushd('x'):`,
+  nothing changes--the two moments coincide.)  A pleasant side
+  effect: a single `pushd` object is now reusable.
+
+* 🤖 A starred interpolation whose value was the empty string
+  (`Formatter('{x*}', {'x*': ''})`) constructed happily, then
+  crashed at *format* time with a bare `ZeroDivisionError` from
+  deep inside the fill arithmetic.  The emptiness could also
+  arrive indirectly, via an object whose `__str__` returns `''`,
+  or via a `format_map` per-call override.  An empty starred
+  value now raises ValueError at construction (or at override
+  time), naming the offending key--matching how protective the
+  constructor already is about every other starred-interpolation
+  rule.
+
+* 🤖 `parse_template_string` silently yielded a phantom `Statement('')`
+  when the template ended immediately after a `{%`--the entire
+  find-the-`%}` scan, *including* its unterminated-statement error,
+  was skipped when nothing followed the marker.  A trailing
+  fat-fingered `{%` now raises SyntaxError ("unterminated statement",
+  with the position) like every other unterminated construct, and a
+  genuinely empty statement (`{%%}`) is still legal.
+
+* 🤖 `parse_template_string`, on Python 3.11 and earlier, crashed
+  with `IndexError` when an expression contained an unclosed open
+  delimiter (`"{{ a( }}"`).  Old `tokenize` reports EOF-in-brackets
+  with a `TokenError` positioned one line *past* the end of the
+  text, and the caret-building error handler indexed that
+  nonexistent line.  It now reports what it always should have:
+  SyntaxError, "unterminated expression".  (The rewritten
+  `tokenize` in 3.12+ doesn't raise there at all, so those
+  versions were never affected.)
+
+* 🤖 `get_int_or_float` now has an explicit purview: strings (`str`,
+  `bytes`, `bytearray`) and things that are already `int` or `float`.
+  It's a poor man's `ast.literal_eval`: if the string reads as an
+  int you get the int, otherwise if it reads as a float you get the
+  float.  Everything else--`Decimal`, `Fraction`, complex,
+  kumquats--gets the documented "return the default" treatment.
+  Previously it tried `int()` on *anything*, and `int()` *truncates*
+  number-like objects rather than raising, so e.g.
+  `get_int_or_float(Decimal('3.5'))` quietly returned `3`.  Also
+  fixed: infinities and NaNs.  `get_int_or_float(float('inf'))`
+  used to raise `OverflowError`, and `float('nan')` raised
+  `ValueError`; now floats that `int()` can't stomach pass through
+  unchanged, and the *strings* `"inf"` and `"nan"` convert to the
+  floats `float()` says they are.
+
+### Smaller fixes and polish
+
+* 🤖 `import big.all` is roughly *twice* as fast (~39ms → ~19ms
+  measured), via two rounds of deferral.  Round one: compiling the
+  two `python_delimiters` grammars into their state machines
+  (~12ms of runtime-assembled dict graphs over 158 tokens each)
+  is deferred until the first
+  `split_delimiters` call that actually uses one.  (The grammar
+  *dicts* themselves are still built eagerly; they're small, and
+  their contents are unchanged.)  Round two: five imports big paid
+  for eagerly but rarely used are now deferred--`inspect` (~13ms!
+  used only for signature computation; imported inside the three
+  functions that need it), `ast` (only `literal_eval` uses it),
+  and the optional packages `regex` and `packaging.version`
+  (recognized via `sys.modules` at isinstance time, which is
+  lossless--an instance of their types can only exist if somebody
+  already imported them) and `dateutil.parser` (availability
+  probed with `find_spec`, which doesn't execute the module; the
+  real import happens at the first `parse_timestamp_3339Z` call).
+  No behavior changes; the costs move from everyone's import to
+  the first use by code that actually uses each feature.
+
+* `str()` of a `big.string` that spans its entire origin--like a
+  string freshly constructed from a slurped-in text file--now
+  returns the origin's plain `str` directly, instead of copying
+  the whole buffer.  Zero copies, effectively free.
+
+  (Why?  So tokenizers built on `big.string`—which scan the raw span
+  of a quoted string and let `literal_eval` do the unescaping—can hand
+  out decoded *values* that still know their file, line, and column.  My
+  **perky** file format is about to become its first public customer!)
+
+* 🤖 The deprecated `lines` pipeline now *says so at runtime*: the
+  `lines` constructor emits a `DeprecationWarning` (one warning
+  covers the whole pipeline--every `lines_*` modifier consumes an
+  iterator that started there), pointing at the new "Migrating
+  from `lines` to `string`" section of this README.  Note that
+  `warnings.warn` never halts anything; by default Python doesn't
+  even display DeprecationWarnings outside `__main__`.
+
+* 🤖 `int_to_words` said its cap of `10**75` was "one quadrillion
+  vigintillion"; that's `10**78`.  The cap is unchanged and now
+  correctly named: one *trillion* vigintillion.  (A function whose
+  job is naming numbers should be able to name its own limit!)
+  Also, passing a non-int now raises `TypeError`, not `ValueError`,
+  matching the rest of big.
+
+* 🤖 `int_to_words` also had two misspellings and a formatting leak.
+  The misspellings: "twelveth" (it's "twelfth") and "qindecillion"
+  (it's "quindecillion"); also "septdecillion" is now
+  "septendecillion", the standard (and inflect's) name for `10**54`.
+  The leak: the internal quantity table was column-aligned with
+  spaces *inside* the string literals, so the shorter names
+  rendered with their padding--`int_to_words(10**33)` returned
+  `'one   decillion'`, three spaces, likewise nonillion, octillion,
+  septillion, and sextillion.  The docstring's claim that flowery
+  output is identical to `inflect.engine().number_to_words(i)` is
+  now true at every magnitude inflect can handle (verified against
+  inflect across 106 values); previously the test suite's numbers
+  jumped from quintillions straight to ~`10**65`--past inflect's
+  range--so the parity check never saw the broken middle.
+
+  (You had ONE JOB, `int_to_words`!)
+
+* `Pattern`'s wrong-type error
+  message claimed "s must be str" while happily accepting bytes;
+  it now says so, and Pattern and Pattern.Match--previously the
+  only big exports with no docstrings at all--now have them.
+
+* 🤖 `python_delimiters_version` now keeps the promise of its name.
+  It used to map `'3.6'` through `'3.13'`--no `'3.14'`, despite
+  big's t-string support--and every key mapped to the *same*
+  object, whose contents depended on the running interpreter:
+  ask for 3.8's grammar on a 3.14 interpreter and you got
+  t-strings.  big now builds both grammars unconditionally
+  (they're static data): `'3.6'`-`'3.13'` map to the t-free
+  grammar, `'3.14'` maps to the t-aware one, and
+  `python_delimiters` picks the right one for the running
+  interpreter.  Bonus fix uncovered along the way: on 3.14
+  interpreters, t-strings never got the f-string brace surgery
+  (the check only recognized `f` prefixes), so `t'{name}'`
+  parsed its braces as inert text; t-strings now get the same
+  `{`interpolation`}`, `!conversion`, and `:format-spec`
+  handling as f-strings.
+
+* 🤖 `split_quoted_strings`' error for a linebreak inside a
+  single-line quoted string literally said
+  `unterminated quoted string, {s!r}`--the f-string prefix was
+  missing, so the placeholder went to the user unfilled.  (The
+  identical check at end-of-string always had its `f`.)  The
+  message now shows the offending string.
+
+* 🤖 `big.text.__all__` listed `split_delimiters` twice: the *internal*
+  generator (whose docstring says right there that it's internal)
+  wore an `@export` decorator alongside the public wrapper that
+  rebinds the name.  Harmless to users--the module attribute always
+  ended up as the public function--but `__all__` hygiene is hygiene.
+  With this and the `big.scheduler` fix, big's export-hygiene test
+  now runs with an *empty* grandfather list: any module that ever
+  lists a name twice again fails the test suite on the spot.
+
+* 🤖 Also, `strip_line_comments` now accepts its line comment markers
+  as any iterable--sets and generators used to raise a bare
+  `TypeError`, because validation indexed into the markers.
+
+* 🤖 And a latent typo: the defensive branches that would add `\v` and
+   `\f` to `bytes_linebreaks` (if Python's `bytes.splitlines` ever
+  starts splitting on them) appended *str* literals to the bytes
+  tuple.  Now they're bytes.  (The branches are dead code today,
+  which is why nobody noticed.)
+
+* 🤖 `linked_list.__eq__`/`__ne__` (and the iterator's `__eq__`) now
+  return `NotImplemented` for types they don't understand, instead
+  of a flat False/True--so reflected comparisons finally get their
+  chance.  (The ordering methods always did this; the class was
+  internally inconsistent about it.)  Also, big.string's
+  provenance-and-mutation policy is now documented prominently:
+  substring operations always return big.strings with true
+  positions, but text-*changing* methods (lower, upper, casefold,
+  format, ...) return plain str when the text changes--failing
+  loudly beats approximate positions.
+
+* 🤖 Reverse-iterator `extend` and `rextend` raised TypeError for
+  generators (and any non-reversible iterable): they called
+  `reversed()` directly on the argument, while every other extend
+  in linked_list accepts any iterable.  Non-reversible iterables
+  are materialized first now, and produce exactly the same result
+  a list would.
+
+* 🤖 `linked_list.pop` and `rpop` on an empty list now raise
+  IndexError, matching `list.pop` and `deque.popleft`--they raised
+  ValueError, so the try/except IndexError code that linked_list's
+  "superset of list and deque" interface invites didn't work.
+  (`popleft`, the deque-compatibility alias itself, raised the
+  wrong exception for deque's most idiomatic failure case.)
+
+* 🤖 `Heap`'s iterator wasn't itself iterable: it implemented `__next__`
+  (plus a snapshot copy and modification detection!) but forgot the
+  one-liner, `__iter__` returning self.  So `for x in heap` worked,
+  but *holding* the iterator--`it = iter(heap); for x in it:`, or
+  `zip(iter(heap), ...)`, or anything else that re-`iter()`s an
+  iterator--raised `TypeError`.  Textbook line added.
+
+* 🤖 `repr()` of an empty `Heap` raised `IndexError`--it interpolated
+  `queue[0]` unguarded.  A broken repr's blast radius is always
+  bigger than the method: an empty heap couldn't be printed, logged,
+  interpolated, or inspected in a debugger--precisely the moments
+  you're trying to *look* at the thing.  The empty repr now simply
+  omits `first=`; and `first=` now shows the `repr` of the first
+  element, so e.g. strings are quoted.
+
+* 🤖 The `RuntimeError` raised when a `TopologicalSorter` view is
+  incoherent with its graph interpolated a whole *set* of successor
+  nodes into the message where a single node belonged.  Each
+  conflicting edge now gets its own properly-formatted description.
+
+* 🤖 `TopologicalSorter.static_order()` leaked a view on every call.
+  Views stay registered on their graph until closed--and every
+  `add()` and `remove()` notifies every registered view--so a
+  long-lived graph that alternated mutation with `static_order()`
+  got a little slower with every ordering it ever computed.  The
+  view is now closed in a `finally`, which covers the fully-consumed
+  case, the abandoned-generator case, *and* the `CycleError` case.
+
+* 🤖 `Version.__lt__`'s incompatible-type error message was an
+  f-string missing its `f`--it literally printed `'{type(other)}'`.
+  Rather than just add the `f`, both `__lt__` and `__eq__` now
+  return `NotImplemented` for types they don't understand, per the
+  data model: Python raises the standard (correctly formatted!)
+  TypeError for unhandled ordering, `==` against foreign types
+  still evaluates False, and reflected comparisons finally get
+  their chance.
+
+* 🤖 `parse_template_string`'s SyntaxError messages now all put the
+  position first, colon-separated (`line 1 column 21: unterminated
+  statement`)--the compiler-error convention, and the one `big.snip`
+  and the unterminated-comment message already used.  Previously
+  statements, expressions, and quoted strings used the trailing
+  "... at line 1 column 21" style, so the same parser spoke two
+  dialects.
+
+* 🤖 `TransitionError` now subclasses `RuntimeError` instead of
+  `RecursionError`.  Both kinds of illegal transition are legal
+  operations attempted at an illegal moment--`RuntimeError`'s
+  beat--and only one of them was even recursion-shaped.  Worse,
+  the old base meant `except RecursionError` handlers guarding
+  against actual runaway recursion silently swallowed state-machine
+  misuse.  Since `RecursionError` subclasses `RuntimeError`,
+  every `except TransitionError` and `except RuntimeError` handler
+  behaves exactly as before; only `except RecursionError` handlers
+  change, and for them not catching `TransitionError` is the fix.
+
+* 🤖 `big.scheduler.__all__` listed `Regulator`, `SingleThreadedRegulator`,
+  `ThreadSafeRegulator`, and `Scheduler` twice: a hand-rolled `__all__`
+  survived the module's conversion to `ModuleManager`, which *adopts*
+  a pre-existing `__all__`--so every `@export` appended a name the
+  hand list already had.  The stale hand-rolled list is gone;
+  `__all__` is now purely `ModuleManager`-managed, and big's export
+  hygiene test enforces that no module ever lists a name twice again.
+
+* 🤖 A typo in `big.file` that, entirely by luck, was harmless: the
+  compile-time probe for platform filename case-sensitivity (used
+  for `search_path`'s `case_sensitive=None` default) compared
+  `os.path.normcase('FOo')` against `os.path.norm`**`path`**`('foo')`.
+  It should be `normcase` on both sides.  It computed the correct
+  answer on every platform anyway, because `normpath('foo')` is
+  `'foo'`, which is exactly what `normcase('foo')` returns
+  everywhere.  Fixed so the incantation matches the intent--the
+  same answer, honestly derived.
+
+* 🤖 The descriptor `BoundInnerClass` leaves in the outer class's
+  `__dict__` is a transparent proxy for the inner class.  It had
+  forwarding properties for `__doc__` and `__module__`--which could
+  never run.  Every class body implicitly defines `__doc__` (its
+  docstring) and `__module__` in its class dict, and those
+  plain-string entries shadowed the properties the decorator
+  inherited from its proxy base class.  Upshot:
+  `Outer.__dict__['Inner'].__doc__` returned `BoundInnerClass`'s own
+  docstring--all sixty lines of it--instead of `Inner`'s, and
+  `.__module__` claimed everything lived in `big.boundinnerclass`.
+  (`help(Outer)` was always fine; pydoc reaches classes through
+  `getattr`, which returns the real class.)  Now the proxy copies
+  `__doc__` and `__module__` from the wrapped class into instance
+  attributes, exactly as it already did for `__qualname__` and
+  `__annotations__`, and no longer declares `__slots__`--instance
+  attributes only win this particular staring contest if there's an
+  instance `__dict__` for them to live in.  (An observable side
+  effect: the proxy now has a `__dict__` of its own, so
+  `Outer.__dict__['Inner'].__dict__` no longer forwards to the inner
+  class's `__dict__`.)
+
+* 🤖 `ModuleManager.export` now raises `ValueError` if you export a
+  name that's already in `__all__`, and `ModuleManager.delete`
+  likewise for a name already scheduled for deletion.  Both
+  doubled-`__all__` bugs fixed in this release (`big.scheduler`'s
+  stale hand-rolled `__all__`, `big.text`'s stray `@export` on an
+  internal function) would have been caught at import time by this
+  check--in *any* project that uses `ModuleManager`, not just big.
+  If a redundant export/delete is intentional, the new
+  keyword-only `force=True` flag permits it quietly, and
+  `__all__` still only lists each name once.
+
+* 🤖 Small fixes in `big.builtin`, all in error paths and
+  hostile-input corners:
+
+  * The `TypeError`s raised by `ModuleManager.export` and
+    `ModuleManager.delete` were missing their f-string `f` prefix,
+    so the message literally read `{o} isn't a string and doesn't
+    have a __name__`.
+  * `get_int` and `get_float` compared the caller's `default`
+    against the internal sentinel with `!=`, which invites the
+    default's `__eq__` to the party.  A default with vectorized
+    equality (a numpy array, say) crashed instead of being
+    returned.  Sentinels are compared by identity now, as is right
+    and proper.
+  * `ModuleManager`'s cleanup scanned the module's namespace for its
+    own bound methods by running `==` against *every* global--same
+    problem: one global with an exotic `__eq__` could blow up `mm()`
+    at module cleanup.  The scan is now gated by type, so `==` only
+    runs between actual bound methods.  (It can't simply use
+    identity: bound method objects are created fresh on every
+    attribute access, so `is` would never match your stored
+    `export = mm.export` alias.)
+
+* 🤖 Assorted small kindnesses:
+  * `ClassRegistry` now supports attribute
+    assignment and deletion (`registry.Name = cls` stores into the
+    registry, matching how attribute *access* already read from it).
+  * Using a `ClassRegistry` registry as a decorator without
+    parentheses--`@registry` instead of `@registry()`--now raises a
+    helpful `TypeError` instead of silently replacing your class with
+    an internal function.
+  * A `ModuleManager`'s cleanup now sweeps up only
+    *itself* and its own bound methods--other `ModuleManager`
+    instances in the same namespace are left alone, they can
+    clean up after themselves.
+  * `iterator_context`'s `ctx.length` and `ctx.countdown` now raise
+    `AttributeError` when the iterator doesn't support `len()`--
+    "undefined" now means the same thing for every ctx attribute, and
+    `hasattr(ctx, 'length')` is a correct capability probe.  (They used
+    to leak `TypeError` from `len()`.)
+  * `translate_filename_to_exfat`/`_to_unix` now raise `TypeError` for
+    non-string input, instead of claiming your integer was an empty
+    filename.
+
+</dd></dl>
+
+## 0.13.4
 
 *2026/07/02*
 
@@ -10040,7 +12618,7 @@ A bugfix release.  Comes with free regression tests!
 </dd></dl>
 
 
-#### 0.13.3
+## 0.13.3
 
 *2026/06/10*
 
@@ -10083,7 +12661,7 @@ A bugfix release.  Comes with free regression tests!
 </dd></dl>
 
 
-#### 0.13.2
+## 0.13.2
 
 *2026/04/24*
 
@@ -10108,7 +12686,7 @@ A bugfix release.  Comes with free regression tests!
 </dd></dl>
 
 
-#### 0.13.1
+## 0.13.1
 
 *2026/03/23*
 
@@ -10168,7 +12746,7 @@ one new helper class in *big.template* and a few small APIs.
     `Destination` will change completely, and `Sink` will change a
     whole lot too.  You're gonna love it!  (In the meantime...
     don't get too comfortable!)
-* Added [`Formatter`](#formattertemplate-mapnone--stretchtrue-width79-kwargs)
+* Added [`Formatter`](#formattertemplate-mapnone--relaxedfalse-stretchtrue-width79-kwargs)
   to [*big.template*](#bigtemplate).  `Formatter` is a reusable formatter for
   multi-line text templates with clever support for repeated / stretched
   line-fill fields via "starred interpolations".
@@ -10182,9 +12760,9 @@ one new helper class in *big.template* and a few small APIs.
   * Observer lists are no longer cached internally--they're now snapshotted
     at the start of every transition.  This fixes an obscure edge case:
     if you replaced one observer A with another observer B, and A == B even
-    though they're different objects, the `StateMachine` wouldn't refresh
+    though they're different objects, the `StateManager` wouldn't refresh
     its cache and would continue calling A.
-  * Trimmed no-op `StateMachine.on_enter` and  `StateMachine.on_exit`
+  * Trimmed no-op `State.on_enter` and `State.on_exit`
     methods.  They were useless in and of themselves, but I put them
     there on the theory that they'd help with autocomplete for these
     methods in subclasses when using advanced editors like PyCharm.
@@ -10209,7 +12787,7 @@ one new helper class in *big.template* and a few small APIs.
 </dd></dl>
 
 
-#### 0.13
+## 0.13
 
 *2026/02/17*
 
@@ -10303,7 +12881,7 @@ It's been more than a year... and I've been busy!
       class that has been bound to an instance.
     * [`bound_to`](#bound_tocls) returns the instance that cls has been
       bound to, if `cls` is a bound inner class bound to an instance.
-    * [`type_bound_to](#type_bound_tocls)` returns the instance that `type(o)` has
+    * [`type_bound_to`](#type_bound_tocls)` returns the instance that `type(o)` has
       been bound to, if `type(o)` is a bound inner class bound
       to an instance.
     * [`bound_inner_base`](#bound_inner_basecls) is only needed to use BoundInnerClass
@@ -10332,7 +12910,7 @@ It's been more than a year... and I've been busy!
   and Mako's ["loop context"](https://docs.makotemplates.org/en/latest/runtime.html#the-loop-context).
   It wraps an iterator and provides helpful metadata.
 * Added
-  [`iterator_filter`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone)
+  [`iterator_filter`](#iterator_filteriterator--stop_at_valueundefined-stop_at_innone-stop_at_predicatenone-stop_at_countnone-reject_valueundefined-reject_innone-reject_predicatenone-only_valueundefined-only_innone-only_predicatenone-call_everynone)
   to *big.itertools*.  `iterator_filter`
   is a pass-through iterator that filters values.
   You pass in an iterator, and rules for what values you
@@ -10418,7 +12996,7 @@ It's been more than a year... and I've been busy!
 </dd></dl>
 
 
-#### 0.12.8
+## 0.12.8
 
 *2025/01/06*
 
@@ -10437,7 +13015,7 @@ It's been more than a year... and I've been busy!
 </dd></dl>
 
 
-#### 0.12.7
+## 0.12.7
 
 *2024/12/15*
 
@@ -10451,7 +13029,7 @@ A teeny tiny new feature.
 </dd></dl>
 
 
-#### 0.12.6
+## 0.12.6
 
 *2024/12/13*
 
@@ -10477,7 +13055,7 @@ less than a day after the last big big release.
 </dd></dl>
 
 
-#### 0.12.5
+## 0.12.5
 
 *2024/12/13*
 
@@ -10546,7 +13124,7 @@ less than a day after the last big big release.
   for that version.  Currently all the values of this dict
   are identical, but that should change in the future.
 
-* A breaking API change to [`split_delimiters`](#split_delimiterss-delimiters--state-yieldsnone) is coming.
+* A breaking API change to [`split_delimiters`](#split_delimiterss-delimiters--state-yields4) is coming.
 
   `split_delimiters` now yields an object that
   can yield either three or four values.  Previous to 0.12.5, the
@@ -10599,7 +13177,7 @@ less than a day after the last big big release.
   so now that's all we do.)
 
 * A minor change to the
-  [`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse)
+  [`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse-nestednone-literal-changenone)
   object used with
   `split_delimiters`: previously, the `quoting` and
   `escape` values had to agree, either both being true
@@ -10614,7 +13192,7 @@ less than a day after the last big big release.
 </dd></dl>
 
 
-#### 0.12.4
+## 0.12.4
 
 *2024/11/15*
 
@@ -10659,14 +13237,14 @@ less than a day after the last big big release.
 </dd></dl>
 
 
-#### 0.12.3
+## 0.12.3
 
 *2024/09/17*
 
 <dl><dd>
 
 Optimized
-[`split_delimiters`](#split_delimiterss-delimiters--state).
+[`split_delimiters`](#split_delimiterss-delimiters--state-yields4).
 The new version uses a much more efficient internal representation
 of how to react to the various delimiters when processing the text.
 Perfunctory `timeit` experiments suggest this new `split_delimiters`
@@ -10679,7 +13257,7 @@ would sometimes raise `ValueError`.)
 </dd></dl>
 
 
-#### 0.12.2
+## 0.12.2
 
 *2024/09/11*
 
@@ -10703,7 +13281,7 @@ would sometimes raise `ValueError`.)
 </dd></dl>
 
 
-#### 0.12.1
+## 0.12.1
 
 *2024/09/07*
 
@@ -10785,7 +13363,7 @@ objects are immutable, ordered, and hashable.
 </dd></dl>
 
 
-#### 0.12
+## 0.12
 
 <dl><dd>
 
@@ -10804,13 +13382,13 @@ The following functions and classes have breaking changes:
 
 <dl><dd>
 
-[`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse)
+[`Delimiter`](#delimiterclose--escape-multilinetrue-quotingfalse-nestednone-literal-changenone)
 
 [`LineInfo`](#lineinfo)
 
 [`lines_strip_line_comments`](#lines_strip_line_comments)
 
-[`split_delimiters`](#split_delimiterss-delimiters--state)
+[`split_delimiters`](#split_delimiterss-delimiters--state-yields4)
 
 [`split_quoted_strings`](#split_quoted_stringss-quotes---escape-multiline_quotes-state)
 
@@ -10825,7 +13403,7 @@ These functions have been renamed:
 
 `lines_strip_comments` is now [`lines_strip_line_comments`](#lines_strip_line_comments)
 
-`parse_delimiters` is now [`split_delimiters`](#split_delimiterss-delimiters--state)
+`parse_delimiters` is now [`split_delimiters`](#split_delimiterss-delimiters--state-yields4)
 
 </dd></dl>
 
@@ -10903,7 +13481,7 @@ Example:
 
 `Delimiter` is a simple data class, representing information about
 delimiters to
-[`split_delimiters`](#split_delimiterss-delimiters--state)
+[`split_delimiters`](#split_delimiterss-delimiters--state-yields4)
  (previously `parse_delimiters`).
 `split_delimiters` has changed, and some of those changes are
 reflected in the `Delimiter` object; also, some changes to `Delimiter`
@@ -11247,7 +13825,7 @@ slower.)
 
 I also applied this same small optimization to several other
 functions in the `text` module.  In particular,
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_responseoverflowresponseraise-overflow_before0-overflow_after0)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
 was binding functions inside a loop (!!).  (Dumb, huh!)
 These local functions are still bound inside `merge_columns`,
 but now at least they're outside the loop.
@@ -11264,7 +13842,7 @@ result to avoid needless reversing.
 <dl><dd>
 
 This function has been renamed
-[`split_delimiters`](#split_delimiterss-delimiters--state)
+[`split_delimiters`](#split_delimiterss-delimiters--state-yields4)
 and rewritten,
 see below.  The old version is still available, using the name
 `big.deprecated.parse_delimiters` module, and will be available
@@ -11305,7 +13883,7 @@ removed most of them.
 
 > This API has breaking changes.
 
-[`split_delimiters`](#split_delimiterss-delimiters--state)
+[`split_delimiters`](#split_delimiterss-delimiters--state-yields4)
 is the new name for the old `parse_delimiters`
 function.  The function has also been completely re-tooled and
 re-written.
@@ -11452,7 +14030,7 @@ discussions._
 </dd></dl>
 
 
-#### 0.11
+## 0.11
 
 *2023/09/19*
 
@@ -11504,7 +14082,7 @@ discussions._
           unicode_whitespace_without_crlf
 
 * Changed
-  [`split_text_with_code`](#split_text_with_codes--tab_width8-allow_codetrue-code_indent4-convert_tabs_to_spacestrue)
+  [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
   implementation to use `StateManager`.
   (No API or semantic changes, just an change to the internal implementation.)
 * New function in the [`big.text`](#bigtext) module: [`encode_strings`,](#encode_stringso--encodingascii)
@@ -11551,7 +14129,7 @@ issues.  Eric is now officially a contributor to **big,** increasing the project
 </dd></dl>
 
 
-#### 0.10
+## 0.10
 
 *2023/09/04*
 
@@ -11577,7 +14155,7 @@ issues.  Eric is now officially a contributor to **big,** increasing the project
 </dd></dl>
 
 
-#### 0.9.2
+## 0.9.2
 
 *2023/07/22*
 
@@ -11588,7 +14166,7 @@ Extremely minor release.  No new features or bug fixes.
 * Fixed coverage, now back to the usual 100%.
   (This just required changing the tests, which
   *didn't* find any new bugs.)
-* Made the tests for [`Log`](#log-clocknone)
+* Made the tests for [`Log`](#logdestinations-options)
   deterministic.  They now use a fake clock
   that always returns the same values.
 * Added GitHub Actions integration.  Tests and
@@ -11602,19 +14180,19 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.9.1
+## 0.9.1
 <dl><dd>
 
 *2023/06/28*
 
 * Added the new [`big.log`](#biglog) module, with its new
-  [`Log`](#log-clocknone) class!
+  [`Log`](#logdestinations-options) class!
   I wrote this for another project--but it turned out so nice
   I just had to add it to **big**!
 
 </dd></dl>
 
-#### 0.9
+## 0.9
 
 *2023/06/15*
 
@@ -11634,7 +14212,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.8.3
+## 0.8.3
 
 *2023/06/11*
 
@@ -11652,7 +14230,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.8.2
+## 0.8.2
 *2023/05/19*
 
 <dl><dd>
@@ -11668,21 +14246,21 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.8.1
+## 0.8.1
 
 *2023/05/19*
 
 <dl><dd>
 
 * Added
-  `parse_delimiters` (ed: now [`split_delimiters`](#split_delimiterss-delimiters--state))
+  `parse_delimiters` (ed: now [`split_delimiters`](#split_delimiterss-delimiters--state-yields4))
   and
   [`Delimiter`.](#delimiteropen-close--backslashfalse-nestedtrue)
 
 </dd></dl>
 
 
-#### 0.8
+## 0.8
 
 *2023/05/18*
 
@@ -11759,7 +14337,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.7.1
+## 0.7.1
 
 *2023/03/13*
 
@@ -11782,7 +14360,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.7
+## 0.7
 
 *2023/03/11*
 
@@ -11821,7 +14399,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.18
+## 0.6.18
 
 *2023/03/09*
 
@@ -11837,7 +14415,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.17
+## 0.6.17
 
 *2023/03/09*
 
@@ -11857,7 +14435,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.16
+## 0.6.16
 
 *2023/02/26*
 
@@ -11874,7 +14452,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.15
+## 0.6.15
 
 *2023/01/07*
 
@@ -11897,7 +14475,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.14
+## 0.6.14
 
 *2022/12/11*
 
@@ -11911,7 +14489,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.13
+## 0.6.13
 
 *2022/12/11*
 
@@ -11926,7 +14504,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.12
+## 0.6.12
 
 *tagged 2022/12/04*
 
@@ -11950,7 +14528,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.11
+## 0.6.11
 
 *tagged 2022/11/13*
 
@@ -11970,7 +14548,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.10
+## 0.6.10
 
 *2022/10/26*
 
@@ -12008,7 +14586,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.8
+## 0.6.8
 
 *2022/10/16*
 
@@ -12023,7 +14601,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.7
+## 0.6.7
 
 *2022/10/16*
 
@@ -12042,7 +14620,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.6
+## 0.6.6
 
 *2022/10/14*
 
@@ -12067,7 +14645,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.5
+## 0.6.5
 
 *2022/10/13*
 
@@ -12086,7 +14664,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6.1
+## 0.6.1
 
 *2022/10/13*
 
@@ -12102,7 +14680,7 @@ Extremely minor release.  No new features or bug fixes.
 </dd></dl>
 
 
-#### 0.6
+## 0.6
 
 *2022/10/13*
 
@@ -12171,7 +14749,7 @@ A **big** upgrade!
 </dd></dl>
 
 
-#### 0.5.2
+## 0.5.2
 
 *2022/09/12*
 
@@ -12183,7 +14761,7 @@ A **big** upgrade!
 </dd></dl>
 
 
-#### 0.5.1
+## 0.5.1
 
 *2022/09/04*
 
@@ -12206,7 +14784,7 @@ A **big** upgrade!
 </dd></dl>
 
 
-#### 0.5
+## 0.5
 
 *2022/06/12*
 

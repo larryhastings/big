@@ -42,7 +42,12 @@ except ImportError: # pragma: no cover
         """
         pass
 
-__all__ = ["TopologicalSorter", "CycleError"]
+
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
+
+export('CycleError')
 
 
 
@@ -61,6 +66,7 @@ def _hopefully_sorted_callable(c):
     except TypeError: # pragma: no cover
         return iter(c())
 
+@export
 class TopologicalSorter:
     """
     An object representing a directed graph of nodes.
@@ -71,11 +77,13 @@ class TopologicalSorter:
     https://docs.python.org/3/library/graphlib.html#graphlib.TopologicalSorter
     """
 
-    class View:
+    class _ViewBase:
         """
-        A view on a TopologicalSorter graph object.
-        Allows iterating over the nodes of the graph
-        in dependency order.
+        The shared core of a TopologicalSorter view: everything a
+        view does except close.  Two sibling subclasses complete it:
+        View, which can be closed; and _InternalView, the graph's own
+        default and stock views, which refuse to close because the
+        graph depends on them.
         """
         def __init__(self, graph, *, original=None):
             if not isinstance(graph, TopologicalSorter):
@@ -122,13 +130,17 @@ class TopologicalSorter:
             self._done = set()
 
         def __repr__(self):
-            return f"<View {hex(id(self))} on graph={hex(id(self.graph))} ready={self._ready} yielded={len(self._yielded)} done={len(self._done)} conflicts={bool(self._conflicts)}>"
+            return f"<{type(self).__name__} {hex(id(self))} on graph={hex(id(self.graph))} ready={self._ready} yielded={len(self._yielded)} done={len(self._done)} conflicts={bool(self._conflicts)}>"
 
         def copy(self):
             """
-            Returns a shallow copy of the view, duplicating its current state.
+            Returns a shallow copy of the view, duplicating its
+            current state.  The copy is always an ordinary, closable
+            View--even a copy of an internal view.  (This is
+            load-bearing: TopologicalSorter.view() is implemented as
+            self._stock_view.copy().)
             """
-            return self.__class__(self.graph, original=self)
+            return TopologicalSorter.View(self.graph, original=self)
 
         def reset(self):
             """
@@ -146,29 +158,13 @@ class TopologicalSorter:
             self._conflicts.clear()
             self._reverse_conflicts.clear()
 
-        def close(self):
-            """
-            Closes the view.  A closed view can no longer be used.
-            """
-            if self.graph is None:
-                raise ValueError("TopologicalSorter view is already closed")
-
-            self.graph.views.remove(self)
-            self.graph = None
-
-            del self._predecessors
-            del self._ready
-            del self._yielded
-            del self._done
-            del self._conflicts
-            del self._reverse_conflicts
-
         def _raise_conflicts(self):
             conflict_descriptions = []
-            for node, successor in self._conflicts.items():
-                conflict_descriptions.append(f"successor node {successor} is 'yielded' or 'done', but it depends on predecessor node {node} which is not 'done'")
+            for node, successors in self._conflicts.items():
+                for successor in successors:
+                    conflict_descriptions.append(f"successor node {successor!r} is 'yielded' or 'done', but it depends on predecessor node {node!r} which is not 'done'")
             s = ".  ".join(conflict_descriptions)
-            raise RuntimeError(f"TopologicalSorter view is incoherent to the graph: {s}")
+            raise RuntimeError(f"TopologicalSorter view is incoherent with the graph: {s}")
 
         def __bool__(self):
             """
@@ -208,17 +204,28 @@ class TopologicalSorter:
                 raise ValueError("TopologicalSorter view has already been closed")
             if self._conflicts:
                 self._raise_conflicts()
+            # Validate everything before mutating anything, so an
+            # invalid call can't leave the view half-updated.  In
+            # particular a duplicate node is an error: marking a node
+            # done twice in one call would decrement its successors'
+            # predecessor counts twice, letting successors come ready
+            # before their other predecessors were done.
+            seen = set()
             for node in nodes:
+                if node in seen:
+                    raise ValueError(f"node {node!r} passed to done() more than once")
+                seen.add(node)
+
                 if node not in self.graph.nodes:
                     raise ValueError(f"node {node!r} was not added using add()")
                 if node not in self._yielded:
                     raise ValueError(f"node {node!r} was not passed out")
+            for node in nodes:
                 self._mark_node_done(node, self.graph.nodes[node][1])
-            nodes = set(nodes)
-            self._done |= nodes
-            self._yielded -= nodes
+            self._done |= seen
+            self._yielded -= seen
 
-        #
+
         # These functions are internal only.
         # They're a private API between the graph
         # and the views on the graph, or just internal
@@ -233,7 +240,6 @@ class TopologicalSorter:
         # be used by any code outside this file.
         #
         # That enough warnings for you?  Don't touch!  I mean it!
-        #
         def _add_nodes(self, nodes):
             """
             event: nodes have been added to the graph.
@@ -255,7 +261,7 @@ class TopologicalSorter:
             successor is guaranteed to be a new successor to node.
             """
 
-            # Determine whether or not the graph is now incoherent.
+            # Determine whether or not the view is now incoherent with the graph.
             #
             # Legend:
             #   a CAPITAL LETTER represents "node", the predecessor node
@@ -268,7 +274,7 @@ class TopologicalSorter:
             #   nodes "C" and "3" have been marked done.
             #
             #   a result of lowercase "o" means "this is fine"
-            #   a result of lowercase "x" means "the graph is now incoherent"
+            #   a result of lowercase "x" means "the view is now incoherent with the graph"
             #
             # resolution table:
             #
@@ -278,7 +284,7 @@ class TopologicalSorter:
             # C|o* o  o
             #
             # o = ok!
-            # x = not ok, view is incoherent.
+            # x = not ok, view is incoherent with the graph.
             # * = if 1 was previously waiting in "ready", it's removed.
 
             conflict_1 = not (node in self._done)      # "node" is not C, so it's A or B
@@ -364,6 +370,42 @@ class TopologicalSorter:
             self.graph.print(print=print)
             print()
 
+    class _InternalView(_ViewBase):
+        """
+        The class of a TopologicalSorter's own two views: the default
+        view (which backs the graph-level ready/done/reset convenience
+        API) and the stock view (the pristine template that view()
+        copies).  A sibling of View that refuses to close--the graph
+        depends on these.
+        """
+
+        def close(self):
+            raise ValueError("can't close a TopologicalSorter's internal view")
+
+    class View(_ViewBase):
+        """
+        A view on a TopologicalSorter graph object.
+        Allows iterating over the nodes of the graph
+        in dependency order.
+        """
+
+        def close(self):
+            """
+            Closes the view.  A closed view can no longer be used.
+            """
+            if self.graph is None:
+                raise ValueError("TopologicalSorter view is already closed")
+
+            self.graph.views.remove(self)
+            self.graph = None
+
+            del self._predecessors
+            del self._ready
+            del self._yielded
+            del self._done
+            del self._conflicts
+            del self._reverse_conflicts
+
     def __bool__(self):
         """
         Returns True if more work can be done in the
@@ -425,8 +467,8 @@ class TopologicalSorter:
         self.dirty = False
 
         self.views = []
-        self._default_view = self.View(self)
-        self._stock_view = self.View(self)
+        self._default_view = self._InternalView(self)
+        self._stock_view = self._InternalView(self)
 
         if graph is not None:
             for node, dependencies in graph.items():
@@ -546,14 +588,26 @@ class TopologicalSorter:
         duplicates the state of get_ready and done.
         """
         clone = self.__class__()
+        # __init__ gave the clone a default view and a stock view;
+        # we're about to build the real ones (copied from ours),
+        # so discard the two placeholders.
+        #
+        # Note that the copied views must be constructed *against the
+        # clone*--View.__init__ registers the view on the graph it's
+        # passed.  (Once upon a time this method used
+        # self._default_view.copy(), which registered the clone's
+        # views on the *original* graph, cross-wiring the two graphs'
+        # notifications forever.)
+        clone.views.clear()
+
+        clone.dirty = self.dirty
+
         for node, p_s in self.nodes.items():
             p, s = p_s
             clone.nodes[node] = [p, s.copy()]
 
-        clone._default_view = self._default_view.copy()
-        clone._default_view.graph = clone
-        clone._stock_view = self._stock_view.copy()
-        clone._stock_view.graph = clone
+        clone._default_view = self._InternalView(clone, original=self._default_view)
+        clone._stock_view = self._InternalView(clone, original=self._stock_view)
 
         return clone
 
@@ -605,6 +659,15 @@ class TopologicalSorter:
         # but this is Python and we could blow our stack.
         iterators = [iter(nodes)]
         seen = set()
+        # "finished" is the classic third DFS color: nodes fully
+        # explored without finding a cycle.  No cycle is reachable
+        # through a finished node (a back edge into the current path
+        # would have been caught via "seen" during its exploration),
+        # so we never need to descend into one again.  Without this
+        # check, diamond-shaped acyclic regions get re-explored once
+        # per distinct path--exponential.  (A 79-node diamond ladder
+        # took ~40 seconds to report its 2-cycle.)
+        finished = set()
         cycle = []
 
         while iterators:
@@ -616,6 +679,9 @@ class TopologicalSorter:
                 # marked 'done' yet, and the only thing we ever
                 # add to 'iterators' are successor nodes.
                 assert node not in done
+                if node in finished:
+                    # already fully explored, no cycle through here
+                    continue
                 if node in seen:
                     # found a cycle
                     index = cycle.index(node)
@@ -629,6 +695,7 @@ class TopologicalSorter:
                 # ascend
                 node = cycle.pop()
                 seen.remove(node)
+                finished.add(node)
                 iterators.pop()
 
     def check_for_cycles(self):
@@ -640,18 +707,27 @@ class TopologicalSorter:
         if self.dirty:
             cycle = self.cycle()
             if cycle:
-                raise CycleError(f"nodes are in a cycle", cycle)
+                raise CycleError("nodes are in a cycle", cycle)
 
     def static_order(self):
         """
         Returns an iterator object that yields the
         graph's nodes in topological order.
         """
+        # The finally is load-bearing: views stay registered on the
+        # graph (and get notified about every mutation) until closed,
+        # so an unclosed view is a leak that slows every future add().
+        # Since this is a generator, the consumer might abandon us
+        # mid-iteration--generator finalization runs the finally then,
+        # too.
         v = self.view()
-        while v:
-            ready = v.ready()
-            yield from ready
-            v.done(*ready)
+        try:
+            while v:
+                ready = v.ready()
+                yield from ready
+                v.done(*ready)
+        finally:
+            v.close()
 
     def print(self, print=print):
         """
@@ -670,6 +746,8 @@ class TopologicalSorter:
     prepare = check_for_cycles
     get_ready = ready
 
+
+mm()
 
 
 if __name__ == "__main__": # pragma: no cover

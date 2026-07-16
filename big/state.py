@@ -26,19 +26,21 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 from functools import update_wrapper
-from inspect import signature
+# (inspect.signature is imported lazily, inside dispatch--
+# inspect costs ~13ms to import and decoration is rare.)
 
 from . import builtin
 mm = builtin.ModuleManager()
 export = mm.export
 
 
+
 @export
 class State:
     """
     Base class for state machine state implementation classes.
-    Use of this base class is optional; states can be instances
-    of any type except types.NoneType.
+    Use of this base class is optional; states can be any
+    value except None.
 
     States may optionally define on_enter() and on_exit()
     methods (or whatever names are configured on the
@@ -51,9 +53,12 @@ class State:
 
 
 @export
-class TransitionError(RecursionError):
+class TransitionError(RuntimeError):
     """
     Exception raised when attempting to execute an illegal state transition.
+
+    TransitionError subclasses RuntimeError: both kinds of illegal
+    transition are legal operations attempted at an illegal moment.
 
     There are only two types of illegal state transitions:
 
@@ -110,7 +115,10 @@ class StateManager:
               remaining observers, completes the state transition,
               and then re-raises that first exception.  (If more
               than one observer raises an exception, only the first
-              exception is retained and re-raised.)
+              exception is retained and re-raised.  If on_enter
+              *also* raises an exception, the observer's exception
+              still wins--it was first--and the on_enter exception
+              is chained to it, as its __cause__.)
 
     The constructor takes the following parameters:
 
@@ -123,9 +131,10 @@ class StateManager:
         to look up an attribute on state objects; by default
         on_enter is the string 'on_enter', but it can be any legal
         Python identifier string or any false value.
-        If on_enter is a valid identifier string, and this StateMachine
+
+        If on_enter is a valid identifier string, and this StateManager
         object transitions to a state object O, and O has an attribute
-        with this name, StateMachine will call that attribute (with no
+        with this name, StateManager will call that attribute (with no
         arguments) immediately after transitioning to that state.
         Passing in a false value for on_enter disables this behavior.
         on_enter is called immediately after the transition is complete,
@@ -197,8 +206,11 @@ class StateManager:
         * Set self.next to None.
         * If self.state has an attribute called 'on_enter',
           call self.state.on_enter().
-        * If an observer raised an exception, re-raise the first
-          observer exception now.
+        * If an observer or on_enter raised an exception, re-raise
+          the *first* exception raised now.  (If both an observer
+          and on_enter raised, the observer's exception came first,
+          so it wins; the on_enter exception is chained to it as
+          its __cause__.)
 
     You may also be interested in the `accessor` and `dispatch`
     decorators in this module.
@@ -211,10 +223,10 @@ class StateManager:
 
     @state.setter
     def state(self, state):
-        if (self.state_class is not None) and (not isinstance(state, self.state_class)):
-            raise TypeError(f"invalid state object {state}, must be an instance of {self.state_class.__name__}")
         if state is None:
             raise ValueError("state can't be None")
+        if (self.state_class is not None) and (not isinstance(state, self.state_class)):
+            raise TypeError(f"invalid state object {state}, must be an instance of {self.state_class.__name__}")
         if self.__next is not None:
             raise TransitionError(f"can't start new state transition to {state}, still processing transition to {self.__next}")
 
@@ -270,7 +282,17 @@ class StateManager:
             # because the state transition is complete at this moment.
             on_enter = getattr(self.__state, self.on_enter, None)
             if on_enter is not None:
-                on_enter()
+                try:
+                    on_enter()
+                except Exception as enter_exception:
+                    # the first exception wins.  if an observer
+                    # already raised, its exception is re-raised
+                    # with on_enter's chained as the cause;
+                    # otherwise on_enter's exception is first.
+                    if exception is None:
+                        exception = enter_exception
+                    else:
+                        raise exception from enter_exception
 
         if exception is not None:
             raise exception
@@ -448,6 +470,7 @@ def dispatch(state_manager='state_manager', *, prefix='', suffix=''):
 
     """
     def dispatch(fn):
+        from inspect import signature
         def wrapper(self, *args, **kwargs):
             i = getattr(self, state_manager)
             method = getattr(i.state, f'{prefix}{fn.__name__}{suffix}')

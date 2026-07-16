@@ -25,13 +25,9 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-__all__ = ['Regulator', 'SingleThreadedRegulator', 'ThreadSafeRegulator', 'Scheduler']
-
-
 from abc import abstractmethod
 import threading
 from .heap import Heap
-import sys
 import time
 
 
@@ -127,8 +123,16 @@ class Regulator:
     @abstractmethod
     def wake(self): # pragma: no cover
         """
-        Aborts all current calls to sleep on this
-        Regulator, across all threads.
+        Aborts at least one current call to sleep on this
+        Regulator.
+
+        A wake must never be lost.  The Scheduler calls wake
+        while holding the lock, but calls sleep *after*
+        releasing it--so a wake may arrive after a thread has
+        committed to sleeping but before it actually sleeps.
+        wake must be a level, not a pulse: if no thread is
+        currently sleeping, the next call to sleep must
+        return immediately.
 
         A Scheduler will only call this method while
         holding this regulator's lock.
@@ -146,7 +150,7 @@ class SingleThreadedRegulator(Regulator):
     """
 
     def __repr__(self): # pragma: no cover
-        return f"<SingleThreadedRegulator>"
+        return "<SingleThreadedRegulator>"
 
     def now(self):
         return time.monotonic()
@@ -166,26 +170,44 @@ class ThreadSafeRegulator(Regulator):
     """
     A thread-safe Regulator object designed
     for use in multithreaded programs.
-    It uses Python's threading.Event and
-    threading.Lock.
+    It uses Python's threading.Lock.
+
+    Sleeping and waking are built on the classic
+    "double acquire" trick: a "blocker" is a lock
+    that we acquire, publish, and acquire *again*,
+    with the sleep interval as the timeout.  wake
+    releases the "blocker".  This makes wake a level,
+    not a pulse: a wake with no sleeper parks the
+    blocker open, so the next sleep returns
+    immediately--and its acquire re-initializes the
+    blocker in the same atomic operation.  A wake can
+    never be lost!
     """
 
     def __init__(self):
-        self.event = threading.Event()
         self.lock = threading.Lock()
+        self.blocker = threading.Lock()
+        self.blocker.acquire()
 
     def __repr__(self): # pragma: no cover
-        return f"<ThreadSafeRegulator event={self.event} lock={self.lock}>"
+        return f"<ThreadSafeRegulator blocker={self.blocker} lock={self.lock}>"
 
     def now(self):
         return time.monotonic()
 
     def wake(self):
-        self.event.set()
-        self.event.clear()
+        try:
+            self.blocker.release()
+        except RuntimeError:
+            # already released: the level is already up,
+            # and the wake is already parked.
+            pass
 
     def sleep(self, interval):
-        self.event.wait(interval)
+        # whether this times out (blocker stays armed) or gets
+        # woken (our acquire re-arms it), the blocker is armed
+        # again by the time we return.
+        self.blocker.acquire(timeout=interval)
 
 
 DEFAULT_PRIORITY = 100
@@ -305,7 +327,7 @@ class Scheduler:
         """
         Cancel a scheduled event.
 
-        event must be a value returned by add().
+        event must be a value returned by schedule().
         If the event is not in the queue, raises ValueError.
         """
         with self.regulator.lock:

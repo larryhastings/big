@@ -28,13 +28,18 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 import calendar
-from datetime import date, datetime, timezone
-try: # pragma: no cover
-    import dateutil.parser
-    have_dateutils = True
-except ImportError: # pragma: no cover
-    have_dateutils = False
+from datetime import date, datetime, timedelta, timezone
+import importlib.util
 import time
+
+# whether parse_timestamp_3339Z gets defined depends on dateutil
+# being available--but *importing* dateutil.parser costs ~4ms, so
+# we only probe for it here (find_spec doesn't execute the module)
+# and defer the real import to the first parse_timestamp_3339Z call.
+try: # pragma: no cover
+    have_dateutils = importlib.util.find_spec('dateutil.parser') is not None
+except (ImportError, ModuleNotFoundError, ValueError): # pragma: no cover
+    have_dateutils = False
 
 
 from . import builtin
@@ -71,6 +76,10 @@ def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
     If want_microseconds is None (the default), the timestamp
     ends in microseconds if t is a type that can represent
     fractional seconds (which is any accepted type except int).
+
+    tzinfo is the timezone the timestamp is rendered in; it should
+    be a datetime.tzinfo object or None.  None (the default) means
+    the currently-set local timezone.
     """
     if isinstance(t, time.struct_time):
         if t.tm_zone == "GMT":
@@ -83,15 +92,19 @@ def timestamp_human(t=None, want_microseconds=None, *, tzinfo=None):
     if t is None:
         t = datetime.now()
     elif isinstance(t, (int, float)):
-        if want_microseconds == None:
+        if want_microseconds is None:
             want_microseconds = isinstance(t, float)
         t = datetime.fromtimestamp(t)
     elif not isinstance(t, datetime):
         raise TypeError(f"unrecognized type {type(t)}")
-    if t.tzinfo is None:
-        t = t.astimezone(tzinfo)
+    # astimezone handles naive and aware datetimes alike: naive
+    # datetimes are assumed to be local time, and aware datetimes
+    # are *converted*--which is what the docstring promises.
+    # (this used to be guarded with "if t.tzinfo is None", so
+    # aware datetimes were never converted to the local timezone.)
+    t = t.astimezone(tzinfo)
 
-    if want_microseconds == None:
+    if want_microseconds is None:
         # if it's still None, t must be a type that supports microseconds
         want_microseconds = True
 
@@ -146,16 +159,19 @@ def timestamp_3339Z(t=None, want_microseconds=None):
     if t is None:
         t = datetime.now(timezone.utc)
     elif isinstance(t, (int, float)):
-        t = datetime.fromtimestamp(t, timezone.utc)
-        if want_microseconds == None:
+        # check t's type *before* replacing it with a datetime!
+        # (this check used to come after, so it was always False:
+        # floats never got their promised microseconds.)
+        if want_microseconds is None:
             want_microseconds = isinstance(t, float)
+        t = datetime.fromtimestamp(t, timezone.utc)
     elif isinstance(t, datetime):
         if t.tzinfo != timezone.utc:
             t = t.astimezone(timezone.utc)
     else:
         raise TypeError(f"unrecognized type {type(t)}")
 
-    if want_microseconds == None:
+    if want_microseconds is None:
         # if want_microseconds is *still* None,
         # t must be a type that supports microseconds
         want_microseconds = True
@@ -169,22 +185,155 @@ def timestamp_3339Z(t=None, want_microseconds=None):
 
 
 @export
+def duration_human(t, *, long=True, want_microseconds=None):
+    """
+    Return an elapsed time formatted as a human-readable string,
+    breaking it into days, hours, minutes, and seconds.  The long
+    format reads like prose, joined with Oxford comma rules--two
+    units get a bare 'and', three or more get commas with ', and'
+    before the last:
+
+        >>> duration_human(90)
+        '1 minute and 30 seconds'
+        >>> duration_human(90061)
+        '1 day, 1 hour, 1 minute, and 1 second'
+
+    Pass in a false value for long to get the short format:
+
+        >>> duration_human(90, long=False)
+        '1m 30s'
+        >>> duration_human(90061, long=False)
+        '1d 1h 1m 1s'
+
+    t should be a number of seconds, either int or float,
+    or a datetime.timedelta object.
+
+    Days are the largest unit; a long duration is a large
+    number of days ('365 days and 6 hours').  Units are included
+    starting at the largest nonzero unit and stopping at the
+    last nonzero unit; zero units in the middle are included,
+    so every rendered duration reads unambiguously:
+
+        >>> duration_human(3600, long=False)
+        '1h'
+        >>> duration_human(3601, long=False)
+        '1h 0m 1s'
+
+    A zero duration is '0 seconds' (or '0s').  A negative
+    duration is formatted like a positive one, with a
+    leading '-'.
+
+    want_microseconds controls sub-second precision, and may be
+    None (the default), True, or False:
+
+      * True means seconds are rendered with microsecond
+        precision.  Fractional seconds appear only when nonzero,
+        rounded to microsecond precision, with trailing zeroes
+        removed ('1.5 seconds', never '1.500000 seconds').
+      * False means seconds are rendered as whole seconds: the
+        duration is rounded to the nearest second, ties rounding
+        up (away from zero).
+      * None means want_microseconds decides for itself: it's
+        True if the total duration is less than one minute, and
+        False otherwise.  While a duration is short enough that
+        fractions of a second matter, you get them; once it
+        grows a minutes column, you don't:
+
+        >>> duration_human(1.5)
+        '1.5 seconds'
+        >>> duration_human(90061.5)
+        '1 day, 1 hour, 1 minute, and 2 seconds'
+        >>> duration_human(90061.5, want_microseconds=True)
+        '1 day, 1 hour, 1 minute, and 1.5 seconds'
+
+    The integer arithmetic is exact, so rounding can never
+    produce a nonsense duration like '59.9999999 seconds' or
+    '60 seconds': 59.9999999 seconds renders as '1 minute'.
+    """
+    if isinstance(t, timedelta):
+        t = t.total_seconds()
+    elif not isinstance(t, (int, float)):
+        raise TypeError(f"unrecognized type {type(t)}")
+
+    if t < 0:
+        sign = '-'
+        t = -t
+    else:
+        sign = ''
+
+    if want_microseconds is None:
+        want_microseconds = t < 60
+
+    microseconds = round(t * 1000000)
+    seconds, microseconds = divmod(microseconds, 1000000)
+    if not want_microseconds:
+        # round to the nearest whole second; ties round up.
+        seconds += microseconds >= 500000
+        microseconds = 0
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+
+    if microseconds:
+        fraction = format(microseconds, '06').rstrip('0')
+        # a string, but that's fine: pluralize formats it with
+        # {}, and a fractional count is never equal to 1, so
+        # it's always correctly plural.
+        seconds_value = f"{seconds}.{fraction}"
+    else:
+        seconds_value = seconds
+
+    if long:
+        rendered = [
+            (days,                       builtin.pluralize(days, 'day')),
+            (hours,                      builtin.pluralize(hours, 'hour')),
+            (minutes,                    builtin.pluralize(minutes, 'minute')),
+            (seconds or microseconds,    builtin.pluralize(seconds_value, 'second')),
+            ]
+        zero = '0 seconds'
+    else:
+        rendered = [
+            (days,                       f"{days}d"),
+            (hours,                      f"{hours}h"),
+            (minutes,                    f"{minutes}m"),
+            (seconds or microseconds,    f"{seconds_value}s"),
+            ]
+        zero = '0s'
+
+    # strip leading and trailing zero units; keep interior zeros.
+    while rendered and (not rendered[0][0]):
+        del rendered[0]
+    while rendered and (not rendered[-1][0]):
+        del rendered[-1]
+
+    if not rendered:
+        return zero
+    strings = [s for value, s in rendered]
+    if long:
+        # the long format joins like prose, Oxford comma rules:
+        # two units get a bare 'and', three or more get commas
+        # with ', and' before the last.
+        trailing = strings.pop()
+        if len(strings) > 1:
+            leading = ', '.join(strings)
+            joined = f'{leading}, and {trailing}'
+        elif strings:
+            joined = f'{strings[0]} and {trailing}'
+        else:
+            joined = trailing
+    else:
+        joined = ' '.join(strings)
+    return sign + joined
+
+
+@export
 def datetime_set_timezone(d, timezone):
     """
     Returns a new datetime.datetime object identical
     to d but with its tzinfo set to timezone.
     """
-    return datetime(
-        year = d.year,
-        month = d.month,
-        day = d.day,
-        hour = d.hour,
-        minute = d.minute,
-        second = d.second,
-        microsecond = d.microsecond,
-        tzinfo = timezone,
-        fold = d.fold,
-        )
+    # replace copies every field (fold included), swapping tzinfo.
+    return d.replace(tzinfo=timezone)
 
 @export
 def datetime_ensure_timezone(d, timezone):
@@ -214,8 +363,8 @@ if have_dateutils:
         a timezone, the 'tzinfo' attribute of the returned object
         will be explicitly set to timezone.
         """
+        import dateutil.parser
         d = dateutil.parser.parse(s)
-        assert d
         d = datetime_ensure_timezone(d, timezone)
         return d
 

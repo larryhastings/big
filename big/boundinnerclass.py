@@ -60,9 +60,13 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ##
 
 
-import inspect
+# note: inspect is deliberately NOT imported at module level.
+# it's expensive (~13ms--it drags in dis, typing, and more), and
+# it's only needed for lazy signature computation.  the one
+# function that needs it imports it locally.
 import sys
 import threading
+import types
 import weakref
 
 _python_3_7_plus = (sys.version_info.major > 3) or ((sys.version_info.major == 3) and (sys.version_info.minor >= 7))
@@ -92,65 +96,41 @@ _BOUNDINNERCLASS_INNER_ATTR = '__boundinnerclass_inner__'
 if _python_3_7_plus: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
-        """
-        Simple wrapper for Python 3.6 compatibility for bound inner classes.
-
-        Returns the base class for declaring a subclass of a
-        bound inner class while still in the outer class scope.
-        Only needed for Python 3.6 compatibility.
-
-        Example:
-
-            class Outer:
-                @BoundInnerClass
-                class InnerParent:
-                    ...
-                @BoundInnerClass
-                class InnerChild(InnerParent):
-                    ...
-
-        This would fail in Python 3.6.  If you change the
-        declaration of "InnerChild" to this:
-
-                class InnerChild(bound_inner_base(InnerParent)):
-
-        then it works.
-
-        Unnecessary in Python 3.7+, or when the child class
-        is defined after exiting the outer class scope.
-        """
+        "Placeholder docstring, overwritten with the real documentation (shared by both version-specific variants) right after this symbol gets bound."
         return o
 else: # pragma: nocover
     @export
     def bound_inner_base(o): # pragma: nocover
-        """
-        Simple wrapper for Python 3.6 compatibility for bound inner classes.
-
-        Returns the base class for declaring a subclass of a
-        bound inner class while still in the outer class scope.
-        Only needed for Python 3.6 compatibility.
-
-        Example:
-
-            class Outer:
-                @BoundInnerClass
-                class InnerParent:
-                    ...
-                @BoundInnerClass
-                class InnerChild(InnerParent):
-                    ...
-
-        This would fail in Python 3.6.  If you change the
-        declaration of "InnerChild" to this:
-
-                class InnerChild(bound_inner_base(InnerParent)):
-
-        then it works.
-
-        Unnecessary in Python 3.7+, or when the child class
-        is defined after exiting the outer class scope.
-        """
+        "Placeholder docstring, overwritten with the real documentation (shared by both version-specific variants) right after this symbol gets bound."
         return o.cls
+
+bound_inner_base.__doc__ = """
+Simple wrapper for Python 3.6 compatibility for bound inner classes.
+
+Returns the base class for declaring a subclass of a
+bound inner class while still in the outer class scope.
+Only needed for Python 3.6 compatibility.
+
+Example:
+
+    class Outer:
+        @BoundInnerClass
+        class InnerParent:
+            ...
+        @BoundInnerClass
+        class InnerChild(InnerParent):
+            ...
+
+This would fail in Python 3.6.  If you change the
+declaration of "InnerChild" to this:
+
+        class InnerChild(bound_inner_base(InnerParent)):
+
+then it works.
+
+Unnecessary in Python 3.7+, or when the child class
+is defined after exiting the outer class scope.
+"""
 
 
 
@@ -167,6 +147,8 @@ def _bound_class_new_or_init_signature(new_or_init):
 
     Returns None if signature cannot be determined.
     """
+    import inspect
+
     try:
         signature = inspect.signature(new_or_init)
     except (ValueError, TypeError):
@@ -205,39 +187,37 @@ class _ClassProxy:
     Inspired by wrapt.ObjectProxy, but much simpler--we only need to
     proxy classes, not arbitrary objects with arithmetic operators, etc.
 
-    Note: __qualname__ and __annotations__ can't be properties in Python,
-    so we copy them as actual attributes and handle them explicitly in
-    __getattr__/__setattr__.
+    Note: __qualname__, __annotations__, __doc__, and __module__ are
+    copied from the wrapped class into instance attributes, and handled
+    explicitly in __setattr__.  __qualname__ and __annotations__ *can't*
+    be properties in Python.  __doc__ and __module__ *could* be... but
+    the properties would never run: every subclass's class body
+    implicitly defines '__doc__' (its docstring) and '__module__' in
+    its class dict, and those plain-string entries shadow properties
+    inherited from _ClassProxy.  Instance attributes, however, beat
+    plain (non-descriptor) class attributes.  Which is also why
+    _ClassProxy and its subclasses must not declare __slots__: the
+    proxy needs an instance __dict__ for these attributes to live in.
+    (There's one proxy per decorated class, so the memory cost of
+    __dict__ is irrelevant.)
     """
 
-    if _python_3_7_plus:
-        __slots__ = ( '__annotations__', '__qualname__', '__wrapped__' )
-    else: # pragma: nocover
-        __slots__ = ( '__annotations__', '__wrapped__' )
+    _COPIED_ATTRIBUTES = ('__annotations__', '__doc__', '__module__', '__qualname__')
+
+    def _copy_wrapped_attributes(self, wrapped):
+        for name in self._COPIED_ATTRIBUTES:
+            try:
+                object.__setattr__(self, name, getattr(wrapped, name))
+            except AttributeError:
+                pass
 
     def __init__(self, wrapped):
         object.__setattr__(self, '__wrapped__', wrapped)
-        # These must be actual attributes, not properties
-        try:
-            object.__setattr__(self, '__qualname__', wrapped.__qualname__)
-        except AttributeError:
-            pass
-        try:
-            object.__setattr__(self, '__annotations__', wrapped.__annotations__)
-        except AttributeError:
-            pass
+        self._copy_wrapped_attributes(wrapped)
 
     @property
     def __name__(self):
         return self.__wrapped__.__name__
-
-    @property
-    def __doc__(self):
-        return self.__wrapped__.__doc__
-
-    @property
-    def __module__(self):
-        return self.__wrapped__.__module__
 
     @property
     def cls(self):
@@ -253,17 +233,8 @@ class _ClassProxy:
     def __setattr__(self, name, value):
         if name == '__wrapped__':
             object.__setattr__(self, name, value)
-            # Update cached attributes
-            wrapped = value
-            try:
-                object.__setattr__(self, '__qualname__', wrapped.__qualname__)
-            except AttributeError:
-                pass
-            try:
-                object.__setattr__(self, '__annotations__', wrapped.__annotations__)
-            except AttributeError:
-                pass
-        elif name in ('__qualname__', '__annotations__'):
+            self._copy_wrapped_attributes(value)
+        elif name in self._COPIED_ATTRIBUTES:
             # Set on both proxy and wrapped
             object.__setattr__(self, name, value)
             setattr(self.__wrapped__, name, value)
@@ -291,13 +262,45 @@ class _BoundInnerClassCache:
 
     Handles key management and stale entry detection internally.
     Thread-safe: all operations are protected by an internal lock.
+
+    A cache belongs to exactly one outer instance, remembered by weak
+    reference.  _get_cache validates ownership on every access, so a
+    cache that gets transplanted onto some *other* instance--by
+    copy.copy, by a user-defined __deepcopy__ or __getstate__ that
+    naively shares __dict__, by __dict__.update, by whatever--is
+    detected and replaced with a fresh cache on first use.
+
+    Additionally, the copy and pickle protocol methods below duplicate
+    a cache as a fresh empty unowned cache.  That's cheaper than
+    actually copying it (the ownership check would only throw the
+    copy away), and it keeps deepcopy and pickle away from our
+    threading.Lock and our dynamically-created bound classes, neither
+    of which they can process.
+
+    This has reassuring redundancy: either mechanism alone covers
+    most of the ways an outer instance can be duplicated; together
+    they mean a duplicated outer always lazily re-binds its inner
+    classes, no matter how it was duplicated.
     """
 
-    __slots__ = ('_cache', '_lock')
+    __slots__ = ('_cache', '_lock', '_outer_ref')
 
-    def __init__(self):
+    def __init__(self, outer=None):
         self._cache = {}
         self._lock = threading.Lock()
+        self._outer_ref = weakref.ref(outer) if (outer is not None) else None
+
+    def _belongs_to(self, outer):
+        return (self._outer_ref is not None) and (self._outer_ref() is outer)
+
+    def __copy__(self):
+        return type(self)()
+
+    def __deepcopy__(self, memo):
+        return type(self)()
+
+    def __reduce__(self):
+        return (type(self), ())
 
     def get(self, cls):
         """
@@ -350,20 +353,26 @@ _get_cache_lock = threading.Lock()
 def _get_cache(outer):
     """Get or create the bound inner classes cache on outer."""
     cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
-    if cache is not None:
+    if (cache is not None) and cache._belongs_to(outer):
         return cache
 
     with _get_cache_lock:
         # Double-check after acquiring lock
         cache = getattr(outer, BOUNDINNERCLASS_OUTER_ATTR, None)
-        if cache is None:
-            cache = _BoundInnerClassCache()
+        if (cache is None) or (not cache._belongs_to(outer)):
             try:
+                # Creating the cache raises TypeError if outer doesn't
+                # support weak references; storing it raises AttributeError
+                # if outer has __slots__ without our slot.  Either way the
+                # advice to the user is the same.
+                cache = _BoundInnerClassCache(outer)
                 object.__setattr__(outer, BOUNDINNERCLASS_OUTER_ATTR, cache)
-            except AttributeError:
+            except (AttributeError, TypeError):
                 raise TypeError(
                     f"Cannot cache bound inner class on {type(outer).__name__}. "
-                    f"Add '{BOUNDINNERCLASS_OUTER_ATTR}' to __slots__ (or remove '__slots__')."
+                    f"Add '{BOUNDINNERCLASS_OUTER_ATTR}' to __slots__, and "
+                    f"'__weakref__' too if no base class provides it "
+                    f"(or remove '__slots__')."
                 ) from None
         return cache
 
@@ -381,6 +390,16 @@ def _unbound(cls):
     return None
 
 
+def _no_descriptor_error(base, outer_class):
+    return RuntimeError(
+        f"Can't find a BoundInnerClass descriptor for "
+        f"{base.__qualname__!r} on {outer_class.__qualname__!r} "
+        f"or any of its bases.  "
+        f"Every BoundInnerClass base must be an inner class "
+        f"of the outer class or one of its ancestors."
+    )
+
+
 class _BoundInnerClassBase(_ClassProxy):
     """
     Base descriptor for bound inner classes.
@@ -395,17 +414,28 @@ class _BoundInnerClassBase(_ClassProxy):
     # used only while the wrapped class still resolves __new__ / __init__
     # to those exact function objects, so reassigning either -- or
     # reassigning __wrapped__ itself -- transparently recomputes.
-    __slots__ = ('_signatures',)
 
     # Class-level cache mapping an (unbound_class, outer_class) pair to
-    # the attribute name the slow path discovered on the outer class.
-    # Shared across all instances, since renaming is a property of the
-    # outer *class*, not any particular outer instance.
+    # a weakref of the descriptor the slow path discovered on the outer
+    # class's MRO.  Shared across all instances, since which descriptor
+    # serves a base is a property of the outer *class*, not any
+    # particular outer instance.
     #
     # Keyed on (id(target_class), id(outer_class)).  If a class is GC'd
     # and its id reused, we might get a stale hit, but the medium path
-    # always verifies via identity check before using the cached value,
-    # so a stale hit is harmless -- it just falls through to the slow path.
+    # always verifies (weakref alive, descriptor still wraps target)
+    # before using the cached value, so a stale hit is harmless -- it
+    # just falls through to the slow path.
+    #
+    # Entries are never evicted, so the cache grows monotonically for
+    # the life of the process.  This is a deliberate tradeoff: entries
+    # are tiny (an int pair -> a weakref, keeping nothing alive), and
+    # they only accumulate for inner classes that inherit from other
+    # inner classes, per outer class.  If some heroic workload ever
+    # makes this a real leak, eviction can be arbitrarily dumb (even
+    # clear() at a size cap), because correctness comes from the
+    # verification on every hit; an evicted entry just costs one extra
+    # slow-path scan.
     _alias_cache = {}
     _alias_cache_lock = threading.Lock()
 
@@ -417,8 +447,10 @@ class _BoundInnerClassBase(_ClassProxy):
         object.__setattr__(self, '_signatures', None)
 
         # Mark the wrapped class as participating in the bound inner class system.
-        # Tuple: (unbound_class, outer_weakref, is_boundinnerclass)
-        # outer_weakref is None for unbound classes.
+        # Tuple: (unbound_class, outer, is_boundinnerclass)
+        # outer is the instance a bound wrapper is bound to (held
+        # strongly, like a bound method's __self__); None for
+        # unbound (decorated but not yet bound) classes.
         # is_boundinnerclass is True for @BoundInnerClass, False for @UnboundInnerClass.
         setattr(wrapped, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, None, is_boundinnerclass))
 
@@ -436,47 +468,50 @@ class _BoundInnerClassBase(_ClassProxy):
         return (None, None)
 
     @classmethod
-    def _resolve_descriptor(cls, outer, outer_class, target):
+    def _resolve_descriptor(cls, outer, outer_class, target, cache):
         """
         Resolve the bound version of target on outer.
 
-        target is an unbound class that may be registered as a
-        BoundInnerClass on outer_class (either as a base class
-        being looked up during __get__, or a child class being
-        looked up during bind()/rebase()).
+        target must be a decorated, unbound inner class (it carries
+        the fingerprint, and the fingerprint's outer slot is None).
+        Returns the bound version, or None if no descriptor wrapping
+        target exists anywhere on outer_class's MRO.
 
-        Uses a three-tier lookup:
-          1. Fast path: getattr(outer, target.__name__), verify identity.
-          2. Medium path: check _alias_cache for a previously-discovered
-             alias name, verify it still points to the right descriptor.
-          3. Slow path: iterate outer_class.__mro__ by identity.
-             On success, updates _alias_cache for future medium-path hits.
+        Three tiers, all keyed on identity--never on names:
+          1. Fast: outer's own bind cache.  If target was already
+             bound on this instance, that's the twin.
+          2. Medium: the alias cache, which maps (target, outer_class)
+             to a weakref of the descriptor a previous slow scan found.
+          3. Slow: scan outer_class's MRO for a descriptor wrapping
+             target, and remember it for next time.
 
-        Returns the bound class, or None if target is not a
-        BoundInnerClass anywhere in outer_class's MRO.
+        Identity resolution cannot recurse: it only ever invokes
+        __get__ on descriptors of true ancestors, descending the
+        inheritance DAG, which is acyclic.  (The name-based resolution
+        this replaced could jump *sideways* through a coincidental
+        name onto a descriptor that was mid-bind, and recurse.)
         """
-        # Fast path: look up by name, verify by identity
-        bound_result = getattr(outer, target.__name__, None)
-        if bound_result is not None and _unbound(bound_result) is target:
+        # Fast path: already bound on this instance?
+        bound_result = cache.get(target)
+        if bound_result is not None:
             return bound_result
 
         alias_key = (id(target), id(outer_class))
 
-        # Medium path: check alias cache
+        # Medium path: do we remember which descriptor serves target?
         with cls._alias_cache_lock:
-            cached_alias = cls._alias_cache.get(alias_key)
-        if cached_alias is not None:
-            bound_result = getattr(outer, cached_alias, None)
-            if bound_result is not None and _unbound(bound_result) is target:
-                return bound_result
-            # Cached alias is stale; fall through to slow path
+            descriptor_ref = cls._alias_cache.get(alias_key)
+        if descriptor_ref is not None:
+            descriptor = descriptor_ref()
+            if (descriptor is not None) and (descriptor.__wrapped__ is target):
+                return descriptor.__get__(outer, outer_class)
+            # dead weakref, or recycled ids: fall through to the scan
 
-        # Slow path: search all descriptors in MRO by identity (for renamed BICs)
-        attr_name, descriptor = cls._find_descriptor_by_identity(outer_class, target)
+        # Slow path: search outer_class's MRO by identity.
+        _, descriptor = cls._find_descriptor_by_identity(outer_class, target)
         if descriptor is not None:
-            # Cache the discovered alias for future lookups
             with cls._alias_cache_lock:
-                cls._alias_cache[alias_key] = attr_name
+                cls._alias_cache[alias_key] = weakref.ref(descriptor)
             return descriptor.__get__(outer, outer_class)
 
         return None
@@ -492,27 +527,43 @@ class _BoundInnerClassBase(_ClassProxy):
 
         bound_class = cache.get(cls)
         if bound_class is None:
-            # Build wrapper bases, handling inheritance from other BoundInnerClasses
-            # The wrapper inherits from cls first (for __init__ signature),
-            # then from bound versions of parent BoundInnerClasses (for MRO chaining)
+            # Build the bound version's bases: cls itself first (it
+            # carries all its original bases along), then the bound
+            # twin of every decorated-but-unbound base, so the MRO
+            # visits bound wrappers before the classes they wrap.
+            #
+            # Bases are triaged by their fingerprint--the marker every
+            # participating class carries in its own __dict__--never
+            # by name.  Names can collide, and resolving a base by
+            # name from inside a descriptor that owns that very name
+            # re-enters __get__ mid-bind and recurses forever.
             wrapper_bases = [cls]
 
             for base in cls.__bases__:
-                # Skip if same name as us (would cause infinite recursion)
-                if base.__name__ == cls.__name__:
+                info = base.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
+
+                if info is None:
+                    # A plain base, never decorated.  No descriptor
+                    # wraps it, so it provably has no bound twin; it
+                    # rides along inside cls like any normal base.
+                    # (This is also object's exit, every time.)
                     continue
 
-                resolved = self._resolve_descriptor(outer, outer_class, base)
-                if resolved is not None:
-                    wrapper_bases.append(resolved)
-                elif _BOUNDINNERCLASS_INNER_ATTR in getattr(base, '__dict__', {}):
-                    raise RuntimeError(
-                        f"Can't find a BoundInnerClass descriptor for "
-                        f"{base.__qualname__!r} on {outer_class.__qualname__!r} "
-                        f"or any of its bases.  "
-                        f"Every BoundInnerClass base must be an inner class "
-                        f"of the outer class or one of its ancestors."
-                    )
+                if info[1] is not None:
+                    # An already-bound wrapper--e.g. we inherit from
+                    # o1.Inner, another outer instance's bound class.
+                    # It's self-sufficient: its methods inject its own
+                    # outer.  Hands off.
+                    continue
+
+                # A decorated, unbound base--the normal case.  Find
+                # its twin bound to this outer, or die trying: a
+                # decorated base with no descriptor anywhere on the
+                # outer class's MRO is a configuration error.
+                resolved = self._resolve_descriptor(outer, outer_class, base, cache)
+                if resolved is None:
+                    raise _no_descriptor_error(base, outer_class)
+                wrapper_bases.append(resolved)
 
             # Create the wrapper - always use cls as base
             bound_class = self._wrap(outer, cls)
@@ -593,6 +644,12 @@ class BoundInnerClass(_BoundInnerClassBase):
                 def __init__(self, outer, value):
                     ...
 
+    BoundInnerClass only binds __new__ and __init__ methods the
+    decorated class *itself* defines.  Methods inherited from base
+    classes are left alone: a regular base class's methods receive
+    only the arguments you pass in, and a bound parent class (see
+    below) injects outer into its own methods itself.
+
     @BoundInnerClass also lets an inner class inherit from another
     bound inner class.  These classes will be bound to the same
     outer instance, and they can simply call super().__init__() without
@@ -617,13 +674,22 @@ class BoundInnerClass(_BoundInnerClassBase):
     call super().__new__(cls) and the bound parent class will receive
     outer automatically.
 
-    Note for pickle users: you can't pickle instances of bound inner classes.
-    Bound inner classes are nameless dynamically-created subclasses, while
-    pickle requires that it can find the class of an object by inspecting
-    the module object and looking up attributes on it by name.  It's possible
-    they could be made to interact properly, but it'd be a lot of work--for
-    both @BoundInnerClass and the author of the pickled class.  So pickle
-    is simply unsupported.
+    This chaining works across an outer class hierarchy too, even when
+    the inner classes share a name:
+
+        class BaseApp:
+            @BoundInnerClass
+            class Config:
+                def __init__(self, outer):
+                    self.app = outer
+
+        class MyApp(BaseApp):
+            @BoundInnerClass
+            class Config(BaseApp.Config):
+                def __init__(self, outer):
+                    super().__init__()
+
+    Base classes are recognized by class *identity*, never by name.
 
     Note for pickle users: you can't pickle instances of bound inner classes.
     Bound inner classes are dynamically-created subclasses bound to specific
@@ -637,14 +703,30 @@ class BoundInnerClass(_BoundInnerClassBase):
     would require custom code in the bound class--it couldn't be made to work
     "automatically".  So as of now pickle is simply unsupported.
 
-    Note for slots users: The "outer" class of a BIC uses a special
-    attribute to cache bound inner classes.  If that outer class
-    uses __slots__, it must add a slot for BIC's special attribute.
-    We provide a predefined constant you can simply "add" to your
-    slots tuple, BOUNDINNERCLASS_OUTER_SLOTS.  Example:
+    The *outer* instance, though, copies, deepcopies, and pickles just
+    fine: BoundInnerClass's internal cache doesn't travel with it.  The
+    duplicate simply re-binds its inner classes, lazily, on first access,
+    exactly like a fresh instance.
+
+    A bound inner class holds a *strong* reference to its outer
+    instance--exactly like a bound method holds __self__.  The
+    tempting one-liner Outer().Inner() therefore just works: the
+    bound class keeps the temporary outer alive.  Two consequences
+    worth knowing: a bound class (or any instance of one, via its
+    class) keeps its outer instance alive as long as it lives; and
+    the resulting outer -> cache -> bound class -> outer reference
+    cycle means outer instances that ever bound an inner class are
+    reclaimed by the cycle collector, not by reference counting.
+
+    Note for slots users: The "outer" class of a BoundInnerClass
+    caches its bound inner classes in a special attribute, and must
+    be weakly referenceable.  If that outer class uses __slots__, add
+    a slot for BoundInnerClass's special attribute--use the predefined
+    constant BOUNDINNERCLASS_OUTER_SLOTS--and, unless a base class
+    already provides one, a '__weakref__' slot.  Example:
 
         class Foo:
-            __slots__ = ('x', 'y', 'z') + BOUNDINNERCLASS_SLOTS
+            __slots__ = ('x', 'y', 'z', '__weakref__') + BOUNDINNERCLASS_OUTER_SLOTS
 
             @BoundInnerClass
             class Bar:
@@ -655,8 +737,6 @@ class BoundInnerClass(_BoundInnerClassBase):
 
     See also big.ClassRegistry.
     """
-
-    __slots__ = ()
 
     def __init__(self, wrapped):
         super().__init__(wrapped, True)
@@ -681,18 +761,27 @@ class BoundInnerClass(_BoundInnerClassBase):
         # signature--assigning to its __signature__, __defaults__,
         # __annotations__, etc.--after a bind.  The function's identity
         # doesn't change, so the cache can't notice.  (*Replacing* the
-        # method is always detected.)  My sincere advice: don't mutate
-        # function signatures in place--if you must, do it early,
-        # before BoundInnerClass caches the signature.
-        init = wrapped.__init__
-        class_defines_init = inspect.isfunction(init)
+        # method is detected the next time the class is bound--though
+        # classes already bound keep the methods they closed over.)
+        #
+        # My sincere advice: don't mutate function signatures in
+        # place.  (If you *must*--do it early, before BoundInnerClass
+        # caches the signature.)
+        #
+        # Like __new__ below, only wrap an __init__ the decorated class
+        # *itself* defines.  An __init__ inherited from a regular base
+        # class doesn't expect outer; an __init__ inherited from a bound
+        # parent gets outer injected by that parent's own wrapper, found
+        # later in the MRO.
+        init = wrapped.__dict__.get('__init__')
+        class_defines_init = isinstance(init, types.FunctionType)
         if not class_defines_init:
             init = None
 
         new = wrapped.__dict__.get('__new__')
         if new and isinstance(new, (staticmethod, classmethod)):
             new = new.__func__
-        class_defines_new = new and inspect.isfunction(new)
+        class_defines_new = new and isinstance(new, types.FunctionType)
         if not class_defines_new:
             new = None
 
@@ -708,16 +797,27 @@ class BoundInnerClass(_BoundInnerClassBase):
             bound_signatures = (bound_new_signature, bound_init_signature)
             object.__setattr__(self, '_signatures', (new_and_init, bound_signatures))
 
-        outer_weakref = weakref.ref(outer)
-
+        # The wrapper holds outer *strongly*--exactly like a bound
+        # method holds __self__--so the tempting Outer().Inner()
+        # one-liner just works: the bound class keeps the temporary
+        # alive.
+        #
+        # The downside: this makes outer -> cache -> Wrapper -> outer
+        # a strong reference cycle.  Sadly we now rely on the cycle
+        # collector to collect these objects.  We tried weakrefs here;
+        # that removed the cycle, but added a failure mode during
+        # construction of temporaries where the outer reference could
+        # go away first--it became a race against the garbage collector
+        # that you would sporadically lose.  An infrequent but
+        # catastrophic failure.
         class Wrapper(base):
             if class_defines_new:
                 def __new__(cls, *args, **kwargs):
-                    return new(cls, outer_weakref(), *args, **kwargs)
+                    return new(cls, outer, *args, **kwargs)
 
             if class_defines_init:
                 def __init__(self, *args, **kwargs):
-                    init(self, outer_weakref(), *args, **kwargs)
+                    init(self, outer, *args, **kwargs)
 
             # Custom repr if the wrapped class doesn't have one
             if wrapped.__repr__ is object.__repr__:
@@ -728,7 +828,7 @@ class BoundInnerClass(_BoundInnerClassBase):
                         ".",
                         self.__class__.__name__,
                         " object bound to ",
-                        repr(outer_weakref()),
+                        repr(outer),
                         " at ",
                         hex(id(self)),
                         ">",
@@ -741,7 +841,7 @@ class BoundInnerClass(_BoundInnerClassBase):
         if hasattr(wrapped, '__annotations__'):
             Wrapper.__annotations__ = wrapped.__annotations__
 
-        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, outer_weakref, True))
+        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (wrapped, outer, True))
 
         if bound_new_signature is not None:
             Wrapper.__new__.__signature__ = bound_new_signature
@@ -775,13 +875,10 @@ class UnboundInnerClass(_BoundInnerClassBase):
     base classes that are decorated with BoundInnerClass *will*.
     """
 
-    __slots__ = ()
-
     def __init__(self, wrapped):
         super().__init__(wrapped, False)
 
     def _wrap(self, outer, base):
-        outer_weakref = weakref.ref(outer)
         cls = self.__wrapped__
 
         class Wrapper(base):
@@ -795,7 +892,7 @@ class UnboundInnerClass(_BoundInnerClassBase):
             Wrapper.__annotations__ = cls.__annotations__
 
         # Mark as an unbound inner class with info about its binding
-        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (cls, outer_weakref, False))
+        setattr(Wrapper, _BOUNDINNERCLASS_INNER_ATTR, (cls, outer, False))
 
         return Wrapper
 
@@ -839,9 +936,9 @@ def unbound(cls):
     return cls
 
 
-def _get_outer_weakref(cls):
+def _get_outer(cls):
     """
-    Extract the outer weakref from a bound class.
+    Extract the outer instance from a bound class.
 
     cls must be a bound class (is_bound(cls) returns True).
     Returns None if cls is not a bound class.
@@ -905,8 +1002,7 @@ def is_bound(cls):
     info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
     if info is None:
         return False
-    outer_weakref = info[1]
-    return outer_weakref is not None
+    return info[1] is not None
 
 
 @export
@@ -919,19 +1015,15 @@ def bound_to(cls):
     variety of type object, returns None.  Raises TypeError if
     cls is not a class object.
 
-    BoundInnerClass doesn't keep strong references to outer instances.
-    If cls was bound to an object that has since been destroyed,
-    bound_to(cls) will return None.
+    A bound class holds a strong reference to its outer instance,
+    so this is guaranteed to be a live reference.
     """
     if not isinstance(cls, type):
         raise TypeError(f"bound_to() argument must be a class, not {type(cls).__name__}")
     info = cls.__dict__.get(_BOUNDINNERCLASS_INNER_ATTR)
     if info is None:
         return None
-    outer_weakref = info[1]
-    if outer_weakref is None:
-        return None
-    return outer_weakref()
+    return info[1]
 
 
 @export
@@ -942,9 +1034,8 @@ def type_bound_to(instance):
     If type(instance) is a bindable inner class that was bound to an
     outer instance, returns that outer instance.  Otherwise returns None.
 
-    BoundInnerClass doesn't keep strong references to outer instances.
-    If type(instance) was bound to an object that has since been
-    destroyed, type_bound_to(instance) will return None.
+    A bound class holds a strong reference to its outer instance--
+    so an instance of a bound inner class implies a live outer.
     """
     return bound_to(type(instance))
 

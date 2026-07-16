@@ -27,150 +27,147 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import bigtestlib
 big_dir = bigtestlib.preload_local_big()
 
+from big.test import subtest
+
 
 import big.all as big
 from big.tokens import generate_tokens
 from big.all import string
-import unittest
 import sys
 
 
 
-class BigTokenTests(unittest.TestCase):
+def test_definitions():
+    for id in """
+        TOKEN_AMPER
+        TOKEN_AMPEREQUAL
+        TOKEN_ASYNC
+        TOKEN_AT
+        TOKEN_ATEQUAL
+        TOKEN_AWAIT
+        TOKEN_CIRCUMFLEX
+        TOKEN_CIRCUMFLEXEQUAL
+        TOKEN_COLON
+        TOKEN_COLONEQUAL
+        TOKEN_COMMA
+        TOKEN_COMMENT
+        TOKEN_DEDENT
+        TOKEN_DOT
+        TOKEN_DOUBLESLASH
+        TOKEN_DOUBLESLASHEQUAL
+        TOKEN_DOUBLESTAR
+        TOKEN_DOUBLESTAREQUAL
+        TOKEN_ELLIPSIS
+        TOKEN_ENCODING
+        TOKEN_ENDMARKER
+        TOKEN_EQEQUAL
+        TOKEN_EQUAL
+        TOKEN_ERRORTOKEN
+        TOKEN_EXCLAMATION
+        TOKEN_FSTRING_END
+        TOKEN_FSTRING_MIDDLE
+        TOKEN_FSTRING_START
+        TOKEN_GREATER
+        TOKEN_GREATEREQUAL
+        TOKEN_INDENT
+        TOKEN_LBRACE
+        TOKEN_LEFTSHIFT
+        TOKEN_LEFTSHIFTEQUAL
+        TOKEN_LESS
+        TOKEN_LESSEQUAL
+        TOKEN_LPAR
+        TOKEN_LSQB
+        TOKEN_MINEQUAL
+        TOKEN_MINUS
+        TOKEN_N_TOKENS
+        TOKEN_NAME
+        TOKEN_NEWLINE
+        TOKEN_NL
+        TOKEN_NOTEQUAL
+        TOKEN_NUMBER
+        TOKEN_OP
+        TOKEN_PERCENT
+        TOKEN_PERCENTEQUAL
+        TOKEN_PLUS
+        TOKEN_PLUSEQUAL
+        TOKEN_RARROW
+        TOKEN_RBRACE
+        TOKEN_RIGHTSHIFT
+        TOKEN_RIGHTSHIFTEQUAL
+        TOKEN_RPAR
+        TOKEN_RSQB
+        TOKEN_SEMI
+        TOKEN_SLASH
+        TOKEN_SLASHEQUAL
+        TOKEN_SOFT_KEYWORD
+        TOKEN_STAR
+        TOKEN_STAREQUAL
+        TOKEN_STRING
+        TOKEN_TILDE
+        TOKEN_TYPE_COMMENT
+        TOKEN_TYPE_IGNORE
+        TOKEN_VBAR
+        TOKEN_VBAREQUAL
+        """.strip().split():
+        with subtest(id):
+            assert hasattr(big.tokens, id)
+            assert isinstance(getattr(big.tokens, id), int)
 
-    maxDiff = 2**32
+def test_functions():
+    # white box testing
+    saved = big.tokens._use_splitlines_for_tokenizer
 
-    def test_definitions(self):
-        for id in """
-            TOKEN_AMPER
-            TOKEN_AMPEREQUAL
-            TOKEN_ASYNC
-            TOKEN_AT
-            TOKEN_ATEQUAL
-            TOKEN_AWAIT
-            TOKEN_CIRCUMFLEX
-            TOKEN_CIRCUMFLEXEQUAL
-            TOKEN_COLON
-            TOKEN_COLONEQUAL
-            TOKEN_COMMA
-            TOKEN_COMMENT
-            TOKEN_DEDENT
-            TOKEN_DOT
-            TOKEN_DOUBLESLASH
-            TOKEN_DOUBLESLASHEQUAL
-            TOKEN_DOUBLESTAR
-            TOKEN_DOUBLESTAREQUAL
-            TOKEN_ELLIPSIS
-            TOKEN_ENCODING
-            TOKEN_ENDMARKER
-            TOKEN_EQEQUAL
-            TOKEN_EQUAL
-            TOKEN_ERRORTOKEN
-            TOKEN_EXCLAMATION
-            TOKEN_FSTRING_END
-            TOKEN_FSTRING_MIDDLE
-            TOKEN_FSTRING_START
-            TOKEN_GREATER
-            TOKEN_GREATEREQUAL
-            TOKEN_INDENT
-            TOKEN_LBRACE
-            TOKEN_LEFTSHIFT
-            TOKEN_LEFTSHIFTEQUAL
-            TOKEN_LESS
-            TOKEN_LESSEQUAL
-            TOKEN_LPAR
-            TOKEN_LSQB
-            TOKEN_MINEQUAL
-            TOKEN_MINUS
-            TOKEN_N_TOKENS
-            TOKEN_NAME
-            TOKEN_NEWLINE
-            TOKEN_NL
-            TOKEN_NOTEQUAL
-            TOKEN_NUMBER
-            TOKEN_OP
-            TOKEN_PERCENT
-            TOKEN_PERCENTEQUAL
-            TOKEN_PLUS
-            TOKEN_PLUSEQUAL
-            TOKEN_RARROW
-            TOKEN_RBRACE
-            TOKEN_RIGHTSHIFT
-            TOKEN_RIGHTSHIFTEQUAL
-            TOKEN_RPAR
-            TOKEN_RSQB
-            TOKEN_SEMI
-            TOKEN_SLASH
-            TOKEN_SLASHEQUAL
-            TOKEN_SOFT_KEYWORD
-            TOKEN_STAR
-            TOKEN_STAREQUAL
-            TOKEN_STRING
-            TOKEN_TILDE
-            TOKEN_TYPE_COMMENT
-            TOKEN_TYPE_IGNORE
-            TOKEN_VBAR
-            TOKEN_VBAREQUAL
-            """.strip().split():
-            with self.subTest(id):
-                self.assertTrue(hasattr(big.tokens, id))
-                self.assertIsInstance(getattr(big.tokens, id), int)
+    def extract_strings_from_tokens(tokens):
+        result = []
+        result_append = result.append
+        for t in tokens:
+            value = t[1]
+            result_append(value)
+        return result
 
-    def test_functions(self):
-        # white box testing
-        saved = big.tokens._use_splitlines_for_tokenizer
+    for text, token_strings in (
+        (
+            "def foo(a, b):\n    return [1, 2, 3]",
+            [
+            'def', 'foo', '(', 'a', ',', 'b', ')', ':', '\n',
+            '    ', 'return', '[', '1', ',', '2', ',', '3', ']',
+            '', '', '',
+            ],
+        ),
 
-        def extract_strings_from_tokens(tokens):
-            result = []
-            result_append = result.append
-            for t in tokens:
-                value = t[1]
-                result_append(value)
-            return result
+        (
+            "'''\nline 1\nline 2\nline 3\n'''",
+            [
+            "'''\nline 1\nline 2\nline 3\n'''", '', '',
+            ],
+        ),
 
-        for text, token_strings in (
-            (
-                "def foo(a, b):\n    return [1, 2, 3]",
-                [
-                'def', 'foo', '(', 'a', ',', 'b', ')', ':', '\n',
-                '    ', 'return', '[', '1', ',', '2', ',', '3', ']',
-                '', '', '',
-                ],
-            ),
+        ):
 
-            (
-                "'''\nline 1\nline 2\nline 3\n'''",
-                [
-                "'''\nline 1\nline 2\nline 3\n'''", '', '',
-                ],
-            ),
+        with subtest(text):
+            for use_splitlines in (False, True):
+                with subtest(use_splitlines):
+                    big.tokens._use_splitlines_for_tokenizer = use_splitlines
+                    tokens = list(generate_tokens(text))
+                    got_token_strings = extract_strings_from_tokens(tokens)
+                    assert got_token_strings == token_strings
 
-            ):
+    big.tokens._use_splitlines_for_tokenizer = saved
 
-            with self.subTest(text):
-                for use_splitlines in (False, True):
-                    with self.subTest(use_splitlines):
-                        big.tokens._use_splitlines_for_tokenizer = use_splitlines
-                        tokens = list(generate_tokens(text))
-                        got_token_strings = extract_strings_from_tokens(tokens)
-                        self.assertEqual(got_token_strings, token_strings)
+    text = string("def foo(a, b):\n")
+    expected_token_strings = [text[0:3], text[4:7], text[7:8], text[8:9], text[9:10], text[11:12], text[12:13], text[13:14], text[14:15], text[15:15]]
+    tokens = list(generate_tokens(text))
+    got_token_strings = extract_strings_from_tokens(tokens)
+    assert got_token_strings == expected_token_strings
+    for got, expected in zip(got_token_strings, expected_token_strings):
+        with subtest(got):
+            assert isinstance(got, string)
+            assert got.line_number == expected.line_number
+            assert got.column_number == expected.column_number
+            assert got.offset == expected.offset
 
-        big.tokens._use_splitlines_for_tokenizer = saved
-
-        text = string("def foo(a, b):\n")
-        expected_token_strings = [text[0:3], text[4:7], text[7:8], text[8:9], text[9:10], text[11:12], text[12:13], text[13:14], text[14:15], text[15:15]]
-        tokens = list(generate_tokens(text))
-        got_token_strings = extract_strings_from_tokens(tokens)
-        self.assertEqual(got_token_strings, expected_token_strings)
-        for got, expected in zip(got_token_strings, expected_token_strings):
-            with self.subTest(got):
-                self.assertIsInstance(got, string)
-                self.assertEqual(got.line_number, expected.line_number)
-                self.assertEqual(got.column_number, expected.column_number)
-                self.assertEqual(got.offset, expected.offset)
-
-def run_tests():
-    bigtestlib.run(name="big.tokens", module=__name__)
+def run_tests(run=None):
+    (run or bigtestlib.run)(name="big.tokens", module=__name__)
 
 if __name__ == "__main__": # pragma: no cover
     run_tests()

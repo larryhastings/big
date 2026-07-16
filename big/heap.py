@@ -24,8 +24,6 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-__all__ = ['Heap']
-
 from heapq import (
     heapify,
     heappop,
@@ -36,6 +34,13 @@ from heapq import (
     nsmallest,
     )
 
+
+from . import builtin
+mm = builtin.ModuleManager()
+export = mm.export
+
+
+@export
 class Heap:
     """
     An object-oriented wrapper around the heapq library, designed to be
@@ -59,7 +64,11 @@ class Heap:
 
     def __repr__(self):
         id_string = hex(id(self))[-6:]
-        return f"<Heap {id_string} len={len(self._queue)} first={self._queue[0]}>"
+        if self._queue:
+            first = f" first={self._queue[0]!r}"
+        else:
+            first = ""
+        return f"<Heap {id_string} len={len(self._queue)}{first}>"
 
     def append(self, o):
         heappush(self._queue, o)
@@ -112,14 +121,18 @@ class Heap:
         return o in self._queue
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and (self.queue == other.queue)
+        if not isinstance(other, self.__class__):
+            # "not my department"--let the other operand's
+            # (possibly reflected) __eq__ have its say
+            return NotImplemented
+        return self.queue == other.queue
 
     def __len__(self):
         return len(self._queue)
 
     def __getitem__(self, item):
         if not isinstance(item, (int, slice)):
-            raise TypeError(f"heap only supports indexing with int and slice")
+            raise TypeError("heap only supports indexing with int and slice")
         if isinstance(item, slice):
             if item.step in (None, 1):
                 length = len(self._queue)
@@ -140,13 +153,23 @@ class Heap:
         elif item == 0:
             return self._queue[0]
         elif item == -1:
+            if not self._queue:
+                # max() would raise ValueError; a list raises IndexError
+                raise IndexError('heap index out of range')
             return max(self._queue)
         elif 0 < item < 10:
             l = nsmallest(item + 1, self._queue)
             return l[item]
         elif -10 < item < 0:
-            l = nlargest((-item) + 1, self._queue)
-            return l[item]
+            # nlargest returns values in *descending* order (see above),
+            # so the (-item)th-largest value is the *last* one.
+            l = nlargest(-item, self._queue)
+            if len(l) < -item:
+                # nlargest silently returns fewer values than requested
+                # when the heap is small--don't let that turn into a
+                # wrong answer.
+                raise IndexError('heap index out of range')
+            return l[-1]
         l = sorted(self._queue)
         # __getitem__ on a list handles ints and slices!
         return l[item]
@@ -156,6 +179,10 @@ class Heap:
             self._heap = heap
             self._copy = heap._queue.copy()
             self._version = heap._version
+
+        def __iter__(self):
+            # iterators must be iterable, and return themselves
+            return self
 
         def __next__(self):
             if self._version != self._heap._version:
@@ -169,4 +196,7 @@ class Heap:
 
     def __iter__(self):
         return self.HeapIterator(self)
+
+
+mm()
 

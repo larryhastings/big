@@ -24,34 +24,31 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-import io
+#
+# The bootstrap for big's own test suite.
+#
+# big's tests are run with big.test--which lives inside the very
+# package under test.  big.test.preload() can't locate big before
+# big is importable, so this module breaks the cycle: it puts the
+# checkout on sys.path *first*, using its own copy of the search
+# logic.  After preload_local_big() returns, "from big import test"
+# resolves to the checkout, and everything else comes from there.
+#
+# run() and finish() are kept as delegates so a test module works
+# the same whether it goes through big.test directly or through
+# here.  (They import big.test lazily: at the time bigtestlib is
+# imported, the checkout isn't on the path yet.)
+#
+
 import pathlib
-import unittest
+import sys
 
-stats = {
-    "failures": 0,
-    "errors": 0,
-    "expected failures": 0,
-    "unexpected successes": 0,
-    "skipped": 0,
-    }
-
-attribute_names = {
-    "failures": "failures",
-    "errors": "errors",
-    "expected failures": "expectedFailures",
-    "unexpected successes": "unexpectedSuccesses",
-    "skipped": "skipped",
-    }
 
 def preload_local_big():
     """
     Pre-load the local "big" module, to preclude finding
     an already-installed one on the path.
     """
-    import pathlib
-    import sys
-
     argv_0 = pathlib.Path(sys.argv[0])
     big_dir = starting_dir = argv_0.resolve().parent
     while True:
@@ -79,42 +76,10 @@ def preload_local_big():
 
 
 def run(name, module, permutations=None):
-    if name:
-        print(f"Testing {name}...")
+    from big import test
+    return test.run(name=name, module=module, permutations=permutations)
 
-    # this is a lot of work to suppress the "\nOK"!
-    sio = io.StringIO()
-    runner = unittest.TextTestRunner(stream=sio)
-    t = unittest.main(module=module, exit=False, testRunner=runner)
-    result = t.result
-    for name in stats:
-        value = getattr(result, attribute_names[name], ())
-        stats[name] += len(value)
-
-    for line in sio.getvalue().split("\n"):
-        if not line.startswith("Ran"):
-            print(line)
-            continue
-
-        if permutations:
-            fields = line.split()
-            tests = fields[2]
-            assert tests in ("test", "tests"), f"expected fields[2] to be 'test' or 'tests', but fields={fields}"
-            fields[2] = f"{tests}, with {permutations()} total permutations,"
-            line = " ".join(fields)
-        print(line)
-        print()
-        # prevent printing the  \n and OK
-        break
 
 def finish():
-    if not (stats['failures'] or stats['errors']): # pragma: nocover
-        result = "OK"
-    else: # pragma: no cover
-        result = "FAILED"
-
-    fields = [f"{name}={value}" for name, value in stats.items() if value]
-    if fields: # pragma: no cover
-        addendum = ", ".join(fields)
-        result = f"{result} ({addendum})"
-    print(result)
+    from big import test
+    test.finish()

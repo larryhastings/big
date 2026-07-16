@@ -45,8 +45,15 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import token
 import tokenize
-from tokenize import TokenInfo
 import sys
+
+try: # pragma: nocover
+    from tokenize import TokenInfo
+except ImportError: # pragma: nocover
+    # Python 3.6.  a namedtuple with the same shape works fine
+    # for the TokenInfo values generate_tokens yields.
+    import collections
+    TokenInfo = collections.namedtuple('TokenInfo', 'type string start end line')
 
 
 # define a TOKEN_X for every token.X in any supported version of Python.
@@ -228,7 +235,6 @@ def generate_tokens(s):
     lines_read = 0
     lines_tokenized = 0
     last_line = None
-    TokenInfo = tokenize.TokenInfo
 
     if _use_splitlines_for_tokenizer:
         lines = s.splitlines(True)
