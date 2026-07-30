@@ -607,7 +607,7 @@ And here are seven little functions/classes I use all the time:
 
 [`Pattern(s, flags=0)`](#patterns-flags0)
 
-[`pluralize(i, singular, plural=None)`](#pluralizei-singular-pluralnone)
+[`pluralize(singular, count, plural=None)`](#pluralizesingular-count-pluralnone)
 
 [`prefix_format(time_seconds_width, time_fractional_width, thread_name_width=12, *, ascii=False)`](#prefix_formattime_seconds_width-time_fractional_width-thread_name_width12--asciifalse)
 
@@ -1264,25 +1264,28 @@ It also automatically deletes itself, and any module-level
 references to its `export` and `delete` methods.
 </dd></dl>
 
-#### `pluralize(i, singular, plural=None)`
+#### `pluralize(singular, count, plural=None)`
 
 <dl><dd>
 
-Returns a string counting `i` things, using the correct
-English grammatical number: `'1 apple'`, `'3 apples'`.
+Returns a string pluralizing a string singular as appropriate.
 
-`i` should be a number.  `singular` should be the singular form
-of the noun.  If `plural` is `None` (the default), the plural
-form is the singular form plus `'s'`; for a noun with an
-irregular plural, pass it in explicitly:
+`singular` should be the singular form of a noun. `count` should
+be a number, used to calculate whether you want the singular
+or plural form of that noun.  If `plural` is `None` (the default),
+the plural form is computed by taking the the singular form
+and appending an `'s'``.  For nouns with an irregular plural,
+you'll need to pass it in explicitly:
 
 ```Python
->>> big.pluralize(2, 'box', 'boxes')
-'2 boxes'
+  >>> pluralize('box', 2, 'boxes')
+  'boxes'
 ```
 
-Uses the plural form for every count except exactly 1.
-(Zero is `'0 apples'`, 1.5 is `'1.5 apples'`.)
+Returns the plural form for every value of count except exactly
+1; if singular is `'apple'`, `count=0` and `count=1.5` both return
+`'apples'`.
+
 </dd></dl>
 
 #### `pure_virtual()`
@@ -11242,6 +11245,20 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
 </dd></dl>
 
 # Release history
+
+## next version
+*under development*
+
+<dl><dd>
+
+* Restored `pluralize` to the way I originally wrote it.  When Claude Fable merged
+  it, for some reason it saw fit to change the API.  I swear, you take your eye off
+  the ball for *one second...!*  The new API takes the *string* first, the *count*
+  second, and does *not* insert the count for you at the front of the string.
+  (Because you might want to write the count out in English, using `int_to_words`
+  for example!)
+
+</dd></dl>
 
 ## 0.14
 

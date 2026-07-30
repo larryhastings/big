@@ -285,10 +285,10 @@ def duration_human(t, *, long=True, want_microseconds=None):
 
     if long:
         rendered = [
-            (days,                       builtin.pluralize(days, 'day')),
-            (hours,                      builtin.pluralize(hours, 'hour')),
-            (minutes,                    builtin.pluralize(minutes, 'minute')),
-            (seconds or microseconds,    builtin.pluralize(seconds_value, 'second')),
+            (days,                       f'{days} '          + builtin.pluralize('day', days)),
+            (hours,                      f'{hours} '         + builtin.pluralize('hour', hours)),
+            (minutes,                    f'{minutes} '       + builtin.pluralize('minute', minutes)),
+            (seconds or microseconds,    f'{seconds_value} ' + builtin.pluralize('second', seconds_value)),
             ]
         zero = '0 seconds'
     else:

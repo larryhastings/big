@@ -203,25 +203,25 @@ def test_get_int_or_float():
     assert big.get_int_or_float(str(big_number), sentinel) == big_number
 
 def test_pluralize():
-    def test(expected, *args):
+    def test(args, expected):
         assert big.pluralize(*args) == expected
 
     # exactly 1 is singular; everything else--zero, many,
     # negative, fractional--is plural, per English convention
-    test('1 apple', 1, 'apple')
-    test('0 apples', 0, 'apple')
-    test('2 apples', 2, 'apple')
-    test('-1 apples', -1, 'apple')
-    test('1.5 apples', 1.5, 'apple')
+    test(('apple', 1), 'apple')
+    test(('apple', 0), 'apples')
+    test(('apple', 2), 'apples')
+    test(('apple', -1), 'apples')
+    test(('apple', 1.5), 'apples')
 
     # a float equal to 1 is singular (1.0 == 1)
-    test('1.0 apple', 1.0, 'apple')
+    test(('apple', 1.0), 'apple')
 
     # irregular plurals are passed in explicitly
-    test('1 box', 1, 'box', 'boxes')
-    test('2 boxes', 2, 'box', 'boxes')
-    test('1 goose', 1, 'goose', 'geese')
-    test('7 geese', 7, 'goose', 'geese')
+    test(('box', 1, 'boxes'), 'box')
+    test(('box', 2, 'boxes'), 'boxes')
+    test(('goose', 1, 'geese'), 'goose')
+    test(('goose', 7, 'geese'), 'geese')
 
 def test_pure_virtual():
     @big.pure_virtual()

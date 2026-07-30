@@ -453,28 +453,30 @@ def literal_eval(s):
 
 
 @export
-def pluralize(i, singular, plural=None):
+def pluralize(singular, count, plural=None):
     """
-    Returns a string counting i things, using the correct
-    English grammatical number: '1 apple', '3 apples'.
+    Returns a string pluralizing a string singular as appropriate.
 
-    i should be a number.  singular should be the singular
-    form of the noun.  If plural is None (the default), the
-    plural form is the singular form plus 's'; for a noun
-    with an irregular plural, pass it in explicitly:
+    singular should be the singular form of a noun. count should
+    be a number, used to calculate whether you want the singular
+    or plural form of that noun.  If plural is None (the default),
+    the plural form is computed by taking the the singular form
+    and appending an 's'.  For nouns with an irregular plural,
+    you'll need to pass it in explicitly:
 
-        >>> pluralize(2, 'box', 'boxes')
-        '2 boxes'
+        >>> pluralize('box', 2, 'boxes')
+        'boxes'
 
-    Uses the plural form for every count except exactly 1.
-    (Zero is '0 apples', 1.5 is '1.5 apples'.)
+    Returns the plural form for every value of count except exactly
+    1; if singular is 'apple', count=0 and count=1.5 both return
+    'apples'.
     """
-    if i == 1:
-        return f"{i} {singular}"
+    if count == 1:
+        return f"{singular}"
 
     if plural is not None:
-        return f"{i} {plural}"
-    return f"{i} {singular}s"
+        return f"{plural}"
+    return f"{singular}s"
 
 @export
 def pure_virtual():
