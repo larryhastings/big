@@ -5572,6 +5572,12 @@ either `overflow_before` or `overflow_after` is nonzero, these
 specify the number of extra lines before or after
 the overflowed lines in a column.
 
+`raw` is an optional callback mapping a line to its *plain text*,
+for columns whose lines carry in-band styling markup.  It defaults
+to the identity.  Line *widths* — for overflow detection and for
+padding a column to its `max_width` — are measured on `raw(line)`,
+while the original line (markup and all) is what's emitted.
+
 For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
 </dd></dl>
@@ -6813,6 +6819,16 @@ of the block `wrap_words` produces, wherever you put it.
 If `two_spaces` is true, elements from `words` that end in
 sentence-ending punctuation (`'.'`, `'?'`, and `'!'`)
 will be followed by two spaces, not one.
+
+`raw` is an optional callback mapping a word to its *plain text*,
+for callers whose words carry in-band styling markup (so the emitted
+word is wider than the text the reader sees).  It defaults to the
+identity.  Every place `wrap_words` *inspects* a word — its width
+for the margin, its trailing punctuation for `two_spaces`, and the
+whitespace / first-character tests that detect line breaks and code
+lines — runs on `raw(word)`, while the *original* word is what gets
+emitted.  `wrap_words` never slices a word, so a plain-text view is
+all it needs.
 
 `indent` prefixes the wrapped lines.  It may be a single string,
 used for every line, or a list or tuple of strings: the first
@@ -11607,6 +11623,37 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   second, and does *not* insert the count for you at the front of the string.
   (Because you might want to write the count out in English, using `int_to_words`
   for example!)
+
+* 🤖 **New module: [`big.markdown`](#bigmarkdown).**  A parser for a subset of
+  standards-compliant CommonMark, plus two rendering back ends over a shared
+  intermediate representation.  `render_terminal` lays a document out as text
+  for a terminal, optionally styled; `render_troff` renders it to groff `man`
+  macros, for a man page.  Styling flows through a `StyleSheet` pipeline
+  (`style_document`, `split_styles_document`, `join_styles`), so the same
+  document can be painted to ANSI, plain text, or any backend.  The parser
+  covers the CommonMark subset it implements closely (~85% of the applicable
+  spec test suite; images, raw HTML, and entity references are deliberately
+  omitted), plus three extensions: GFM strikethrough, definition lists, and
+  GitHub alerts (`> [!NOTE]` and friends).
+
+* 🤖 **[`big.template`](#bigtemplate) gains `StyleSheet`**, a two-layer,
+  recursive style sheet that maps conceptual roles down to a backend's escape
+  sequences.  Author markup with `style`, `plain`, and `escape_styles`; rewrite
+  it to word granularity and back with `split_styles` and `join_styles`; and
+  render it with any of four stock low-level ANSI maps — `ansi_truecolor`,
+  `ansi_256`, `ansi_16`, and `ansi_uncolored` — over a 26-color vocabulary plus
+  four attributes.  Format names may now contain underscores.
+
+* 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+  and [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+  gain a `raw` callback.**  It maps a word or line to its plain text, so callers
+  whose words carry in-band styling markup wrap by *visible* width while the
+  original styled text is what's emitted.  Defaults to the identity, so existing
+  behavior is unchanged.
+
+* 🤖 **`big.test`: an uncaught `SystemExit` is now a failure, not a fatal
+  escape.**  Code under test that calls `sys.exit()` is scored as an ordinary
+  failure; only `KeyboardInterrupt` still propagates and stops the run.
 
 </dd></dl>
 
