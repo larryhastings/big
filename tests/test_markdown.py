@@ -36,6 +36,7 @@ from big.test import raises
 
 import big.markdown
 from big.markdown import *
+from big.template import StyleSheet, plain_stylesheet, join_styles
 
 
 #
@@ -151,7 +152,7 @@ def test_ordered_list_delimiter_preserved():
     # `.` and `)` are both kept and rendered as typed
     dot = parse("1. a\n2. b\n").blocks[0]
     assert dot.delimiter == '.'
-    assert render(parse("1) a\n2) b\n")) == "1) a\n2) b"
+    assert render_terminal(parse("1) a\n2) b\n")) == "1) a\n2) b"
     # switching the delimiter starts a NEW list (CommonMark)
     blocks = parse("1. a\n2) b\n").blocks
     assert [b.delimiter for b in blocks] == ['.', ')']
@@ -306,8 +307,8 @@ def test_hard_break_nodes():
     assert parse("a\nb\n").blocks[0] == Paragraph([Text('a\nb')])
 
 def test_hard_break_rendering():
-    assert render(parse("a  \nb\n"), width=40) == "a\nb"       # hard: forced
-    assert render(parse("a\nb\n"), width=40) == "a b"          # soft: reflowed
+    assert render_terminal(parse("a  \nb\n"), width=40) == "a\nb"       # hard: forced
+    assert render_terminal(parse("a\nb\n"), width=40) == "a b"          # soft: reflowed
 
 def test_backslash_escapes():
     assert parse(r"\*not italic\*" + "\n").blocks[0] == Paragraph([Text('*not italic*')])
@@ -503,44 +504,114 @@ def test_definition_lazy_continuation():
 #
 
 def test_render_paragraph_wraps():
-    assert render(parse("one two three four five\n"), width=13) == "one two three\nfour five"
+    assert render_terminal(parse("one two three four five\n"), width=13) == "one two three\nfour five"
 
 def test_render_paragraphs_separated():
-    assert render(parse("a\n\nb\n"), width=20) == "a\n\nb"
+    assert render_terminal(parse("a\n\nb\n"), width=20) == "a\n\nb"
 
 def test_render_bullet_list():
-    assert render(parse("- a\n- b\n"), width=20) == "• a\n• b"
+    assert render_terminal(parse("- a\n- b\n"), width=20) == "• a\n• b"
 
 def test_render_ordered_from_start():
-    assert render(parse("3. c\n4. d\n"), width=20) == "3. c\n4. d"
+    assert render_terminal(parse("3. c\n4. d\n"), width=20) == "3. c\n4. d"
 
 def test_render_ordered_right_aligned():
     # markers right-align within the list so the periods share a
     # column and the text shares the next-but-one column
-    assert render(parse("9. nine\n10. ten\n"), width=20) == " 9. nine\n10. ten"
+    assert render_terminal(parse("9. nine\n10. ten\n"), width=20) == " 9. nine\n10. ten"
 
 def test_render_nested_tight():
-    assert render(parse("- outer\n  - inner\n"), width=20) == "• outer\n  • inner"
+    assert render_terminal(parse("- outer\n  - inner\n"), width=20) == "• outer\n  • inner"
 
 def test_render_loose_has_blanks():
-    assert render(parse("- a\n\n- b\n"), width=20) == "• a\n\n• b"
+    assert render_terminal(parse("- a\n\n- b\n"), width=20) == "• a\n\n• b"
 
 def test_render_code_block_indented():
-    assert render(parse("```\nx = 1\n```\n"), width=20) == "    x = 1"
+    assert render_terminal(parse("```\nx = 1\n```\n"), width=20) == "    x = 1"
 
 def test_render_blockquote_prefixed():
-    assert render(parse("> hi there\n"), width=20) == "│ hi there"
+    assert render_terminal(parse("> hi there\n"), width=20) == "│ hi there"
 
 def test_render_thematic_break():
-    assert render(parse("---\n"), width=5) == "─────"
+    assert render_terminal(parse("---\n"), width=5) == "─────"
 
 def test_render_definition_list():
-    assert render(parse("term\n: def here\n"), width=20) == "term\n    def here"
+    assert render_terminal(parse("term\n: def here\n"), width=20) == "term\n    def here"
 
 def test_render_hanging_wrap():
     # continuation of a wrapped item hangs under the item's text
-    out = render(parse("- word word word word\n"), width=12)
+    out = render_terminal(parse("- word word word word\n"), width=12)
     assert out == "• word word\n  word word"
+
+
+#
+# Styling pipeline: parse -> style -> render_terminal -> StyleSheet.render
+#
+
+def test_style_bakes_role_markup():
+    # style() wraps inline runs and headings in their roles
+    assert style_document(parse("# Hi\n")).blocks[0] == Heading(1, [Text('⦃heading1⦙Hi⦄')])
+    para = style_document(parse("a **b** *c* `d` ~~e~~ [f](u)\n")).blocks[0]
+    assert para == Paragraph([Text(
+        'a ⦃bold⦙b⦄ ⦃italic⦙c⦄ ⦃code⦙d⦄ ⦃strikethrough⦙e⦄ ⦃link⦙f⦄')])
+    # plain_stylesheet strips it all back to the plain text
+    assert plain_stylesheet.render(para.children[0].text) == 'a b c d e f'
+
+def test_split_styles_document():
+    # the IR->IR pass runs split_styles over every node's text, so a
+    # multi-word span becomes per-word (render_terminal won't tear it)
+    doc = split_styles_document(style_document(parse("**one two three**\n")))
+    assert doc.blocks[0] == Paragraph([Text('⦃bold⦙one⦄ ⦃bold⦙two⦄ ⦃bold⦙three⦄')])
+    # it's a no-op on an unstyled document
+    plain = parse("one two three\n")
+    assert split_styles_document(plain) == plain
+
+def test_styled_wrapping_measures_visible_width():
+    # a styled run wraps at the same columns as the unstyled text,
+    # because width is measured past the markup
+    src = "The quick brown fox jumps\n"
+    doc = split_styles_document(style_document(parse(src)))
+    styled = render_terminal(doc, width=15)
+    assert plain_stylesheet.render(styled) == render_terminal(parse(src), width=15)
+
+def test_render_terminal_glyphs_styled_only_when_document_is():
+    # unstyled IR -> no markup anywhere (markers/rules stay plain)
+    assert render_terminal(parse("# Hi\n\n- a\n")) == "==\nHi\n==\n\n• a"
+    # styled IR -> heading rule and list marker wear their roles
+    out = render_terminal(split_styles_document(style_document(parse("# Hi\n\n- a\n"))))
+    assert '⦃heading1⦙==⦄' in out and '⦃marker⦙•⦄' in out
+
+def test_style_pipeline_two_layer_theme():
+    # low level: formatting -> backend tokens (stand-ins for ANSI)
+    low = StyleSheet({
+        'bold':         ('T', '[b]T[/b]'),
+        'underline':    ('T', '[u]T[/u]'),
+        'header_color': ('T', '[c]T[/c]'),
+    })
+    # high level: concept -> formatting, resolved recursively
+    theme = StyleSheet({
+        'heading1': ('T', '⦃bold⦙⦃header_color⦙T⦄⦄'),
+        'marker':   ('T', '⦃header_color⦙T⦄'),
+        'code':     ('T', 'T'),
+        'link':     ('T', '⦃underline⦙T⦄'),
+    })
+    sheet = low | theme
+    md = "# Hi\n\nsome **bold** and `c` and [x](u)\n\n- a\n"
+
+    # the whole pipeline: parse -> style -> split -> render -> join -> paint
+    def paint(with_sheet):
+        doc = split_styles_document(style_document(parse(md)))
+        return with_sheet.render(join_styles(render_terminal(doc, width=0)))
+
+    out = paint(sheet)
+    assert '[b][c]Hi[/c][/b]' in out                 # heading: bold + color
+    assert '[b][c]==[/c][/b]' in out                 # rule matches 'Hi' width
+    assert '[c]•[/c] a' in out                        # marker: color
+    assert 'some [b]bold[/b] and c and [u]x[/u]' in out
+    # the payoff: overwrite header_color ONCE, every heading AND marker
+    # recolors -- because the high-level roles compose onto it
+    recolored = paint(sheet | StyleSheet({'header_color': ('T', '[C]T[/C]')}))
+    assert '[b][C]Hi[/C][/b]' in recolored and '[C]•[/C] a' in recolored
 
 
 def run_tests(run=None):

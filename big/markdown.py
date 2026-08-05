@@ -31,9 +31,17 @@ CommonMark syntax.
 Two halves:
 
   * parse(text) turns Markdown into an intermediate representation
-    (the node classes below); and
-  * render(document) consumes that IR and produces formatted text
-    for a terminal.
+    (the node classes below);
+  * style_document(document) bakes `⦃role⦙…⦄` markup into the IR's text;
+  * split_styles_document(document) splits each span to word granularity
+    (so wrapping can't tear one); and
+  * render_terminal(document) lays the IR out as text for a terminal.
+
+Then join_styles() coalesces the per-line markup and a big.template
+StyleSheet paints it (or plain_stylesheet strips it):
+
+    parse -> style_document -> split_styles_document
+          -> render_terminal -> join_styles -> stylesheet.render
 
 The IR carries what the renderer draws, plus a Raw node so anything
 outside the subset (a table, raw HTML) survives to be degraded
@@ -41,9 +49,22 @@ rather than dropped.  Stdlib-only, and Python 3.6-clean.
 """
 
 import re
+import shutil
 
 from big.text import split_text_with_code as _split_text
 from big.text import wrap_words as _wrap_words
+from big.template import style as _style_span
+from big.template import style_delimiters as _style_delims
+from big.template import plain_stylesheet as _plain_sheet
+from big.template import split_styles as _split_styles
+
+# strip `⦃role⦙…⦄` markup back to plain text (the raw callback for
+# wrap_words, so styled words measure by their visible width).
+_strip_markup = _plain_sheet.render
+
+# width=0 asks render_terminal for no maximum; a margin this wide
+# means wrap_words never wraps.
+_NO_MAX_WIDTH = 2 ** 31
 
 
 #
@@ -1178,6 +1199,121 @@ def _parse_paragraph(lines, i, refs):
 
 
 #
+# Styling: bake role markup into the IR's text.
+#
+# style_document(document) returns a copy of the IR whose inline text carries
+# `⦃role⦙…⦄` markup: Strong -> bold, Emph -> italic, Strikethrough ->
+# strikethrough, Code -> code, Link -> link, and a Heading's text is
+# wrapped in heading1..heading6 by level.  The block STRUCTURE is
+# preserved (it's still a Document), so render_terminal can lay it
+# out; the generated glyphs it draws (list markers, heading rules)
+# are styled there, not here, since they aren't text of any node.
+#
+
+def _styled_text(nodes):
+    "Inline nodes -> one markup string (bold/italic/strike/code/link)."
+    out = []
+    for node in nodes:
+        if isinstance(node, Text):
+            out.append(node.text)
+        elif isinstance(node, Strong):
+            out.append(_style_span('bold', _styled_text(node.children)))
+        elif isinstance(node, Emph):
+            out.append(_style_span('italic', _styled_text(node.children)))
+        elif isinstance(node, Strikethrough):
+            out.append(_style_span('strikethrough', _styled_text(node.children)))
+        elif isinstance(node, Code):
+            out.append(_style_span('code', node.text))
+        elif isinstance(node, Link):
+            out.append(_style_span('link', _styled_text(node.children)))
+        elif isinstance(node, HardBreak):
+            out.append('\n')     # only reached if a break nests inside a span
+    return ''.join(out)
+
+
+def _styled_inline(nodes):
+    "Inline nodes -> [Text(markup) | HardBreak], hard breaks kept as nodes."
+    result = []
+    run = []
+    for node in nodes:
+        if isinstance(node, HardBreak):
+            if run:
+                result.append(Text(_styled_text(run)))
+                run = []
+            result.append(HardBreak())
+        else:
+            run.append(node)
+    if run:
+        result.append(Text(_styled_text(run)))
+    return result
+
+
+def _style_blocks(blocks):
+    return [_style_block(block) for block in blocks]
+
+
+def _style_block(block):
+    if isinstance(block, Heading):
+        text = _style_span(f'heading{block.level}', _styled_text(block.children))
+        return Heading(block.level, [Text(text)])
+    if isinstance(block, Paragraph):
+        return Paragraph(_styled_inline(block.children))
+    if isinstance(block, BulletList):
+        return BulletList(
+            [ListItem(_style_blocks(item.blocks)) for item in block.items],
+            block.tight)
+    if isinstance(block, OrderedList):
+        return OrderedList(
+            [ListItem(_style_blocks(item.blocks)) for item in block.items],
+            block.start, block.delimiter, block.tight)
+    if isinstance(block, BlockQuote):
+        return BlockQuote(_style_blocks(block.blocks))
+    if isinstance(block, DefinitionList):
+        return DefinitionList([_style_entry(entry) for entry in block.entries])
+    # CodeBlock, ThematicBreak, Raw: no inline text to style
+    return block
+
+
+def _style_entry(entry):
+    term = Term(_styled_inline(entry.term.children))
+    definitions = [Definition(_style_blocks(d.blocks)) for d in entry.definitions]
+    return DefinitionEntry(term, definitions)
+
+
+def style_document(document):
+    """
+    Return a copy of `document` with styling markup baked into its
+    text -- each inline run wrapped in its role and each heading in
+    heading1..heading6.  The result is still an IR; feed it to
+    render_terminal to lay out, then to a StyleSheet to paint (or
+    to plain_stylesheet to strip the markup back out).
+    """
+    return Document(_style_blocks(document.blocks))
+
+
+def _map_style_text(node):
+    "Rebuild an IR node, running split_styles over every string field."
+    if isinstance(node, Node):
+        return type(node)(*(_map_style_text(getattr(node, f)) for f in node._fields))
+    if isinstance(node, list):
+        return [_map_style_text(child) for child in node]
+    if isinstance(node, str):
+        return _split_styles(node)
+    return node                        # ints and the like pass through
+
+
+def split_styles_document(document):
+    """
+    Return a copy of a styled document with every span split to word
+    granularity (see big.template.split_styles) -- built on top of it,
+    applied to each node's text.  This lets render_terminal wrap lines
+    without tearing a span; run it after style_document, before
+    render_terminal.  join_styles undoes it on the laid-out text.
+    """
+    return _map_style_text(document)
+
+
+#
 # The renderer: IR -> text fitted to a terminal width.
 #
 # It lays out the structure -- the wrapping (through big's trio),
@@ -1187,9 +1323,28 @@ def _parse_paragraph(lines, i, refs):
 # mode; only ANSI color and bold are deferred to a later pass.
 #
 
-def render(document, width=79):
-    "Render a Document to plain wrapped text for a terminal `width` wide."
-    lines = _render_blocks(document.blocks, width)
+def render_terminal(document, width=None):
+    """
+    Lay a Document out as text for a terminal, honoring the block
+    geometry (hanging indents, list markers, heading rules, quote
+    bars) and wrapping prose to `width`.
+
+    width=None (the default) uses the current terminal's width, or 79
+    if there's no terminal; width=0 imposes no maximum line width.
+
+    Any `⦃role⦙…⦄` styling markup already in the IR (see style()) is
+    carried through untouched; paint it with a StyleSheet's render(),
+    or strip it with plain_stylesheet.
+    """
+    if width is None:
+        width = shutil.get_terminal_size((79, 24)).columns
+    elif width == 0:
+        width = _NO_MAX_WIDTH
+    # was the IR run through style()?  If so, the glyphs render_terminal
+    # generates (list markers, heading rules) get their roles too; if
+    # not, everything stays plain.
+    styled = _is_styled(document)
+    lines = _render_blocks(document.blocks, width, styled)
     return '\n'.join(line.rstrip() for line in lines)
 
 
@@ -1211,16 +1366,21 @@ def _wrap(text, width):
     text = text.replace('\n', ' ')
     if not text.strip():
         return []
-    return _wrap_words(_split_text(text, code_indent=0), margin=width).split('\n')
+    # styled text arrives already word-split (split_styles_document), so
+    # tokenizing at whitespace yields balanced words; `raw` measures the
+    # visible width past the markup.
+    raw = _strip_markup if (_style_delims[0] in text) else None
+    return _wrap_words(_split_text(text, code_indent=0), margin=width,
+                       raw=raw).split('\n')
 
 
-def _render_blocks(blocks, width, tight=False):
+def _render_blocks(blocks, width, styled, tight=False):
     "Render a run of block nodes; a blank line between them unless tight."
     out = []
     for index, block in enumerate(blocks):
         if index and not tight:
             out.append('')
-        out.extend(_render_block(block, width))
+        out.extend(_render_block(block, width, styled))
     return out
 
 
@@ -1238,29 +1398,50 @@ def _render_paragraph(children, width):
     return lines
 
 
-def _render_block(block, width):
+def _is_styled(node):
+    "True if any text anywhere in the IR carries `⦃…⦄` style markup."
+    if isinstance(node, str):
+        return _style_delims[0] in node
+    if isinstance(node, Node):
+        return any(_is_styled(getattr(node, f)) for f in node._fields)
+    if isinstance(node, (list, tuple)):
+        return any(_is_styled(child) for child in node)
+    return False
+
+
+def _render_block(block, width, styled):
     if isinstance(block, Paragraph):
         return _render_paragraph(block.children, width)
     if isinstance(block, Heading):
-        return _wrap(_flatten(block.children), width)
+        lines = _wrap(_flatten(block.children), width)
+        if block.level > 2:                  # H3..H6: styled text, no rule
+            return lines
+        # H1 gets a `=` rule above and below, H2 a `-` rule below; the
+        # rule matches the header TEXT width (measured past any markup),
+        # and wears the heading role when the document is styled.
+        rule_width = max((len(_strip_markup(line)) for line in lines), default=0)
+        rule = ('=' if block.level == 1 else '-') * rule_width
+        if styled:
+            rule = _style_span(f'heading{block.level}', rule)
+        return [rule, *lines, rule] if block.level == 1 else [*lines, rule]
     if isinstance(block, ThematicBreak):
         return ['─' * width]
     if isinstance(block, CodeBlock):
         return ['    ' + line for line in block.text.split('\n')]
     if isinstance(block, BlockQuote):
-        return ['│ ' + line for line in _render_blocks(block.blocks, max(1, width - 2))]
+        return ['│ ' + line for line in _render_blocks(block.blocks, max(1, width - 2), styled)]
     if isinstance(block, BulletList):
-        return _render_list(block, width, False)
+        return _render_list(block, width, False, styled)
     if isinstance(block, OrderedList):
-        return _render_list(block, width, True)
+        return _render_list(block, width, True, styled)
     if isinstance(block, DefinitionList):
-        return _render_deflist(block, width)
+        return _render_deflist(block, width, styled)
     if isinstance(block, Raw):
         return block.text.split('\n')
     return []
 
 
-def _render_list(list_node, width, ordered):
+def _render_list(list_node, width, ordered, styled):
     # Right-align the markers within this one contiguous list, so the
     # periods (or bullets) share a column, then one space, then every
     # item's text -- and every wrapped/continuation line -- shares the
@@ -1274,8 +1455,11 @@ def _render_list(list_node, width, ordered):
     pad = ' ' * text_col
     out = []
     for index, item in enumerate(list_node.items):
-        prefix = markers[index].rjust(marker_width) + ' '
-        inner = _render_blocks(item.blocks, max(1, width - text_col), list_node.tight)
+        marker = markers[index]
+        glyph = _style_span('marker', marker) if styled else marker
+        # right-align on the PLAIN marker width, then style the glyph
+        prefix = (' ' * (marker_width - len(marker))) + glyph + ' '
+        inner = _render_blocks(item.blocks, max(1, width - text_col), styled, list_node.tight)
         if not inner:
             item_lines = [prefix.rstrip()]
         else:
@@ -1287,14 +1471,14 @@ def _render_list(list_node, width, ordered):
     return out
 
 
-def _render_deflist(dl, width):
+def _render_deflist(dl, width, styled):
     out = []
     for index, entry in enumerate(dl.entries):
         if index:
             out.append('')
         out.extend(_wrap(_flatten(entry.term.children), width))
         for definition in entry.definitions:
-            inner = _render_blocks(definition.blocks, max(1, width - 4))
+            inner = _render_blocks(definition.blocks, max(1, width - 4), styled)
             out.extend('    ' + line for line in inner)
     return out
 
@@ -1311,5 +1495,5 @@ __all__ = [
     # inline
     'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
     # parser + renderer
-    'parse', 'render',
+    'parse', 'style_document', 'split_styles_document', 'render_terminal',
 ]
