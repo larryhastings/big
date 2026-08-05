@@ -344,6 +344,10 @@ def run(name=None, module=None, permutations=None):
     `module` may be a module object, a module name (test files
     pass __name__), or None for the __main__ module.
 
+    Any exception escaping a test counts as a failure--including
+    SystemExit, so code under test calling sys.exit() can't
+    silently kill the run.  Only KeyboardInterrupt propagates.
+
     `name`, if given, is printed in a "Testing {name}..." banner.
     `permutations`, if given, is a zero-argument callable returning
     a number to report in the "Ran N tests" line.
@@ -384,7 +388,14 @@ def run(name=None, module=None, permutations=None):
         except unittest.SkipTest:
             skips += 1
             markers.append('s')
-        except Exception:
+        except KeyboardInterrupt:
+            raise
+        except BaseException:
+            # BaseException, not Exception: code under test calling
+            # sys.exit() must not vaporize the test run.  (unittest
+            # draws the line in the same place: KeyboardInterrupt
+            # aborts, everything else--SystemExit included--is a
+            # test that didn't do what it predicted.)
             if expecting_failure:
                 expected_failures += 1
                 markers.append('x')

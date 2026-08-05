@@ -368,6 +368,28 @@ def test_run_one_of_everything():
     assert tally["unexpected successes"] == 1
     assert tally["errors"] == 0
 
+def test_run_sys_exit_is_a_failure():
+    # code under test calling sys.exit() must not vaporize the run:
+    # SystemExit is a BaseException, but run() catches it anyway
+    # and counts it as an ordinary failure.
+    def calls_sys_exit():
+        sys.exit(2)
+    module = synthetic_module(test_calls_sys_exit=calls_sys_exit)
+    output, (total, failed), tally = run_quietly(module=module)
+    assert total == 1
+    assert failed == 1
+    assert tally["failures"] == 1
+    assert "FAIL: test_calls_sys_exit" in output
+    assert "SystemExit" in output
+
+def test_run_keyboard_interrupt_propagates():
+    # ...but ^C still means STOP.
+    def inconceivably_slow():
+        raise KeyboardInterrupt
+    module = synthetic_module(test_slow=inconceivably_slow)
+    with raises(KeyboardInterrupt):
+        run_quietly(module=module)
+
 def test_run_module_by_name():
     module = synthetic_module("by_name_module", test_fine=lambda: None)
     # a lambda has no required parameters, so it's discovered
