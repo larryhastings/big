@@ -1,0 +1,1315 @@
+#!/usr/bin/env python3
+
+_license = """
+big
+Copyright 2022-2026 Larry Hastings
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+"""
+big.markdown -- a parser for a subset of standards-compliant
+CommonMark syntax.
+
+Two halves:
+
+  * parse(text) turns Markdown into an intermediate representation
+    (the node classes below); and
+  * render(document) consumes that IR and produces formatted text
+    for a terminal.
+
+The IR carries what the renderer draws, plus a Raw node so anything
+outside the subset (a table, raw HTML) survives to be degraded
+rather than dropped.  Stdlib-only, and Python 3.6-clean.
+"""
+
+import re
+
+from big.text import split_text_with_code as _split_text
+from big.text import wrap_words as _wrap_words
+
+
+#
+# Node base.
+#
+# Every IR node is a small __slots__ class over a fixed tuple of
+# fields (`_fields`).  The base supplies a positional __init__,
+# a structural __eq__, and a readable __repr__ -- the last matters
+# because the tests compare and print whole trees.
+#
+
+class Node:
+    __slots__ = ()
+    _fields = ()
+
+    def __init__(self, *args):
+        fields = self._fields
+        if len(args) != len(fields):
+            plural = "" if len(fields) == 1 else "s"
+            raise TypeError(
+                f"{type(self).__name__} takes {len(fields)} "
+                f"argument{plural} ({len(args)} given)")
+        for name, value in zip(fields, args):
+            setattr(self, name, value)
+
+    def _values(self):
+        return tuple(getattr(self, name) for name in self._fields)
+
+    def __eq__(self, other):
+        return (type(self) is type(other)) and (self._values() == other._values())
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash((type(self),) + self._values())
+
+    def __repr__(self):
+        inside = ", ".join(f"{name}={getattr(self, name)!r}"
+                           for name in self._fields)
+        return f"{type(self).__name__}({inside})"
+
+
+#
+# Block nodes.
+#
+# `children` always means a list of INLINE nodes; `blocks` always
+# means a list of BLOCK nodes.  Keeping those two words disjoint is
+# a small invariant the parser and renderer both lean on.
+#
+
+class Document(Node):
+    "The whole parsed document: a list of block nodes."
+    __slots__ = ('blocks',)
+    _fields = ('blocks',)
+
+
+class Heading(Node):
+    "An ATX heading.  `level` is 1..6; `children` is inline."
+    __slots__ = ('level', 'children')
+    _fields = ('level', 'children')
+
+
+class Paragraph(Node):
+    "A paragraph; `children` is inline."
+    __slots__ = ('children',)
+    _fields = ('children',)
+
+
+class BulletList(Node):
+    """
+    A `*`/`-`/`+` bullet list.  `items` is a list of ListItem.
+    `tight` (bool) is CommonMark's tight-vs-loose distinction: a
+    tight list renders its items without blank lines between them.
+    """
+    __slots__ = ('items', 'tight')
+    _fields = ('items', 'tight')
+
+
+class OrderedList(Node):
+    """
+    A numbered list.  `items` is a list of ListItem; `start` is the
+    first item's number (rendered verbatim, never resequenced);
+    `delimiter` is the character after the number, `.` or `)` (a
+    change of delimiter starts a new list); `tight` as for BulletList.
+    """
+    __slots__ = ('items', 'start', 'delimiter', 'tight')
+    _fields = ('items', 'start', 'delimiter', 'tight')
+
+
+class ListItem(Node):
+    "One item of a bullet or ordered list; `blocks` is block-level."
+    __slots__ = ('blocks',)
+    _fields = ('blocks',)
+
+
+class DefinitionList(Node):
+    "A definition list: `entries` is a list of DefinitionEntry."
+    __slots__ = ('entries',)
+    _fields = ('entries',)
+
+
+class DefinitionEntry(Node):
+    """
+    One term and its definitions.  `term` is a Term; `definitions`
+    is a list of Definition (a term may have more than one).
+    """
+    __slots__ = ('term', 'definitions')
+    _fields = ('term', 'definitions')
+
+
+class Term(Node):
+    "A definition-list term; `children` is inline."
+    __slots__ = ('children',)
+    _fields = ('children',)
+
+
+class Definition(Node):
+    "A definition-list definition; `blocks` is block-level."
+    __slots__ = ('blocks',)
+    _fields = ('blocks',)
+
+
+class CodeBlock(Node):
+    """
+    A fenced or indented code block.  `text` is the literal content
+    (verbatim, tabs and all); `info` is the fence info string
+    (language hint) or '' for an indented block.
+    """
+    __slots__ = ('text', 'info')
+    _fields = ('text', 'info')
+
+
+class BlockQuote(Node):
+    "A `>` block quote; `blocks` is block-level."
+    __slots__ = ('blocks',)
+    _fields = ('blocks',)
+
+
+class ThematicBreak(Node):
+    "A horizontal rule (`---`, `***`, `___`).  No fields."
+    __slots__ = ()
+    _fields = ()
+
+
+class Raw(Node):
+    """
+    An escape hatch for a construct outside big's rendered subset --
+    a table, raw HTML, a footnote.  `text` is the original Markdown
+    source, preserved verbatim.  The renderer DEGRADES it (plain
+    text, escaped, or alt text -- never silently dropped); the GHFM
+    serializer passes it straight through, so GitHub renders it
+    natively.  This is how the private IR avoids being a ceiling:
+    what it can't model, it carries.
+    """
+    __slots__ = ('text',)
+    _fields = ('text',)
+
+
+#
+# Inline nodes.
+#
+
+class Text(Node):
+    "A run of literal text."
+    __slots__ = ('text',)
+    _fields = ('text',)
+
+
+class Strong(Node):
+    "Strong emphasis (`**...**`); `children` is inline."
+    __slots__ = ('children',)
+    _fields = ('children',)
+
+
+class Emph(Node):
+    "Emphasis (`*...*`); `children` is inline."
+    __slots__ = ('children',)
+    _fields = ('children',)
+
+
+class Strikethrough(Node):
+    "Strikethrough (`~~...~~`); `children` is inline."
+    __slots__ = ('children',)
+    _fields = ('children',)
+
+
+class Code(Node):
+    "An inline code span (`` `...` ``); `text` is literal."
+    __slots__ = ('text',)
+    _fields = ('text',)
+
+
+class Link(Node):
+    """
+    A link.  `children` is the inline link text; `url` is the
+    destination; `title` is the optional title (or '').
+    """
+    __slots__ = ('children', 'url', 'title')
+    _fields = ('children', 'url', 'title')
+
+
+class HardBreak(Node):
+    "A hard line break inside a paragraph (two trailing spaces or `\\`)."
+    __slots__ = ()
+    _fields = ()
+
+
+#
+# The block parser.
+#
+# Markdown text -> Document of block nodes.  Leaf inline content
+# (paragraph / heading / term text) is run through _parse_inline.
+#
+# The parser implements the documented subset; where it doesn't
+# implement a construct it degrades rather than raises, so any
+# prose is accepted.
+#
+
+_atx_re        = re.compile(r' {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$')
+_fence_re      = re.compile(r'( {0,3})(`{3,}|~{3,})[ \t]*(.*?)[ \t]*$')
+_thematic_re   = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$')
+_blockquote_re = re.compile(r' {0,3}>[ ]?(.*)$')
+_bullet_re     = re.compile(r'( {0,3})([*+-])(?:([ \t]+)(.*))?$')
+_ordered_re    = re.compile(r'( {0,3})([0-9]{1,9})([.)])(?:([ \t]+)(.*))?$')
+_defdef_re     = re.compile(r'( {0,3}):([ \t]+)(.*)$')
+_indent_code_re = re.compile(r'(?: {4}|\t)')
+# a setext underline: a run of only '=' (H1) or only '-' (H2).
+_setext_re     = re.compile(r' {0,3}(=+|-+)[ \t]*$')
+
+
+def _blank(line):
+    return not line.strip()
+
+
+def _dedent(line, n):
+    "Strip up to n leading spaces (only spaces, never past them)."
+    j = 0
+    while (j < n) and (j < len(line)) and (line[j] == ' '):
+        j += 1
+    return line[j:]
+
+
+def _trim_blanks(lines):
+    "Drop leading and trailing blank lines."
+    lines = list(lines)
+    while lines and _blank(lines[0]):
+        lines.pop(0)
+    while lines and _blank(lines[-1]):
+        lines.pop()
+    return lines
+
+
+def _is_block_start(line):
+    "True if line opens a block other than a paragraph/def-list."
+    return bool(_atx_re.match(line) or (_fence_re.match(line) and _fence_re.match(line).group(2))
+                or _thematic_re.match(line) or _blockquote_re.match(line)
+                or _bullet_re.match(line) or _ordered_re.match(line)
+                or _indent_code_re.match(line))
+
+
+def _interrupts_paragraph(line):
+    """
+    True if `line` starts a block that may INTERRUPT a paragraph.
+    Narrower than _is_block_start: indented code never interrupts a
+    paragraph (a 4-space line continues it), an ordered list only
+    interrupts when it starts at 1, and an empty list marker never
+    interrupts.  (CommonMark's paragraph-interruption rules.)
+    """
+    if _atx_re.match(line):
+        return True
+    m = _fence_re.match(line)
+    if m and m.group(2):
+        return True
+    if _thematic_re.match(line):
+        return True
+    if _blockquote_re.match(line):
+        return True
+    m = _bullet_re.match(line)
+    if m and (m.group(4) or '').strip():
+        return True
+    m = _ordered_re.match(line)
+    if m and (int(m.group(2)) == 1) and (m.group(5) or '').strip():
+        return True
+    return False
+
+
+#
+# Inline parser.
+#
+# Precedence: code spans win over everything (they suppress markup
+# inside), then links, then emphasis.  Emphasis uses `*`/`**` and
+# `_`/`__`, with flanking guards so `*args`/`**kwargs` stay literal;
+# `_` additionally can't open or close INSIDE a word, so snake_case
+# identifiers never italicize (the CommonMark intra-word rule).
+# Emphasis is paired with a delimiter stack (each closer to its
+# nearest opener of the same character), so it nests correctly and
+# can wrap code spans and links, not just plain text.
+#
+
+# the opening `[label]:` of a link reference definition.  The label
+# runs to the first unescaped `]`; the destination and optional title
+# that follow may spill onto later lines, so the rest is parsed by
+# _parse_linkdef, not this regex.
+_linkdef_open_re = re.compile(r' {0,3}\[((?:[^\]\\]|\\.)+)\]:(.*)$')
+
+_title_close = {'"': '"', "'": "'", '(': ')'}
+
+
+def _normalize_label(label):
+    "CommonMark label normalization: trim, collapse whitespace, fold case."
+    return re.sub(r'\s+', ' ', label.strip()).lower()
+
+
+def _parse_linkdef(lines, idx):
+    """
+    Try to read a link reference definition beginning at lines[idx].
+    A definition is `[label]: destination` with an optional title, and
+    the destination and title may each wrap onto a following line, so
+    this consumes as many lines as the definition spans.  The title
+    may be double-quoted, single-quoted, or parenthesized.
+
+    Returns (label, destination, title, next_index) on success, or
+    None -- fail-soft, never raises, so a line that merely looks like
+    a definition falls through to ordinary block parsing.
+    """
+    m = _linkdef_open_re.match(lines[idx])
+    if not m:
+        return None
+    label = m.group(1)
+    if not _normalize_label(label):
+        return None
+    # `phys[0]` is the label line's tail (after the colon); phys[1:]
+    # are candidate continuation lines.  A blank line stops the scan.
+    phys = [m.group(2)] + lines[idx + 1:]
+
+    def skip_ws(li, ci):
+        "Skip spaces/tabs, crossing at most one newline.  -> (li, ci, crossed)."
+        line = phys[li] if li < len(phys) else ''
+        while ci < len(line) and line[ci] in ' \t':
+            ci += 1
+        if ci < len(line):
+            return li, ci, False
+        # end of line: cross one newline only onto a non-blank line
+        if (li + 1) < len(phys) and phys[li + 1].strip():
+            li += 1
+            ci = 0
+            line = phys[li]
+            while ci < len(line) and line[ci] in ' \t':
+                ci += 1
+            return li, ci, True
+        return li, ci, False
+
+    def read_dest(li, ci):
+        "A bare destination: to whitespace, with balanced parens.  -> (dest, ci)."
+        line = phys[li]
+        start = ci
+        depth = 0
+        while ci < len(line):
+            ch = line[ci]
+            if ch in ' \t':
+                break
+            if ch == '\\' and (ci + 1) < len(line):
+                ci += 2
+                continue
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                if depth == 0:
+                    break
+                depth -= 1
+            ci += 1
+        return line[start:ci], ci
+
+    def read_title(li, ci):
+        "A quoted/parenthesized title, possibly multi-line.  -> (title, li, ci) or None."
+        opener = phys[li][ci]
+        closer = _title_close[opener]
+        depth = 0
+        buf = []
+        ci += 1
+        while li < len(phys):
+            line = phys[li]
+            if (buf and buf[-1] == '\n') and not line.strip():
+                return None                      # a blank line breaks a title
+            while ci < len(line):
+                ch = line[ci]
+                if ch == '\\' and (ci + 1) < len(line):
+                    buf.append(line[ci + 1])
+                    ci += 2
+                    continue
+                if opener == '(' and ch == '(':
+                    depth += 1
+                elif ch == closer:
+                    if depth == 0:
+                        return ''.join(buf), li, ci + 1
+                    depth -= 1
+                buf.append(ch)
+                ci += 1
+            buf.append('\n')
+            li += 1
+            ci = 0
+        return None                              # unterminated title
+
+    li, ci, _ = skip_ws(0, 0)
+    if li >= len(phys) or ci >= len(phys[li]):
+        return None
+    dest, ci = read_dest(li, ci)
+    if not dest:
+        return None
+    dest_end_li = li
+
+    # an optional title follows, after spaces/tabs and up to one newline.
+    li, ci, crossed = skip_ws(li, ci)
+    if (li < len(phys)) and (ci < len(phys[li])) and (phys[li][ci] in _title_close):
+        result = read_title(li, ci)
+        if result is not None:
+            title, tli, tci = result
+            if not phys[tli][tci:].strip():      # nothing but space after title
+                return label, dest, title, idx + 1 + tli
+        # a title that fails on the SAME line as the destination voids the
+        # whole definition; on a LATER line it just isn't part of it.
+        if not crossed:
+            return None
+    elif (li < len(phys)) and (ci < len(phys[li])) and not crossed:
+        return None                              # junk after destination
+
+    return label, dest, '', idx + 1 + dest_end_li
+
+
+# a backslash escapes only these (ASCII punctuation); before anything
+# else -- a letter, digit, space -- the backslash stays literal.
+_ASCII_PUNCT = set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+# CommonMark autolinks, both spellings.  A URI autolink is a scheme
+# (2-32 chars) plus anything up to '>' with no spaces or controls; an
+# email autolink is an address.  Both are anchored at a leading '<'.
+_uri_autolink_re = re.compile(r'<([A-Za-z][A-Za-z0-9+.\-]{1,31}:[^<>\x00-\x20]*)>')
+_email_autolink_re = re.compile(
+    r"<([A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+"
+    r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)>")
+
+
+def _char_class(ch):
+    """
+    Classify the character on one side of a `*`/`_` run.  The start
+    and end of the string, and any whitespace, count as 'space';
+    ASCII punctuation is 'punct'; everything else is 'word'.  This
+    is the input CommonMark's opener/closer rule looks at.
+    """
+    if (ch == '') or ch.isspace():
+        return 'space'
+    if ch in _ASCII_PUNCT:
+        return 'punct'
+    return 'word'
+
+
+def _parse_inline(text, refs=None):
+    return _inline(text, refs or {}) if text else []
+
+
+def _inline(text, refs):
+    """
+    Parse inline Markdown into a list of nodes.
+
+    Phase 1 scans out code spans and links as opaque nodes and
+    tokenizes `*` runs into delimiter records; phase 2 pairs the
+    delimiters into Strong/Emph.  Because emphasis runs over the
+    WHOLE token sequence (nodes included), a `*...*` can wrap a
+    link or code span, not just plain text.
+
+    The internal item shapes are:
+        ['text', str]
+        ['delim', char, count, can_open, can_close]  (count mutable)
+        ['node', Node]
+    """
+    items = []
+    buf = []
+    n = len(text)
+    i = 0
+
+    def flush():
+        if buf:
+            items.append(['text', ''.join(buf)])
+            del buf[:]
+
+    while i < n:
+        c = text[i]
+        if c == '\\' and (i + 1 < n) and text[i + 1] in _ASCII_PUNCT:
+            # escaped punctuation: emit it as SETTLED text (its own item)
+            # so it can't act as a delimiter, and so a trailing escaped
+            # backslash isn't mistaken for a hard-break backslash.
+            flush()
+            items.append(['text', text[i + 1]])
+            i += 2
+            continue
+        if c == '`':
+            run = _run_length(text, i, '`')
+            close = _find_backtick_close(text, i + run, run)
+            if close != -1:
+                flush()
+                content = text[i + run:close].replace('\n', ' ')
+                if (len(content) >= 2 and content[0] == ' '
+                        and content[-1] == ' ' and content.strip()):
+                    content = content[1:-1]
+                items.append(['node', Code(content)])
+                i = close + run
+                continue
+            buf.append(text[i:i + run])
+            i += run
+            continue
+        if c == '<':
+            um = _uri_autolink_re.match(text, i)
+            if um:
+                flush()
+                url = um.group(1)
+                items.append(['node', Link([Text(url)], url, '')])
+                i = um.end()
+                continue
+            em = _email_autolink_re.match(text, i)
+            if em:
+                flush()
+                addr = em.group(1)
+                items.append(['node', Link([Text(addr)], 'mailto:' + addr, '')])
+                i = em.end()
+                continue
+            buf.append(c)
+            i += 1
+            continue
+        if c == '[':
+            link = _try_link(text, i)
+            if link:
+                flush()
+                label, dest, title, end = link
+                items.append(['node', Link(_inline(label, refs), dest, title)])
+                i = end
+                continue
+            ref = _try_ref_link(text, i, refs)
+            if ref:
+                flush()
+                shown_nodes, dest, title, end = ref
+                items.append(['node', Link(shown_nodes, dest, title)])
+                i = end
+                continue
+            buf.append(c)
+            i += 1
+            continue
+        if c == '*' or c == '_' or c == '~':
+            run = _run_length(text, i, c)
+            flush()
+            after = text[i + run] if (i + run) < n else ''
+            before = text[i - 1] if i > 0 else ''
+            # CommonMark's opener/closer rule.  A run is "left-flanking"
+            # (may open) when it isn't followed by space and isn't a
+            # punctuation-to-word boundary; "right-flanking" (may close)
+            # is the mirror.  For `_`, opening/closing additionally
+            # requires a non-word neighbor on the far side, which is what
+            # keeps snake_case identifiers from ever italicizing.  `*` and
+            # `~` (GFM strikethrough) use the plain rule.
+            b, a = _char_class(before), _char_class(after)
+            left = (a != 'space') and not (a == 'punct' and b == 'word')
+            right = (b != 'space') and not (b == 'punct' and a == 'word')
+            if c == '_':
+                can_open = left and ((not right) or (b == 'punct'))
+                can_close = right and ((not left) or (a == 'punct'))
+            else:
+                can_open, can_close = left, right
+            items.append(['delim', c, run, can_open, can_close, run])
+            i += run
+            continue
+        if c == '\n':
+            # a line ending in two+ spaces, or a backslash, is a HARD
+            # break; any other newline is a soft break (a space that
+            # reflows at render time), kept in the text as '\n'.
+            s = ''.join(buf)
+            if s.endswith('\\') or s.endswith('  '):
+                del buf[:]
+                shown = s[:-1] if s.endswith('\\') else s.rstrip(' ')
+                if shown:
+                    items.append(['text', shown])
+                items.append(['node', HardBreak()])
+            else:
+                buf.append('\n')
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    flush()
+    _pair_emphasis(items)
+    return _items_to_nodes(items)
+
+
+def _match_bracket(text, i):
+    """
+    text[i] is '['; return the index of the matching ']', where inner
+    `[ ]` pairs nest and a backslash-escaped bracket doesn't count.
+    Returns -1 if there is no match.
+    """
+    n = len(text)
+    depth = 0
+    k = i
+    while k < n:
+        c = text[k]
+        if c == '\\':
+            k += 2
+            continue
+        if c == '[':
+            depth += 1
+        elif c == ']':
+            depth -= 1
+            if depth == 0:
+                return k
+        k += 1
+    return -1
+
+
+def _try_link(text, i):
+    """
+    Parse `[label](dest)` or `[label](dest "title")` at text[i]=='['.
+    The label may contain BALANCED brackets, the destination BALANCED
+    parentheses.  Returns (label, dest, title, end_index) or None.
+    """
+    n = len(text)
+    close = _match_bracket(text, i)
+    if close == -1:
+        return None
+    label = text[i + 1:close]
+    k = close + 1
+    if k >= n or text[k] != '(':
+        return None
+    k += 1
+    while k < n and text[k] in ' \t':
+        k += 1
+    depth = 0
+    start = k
+    while k < n:
+        c = text[k]
+        if c in ' \t':
+            break
+        if c == '(':
+            depth += 1
+        elif c == ')':
+            if depth == 0:
+                break
+            depth -= 1
+        k += 1
+    dest = text[start:k]
+    title = ''
+    while k < n and text[k] in ' \t':
+        k += 1
+    if k < n and text[k] in '"\'':
+        quote = text[k]
+        k += 1
+        t_start = k
+        while k < n and text[k] != quote:
+            k += 1
+        title = text[t_start:k]
+        if k < n:
+            k += 1
+        while k < n and text[k] in ' \t':
+            k += 1
+    if k >= n or text[k] != ')':
+        return None
+    return (label, dest, title, k + 1)
+
+
+def _try_ref_link(text, i, refs):
+    """
+    Parse a reference link at text[i]=='[' -- full `[text][label]`,
+    collapsed `[text][]`, or shortcut `[text]` -- resolving `label`
+    against the collected definitions.  Returns
+    (shown_nodes, dest, title, end) or None.
+    """
+    n = len(text)
+    close = _match_bracket(text, i)
+    if close == -1:
+        return None
+    shown = text[i + 1:close]
+    k = close + 1
+    if k < n and text[k] == '[':
+        close2 = text.find(']', k + 1)
+        if close2 == -1:
+            return None
+        inner = text[k + 1:close2]
+        label = inner if inner.strip() else shown   # `[text][]` collapses
+        end = close2 + 1
+    else:
+        label = shown                               # `[text]` shortcut
+        end = close + 1
+    entry = refs.get(_normalize_label(label))
+    if entry is None:
+        return None
+    dest, title = entry
+    return (_inline(shown, refs), dest, title, end)
+
+
+def _pair_emphasis(items):
+    """
+    Pair delimiter records into nodes, matching each closer to its
+    NEAREST preceding opener (left to right): `*`/`_` give Strong/Emph,
+    a `~~` pair gives Strikethrough.  A stray unmatched opener -- the `*` of
+    `*args` -- is left literal.  Mutates `items` in place; paired
+    regions collapse to ['node', ...].
+    """
+    changed = True
+    while changed:
+        changed = False
+        for ci in range(len(items)):
+            it = items[ci]
+            if not (it[0] == 'delim' and it[4]):        # can_close
+                continue
+            oi = None
+            for k in range(ci - 1, -1, -1):
+                ot = items[k]
+                if not (ot[0] == 'delim' and ot[3] and ot[1] == it[1]):
+                    continue                            # can_open, same char
+                # strikethrough is the two-tilde form only: a `~` run that
+                # isn't exactly a pair never strikes (it stays literal).
+                if it[1] == '~' and not (ot[2] == 2 and it[2] == 2):
+                    continue
+                # CommonMark's "rule of three" (emphasis only): when either
+                # run can both open and close, a match whose two ORIGINAL
+                # run lengths sum to a multiple of 3 is forbidden -- unless
+                # both are themselves multiples of 3.  Skip and look back.
+                if it[1] != '~' and (ot[4] or it[3]) \
+                        and (((ot[5] + it[5]) % 3) == 0) \
+                        and ((ot[5] % 3) or (it[5] % 3)):
+                    continue
+                oi = k
+                break
+            if oi is None:
+                continue
+            ot = items[oi]
+            inner = _items_to_nodes(items[oi + 1:ci])
+            if it[1] == '~':
+                use = 2
+                node = Strikethrough(inner)
+            else:
+                use = 2 if (it[2] >= 2 and ot[2] >= 2) else 1
+                node = (Strong if use == 2 else Emph)(inner)
+            ot[2] -= use
+            it[2] -= use
+            middle = []
+            if ot[2] > 0:
+                middle.append(ot)
+            middle.append(['node', node])
+            if it[2] > 0:
+                middle.append(it)
+            items[oi:ci + 1] = middle
+            changed = True
+            break
+    return items
+
+
+def _items_to_nodes(items):
+    "Flatten items to inline nodes, merging adjacent text and stray stars."
+    out = []
+    buf = []
+
+    def flush():
+        if buf:
+            out.append(Text(''.join(buf)))
+            del buf[:]
+
+    for it in items:
+        if it[0] == 'text':
+            buf.append(it[1])
+        elif it[0] == 'delim':
+            buf.append(it[1] * it[2])
+        else:
+            flush()
+            out.append(it[1])
+    flush()
+    return out
+
+
+def _run_length(text, i, ch):
+    run = 1
+    while (i + run < len(text)) and (text[i + run] == ch):
+        run += 1
+    return run
+
+
+def _find_backtick_close(text, start, run):
+    "Index of the next run of EXACTLY `run` backticks, or -1."
+    n = len(text)
+    i = start
+    while i < n:
+        if text[i] == '`':
+            r = _run_length(text, i, '`')
+            if r == run:
+                return i
+            i += r
+            continue
+        i += 1
+    return -1
+
+
+def parse(text):
+    "Parse a Markdown string into a Document (the big.markdown IR)."
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    # Expand tabs to spaces at 4-column tab stops (str.expandtabs resets
+    # at every newline), which is exactly CommonMark's rule for tabs in
+    # indentation -- so all the indent math downstream can count spaces.
+    # (The one deviation: a literal tab INSIDE code becomes spaces here,
+    # rather than surviving verbatim.  On a terminal that's invisible.)
+    text = text.expandtabs(4)
+    # First pass: pull out link reference definitions so references
+    # resolve regardless of where the definition sits.  A definition is
+    # only harvested at a block-start position (it cannot interrupt a
+    # paragraph); it renders nothing.
+    refs = {}
+    kept = []
+    at_block_start = True
+    all_lines = text.split('\n')
+    i = 0
+    n = len(all_lines)
+    while i < n:
+        line = all_lines[i]
+        if _blank(line):
+            kept.append(line)
+            at_block_start = True
+            i += 1
+            continue
+        if at_block_start:
+            result = _parse_linkdef(all_lines, i)
+            if result is not None:
+                label, dest, title, next_i = result
+                refs.setdefault(_normalize_label(label), (dest, title))
+                i = next_i                      # skip every line the def spanned
+                continue                        # still at a block start
+        kept.append(line)
+        at_block_start = False
+        i += 1
+    return Document(_parse_blocks(kept, refs))
+
+
+# Each _parse_<block> helper consumes one block that begins at lines[i]
+# and returns (block_node, index_of_next_unconsumed_line).  The
+# dispatcher below picks a helper by looking at lines[i], and moves
+# the cursor forward by whatever the helper consumed.
+
+def _parse_blocks(lines, refs=None):
+    "Parse block-level lines; discard the tight/loose signal."
+    return _parse_blocks_tracked(lines, refs)[0]
+
+
+def _parse_blocks_tracked(lines, refs=None):
+    """
+    Like _parse_blocks, but also returns whether a blank line fell
+    BETWEEN two top-level blocks -- CommonMark's "directly contains
+    two blocks with a blank between" test for list looseness.  A blank
+    interior to a nested block is consumed by that block's own parser
+    and never reaches this loop, so it doesn't count here.  Returns
+    (blocks, interblock_blank).
+    """
+    refs = refs or {}
+    blocks = []
+    i = 0
+    n = len(lines)
+    interblock_blank = False
+    pending_blank = False
+    while i < n:
+        line = lines[i]
+        if _blank(line):
+            if blocks:                  # a blank after real content...
+                pending_blank = True    # ...pending until the next block confirms it
+            i += 1
+            continue
+        if pending_blank:
+            interblock_blank = True
+            pending_blank = False
+
+        m = _fence_re.match(line)
+        if m and m.group(2):
+            block, i = _parse_fence(lines, i, m)
+            blocks.append(block)
+            continue
+
+        m = _atx_re.match(line)
+        if m and m.group(1):
+            content = re.sub(r'[ \t]+#+$', '', m.group(2) or '').strip()
+            blocks.append(Heading(len(m.group(1)), _parse_inline(content, refs)))
+            i += 1
+            continue
+
+        if _thematic_re.match(line):
+            blocks.append(ThematicBreak())
+            i += 1
+            continue
+
+        if _blockquote_re.match(line):
+            block, i = _parse_blockquote(lines, i, refs)
+            blocks.append(block)
+            continue
+
+        if _bullet_re.match(line) or _ordered_re.match(line):
+            block, i = _parse_list(lines, i, refs)
+            blocks.append(block)
+            continue
+
+        if _indent_code_re.match(line):
+            block, i = _parse_indented_code(lines, i)
+            blocks.append(block)
+            continue
+
+        if (i + 1 < n) and _defdef_re.match(lines[i + 1]) and not _is_block_start(line):
+            block, i = _parse_deflist(lines, i, refs)
+            blocks.append(block)
+            continue
+
+        block, i = _parse_paragraph(lines, i, refs)
+        blocks.append(block)
+    return blocks, interblock_blank
+
+
+def _parse_fence(lines, i, m):
+    indent = len(m.group(1))
+    fence_char = m.group(2)[0]
+    fence_len = len(m.group(2))
+    info = m.group(3) or ''
+    close_re = re.compile(
+        rf' {{0,3}}{re.escape(fence_char)}{{{fence_len},}}[ \t]*$')
+    body = []
+    i += 1
+    n = len(lines)
+    while i < n:
+        if close_re.match(lines[i]):
+            i += 1
+            break
+        body.append(_dedent(lines[i], indent))
+        i += 1
+    return CodeBlock('\n'.join(body), info), i
+
+
+def _parse_blockquote(lines, i, refs):
+    inner = []
+    n = len(lines)
+    while i < n:
+        m = _blockquote_re.match(lines[i])
+        if m:
+            inner.append(m.group(1))
+            i += 1
+            continue
+        # lazy continuation: a non-blank, non-block-start line with no
+        # `>` continues the quote's current paragraph.
+        if (inner and not _blank(inner[-1])
+                and not _blank(lines[i]) and not _interrupts_paragraph(lines[i])):
+            inner.append(lines[i])
+            i += 1
+            continue
+        break
+    return BlockQuote(_parse_blocks(inner, refs)), i
+
+
+def _parse_indented_code(lines, i):
+    body = []
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        if _indent_code_re.match(line):
+            body.append(line[1:] if line[:1] == '\t' else line[4:])
+            i += 1
+        elif _blank(line):
+            body.append('')
+            i += 1
+        else:
+            break
+    while body and _blank(body[-1]):
+        body.pop()
+    return CodeBlock('\n'.join(body), ''), i
+
+
+def _parse_list(lines, i, refs):
+    n = len(lines)
+    ordered = bool(_ordered_re.match(lines[i]))
+    if ordered:
+        marker_key = _ordered_re.match(lines[i]).group(3)
+        start = int(_ordered_re.match(lines[i]).group(2))
+    else:
+        marker_key = _bullet_re.match(lines[i]).group(2)
+        start = None
+    items = []
+    loose = False
+    while i < n:
+        m = _ordered_re.match(lines[i]) if ordered else _bullet_re.match(lines[i])
+        if not m:
+            break
+        if ordered:
+            if m.group(3) != marker_key:
+                break
+            lead, marker = len(m.group(1)), m.group(2) + m.group(3)
+            gap, first = m.group(4) or '', m.group(5) or ''
+        else:
+            if m.group(2) != marker_key:
+                break
+            lead, marker = len(m.group(1)), m.group(2)
+            gap, first = m.group(3) or '', m.group(4) or ''
+        # a marker followed by 5+ spaces caps the gap at 1: the rest
+        # becomes the item's content indent, so `-      foo` holds an
+        # indented code block, not a paragraph.
+        if len(gap) > 4:
+            first = gap[1:] + first
+            gap = ' '
+        content_col = lead + len(marker) + len(gap)
+        item_lines = [first]
+        i += 1
+        in_gap = False
+        while i < n:
+            l = lines[i]
+            if _blank(l):
+                item_lines.append('')
+                in_gap = True
+                i += 1
+                continue
+            indent = len(l) - len(l.lstrip(' '))
+            if indent >= content_col:
+                item_lines.append(l[content_col:])
+                in_gap = False
+                i += 1
+                continue
+            if (_ordered_re if ordered else _bullet_re).match(l):
+                break
+            if (not in_gap) and (not _is_block_start(l)):
+                item_lines.append(l.strip())
+                i += 1
+                continue
+            break
+        trimmed = _trim_blanks(item_lines)
+        # loose if an item DIRECTLY contains two blocks split by a blank
+        # (a blank buried in a nested block doesn't count -- that's the
+        # nested list's business), or if a blank sits between this item
+        # and a following sibling.  A blank merely trailing the whole
+        # list (e.g. the final newline) does NOT make it loose.
+        item_blocks, item_interblank = _parse_blocks_tracked(trimmed, refs)
+        if item_interblank:
+            loose = True
+        if item_lines and _blank(item_lines[-1]) and (i < n):
+            sm = _ordered_re.match(lines[i]) if ordered else _bullet_re.match(lines[i])
+            # only a blank before a SAME-marker sibling loosens; a
+            # different marker starts a new list and must not.
+            if sm and ((sm.group(3) if ordered else sm.group(2)) == marker_key):
+                loose = True
+        items.append(ListItem(item_blocks))
+    tight = not loose
+    if ordered:
+        return OrderedList(items, start, marker_key, tight), i
+    return BulletList(items, tight), i
+
+
+def _parse_deflist(lines, i, refs):
+    n = len(lines)
+    entries = []
+    while i < n:
+        term_line = lines[i]
+        if _blank(term_line) or _is_block_start(term_line):
+            break
+        if not ((i + 1 < n) and _defdef_re.match(lines[i + 1])):
+            break
+        term = Term(_parse_inline(term_line.strip(), refs))
+        i += 1
+        definitions = []
+        while i < n:
+            dm = _defdef_re.match(lines[i])
+            if not dm:
+                break
+            # `:` is a list-family marker, so the section 5.2 content
+            # column applies exactly as for `-`/`1.`: 1-4 spaces set
+            # the column, 5+ tips the first line into indented code.
+            gap, content = dm.group(2), dm.group(3)
+            if len(gap) > 4:
+                content = gap[1:] + content
+                gap = ' '
+            content_col = len(dm.group(1)) + 1 + len(gap)
+            def_lines = [content]
+            i += 1
+            in_gap = False
+            while i < n:
+                l = lines[i]
+                if _blank(l):
+                    def_lines.append('')
+                    in_gap = True
+                    i += 1
+                    continue
+                indent = len(l) - len(l.lstrip(' '))
+                if indent >= content_col:
+                    def_lines.append(l[content_col:])
+                    in_gap = False
+                    i += 1
+                    continue
+                if _defdef_re.match(l):
+                    break
+                # lazy paragraph continuation -- but a line that is
+                # itself a term (a following `:`) starts a new entry
+                # and must not be swallowed here.
+                if (not in_gap) and (not _interrupts_paragraph(l)):
+                    if (i + 1 < n) and _defdef_re.match(lines[i + 1]):
+                        break
+                    def_lines.append(l.strip())
+                    i += 1
+                    continue
+                break
+            definitions.append(Definition(_parse_blocks(_trim_blanks(def_lines), refs)))
+        entries.append(DefinitionEntry(term, definitions))
+    return DefinitionList(entries), i
+
+
+def _parse_paragraph(lines, i, refs):
+    n = len(lines)
+    paragraph = []
+    while i < n:
+        line = lines[i]
+        # a setext underline (=/-) directly under paragraph text turns
+        # the whole collected paragraph into a heading.  Checked BEFORE
+        # the thematic-break interrupt, so `text` over `---` is an H2,
+        # while `---` after a blank line stays a thematic break.
+        if paragraph:
+            sm = _setext_re.match(line)
+            if sm:
+                level = 1 if sm.group(1)[0] == '=' else 2
+                return Heading(level, _parse_inline('\n'.join(paragraph).rstrip(), refs)), i + 1
+        if _blank(line) or _interrupts_paragraph(line):
+            break
+        if paragraph and (i + 1 < n) and _defdef_re.match(lines[i + 1]):
+            break
+        # keep TRAILING whitespace (it may signal a hard break); strip
+        # only leading (insignificant, reflowed away).
+        paragraph.append(line.lstrip())
+        i += 1
+    return Paragraph(_parse_inline('\n'.join(paragraph).rstrip(), refs)), i
+
+
+#
+# The renderer: IR -> text fitted to a terminal width.
+#
+# It lays out the structure -- the wrapping (through big's trio),
+# and the list / blockquote / code geometry -- as plain text.  The
+# structural glyphs (the bullet, the quote bar, the code indent,
+# the thematic-break rule) are permanent layout, present in every
+# mode; only ANSI color and bold are deferred to a later pass.
+#
+
+def render(document, width=79):
+    "Render a Document to plain wrapped text for a terminal `width` wide."
+    lines = _render_blocks(document.blocks, width)
+    return '\n'.join(line.rstrip() for line in lines)
+
+
+def _flatten(nodes):
+    "Inline nodes -> plain text (color and bold dropped)."
+    out = []
+    for node in nodes:
+        if isinstance(node, (Text, Code)):
+            out.append(node.text)
+        elif isinstance(node, (Strong, Emph, Strikethrough, Link)):
+            out.append(_flatten(node.children))
+        elif isinstance(node, HardBreak):
+            out.append(' ')       # collapses to a space outside a paragraph
+    return ''.join(out)
+
+
+def _wrap(text, width):
+    "Flatten soft breaks, wrap prose to width, return lines."
+    text = text.replace('\n', ' ')
+    if not text.strip():
+        return []
+    return _wrap_words(_split_text(text, code_indent=0), margin=width).split('\n')
+
+
+def _render_blocks(blocks, width, tight=False):
+    "Render a run of block nodes; a blank line between them unless tight."
+    out = []
+    for index, block in enumerate(blocks):
+        if index and not tight:
+            out.append('')
+        out.extend(_render_block(block, width))
+    return out
+
+
+def _render_paragraph(children, width):
+    "Wrap a paragraph, honoring hard breaks: each segment wraps alone."
+    lines = []
+    segment = []
+    for node in children:
+        if isinstance(node, HardBreak):
+            lines.extend(_wrap(_flatten(segment), width) or [''])
+            segment = []
+        else:
+            segment.append(node)
+    lines.extend(_wrap(_flatten(segment), width))
+    return lines
+
+
+def _render_block(block, width):
+    if isinstance(block, Paragraph):
+        return _render_paragraph(block.children, width)
+    if isinstance(block, Heading):
+        return _wrap(_flatten(block.children), width)
+    if isinstance(block, ThematicBreak):
+        return ['─' * width]
+    if isinstance(block, CodeBlock):
+        return ['    ' + line for line in block.text.split('\n')]
+    if isinstance(block, BlockQuote):
+        return ['│ ' + line for line in _render_blocks(block.blocks, max(1, width - 2))]
+    if isinstance(block, BulletList):
+        return _render_list(block, width, False)
+    if isinstance(block, OrderedList):
+        return _render_list(block, width, True)
+    if isinstance(block, DefinitionList):
+        return _render_deflist(block, width)
+    if isinstance(block, Raw):
+        return block.text.split('\n')
+    return []
+
+
+def _render_list(list_node, width, ordered):
+    # Right-align the markers within this one contiguous list, so the
+    # periods (or bullets) share a column, then one space, then every
+    # item's text -- and every wrapped/continuation line -- shares the
+    # next column.  No raggedness, no marker-width backward-jut.
+    if ordered:
+        markers = [f'{list_node.start + index}{list_node.delimiter}' for index in range(len(list_node.items))]
+    else:
+        markers = ['•'] * len(list_node.items)
+    marker_width = max((len(m) for m in markers), default=0)
+    text_col = marker_width + 1          # widest marker, plus one space
+    pad = ' ' * text_col
+    out = []
+    for index, item in enumerate(list_node.items):
+        prefix = markers[index].rjust(marker_width) + ' '
+        inner = _render_blocks(item.blocks, max(1, width - text_col), list_node.tight)
+        if not inner:
+            item_lines = [prefix.rstrip()]
+        else:
+            item_lines = [(prefix if j == 0 else pad) + line
+                          for j, line in enumerate(inner)]
+        if index and not list_node.tight:
+            out.append('')
+        out.extend(item_lines)
+    return out
+
+
+def _render_deflist(dl, width):
+    out = []
+    for index, entry in enumerate(dl.entries):
+        if index:
+            out.append('')
+        out.extend(_wrap(_flatten(entry.term.children), width))
+        for definition in entry.definitions:
+            inner = _render_blocks(definition.blocks, max(1, width - 4))
+            out.extend('    ' + line for line in inner)
+    return out
+
+
+# The full node vocabulary, for the parser/renderer to import and
+# for tests to introspect.
+__all__ = [
+    'Node',
+    # block
+    'Document', 'Heading', 'Paragraph',
+    'BulletList', 'OrderedList', 'ListItem',
+    'DefinitionList', 'DefinitionEntry', 'Term', 'Definition',
+    'CodeBlock', 'BlockQuote', 'ThematicBreak', 'Raw',
+    # inline
+    'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
+    # parser + renderer
+    'parse', 'render',
+]
