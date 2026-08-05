@@ -581,7 +581,7 @@ And here are seven little functions/classes I use all the time:
 
 [`LogFormatter(format_dict, types, *, name=None)`](#logformatterformat_dict-types--namenone)
 
-[`merge_columns(*columns, column_separator=" ", overflow_strategy=OverflowStrategy.RAISE, overflow_before=0, overflow_after=0, tab_width=8)`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns(*columns, column_separator=" ", overflow_strategy=OverflowStrategy.RAISE, overflow_before=0, overflow_after=0, tab_width=8, raw=None)`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 
 [`metadata.version`](#metadataversion)
 
@@ -815,7 +815,7 @@ And here are seven little functions/classes I use all the time:
 
 [`whitespace_without_crlf`](#whitespace_without_crlf)
 
-[`wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True)`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+[`wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True, raw=None)`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
 
 </dd></dl>
 
@@ -2947,7 +2947,7 @@ linebreak characters.  Definitions are text: each one is split
 with
 [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
 and wrapped with
-[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue),
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone),
 so paragraph breaks and code lines work as they do there.
 A pair with an empty definition is just the term on a line
 by itself.
@@ -5517,7 +5517,7 @@ Equivalent to [`linebreaks`](#linebreaks) without `'\r\n'`.
 </dd></dl>
 
 
-#### `merge_columns(*columns, column_separator=" ", overflow_strategy=OverflowStrategy.RAISE, overflow_before=0, overflow_after=0, tab_width=8)`
+#### `merge_columns(*columns, column_separator=" ", overflow_strategy=OverflowStrategy.RAISE, overflow_before=0, overflow_after=0, tab_width=8, raw=None)`
 
 <dl><dd>
 
@@ -6444,7 +6444,7 @@ Note:
 
 Splits `s` into individual words,
 suitable for feeding into
-[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone).
 
 `s` may be either `str` or `bytes`.
 
@@ -6456,7 +6456,7 @@ by at least `code_indent` columns are "code lines": paragraphs
 of them preserve their whitespace, internal and leading, and
 their linebreaks.  (This preserves the formatting of code
 examples when these words are rejoined into lines by
-[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).)
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone).)
 Code lines are emitted verbatim, tabs included; `wrap_words`
 expands their tabs at render time, when it knows what column
 the line lands at.  If `code_indent` is 0, there are no code
@@ -6772,7 +6772,7 @@ Equivalent to [`whitespace`](#whitespace) without `'\r\n'`.
 
 </dd></dl>
 
-#### `wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True)`
+#### `wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True, raw=None)`
 
 <dl><dd>
 
@@ -11155,9 +11155,9 @@ into two-byte segments and operate on those.
 **big** contains three functions used to reflow and format text
 in a pleasing manner.  In the order you should use them, they are
 [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8),
-[`wrap_words(),`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue),
+[`wrap_words(),`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone),
 and optionally
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8).
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone).
 This trio of functions gives you the following word-wrap superpowers:
 
 * Paragraphs of text representing embedded "code" don't get word-wrapped.
@@ -11202,7 +11202,7 @@ represent individual word-wrappable substrings.
 
 [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8)
 returns a *split text array,* and
-[`wrap_words()`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+[`wrap_words()`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
 consumes a *split text array.*
 
 You'll see four kinds of strings in a *split text array:*
@@ -11300,11 +11300,11 @@ Of course, this algorithm is too simple to do word wrapping.
 Nor does it handle adding two spaces after sentence-ending
 punctuation.  In practice, you shouldn't do this by hand;
 you should use
-[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone).
 
 #### Merging columns
 
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 merges multiple strings into columns on the same line.
 
 For example, it could merge these three Python strings:
@@ -11326,13 +11326,13 @@ column of text.     It's the second        third column.
 ```
 
 (Note that
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 doesn't do its own word-wrapping;
 instead, it's designed to consume the output of
-[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue).)
+[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone).)
 
 Each column is passed in to
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 as a "column tuple":
 
 ```Python
@@ -11345,11 +11345,11 @@ as a "column tuple":
 
 As you saw above, `s` can contain newline characters,
 and
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 obeys those when formatting each column.
 
 For each column,
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 measures the longest
 line of each column.  The width of the column is determined
 as follows:
@@ -11366,18 +11366,18 @@ as follows:
 #### Overflow
 
 What is "overflow"?  It's a condition
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 may encounter when the text in a column is wider than that
 column's `max_width`.
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 needs to consider both "overflow lines",
 lines that are longer than `max_width`, and "overflow columns",
 columns that contain one or more overflow lines.
 
 What does
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 do when it encounters overflow?
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 supports three "strategies" to deal with this condition, and you can specify
 which one you want using its `overflow_strategy` parameter.  The three
 strategies are:
@@ -11601,9 +11601,9 @@ plus the private lookup tables it needs.
 
 </dt><dd>
 
-The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue),
+The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone),
 [`split_text_with_code`](#split_text_with_codes--code_indent4-tab_width8), and
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)--plus `OverflowStrategy` and
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)--plus `OverflowStrategy` and
 [`expand_tabs`](#expand_tabss--column1-first_column1-tab_width8).
 
 </dd></dl>
@@ -11644,8 +11644,8 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `ansi_256`, `ansi_16`, and `ansi_uncolored` — over a 26-color vocabulary plus
   four attributes.  Format names may now contain underscores.
 
-* 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
-  and [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+* 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
+  and [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
   gain a `raw` callback.**  It maps a word or line to its plain text, so callers
   whose words carry in-band styling markup wrap by *visible* width while the
   original styled text is what's emitted.  Defaults to the identity, so existing
@@ -12094,7 +12094,7 @@ to manage snippets; run it with `python3 -m big.snip`.
       emits each tab as its own `'\t'` word (a behavior change: a tab
       in text used to be a plain word separator), and code lines keep
       their tabs verbatim;
-      [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+      [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
       renders both as spaces at the columns where they actually land,
       guided by the new `left_column` parameter (the 1-based "virtual
       left column" for output you'll place somewhere other than the
@@ -12122,11 +12122,11 @@ to manage snippets; run it with `python3 -m big.snip`.
       author's alignment; False lands their tabs on the page's
       stops), plus `definition_left_column`, which lets fussy users
       name the exact column where definitions start.  And a
-      [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+      [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
       column tuple takes an optional fourth member, `relative_tabs`,
       with the same meaning and the same default.
 
-    * [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue)
+    * [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
       learned to indent 🤖.  The new `indent` parameter prefixes the
       wrapped lines: pass a single string for every line, or a list
       or tuple--the first line gets the first indent, the last one
@@ -14239,7 +14239,7 @@ slower.)
 
 I also applied this same small optimization to several other
 functions in the `text` module.  In particular,
-[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8)
+[`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
 was binding functions inside a loop (!!).  (Dumb, huh!)
 These local functions are still bound inside `merge_columns`,
 but now at least they're outside the loop.
