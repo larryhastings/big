@@ -992,6 +992,24 @@ def plain(text):
     return f'⦃_plain⦙{text}⦄'
 
 
+@export
+def escape_styles(text):
+    """
+    Quote any style delimiter characters in `text` so it can be
+    dropped into markup as literal text -- each delimiter is preceded
+    by the open delimiter (⦃ -> ⦃⦃, ⦙ -> ⦃⦙, ⦄ -> ⦃⦄).  Rendering
+    (or plain_stylesheet) turns them back into the literal character.
+    Call this on raw text before wrapping it in a span.
+    """
+    open_c = style_delimiters[0]
+    out = []
+    for ch in text:
+        if ch in style_delimiters:
+            out.append(open_c)
+        out.append(ch)
+    return ''.join(out)
+
+
 class _Span:
     "A parsed markup span: a name and its fields (lists of nodes)."
     __slots__ = ('name', 'fields', 'where')
@@ -1052,6 +1070,15 @@ def _parse_markup(s, delimiters):
         if text_start < i:
             out.append(s[text_start:i])
         if c == open_c:
+            if (i + 1 < n) and (s[i + 1] in delimiters):
+                # the open delimiter before ANY delimiter quotes it: a
+                # literal delimiter character, not the start of a span.
+                # (A span name can't be empty, so these three sequences
+                # were parse errors before -- free to repurpose.)
+                out.append(s[i + 1])
+                i += 2
+                text_start = i
+                continue
             # scan the name: up to the next delimiter
             j = i + 1
             while j < n and s[j] not in delimiters:
@@ -1135,6 +1162,7 @@ def split_styles(s):
     for run, names in acc:
         for word, gap in _multisplit(run, keep=True, separate=False, strip=False):
             if word:
+                word = escape_styles(word)     # _parse_markup unquoted it
                 for name in reversed(names):   # inner span first
                     word = style(name, word)
                 out.append(word)
@@ -1180,6 +1208,7 @@ def join_styles(s):
             out.append([text, stack])
     pieces = []
     for text, stack in out:
+        text = escape_styles(text)     # _parse_markup unquoted it
         for name in reversed(stack):   # inner span first
             text = style(name, text)
         pieces.append(text)

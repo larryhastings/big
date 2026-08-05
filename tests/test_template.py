@@ -1137,6 +1137,16 @@ def test_join_styles():
     assert big.join_styles('⦃bold⦙a⦄, ⦃bold⦙b⦄') == '⦃bold⦙a⦄, ⦃bold⦙b⦄'
     assert big.join_styles('⦃bold⦙a⦄ ⦃italic⦙b⦄') == '⦃bold⦙a⦄ ⦃italic⦙b⦄'
 
+def test_escape_styles():
+    # each delimiter is quoted by a leading open delimiter
+    assert big.escape_styles('a⦃b⦙c⦄d') == 'a⦃⦃b⦃⦙c⦃⦄d'
+    # parsing (rendering) turns the quoted forms back into literals
+    assert big.plain_stylesheet.render(big.escape_styles('a⦃b⦙c⦄d')) == 'a⦃b⦙c⦄d'
+    # style() accepts text once its delimiters are quoted
+    assert big.style('bold', big.escape_styles('has ⦄ here')) == '⦃bold⦙has ⦃⦄ here⦄'
+    # a quoted literal survives the split/join round-trip inside a span
+    assert big.join_styles(big.split_styles('⦃bold⦙x ⦃⦄ y⦄')) == '⦃bold⦙x ⦃⦄ y⦄'
+
 def test_ansi_low_level_maps():
     E = '\x1b'
     # each map defines the 4 attributes + the 26-color vocabulary

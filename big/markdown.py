@@ -57,10 +57,17 @@ from big.template import style as _style_span
 from big.template import style_delimiters as _style_delims
 from big.template import plain_stylesheet as _plain_sheet
 from big.template import split_styles as _split_styles
+from big.template import escape_styles as _escape
 
 # strip `⦃role⦙…⦄` markup back to plain text (the raw callback for
-# wrap_words, so styled words measure by their visible width).
-_strip_markup = _plain_sheet.render
+# wrap_words, so styled words measure by their visible width).  Stays
+# fail-soft: unstyled text carrying a literal, unquoted delimiter isn't
+# markup, so measure it as-is rather than letting the loud parser raise.
+def _strip_markup(word):
+    try:
+        return _plain_sheet.render(word)
+    except ValueError:
+        return word
 
 # width=0 asks render_terminal for no maximum; a margin this wide
 # means wrap_words never wraps.
@@ -1215,7 +1222,7 @@ def _styled_text(nodes):
     out = []
     for node in nodes:
         if isinstance(node, Text):
-            out.append(node.text)
+            out.append(_escape(node.text))       # literal delimiters -> quoted
         elif isinstance(node, Strong):
             out.append(_style_span('bold', _styled_text(node.children)))
         elif isinstance(node, Emph):
@@ -1223,7 +1230,7 @@ def _styled_text(nodes):
         elif isinstance(node, Strikethrough):
             out.append(_style_span('strikethrough', _styled_text(node.children)))
         elif isinstance(node, Code):
-            out.append(_style_span('code', node.text))
+            out.append(_style_span('code', _escape(node.text)))
         elif isinstance(node, Link):
             out.append(_style_span('link', _styled_text(node.children)))
         elif isinstance(node, HardBreak):
@@ -1274,7 +1281,7 @@ def _style_block(block):
         # style each line on its own -- render_terminal splits the block
         # at newlines to indent it, so a whole-block span would tear.
         # The whole line (its own indentation included) rides in `code`.
-        lines = [_style_span('code', line) if line else line
+        lines = [_style_span('code', _escape(line)) if line else line
                  for line in block.text.split('\n')]
         return CodeBlock('\n'.join(lines), block.info)
     # ThematicBreak, Raw: no inline text to style

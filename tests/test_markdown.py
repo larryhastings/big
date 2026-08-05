@@ -579,6 +579,18 @@ def test_code_block_styled_per_line():
     # unstyled code stays plain (no markup)
     assert render_terminal(parse("```\nx = 1\n```\n")) == "    x = 1"
 
+def test_stylesheet_delimiters_in_markdown_are_safe():
+    # a docstring containing the StyleSheet delimiters must not crash the
+    # styling pipeline -- style_document quotes them in the IR text
+    assert style_document(parse("x⦃y\n")).blocks[0] == Paragraph([Text('x⦃⦃y')])
+    # and they round-trip back to themselves through the whole pipeline
+    src = "use ⦃a⦙b⦄ here and **x ⦄ y**\n"
+    doc = split_styles_document(style_document(parse(src)))
+    painted = plain_stylesheet.render(join_styles(render_terminal(doc, width=0)))
+    assert '⦃a⦙b⦄' in painted
+    # the unstyled path handles a literal delimiter without raising, too
+    assert painted == render_terminal(parse(src), width=0)
+
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
     # because width is measured past the markup
