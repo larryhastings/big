@@ -565,6 +565,19 @@ def test_split_styles_document():
     # it's a no-op on an unstyled document
     plain = parse("one two three\n")
     assert split_styles_document(plain) == plain
+    # code is verbatim: never word-split, so its whole line stays one span
+    code = split_styles_document(style_document(parse("```\na b c\n```\n")))
+    assert code.blocks[0] == CodeBlock('⦃code⦙a b c⦄', '')
+
+def test_code_block_styled_per_line():
+    # each code line is its own `code` span, with its own indentation
+    # INSIDE the span; only the block-render indent stays plain
+    doc = style_document(parse("```\n    x = 1\ny = 2\n```\n"))
+    assert doc.blocks[0] == CodeBlock('⦃code⦙    x = 1⦄\n⦃code⦙y = 2⦄', '')
+    out = render_terminal(split_styles_document(doc), width=0)
+    assert out == "    ⦃code⦙    x = 1⦄\n    ⦃code⦙y = 2⦄"
+    # unstyled code stays plain (no markup)
+    assert render_terminal(parse("```\nx = 1\n```\n")) == "    x = 1"
 
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,

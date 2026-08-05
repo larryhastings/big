@@ -1270,7 +1270,14 @@ def _style_block(block):
         return BlockQuote(_style_blocks(block.blocks))
     if isinstance(block, DefinitionList):
         return DefinitionList([_style_entry(entry) for entry in block.entries])
-    # CodeBlock, ThematicBreak, Raw: no inline text to style
+    if isinstance(block, CodeBlock):
+        # style each line on its own -- render_terminal splits the block
+        # at newlines to indent it, so a whole-block span would tear.
+        # The whole line (its own indentation included) rides in `code`.
+        lines = [_style_span('code', line) if line else line
+                 for line in block.text.split('\n')]
+        return CodeBlock('\n'.join(lines), block.info)
+    # ThematicBreak, Raw: no inline text to style
     return block
 
 
@@ -1293,6 +1300,8 @@ def style_document(document):
 
 def _map_style_text(node):
     "Rebuild an IR node, running split_styles over every string field."
+    if isinstance(node, CodeBlock):
+        return node                    # code is verbatim: never word-split
     if isinstance(node, Node):
         return type(node)(*(_map_style_text(getattr(node, f)) for f in node._fields))
     if isinstance(node, list):
