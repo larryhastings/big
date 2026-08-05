@@ -34,14 +34,17 @@ Two halves:
     (the node classes below);
   * style_document(document) bakes `⦃role⦙…⦄` markup into the IR's text;
   * split_styles_document(document) splits each span to word granularity
-    (so wrapping can't tear one); and
-  * render_terminal(document) lays the IR out as text for a terminal.
+    (so wrapping can't tear one);
+  * render_terminal(document) lays the IR out as text for a terminal; and
+  * render_troff(document) renders the IR to groff `man`-macro troff.
 
-Then join_styles() coalesces the per-line markup and a big.template
-StyleSheet paints it (or plain_stylesheet strips it):
+For the terminal path, join_styles() coalesces the per-line markup and
+a big.template StyleSheet paints it (or plain_stylesheet strips it):
 
     parse -> style_document -> split_styles_document
           -> render_terminal -> join_styles -> stylesheet.render
+
+render_troff is a separate back end over the raw parse() IR.
 
 The IR carries what the renderer draws, plus a Raw node so anything
 outside the subset (a table, raw HTML) survives to be degraded
@@ -1603,6 +1606,140 @@ def _render_deflist(dl, width, styled):
     return out
 
 
+#
+# The troff renderer: IR -> groff `man` macros, for a man page.
+#
+# A back end alongside render_terminal, but simpler: troff does its own
+# line-filling and font handling, so there's no width math and no
+# StyleSheet -- it walks the (unstyled) parse() IR and emits macros.
+# It produces the man-page BODY (the .SH sections); the caller supplies
+# the `.TH name section date ...` header.
+#
+
+def _troff_escape(text):
+    "Escape troff specials in a run of text: backslash, and hyphen->minus."
+    return text.replace('\\', '\\e').replace('-', '\\-')
+
+
+def _troff_protect(line):
+    "Guard a line that would otherwise look like a macro (leading . or ')."
+    return ('\\&' + line) if line[:1] in ('.', "'") else line
+
+
+def _troff_text(text):
+    "Escape a possibly-multi-line run, protecting each line's first column."
+    return '\n'.join(_troff_protect(_troff_escape(line))
+                     for line in text.split('\n'))
+
+
+def _troff_inline(nodes):
+    "Inline nodes -> a troff string (font escapes; no line macros)."
+    out = []
+    for node in nodes:
+        if isinstance(node, Text):
+            out.append(_troff_text(node.text))
+        elif isinstance(node, Strong):
+            out.append('\\fB' + _troff_inline(node.children) + '\\fP')
+        elif isinstance(node, Emph):
+            out.append('\\fI' + _troff_inline(node.children) + '\\fP')
+        elif isinstance(node, Code):
+            out.append('\\fB' + _troff_text(node.text) + '\\fP')
+        elif isinstance(node, Strikethrough):
+            out.append(_troff_inline(node.children))   # no troff strike
+        elif isinstance(node, Link):
+            text = _troff_inline(node.children)
+            if node.url and node.url != _flatten(node.children):
+                out.append(text + ' <' + _troff_text(node.url) + '>')
+            else:
+                out.append(text)
+    return ''.join(out)
+
+
+def _troff_paragraph(children, lead='.PP'):
+    "A paragraph, splitting at hard breaks into `.br`-separated lines."
+    out = [lead] if lead else []
+    segment = []
+    for node in children:
+        if isinstance(node, HardBreak):
+            out.append(_troff_inline(segment))
+            out.append('.br')
+            segment = []
+        else:
+            segment.append(node)
+    out.append(_troff_inline(segment))
+    return out
+
+
+def _troff_item_blocks(blocks):
+    "An item/definition body: first paragraph inline, the rest as blocks."
+    out = []
+    for index, block in enumerate(blocks):
+        if index == 0 and isinstance(block, Paragraph):
+            out.append(_troff_inline(block.children))   # sits under the .IP/.TP
+        else:
+            out.extend(_troff_block(block))
+    return out
+
+
+def _troff_block(block):
+    if isinstance(block, Heading):
+        macro = '.SH' if block.level == 1 else '.SS'
+        return [macro + ' ' + _troff_inline(block.children)]
+    if isinstance(block, Paragraph):
+        return _troff_paragraph(block.children)
+    if isinstance(block, (BulletList, OrderedList)):
+        ordered = isinstance(block, OrderedList)
+        out = []
+        for index, item in enumerate(block.items):
+            if ordered:
+                out.append(f'.IP "{block.start + index}{block.delimiter}" 4')
+            else:
+                out.append('.IP \\(bu 3')
+            out.extend(_troff_item_blocks(item.blocks))
+        return out
+    if isinstance(block, DefinitionList):
+        out = []
+        for entry in block.entries:
+            out.append('.TP')
+            out.append('\\fB' + _troff_inline(entry.term.children) + '\\fP')
+            for definition in entry.definitions:
+                out.extend(_troff_item_blocks(definition.blocks))
+        return out
+    if isinstance(block, CodeBlock):
+        return ['.EX'] + [_troff_text(line) for line in block.text.split('\n')] + ['.EE']
+    if isinstance(block, BlockQuote):
+        return ['.RS 4'] + _troff_blocks(block.blocks) + ['.RE']
+    if isinstance(block, Alert):
+        title = block.kind.capitalize()
+        return (['.PP', '\\fB' + title + ':\\fP', '.RS 4']
+                + _troff_blocks(block.blocks) + ['.RE'])
+    if isinstance(block, ThematicBreak):
+        return ['.sp']
+    if isinstance(block, Raw):
+        return [_troff_text(block.text)]
+    return []
+
+
+def _troff_blocks(blocks):
+    out = []
+    for block in blocks:
+        out.extend(_troff_block(block))
+    return out
+
+
+def render_troff(document):
+    """
+    Render a Document to groff `man`-macro troff -- the BODY of a man
+    page (`.SH`/`.SS` sections, `.TP` for definition lists, `.IP` for
+    lists, `.EX`/`.EE` for code, `\\fB`/`\\fI` for strong/emphasis).
+    The caller prepends the `.TH name section date ...` header.
+
+    Call it on the raw `parse(text)` IR, not on `style_document`
+    output -- it reads the structured inline nodes, not role markup.
+    """
+    return '\n'.join(_troff_blocks(document.blocks))
+
+
 # The full node vocabulary, for the parser/renderer to import and
 # for tests to introspect.
 __all__ = [
@@ -1616,5 +1753,5 @@ __all__ = [
     'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
     # parser + renderer
     'parse', 'style_document', 'split_styles_document', 'render_terminal',
-    'markdown_defaults',
+    'render_troff', 'markdown_defaults',
 ]

@@ -3233,6 +3233,29 @@ or that [`plain_stylesheet`](#plain_stylesheet) strips.
 
 </dd></dl>
 
+#### `render_troff(document)`
+
+<dl><dd>
+
+Renders a `Document` to groff `man`-macro troff — the **body** of a
+man page.  Headings become `.SH`/`.SS` sections, definition lists
+`.TP` tagged paragraphs (ideal for options), bullet/ordered lists
+`.IP`, code blocks `.EX`/`.EE`, block quotes `.RS`/`.RE`, and strong
+/ emphasis / inline code the `\fB` / `\fI` font escapes; hyphens are
+escaped to `\-` as man pages want.  The caller prepends the
+`.TH name section date …` header line.
+
+A back end alongside `render_terminal`, but simpler — troff does its
+own line-filling and fonts, so there's no width and no `StyleSheet`.
+Call it on the raw `parse()` IR, *not* on `style_document` output.
+
+```Python
+    print(".TH FOOZLE 1")
+    print(render_troff(parse(docstring)))
+```
+
+</dd></dl>
+
 #### `markdown_defaults`
 
 <dl><dd>

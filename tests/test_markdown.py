@@ -627,6 +627,21 @@ def test_structural_roles():
     r = render_terminal(style_document(parse("a\n\n---\n")), width=6)
     assert "⦃rule⦙──────⦄" in r
 
+def test_render_troff():
+    # inline: strong -> \fB, inline code -> \fB, hyphens -> \- for man
+    out = render_troff(parse("# NAME\n\nfoozle - a **tool** with `--flag`\n"))
+    assert '.SH NAME' in out
+    assert '\\fBtool\\fP' in out
+    assert '\\fB\\-\\-flag\\fP' in out
+    # definition lists become .TP tagged paragraphs (ideal for options)
+    t = render_troff(parse("-v, --verbose\n: Print more.\n"))
+    assert '.TP' in t and '\\fB\\-v, \\-\\-verbose\\fP' in t and 'Print more.' in t
+    # blocks map to man macros
+    assert '.SS' in render_troff(parse("## Sub\n"))
+    assert '.IP \\(bu' in render_troff(parse("- a\n"))
+    assert '.EX' in render_troff(parse("```\ncode\n```\n"))
+    assert '.RS 4' in render_troff(parse("> quoted\n"))
+
 def test_alerts():
     # a [!KIND] first line turns a block quote into an Alert
     assert parse("> [!NOTE]\n> Useful info.\n").blocks[0] == \
