@@ -2387,6 +2387,21 @@ def test_wrap_words_two_spaces_false():
     got = big.wrap_words(['aa.', 'bb'], 6, two_spaces=True)
     assert got == "aa.\nbb"
 
+def test_wrap_words_raw():
+    # 'raw' lets styled words wrap by their PLAIN width while the
+    # markup rides through to the output untouched.
+    strip = lambda w: w.replace('<b>', '').replace('</b>', '')
+    words = ['<b>Hello</b>', 'world', 'foo', 'bar', 'baz']
+    # plain widths 5 5 3 3 3; at margin 11 -> 'Hello world' / 'foo bar baz'
+    assert big.wrap_words(words, 11, raw=strip) == '<b>Hello</b> world\nfoo bar baz'
+    # without raw the markup counts toward the width, so it wraps sooner
+    assert big.wrap_words(words, 11) == '<b>Hello</b>\nworld foo\nbar baz'
+    # the two-space rule reads the plain trailing '.', not the markup
+    assert big.wrap_words(['<b>End.</b>', 'Next'], 40, raw=strip) == '<b>End.</b>  Next'
+    # bytes travel the same path
+    bstrip = lambda w: w.replace(b'<b>', b'').replace(b'</b>', b'')
+    assert big.wrap_words([b'<b>End.</b>', b'Next'], 40, raw=bstrip) == b'<b>End.</b>  Next'
+
 def test_wrap_words_indent():
     def test(words, expected, margin=79, indent='', tab_width=8):
         got = big.wrap_words(words, margin, indent=indent, tab_width=tab_width)
@@ -2886,6 +2901,23 @@ def test_merge_columns_default_overflow_strategy():
     columns = (("this-line-is-way-too-wide\nshort", 5, 5), ("aaa\nbbb", 3, 3))
     with raises(OverflowError):
         big.merge_columns(*columns)
+
+def test_merge_columns_raw():
+    # 'raw' aligns columns by PLAIN width while the markup rides
+    # through to the output untouched.
+    strip = lambda w: w.replace('<b>', '').replace('</b>', '')
+    left = '<b>foo</b>\n<b>longer</b>'     # plain widths 3 and 6
+    right = 'one\ntwo'
+    got = big.merge_columns((left, 6, 6), (right, 3, 3),
+        column_separator=' | ', raw=strip)
+    assert got == '<b>foo</b>    | one\n<b>longer</b> | two'
+    # once the markup is stripped, the separator lands in one column
+    assert [strip(line) for line in got.split('\n')] == \
+        ['foo    | one', 'longer | two']
+    # without raw, the markup counts toward width and overflows the
+    # 6-wide column -- proving the measurement now uses display width
+    with raises(OverflowError):
+        big.merge_columns((left, 6, 6), (right, 3, 3), column_separator=' | ')
 
 def test_merge_columns_input_validation_raises():
     # regression: these guards used to be asserts, which vanish
