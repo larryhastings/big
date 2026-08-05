@@ -186,6 +186,8 @@ And here are seven little functions/classes I use all the time:
 
 [`big.log`](#biglog)
 
+[`big.markdown`](#bigmarkdown)
+
 [`big.metadata`](#bigmetadata)
 
 [`big.scheduler`](#bigscheduler)
@@ -3090,6 +3092,169 @@ stepping-stone; please migrate to [`Log`](#logdestinations-options).
 </dd></dl>
 
 
+## `big.markdown`
+
+<dl><dd>
+
+A parser for a subset of standards-compliant CommonMark, plus a
+renderer that lays the result out as styled text for a terminal.
+
+`big.markdown` has three jobs, cleanly separated:
+
+* **`parse`** turns Markdown text into an *intermediate
+  representation* (the node classes below) — a tree of blocks and
+  inline runs.
+* **`style_document`**, **`split_styles_document`**, and
+  **`render_terminal`** lay that tree out as text, honoring block
+  geometry (wrapping, list markers, heading rules, quote bars) and,
+  optionally, baking in [`StyleSheet`](#stylesheetformats--delimiters-escape)
+  role markup.
+* A [`StyleSheet`](#stylesheetformats--delimiters-escape) then
+  *paints* the laid-out text — to ANSI, to plain text, to anything.
+
+The full styled pipeline is:
+
+```Python
+    from big.markdown import *
+    from big.template import ansi_256, join_styles
+
+    document = parse(markdown_text)
+    document = style_document(document)          # bake in ⦃role⦙…⦄ markup
+    document = split_styles_document(document)    # per-word spans, for wrapping
+    laid_out = render_terminal(document, width=None)
+    painted  = (markdown_defaults | my_theme | ansi_256).render(join_styles(laid_out))
+    print(painted)
+```
+
+For plain, unstyled output, skip the middle three steps:
+
+```Python
+    print(render_terminal(parse(markdown_text)))
+```
+
+**The subset.** Every CommonMark block and inline construct is
+implemented *except* three, deliberately omitted: images
+(`![alt](url)`), raw HTML (block and inline), and entity/numeric
+character references (`&amp;`).  Within what it implements the parser
+follows CommonMark closely — it passes about 85% of the applicable
+CommonMark spec tests, with the remaining gaps concentrated in a few
+link/URL edge cases — and it is *fail-soft*: it never raises on
+malformed input, it degrades.  Three non-CommonMark extensions are
+supported:
+GitHub-Flavored strikethrough (`~~text~~`), definition lists
+(a `term` line followed by `: definition` lines), and GitHub
+**alerts** (a block quote whose first line is `[!NOTE]`, `[!TIP]`,
+`[!IMPORTANT]`, `[!WARNING]`, or `[!CAUTION]` — strictly uppercase).
+
+**The IR.** Every node is a small `__slots__` class with structural
+equality and a readable `repr`.  Block nodes: `Document`,
+`StyledDocument`, `Heading`, `Paragraph`, `BulletList`,
+`OrderedList`, `ListItem`, `DefinitionList`, `DefinitionEntry`,
+`Term`, `Definition`, `CodeBlock`, `BlockQuote`, `Alert`,
+`ThematicBreak`, and `Raw` (an escape hatch: anything outside the
+subset — a table, raw HTML — is preserved here to be degraded rather
+than dropped).  Inline nodes: `Text`, `Strong`, `Emph`,
+`Strikethrough`, `Code`, `Link`, and `HardBreak`.
+
+</dd></dl>
+
+#### `parse(text)`
+
+<dl><dd>
+
+Parses a Markdown string and returns a `Document` (the root IR node).
+Never raises; malformed constructs degrade to text.
+
+```Python
+    >>> parse("# Hi\n\nsome **bold** text\n")
+    Document(blocks=[Heading(level=1, children=[Text(text='Hi')]),
+      Paragraph(children=[Text(text='some '), Strong(children=[Text(text='bold')]),
+      Text(text=' text')])])
+```
+
+</dd></dl>
+
+#### `style_document(document)`
+
+<dl><dd>
+
+Returns a copy of `document` with styling markup baked into its text.
+Each inline run is wrapped in its *role* — `Strong`&nbsp;→&nbsp;`bold`,
+`Emph`&nbsp;→&nbsp;`italic`, `Strikethrough`&nbsp;→&nbsp;`strikethrough`,
+`Code`&nbsp;→&nbsp;`code`, `Link`&nbsp;→&nbsp;`link` — and each heading
+in `heading1`…`heading6` by level; code blocks use `codeblock`,
+definition terms `term`.  The markup uses
+[`big.template.style`](#stylename-fields) syntax (`⦃role⦙text⦄`).
+
+The result is a `StyledDocument` (a `Document` subclass).
+`render_terminal` checks for that type — not the text — to decide
+whether the glyphs *it* draws (list markers, heading rules, quote and
+alert bars) should wear roles too, so a styled document made entirely
+of plain prose still gets styled glyphs.
+
+Literal delimiter characters in the source (`⦃ ⦙ ⦄`) are quoted
+automatically, so a docstring that happens to contain them is safe.
+
+</dd></dl>
+
+#### `split_styles_document(document)`
+
+<dl><dd>
+
+Returns a copy of a styled document with every markup span split to
+word granularity (built on
+[`big.template.split_styles`](#split_stylestext)).  A run like
+`⦃bold⦙a b c⦄` becomes `⦃bold⦙a⦄ ⦃bold⦙b⦄ ⦃bold⦙c⦄`, so
+`render_terminal` can break a line mid-run without tearing a span.
+Run it after `style_document` and before `render_terminal`; code
+blocks are left verbatim.
+
+</dd></dl>
+
+#### `render_terminal(document, width=None)`
+
+<dl><dd>
+
+Lays a `Document` out as text for a terminal, wrapping prose to
+`width` and drawing the block geometry — hanging-indented list
+markers, heading rules (`=` for H1, `-` for H2), block-quote bars,
+and titled, colored alert callouts.
+
+`width=None` (the default) uses the current terminal's width, or 79
+if there's no terminal; `width=0` imposes no maximum line width.
+
+If `document` is a `StyledDocument`, the generated glyphs are wrapped
+in their roles (`marker`, `heading{n}`, `blockquote`, `rule`, the
+alert kinds); otherwise everything is emitted as plain text.  The
+returned string carries `⦃role⦙…⦄` markup that a
+[`StyleSheet`](#stylesheetformats--delimiters-escape) paints (use
+[`big.template.join_styles`](#join_stylestext) first to minimize it),
+or that [`plain_stylesheet`](#plain_stylesheet) strips.
+
+</dd></dl>
+
+#### `markdown_defaults`
+
+<dl><dd>
+
+A [`StyleSheet`](#stylesheetformats--delimiters-escape) defining a
+default for every high-level role `big.markdown` emits.  Compose it
+*under* a theme and a low-level color map:
+
+```Python
+    sheet = markdown_defaults | my_theme | ansi_256
+```
+
+Every role is defined explicitly (there is no `_default`, so an
+*undefined* role raises rather than passing silently).  All are
+do-nothing except `codeblock`, which inherits `code`, and the ten
+alert roles, which default to GitHub-ish colors: `note` blue, `tip`
+green, `important` purple, `warning` orange, `caution` red — each
+`heading_<kind>` being that color over `heading2`.
+
+</dd></dl>
+
+
 ## `big.metadata`
 
 <dl><dd>
@@ -4362,6 +4527,168 @@ Represents a `{% %}` statement from a parsed template.
 all leading and trailing whitespace.
 
 See [`parse_template_string`](#parse_template_strings--parse_expressionstrue-parse_commentsfalse-parse_statementsfalse-parse_whitespace_eaterfalse-quotes--multiline_quotes-escape).
+</dd></dl>
+
+### StyleSheet: inline character styling
+
+<dl><dd>
+
+A tiny markup language for decorating text *within* a line — bold,
+color, links — and a two-layer, recursive *style sheet* that renders
+that markup to any backend.  It's the machinery `big.markdown` paints
+with, but it stands on its own.
+
+Markup is authored with [`style`](#stylename-fields) and
+[`plain`](#plaintext), never typed by hand: the three delimiters
+(`style_delimiters`, the string `'⦃⦙⦄'`) are deliberately exotic so
+they're visible if they ever leak.  A span is written `⦃name⦙text⦄`.
+
+A [`StyleSheet`](#stylesheetformats--delimiters-escape) maps each
+*name* to a definition and renders the markup.  Because a definition's
+replacement may itself contain markup, style sheets *compose*: a
+high-level sheet mapping `heading`&nbsp;→&nbsp;`⦃bold⦙⦃red⦙…⦄⦄` merges
+with a low-level sheet mapping `red`&nbsp;→&nbsp;an ANSI escape, and
+`.render()` resolves the whole chain.  `StyleSheet` is a `dict`
+subclass, so you compose with `|` and tweak with ordinary item
+assignment.
+
+</dd></dl>
+
+#### `style(name, *fields)`
+
+<dl><dd>
+
+Returns the markup for one span: `'⦃name⦙field…⦄'`.  `name` must be
+alphanumeric or underscore and must not start with a digit.  Fields
+may themselves *contain* well-formed markup — `style('bold',
+style('link', text))` composes — but a stray delimiter in a field
+raises `ValueError` (quote it first with
+[`escape_styles`](#escape_stylestext)).
+
+```Python
+    >>> style('bold', 'hello')
+    '⦃bold⦙hello⦄'
+```
+
+</dd></dl>
+
+#### `plain(text)`
+
+<dl><dd>
+
+Returns the markup for a "boring island": `text` renders with no
+paint — any enclosing paint is suspended and nested paint stripped.
+
+</dd></dl>
+
+#### `escape_styles(text)`
+
+<dl><dd>
+
+Quotes any style-delimiter characters in `text` so it can be dropped
+into markup as literal text.  Each delimiter is preceded by the open
+delimiter (`⦃`&nbsp;→&nbsp;`⦃⦃`, `⦙`&nbsp;→&nbsp;`⦃⦙`,
+`⦄`&nbsp;→&nbsp;`⦃⦄`); rendering turns them back into the literal
+character.  Call it on raw text before wrapping it in a span.
+
+</dd></dl>
+
+#### `StyleSheet(formats=(), *, delimiters='⦃⦙⦄', escape=None)`
+
+<dl><dd>
+
+Maps format names to definitions; `.render(s)` paints marked-up text
+`s`.  A definition is either a tuple of one or more strings —
+`(*args, replacement)`, where each `arg` is a placeholder that must
+appear in `replacement` — or a `callable(*fields)` returning text
+(the escape hatch).
+
+```Python
+    sheet = StyleSheet({
+        'bold': ('T', '\x1b[1mT\x1b[22m'),          # low level: T -> ANSI
+        'heading': ('T', '⦃bold⦙⦃red⦙T⦄⦄'),          # high level: composes
+        'red': ('T', '\x1b[31mT\x1b[39m'),
+    })
+    sheet.render(style('heading', 'Hi'))            # bold + red
+```
+
+`'_default'`, if present, catches unknown names (it takes one arg,
+the display text); with no `'_default'`, an unknown name raises
+`KeyError`.  `escape` is applied to literal source text at render
+time (e.g. `html.escape` for an HTML backend).  Merging with `|`
+composes vocabularies; the left operand's delimiters win.
+
+</dd></dl>
+
+#### `split_styles(text)`
+
+<dl><dd>
+
+Rewrites markup so every whitespace-delimited word carries its own
+balanced span — `'⦃bold⦙a b c⦄'`&nbsp;→&nbsp;`'⦃bold⦙a⦄ ⦃bold⦙b⦄
+⦃bold⦙c⦄'` — while preserving all whitespace verbatim (a two-space
+gap stays two spaces).  This lets a consumer split the text at
+whitespace (to wrap it, lay it in columns, …) and get self-contained
+styled words, since a span never straddles a break.  Pure markup in,
+markup out.
+
+</dd></dl>
+
+#### `join_styles(text)`
+
+<dl><dd>
+
+The inverse of [`split_styles`](#split_stylestext): coalesces
+adjacent spans that carry an identical stack and are separated only
+by non-newline whitespace, absorbing that whitespace into the merged
+span.  Used to minimize a backend's output (fewer style toggles)
+after layout.  It never merges across a newline, so each line's
+markup stays balanced and self-contained.
+
+</dd></dl>
+
+#### `plain_stylesheet`
+
+<dl><dd>
+
+A `StyleSheet` that strips *all* markup to bare text — every span
+renders as its content, any role.  Handy as a "render to plain text"
+backend.
+
+</dd></dl>
+
+#### `transforms`
+
+<dl><dd>
+
+A `dict` of stock text transforms — `'upper'`, `'lower'`, `'title'` —
+suitable for merging into a `StyleSheet` and used as tags, e.g.
+`⦃upper⦙text⦄`.  Pure text shaping, no paint.
+
+</dd></dl>
+
+#### `ansi_truecolor`, `ansi_256`, `ansi_16`, `ansi_uncolored`
+
+<dl><dd>
+
+Four stock *low-level* style sheets that resolve the styling
+vocabulary to terminal escape sequences.  Merge one *under* a
+high-level theme so the theme's roles reach real escapes:
+
+```Python
+    sheet = my_theme | ansi_256
+```
+
+Each defines the four attributes — `bold`, `italic`, `underline`,
+`strikethrough` — and the 26-color vocabulary: `red`, `orange`,
+`yellow`, `green`, `cyan`, `blue`, `purple`, and `gray`, each in
+`light`/`dark`/normal (`lightred`, `darkred`, `red`), plus `white`
+and `black`.  The attributes are identical across all four; the color
+depth differs: `ansi_truecolor` emits 24-bit `38;2;r;g;b`, `ansi_256`
+the nearest xterm-256 index, `ansi_16` an explicit mapping onto the
+16 basic colors, and `ansi_uncolored` renders the attributes but
+drops color entirely.
+
 </dd></dl>
 
 

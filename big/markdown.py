@@ -460,25 +460,9 @@ def _parse_linkdef(lines, idx):
         return li, ci, False
 
     def read_dest(li, ci):
-        "A bare destination: to whitespace, with balanced parens.  -> (dest, ci)."
+        "A destination on one line: bare (balanced parens) or <...>.  -> (dest, ci) or None."
         line = phys[li]
-        start = ci
-        depth = 0
-        while ci < len(line):
-            ch = line[ci]
-            if ch in ' \t':
-                break
-            if ch == '\\' and (ci + 1) < len(line):
-                ci += 2
-                continue
-            if ch == '(':
-                depth += 1
-            elif ch == ')':
-                if depth == 0:
-                    break
-                depth -= 1
-            ci += 1
-        return line[start:ci], ci
+        return _link_destination(line, ci, len(line))
 
     def read_title(li, ci):
         "A quoted/parenthesized title, possibly multi-line.  -> (title, li, ci) or None."
@@ -513,7 +497,10 @@ def _parse_linkdef(lines, idx):
     li, ci, _ = skip_ws(0, 0)
     if li >= len(phys) or ci >= len(phys[li]):
         return None
-    dest, ci = read_dest(li, ci)
+    result = read_dest(li, ci)
+    if result is None:
+        return None
+    dest, ci = result
     if not dest:
         return None
     dest_end_li = li
@@ -723,11 +710,55 @@ def _match_bracket(text, i):
     return -1
 
 
+def _link_destination(text, k, n):
+    """
+    Read a link destination at text[k].  Two forms: `<...>` (may hold
+    spaces, but no unescaped `<`, `>`, or newline; backslash escapes
+    allowed), or a bare run up to whitespace with balanced parentheses.
+    Returns (destination, index_after) -- the angle form returns None
+    if it's malformed (no closing `>`, or a stray `<`/newline inside).
+    """
+    if k < n and text[k] == '<':
+        k += 1
+        out = []
+        while k < n:
+            c = text[k]
+            if c == '>':
+                return ''.join(out), k + 1
+            if c == '\n' or c == '<':
+                return None
+            if c == '\\' and (k + 1) < n and text[k + 1] in _ASCII_PUNCT:
+                out.append(text[k + 1])
+                k += 2
+                continue
+            out.append(c)
+            k += 1
+        return None                    # no closing '>'
+    depth = 0
+    start = k
+    while k < n:
+        c = text[k]
+        if c in ' \t':
+            break
+        if c == '\\' and (k + 1) < n:
+            k += 2
+            continue
+        if c == '(':
+            depth += 1
+        elif c == ')':
+            if depth == 0:
+                break
+            depth -= 1
+        k += 1
+    return text[start:k], k
+
+
 def _try_link(text, i):
     """
     Parse `[label](dest)` or `[label](dest "title")` at text[i]=='['.
-    The label may contain BALANCED brackets, the destination BALANCED
-    parentheses.  Returns (label, dest, title, end_index) or None.
+    The label may contain BALANCED brackets; the destination is bare
+    (balanced parens) or `<...>`.  Returns (label, dest, title, end)
+    or None.
     """
     n = len(text)
     close = _match_bracket(text, i)
@@ -740,20 +771,10 @@ def _try_link(text, i):
     k += 1
     while k < n and text[k] in ' \t':
         k += 1
-    depth = 0
-    start = k
-    while k < n:
-        c = text[k]
-        if c in ' \t':
-            break
-        if c == '(':
-            depth += 1
-        elif c == ')':
-            if depth == 0:
-                break
-            depth -= 1
-        k += 1
-    dest = text[start:k]
+    result = _link_destination(text, k, n)
+    if result is None:
+        return None
+    dest, k = result
     title = ''
     while k < n and text[k] in ' \t':
         k += 1

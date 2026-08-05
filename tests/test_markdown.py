@@ -348,6 +348,14 @@ def test_inline_link_destination_with_balanced_parentheses():
         Link([Text('docs')], 'https://example.test/a_(b)', ''),
     ])
 
+def test_link_angle_bracket_destination():
+    # <...> destinations may hold spaces; the brackets are stripped
+    assert parse("[t](<a b>)\n").blocks[0] == Paragraph([Link([Text('t')], 'a b', '')])
+    assert parse("[t](<>)\n").blocks[0] == Paragraph([Link([Text('t')], '', '')])
+    # and in a reference definition, with a title
+    d = parse("[t]\n\n[t]: <my url> \"T\"\n")
+    assert d.blocks[0] == Paragraph([Link([Text('t')], 'my url', 'T')])
+
 def test_inline_link_label_with_balanced_brackets():
     # the label runs to the MATCHING ']', so brackets may nest inside
     p = parse("see [the [advanced] mode](u) now\n").blocks[0]
