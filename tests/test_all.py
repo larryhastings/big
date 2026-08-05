@@ -43,6 +43,7 @@ with test.suite() as run:
         test_heap
         test_itertools
         test_log
+        test_markdown
         test_metadata
         test_scheduler
         test_snip
