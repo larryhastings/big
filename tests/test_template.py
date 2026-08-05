@@ -1137,6 +1137,40 @@ def test_join_styles():
     assert big.join_styles('⦃bold⦙a⦄, ⦃bold⦙b⦄') == '⦃bold⦙a⦄, ⦃bold⦙b⦄'
     assert big.join_styles('⦃bold⦙a⦄ ⦃italic⦙b⦄') == '⦃bold⦙a⦄ ⦃italic⦙b⦄'
 
+def test_ansi_low_level_maps():
+    E = '\x1b'
+    # each map defines the 4 attributes + the 26-color vocabulary
+    hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'gray']
+    vocab = {'bold', 'italic', 'underline', 'strikethrough', 'white', 'black'}
+    for hue in hues:
+        vocab |= {hue, 'light' + hue, 'dark' + hue}
+    for sheet in (big.ansi_truecolor, big.ansi_256, big.ansi_16, big.ansi_uncolored):
+        assert vocab <= set(sheet), sorted(vocab - set(sheet))
+
+    r = lambda sheet, role: sheet.render('⦃' + role + '⦙x⦄')
+    # attributes are identical across every map
+    for sheet in (big.ansi_truecolor, big.ansi_256, big.ansi_16, big.ansi_uncolored):
+        assert r(sheet, 'bold') == f'{E}[1mx{E}[22m'
+        assert r(sheet, 'strikethrough') == f'{E}[9mx{E}[29m'
+    # 24-bit uses the master hex verbatim (normal red is BA0000)
+    assert r(big.ansi_truecolor, 'red') == f'{E}[38;2;186;0;0mx{E}[39m'
+    # 16-color: normal red -> 31, light red -> 91, orange leans bright-red
+    assert r(big.ansi_16, 'red') == f'{E}[31mx{E}[39m'
+    assert r(big.ansi_16, 'lightred') == f'{E}[91mx{E}[39m'
+    assert r(big.ansi_16, 'orange') == f'{E}[91mx{E}[39m'
+    # 256: an indexed color, red nearest-matches to 124
+    assert r(big.ansi_256, 'red') == f'{E}[38;5;124mx{E}[39m'
+    # uncolored keeps attributes but drops color
+    assert r(big.ansi_uncolored, 'red') == 'x'
+    assert r(big.ansi_uncolored, 'bold') == f'{E}[1mx{E}[22m'
+
+def test_ansi_map_composes_under_a_theme():
+    # a conceptual role resolves through the theme down to a real escape
+    theme = StyleSheet({'heading': ('T', big.style('bold', big.style('lightgray', 'T')))})
+    sheet = big.ansi_truecolor | theme
+    assert sheet.render(big.style('heading', 'Hi')) == \
+        '\x1b[1m\x1b[38;2;179;179;179mHi\x1b[39m\x1b[22m'
+
 
 def test_stylesheet_validation():
     with raises(ValueError):

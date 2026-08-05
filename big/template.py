@@ -1496,5 +1496,118 @@ plain_stylesheet = StyleSheet({'_default': ('T', 'T')})
 export('plain_stylesheet')
 
 
+# ---------------------------------------------------------------------
+# Stock low-level ANSI maps: role -> escape sequence.  Merge one under
+# a high-level theme (`theme | ansi_256`) so the theme's conceptual
+# roles resolve all the way to escapes.  The four attributes are shared
+# across the maps; the 26-color vocabulary (red/orange/yellow/green/
+# cyan/blue/purple/gray, each light/dark/normal, plus white/black) is
+# rendered at whatever depth each map supports.  The 24-bit values are
+# the master; 256 is nearest-matched from them; 16 is an explicit
+# hand-mapping; uncolored keeps the attributes but drops color.
+# ---------------------------------------------------------------------
+
+_ansi_attributes = {
+    'bold':          ('T', '\x1b[1mT\x1b[22m'),
+    'italic':        ('T', '\x1b[3mT\x1b[23m'),
+    'underline':     ('T', '\x1b[4mT\x1b[24m'),
+    'strikethrough': ('T', '\x1b[9mT\x1b[29m'),
+}
+
+# each hue: (dark, normal, light) as six hex digits
+_palette_rgb = {
+    'red':    ('850000', 'BA0000', 'E00000'),
+    'orange': ('AD3E00', 'C74800', 'FF5C00'),
+    'yellow': ('A89000', 'E3C000', 'F5DE00'),
+    'green':  ('1E7A3C', '2FA65A', '5FD088'),
+    'cyan':   ('0E6B78', '1AA0B0', '4FCEDC'),
+    'blue':   ('0E2E88', '2F72C0', '6BA6E6'),
+    'purple': ('63108A', '9040B8', 'B87AD8'),
+    'gray':   ('4D4D4D', '808080', 'B3B3B3'),
+}
+_palette_white, _palette_black = 'FFFFFF', '000000'
+
+# each hue: (dark, normal, light) SGR foreground code
+_palette_16 = {
+    'red':    (31, 31, 91),
+    'orange': (91, 91, 93),
+    'yellow': (33, 33, 93),
+    'green':  (32, 32, 92),
+    'cyan':   (36, 36, 96),
+    'blue':   (34, 34, 94),
+    'purple': (35, 35, 95),
+    'gray':   (90, 90, 37),
+}
+_palette_16_white, _palette_16_black = 97, 30
+
+_ansi_cube = (0, 95, 135, 175, 215, 255)
+
+
+def _hex_rgb(h):
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _nearest_256(r, g, b):
+    "The xterm-256 index nearest (r,g,b): the 6x6x6 cube or the gray ramp."
+    def level(v):
+        return min(range(6), key=lambda i: abs(_ansi_cube[i] - v))
+    lr, lg, lb = level(r), level(g), level(b)
+    cube = 16 + 36 * lr + 6 * lg + lb
+    cr, cg, cb = _ansi_cube[lr], _ansi_cube[lg], _ansi_cube[lb]
+    cube_d = (cr - r) ** 2 + (cg - g) ** 2 + (cb - b) ** 2
+    gi = min(range(24), key=lambda i: abs((8 + 10 * i) - (r + g + b) / 3))
+    gv = 8 + 10 * gi
+    gray_d = (gv - r) ** 2 + (gv - g) ** 2 + (gv - b) ** 2
+    return cube if cube_d <= gray_d else 232 + gi
+
+
+def _rgb_vocab():
+    "Yield (name, hex) for all 26 colors."
+    for hue, (dark, normal, light) in _palette_rgb.items():
+        yield hue, normal
+        yield 'light' + hue, light
+        yield 'dark' + hue, dark
+    yield 'white', _palette_white
+    yield 'black', _palette_black
+
+
+def _code16_vocab():
+    "Yield (name, SGR code) for all 26 colors."
+    for hue, (dark, normal, light) in _palette_16.items():
+        yield hue, normal
+        yield 'light' + hue, light
+        yield 'dark' + hue, dark
+    yield 'white', _palette_16_white
+    yield 'black', _palette_16_black
+
+
+def _fg24(h):
+    r, g, b = _hex_rgb(h)
+    return ('T', f'\x1b[38;2;{r};{g};{b}mT\x1b[39m')
+
+def _fg256(h):
+    return ('T', f'\x1b[38;5;{_nearest_256(*_hex_rgb(h))}mT\x1b[39m')
+
+def _fg16(code):
+    return ('T', f'\x1b[{code}mT\x1b[39m')
+
+
+ansi_truecolor = StyleSheet(dict(_ansi_attributes,
+    **{name: _fg24(h) for name, h in _rgb_vocab()}))
+export('ansi_truecolor')
+
+ansi_256 = StyleSheet(dict(_ansi_attributes,
+    **{name: _fg256(h) for name, h in _rgb_vocab()}))
+export('ansi_256')
+
+ansi_16 = StyleSheet(dict(_ansi_attributes,
+    **{name: _fg16(c) for name, c in _code16_vocab()}))
+export('ansi_16')
+
+ansi_uncolored = StyleSheet(dict(_ansi_attributes,
+    **{name: ('T', 'T') for name, _ in _rgb_vocab()}))
+export('ansi_uncolored')
+
+
 
 mm()
