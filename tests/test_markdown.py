@@ -567,15 +567,15 @@ def test_split_styles_document():
     assert split_styles_document(plain) == plain
     # code is verbatim: never word-split, so its whole line stays one span
     code = split_styles_document(style_document(parse("```\na b c\n```\n")))
-    assert code.blocks[0] == CodeBlock('⦃code⦙a b c⦄', '')
+    assert code.blocks[0] == CodeBlock('⦃codeblock⦙a b c⦄', '')
 
 def test_code_block_styled_per_line():
     # each code line is its own `code` span, with its own indentation
     # INSIDE the span; only the block-render indent stays plain
     doc = style_document(parse("```\n    x = 1\ny = 2\n```\n"))
-    assert doc.blocks[0] == CodeBlock('⦃code⦙    x = 1⦄\n⦃code⦙y = 2⦄', '')
+    assert doc.blocks[0] == CodeBlock('⦃codeblock⦙    x = 1⦄\n⦃codeblock⦙y = 2⦄', '')
     out = render_terminal(split_styles_document(doc), width=0)
-    assert out == "    ⦃code⦙    x = 1⦄\n    ⦃code⦙y = 2⦄"
+    assert out == "    ⦃codeblock⦙    x = 1⦄\n    ⦃codeblock⦙y = 2⦄"
     # unstyled code stays plain (no markup)
     assert render_terminal(parse("```\nx = 1\n```\n")) == "    x = 1"
 
@@ -605,6 +605,49 @@ def test_render_terminal_glyphs_styled_only_when_document_is():
     # styled IR -> heading rule and list marker wear their roles
     out = render_terminal(split_styles_document(style_document(parse("# Hi\n\n- a\n"))))
     assert '⦃heading1⦙==⦄' in out and '⦃marker⦙•⦄' in out
+
+def test_structural_roles():
+    # code blocks wear `codeblock` (distinct from inline `code`)
+    cb = style_document(parse("```\nx\n```\n")).blocks[0]
+    assert cb == CodeBlock('⦃codeblock⦙x⦄', '')
+    assert style_document(parse("`x`\n")).blocks[0] == Paragraph([Text('⦃code⦙x⦄')])
+    # a definition-list term wears `term`
+    term = style_document(parse("word\n: a def\n")).blocks[0].entries[0].term
+    assert term == Term([Text('⦃term⦙word⦄')])
+    # render_terminal styles the quote bar and the thematic-break rule
+    assert render_terminal(style_document(parse("> hi\n")), width=20) == "⦃blockquote⦙│ ⦄hi"
+    r = render_terminal(style_document(parse("a\n\n---\n")), width=6)
+    assert "⦃rule⦙──────⦄" in r
+
+def test_alerts():
+    # a [!KIND] first line turns a block quote into an Alert
+    assert parse("> [!NOTE]\n> Useful info.\n").blocks[0] == \
+        Alert('note', [Paragraph([Text('Useful info.')])])
+    # STRICT: the kind must be UPPERCASE, and unknown kinds stay quotes
+    assert isinstance(parse("> [!Note]\n> x\n").blocks[0], BlockQuote)
+    assert isinstance(parse("> [!warning]\n> hi\n").blocks[0], BlockQuote)
+    assert isinstance(parse("> [!FOO]\n> hi\n").blocks[0], BlockQuote)
+    # styled: a heading_<kind> title (emoji + kind) + a per-line <kind> bar
+    out = render_terminal(style_document(parse("> [!TIP]\n> do this\n")), width=40)
+    assert out == "⦃tip⦙│ ⦄⦃heading_tip⦙💡 Tip⦄\n⦃tip⦙│ ⦄do this"
+    # unstyled stays plain
+    assert render_terminal(parse("> [!TIP]\n> do this\n"), width=40) == "│ 💡 Tip\n│ do this"
+
+def test_alert_role_defaults():
+    sheet = markdown_defaults | StyleSheet({
+        'blue': ('T', '[b]T[/b]'), 'red': ('T', '[r]T[/r]'),
+        'heading2': ('T', '[h]T[/h]')})
+    assert sheet.render('⦃note⦙x⦄') == '[b]x[/b]'              # note -> blue
+    # title = heading2 over the kind's color (caution -> red)
+    assert sheet.render('⦃heading_caution⦙x⦄') == '[h][r]x[/r][/h]'
+
+def test_markdown_defaults_stylesheet():
+    # codeblock inherits code; blockquote/rule/term/unknown -> plain
+    sheet = markdown_defaults | StyleSheet({'code': ('T', '[c]T[/c]')})
+    assert sheet.render('⦃codeblock⦙x⦄') == '[c]x[/c]'
+    assert sheet.render('⦃blockquote⦙│ ⦄') == '│ '
+    assert sheet.render('⦃rule⦙───⦄') == '───'
+    assert sheet.render('⦃term⦙word⦄') == 'word'
 
 def test_style_pipeline_two_layer_theme():
     # low level: formatting -> backend tokens (stand-ins for ANSI)

@@ -58,6 +58,7 @@ from big.template import style_delimiters as _style_delims
 from big.template import plain_stylesheet as _plain_sheet
 from big.template import split_styles as _split_styles
 from big.template import escape_styles as _escape
+from big.template import StyleSheet as _StyleSheet
 
 # strip `⦃role⦙…⦄` markup back to plain text (the raw callback for
 # wrap_words, so styled words measure by their visible width).  Stays
@@ -72,6 +73,15 @@ def _strip_markup(word):
 # width=0 asks render_terminal for no maximum; a margin this wide
 # means wrap_words never wraps.
 _NO_MAX_WIDTH = 2 ** 31
+
+# the glyph that leads each alert's title (✴ is U+2734, a starburst).
+_alert_emoji = {
+    'note':      'ℹ️',
+    'tip':       '💡',
+    'important': '✴',
+    'warning':   '⚠️',
+    'caution':   '🛑',
+}
 
 
 #
@@ -126,6 +136,17 @@ class Node:
 class Document(Node):
     "The whole parsed document: a list of block nodes."
     __slots__ = ('blocks',)
+    _fields = ('blocks',)
+
+
+class StyledDocument(Document):
+    """
+    A Document that has been through style_document (its text carries
+    role markup).  render_terminal checks for this type -- not the
+    text -- so it knows to style the glyphs it draws (list markers,
+    heading rules, quote bars) even when the prose itself is unstyled.
+    """
+    __slots__ = ()
     _fields = ('blocks',)
 
 
@@ -209,6 +230,16 @@ class BlockQuote(Node):
     "A `>` block quote; `blocks` is block-level."
     __slots__ = ('blocks',)
     _fields = ('blocks',)
+
+
+class Alert(Node):
+    """
+    A GitHub alert -- a block quote whose first line is `[!KIND]`.
+    `kind` is one of note/tip/important/warning/caution; `blocks` is
+    the body (block-level).  Renders as a titled, colored callout.
+    """
+    __slots__ = ('kind', 'blocks')
+    _fields = ('kind', 'blocks')
 
 
 class ThematicBreak(Node):
@@ -295,6 +326,9 @@ _atx_re        = re.compile(r' {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$')
 _fence_re      = re.compile(r'( {0,3})(`{3,}|~{3,})[ \t]*(.*?)[ \t]*$')
 _thematic_re   = re.compile(r' {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$')
 _blockquote_re = re.compile(r' {0,3}>[ ]?(.*)$')
+# a GitHub alert marker on a block quote's first line: `[!NOTE]` etc.
+# STRICT: the kind must be uppercase -- `[!NOTE]` matches, `[!Note]` doesn't.
+_alert_re = re.compile(r'[ \t]*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*$')
 _bullet_re     = re.compile(r'( {0,3})([*+-])(?:([ \t]+)(.*))?$')
 _ordered_re    = re.compile(r'( {0,3})([0-9]{1,9})([.)])(?:([ \t]+)(.*))?$')
 _defdef_re     = re.compile(r'( {0,3}):([ \t]+)(.*)$')
@@ -1025,6 +1059,11 @@ def _parse_blockquote(lines, i, refs):
             i += 1
             continue
         break
+    # a `[!KIND]` on the first line turns the quote into a GitHub alert
+    if inner:
+        alert = _alert_re.match(inner[0])
+        if alert:
+            return Alert(alert.group(1).lower(), _parse_blocks(inner[1:], refs)), i
     return BlockQuote(_parse_blocks(inner, refs)), i
 
 
@@ -1275,13 +1314,16 @@ def _style_block(block):
             block.start, block.delimiter, block.tight)
     if isinstance(block, BlockQuote):
         return BlockQuote(_style_blocks(block.blocks))
+    if isinstance(block, Alert):
+        # title + bar are render-generated glyphs; just style the body
+        return Alert(block.kind, _style_blocks(block.blocks))
     if isinstance(block, DefinitionList):
         return DefinitionList([_style_entry(entry) for entry in block.entries])
     if isinstance(block, CodeBlock):
         # style each line on its own -- render_terminal splits the block
         # at newlines to indent it, so a whole-block span would tear.
         # The whole line (its own indentation included) rides in `code`.
-        lines = [_style_span('code', _escape(line)) if line else line
+        lines = [_style_span('codeblock', _escape(line)) if line else line
                  for line in block.text.split('\n')]
         return CodeBlock('\n'.join(lines), block.info)
     # ThematicBreak, Raw: no inline text to style
@@ -1289,7 +1331,8 @@ def _style_block(block):
 
 
 def _style_entry(entry):
-    term = Term(_styled_inline(entry.term.children))
+    # the whole term wears the `term` role, so it can read as a label
+    term = Term([Text(_style_span('term', _styled_text(entry.term.children)))])
     definitions = [Definition(_style_blocks(d.blocks)) for d in entry.definitions]
     return DefinitionEntry(term, definitions)
 
@@ -1302,7 +1345,7 @@ def style_document(document):
     render_terminal to lay out, then to a StyleSheet to paint (or
     to plain_stylesheet to strip the markup back out).
     """
-    return Document(_style_blocks(document.blocks))
+    return StyledDocument(_style_blocks(document.blocks))
 
 
 def _map_style_text(node):
@@ -1327,6 +1370,43 @@ def split_styles_document(document):
     render_terminal.  join_styles undoes it on the laid-out text.
     """
     return _map_style_text(document)
+
+
+# Default definitions for every high-level role big.markdown emits, so
+# a document paints before any theme touches it and an UNDEFINED role
+# is a loud error, not a silent pass-through (no _default here on
+# purpose).  All do-nothing except `codeblock`, which inherits `code`.
+# The low-level attribute/color roles (bold, red, ...) come from a
+# backend map.  Compose UNDER a theme:  markdown_defaults | theme | ansi_256
+markdown_defaults = _StyleSheet({
+    'heading1':   ('T', 'T'),
+    'heading2':   ('T', 'T'),
+    'heading3':   ('T', 'T'),
+    'heading4':   ('T', 'T'),
+    'heading5':   ('T', 'T'),
+    'heading6':   ('T', 'T'),
+    'code':       ('T', 'T'),
+    'codeblock':  ('T', '⦃code⦙T⦄'),
+    'link':       ('T', 'T'),
+    'marker':     ('T', 'T'),
+    'blockquote': ('T', 'T'),
+    'rule':       ('T', 'T'),
+    'term':       ('T', 'T'),
+    # GitHub alerts: each kind wears a color; the title is that color
+    # over heading2 (do-nothing by default, a theme's heading style if
+    # set).  note=blue, tip=green, important=purple, warning=orange,
+    # caution=red.
+    'note':              ('T', '⦃blue⦙T⦄'),
+    'heading_note':      ('T', '⦃heading2⦙⦃blue⦙T⦄⦄'),
+    'tip':               ('T', '⦃green⦙T⦄'),
+    'heading_tip':       ('T', '⦃heading2⦙⦃green⦙T⦄⦄'),
+    'important':         ('T', '⦃purple⦙T⦄'),
+    'heading_important': ('T', '⦃heading2⦙⦃purple⦙T⦄⦄'),
+    'warning':           ('T', '⦃orange⦙T⦄'),
+    'heading_warning':   ('T', '⦃heading2⦙⦃orange⦙T⦄⦄'),
+    'caution':           ('T', '⦃red⦙T⦄'),
+    'heading_caution':   ('T', '⦃heading2⦙⦃red⦙T⦄⦄'),
+})
 
 
 #
@@ -1356,10 +1436,11 @@ def render_terminal(document, width=None):
         width = shutil.get_terminal_size((79, 24)).columns
     elif width == 0:
         width = _NO_MAX_WIDTH
-    # was the IR run through style()?  If so, the glyphs render_terminal
-    # generates (list markers, heading rules) get their roles too; if
-    # not, everything stays plain.
-    styled = _is_styled(document)
+    # a StyledDocument (from style_document) means the glyphs
+    # render_terminal generates -- markers, heading rules, quote bars,
+    # the thematic rule -- get their roles too; a plain Document stays
+    # plain, even if its prose happens to contain a literal delimiter.
+    styled = isinstance(document, StyledDocument)
     lines = _render_blocks(document.blocks, width, styled)
     return '\n'.join(line.rstrip() for line in lines)
 
@@ -1414,17 +1495,6 @@ def _render_paragraph(children, width):
     return lines
 
 
-def _is_styled(node):
-    "True if any text anywhere in the IR carries `⦃…⦄` style markup."
-    if isinstance(node, str):
-        return _style_delims[0] in node
-    if isinstance(node, Node):
-        return any(_is_styled(getattr(node, f)) for f in node._fields)
-    if isinstance(node, (list, tuple)):
-        return any(_is_styled(child) for child in node)
-    return False
-
-
 def _render_block(block, width, styled):
     if isinstance(block, Paragraph):
         return _render_paragraph(block.children, width)
@@ -1441,11 +1511,24 @@ def _render_block(block, width, styled):
             rule = _style_span(f'heading{block.level}', rule)
         return [rule, *lines, rule] if block.level == 1 else [*lines, rule]
     if isinstance(block, ThematicBreak):
-        return ['─' * width]
+        rule = '─' * width
+        return [_style_span('rule', rule) if styled else rule]
     if isinstance(block, CodeBlock):
         return ['    ' + line for line in block.text.split('\n')]
     if isinstance(block, BlockQuote):
-        return ['│ ' + line for line in _render_blocks(block.blocks, max(1, width - 2), styled)]
+        bar = _style_span('blockquote', '│ ') if styled else '│ '
+        return [bar + line for line in _render_blocks(block.blocks, max(1, width - 2), styled)]
+    if isinstance(block, Alert):
+        # a titled callout: a bar on every line (colored by kind), and a
+        # heading_<kind> title line above the body.
+        title = _alert_emoji[block.kind] + ' ' + block.kind.capitalize()
+        inner = _render_blocks(block.blocks, max(1, width - 2), styled)
+        if styled:
+            bar = _style_span(block.kind, '│ ')
+            head = bar + _style_span('heading_' + block.kind, title)
+        else:
+            bar, head = '│ ', '│ ' + title
+        return [head] + [bar + line for line in inner]
     if isinstance(block, BulletList):
         return _render_list(block, width, False, styled)
     if isinstance(block, OrderedList):
@@ -1504,12 +1587,13 @@ def _render_deflist(dl, width, styled):
 __all__ = [
     'Node',
     # block
-    'Document', 'Heading', 'Paragraph',
+    'Document', 'StyledDocument', 'Heading', 'Paragraph',
     'BulletList', 'OrderedList', 'ListItem',
     'DefinitionList', 'DefinitionEntry', 'Term', 'Definition',
-    'CodeBlock', 'BlockQuote', 'ThematicBreak', 'Raw',
+    'CodeBlock', 'BlockQuote', 'Alert', 'ThematicBreak', 'Raw',
     # inline
     'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
     # parser + renderer
     'parse', 'style_document', 'split_styles_document', 'render_terminal',
+    'markdown_defaults',
 ]
