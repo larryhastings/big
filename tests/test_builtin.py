@@ -664,6 +664,66 @@ def test_literal_eval_errors_propagate():
             big.literal_eval(string(bad, source='test.pky'))
 
 
+def test_can_colorize():
+    import io
+    import os
+
+    saved = {k: os.environ.get(k)
+             for k in ('PYTHON_COLORS', 'NO_COLOR', 'FORCE_COLOR', 'TERM')}
+
+    def call(file=None, **env):
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ.update(env)
+        return big.can_colorize(file=file if file is not None else io.StringIO())
+
+    try:
+        # a non-tty (StringIO) is not colorized...
+        assert call() is False
+        # ...unless FORCE_COLOR overrides it
+        assert call(FORCE_COLOR='1') is True
+        # NO_COLOR is checked before FORCE_COLOR, so it disables color
+        # even when both are set
+        assert call(NO_COLOR='1', FORCE_COLOR='1') is False
+        # TERM=dumb disables color on a would-be tty
+        assert call(TERM='dumb') is False
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_ansi_color_depth():
+    import os
+
+    saved = {k: os.environ.get(k) for k in ('COLORTERM', 'TERM')}
+
+    def depth(**env):
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ.update(env)
+        return big.ansi_color_depth()
+
+    try:
+        assert depth(COLORTERM='truecolor') == 'truecolor'
+        assert depth(COLORTERM='24bit') == 'truecolor'
+        assert depth(TERM='xterm-256color') == '256color'
+        assert depth(TERM='linux') == '16color'
+        assert depth(TERM='vt220') == '16color'
+        assert depth(TERM='xterm') == 'truecolor'          # unknown -> default
+        assert depth() == 'truecolor'                       # nothing set
+        # COLORTERM=truecolor wins over a 256color TERM
+        assert depth(COLORTERM='truecolor', TERM='xterm-256color') == 'truecolor'
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.builtin", module=__name__)
 

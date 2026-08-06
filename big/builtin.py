@@ -24,6 +24,7 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import os
 import re
 import sys
 
@@ -572,6 +573,81 @@ class ClassRegistry(dict):
             self[key] = cls
             return cls
         return decorator
+
+
+# --8<-- start big terminal color --8<--
+# (can_colorize + ansi_color_depth; a snippet consumer supplies `sys`,
+#  `os`, and an export() shim.)
+if sys.version_info >= (3, 13):
+    # 3.13+ ships this logic as _colorize.can_colorize; alias it, so we
+    # track CPython exactly (including any later refinements).
+    from _colorize import can_colorize
+    export('can_colorize')
+else:
+    import io as _io
+
+    @export
+    def can_colorize(*, file=None):
+        """
+        Return True if `file` (default sys.stdout) should get colorized
+        output, honoring the usual environment overrides.
+
+        The same logic as CPython 3.13+'s _colorize.can_colorize (which
+        this aliases on 3.13+): PYTHON_COLORS forces the answer (unless
+        running with -E/-I); otherwise NO_COLOR disables color,
+        FORCE_COLOR enables it, TERM=dumb disables it; on Windows the
+        console must support virtual-terminal sequences; and failing all
+        of those the file must be a tty.
+        """
+        if file is None:
+            file = sys.stdout
+
+        if not sys.flags.ignore_environment:
+            if os.environ.get("PYTHON_COLORS") == "0":
+                return False
+            if os.environ.get("PYTHON_COLORS") == "1":
+                return True
+        if os.environ.get("NO_COLOR"):
+            return False
+        if os.environ.get("FORCE_COLOR"):
+            return True
+        if os.environ.get("TERM") == "dumb":
+            return False
+
+        if not hasattr(file, "fileno"):
+            return False
+
+        if sys.platform == "win32":
+            try:
+                import nt
+                if not nt._supports_virtual_terminal():
+                    return False
+            except (ImportError, AttributeError):
+                return False
+
+        try:
+            return os.isatty(file.fileno())
+        except _io.UnsupportedOperation:
+            return file.isatty()
+
+
+@export
+def ansi_color_depth():
+    """
+    Guess the terminal's ANSI color depth from the COLORTERM and TERM
+    environment variables: 'truecolor', '256color', or '16color'.
+    Defaults to 'truecolor' when nothing says otherwise.
+    """
+    colorterm = os.environ.get('COLORTERM', '')
+    term = os.environ.get('TERM', '')
+    if 'truecolor' in colorterm or '24bit' in colorterm:
+        return 'truecolor'
+    if '256color' in term:
+        return '256color'
+    if term in ('linux', 'ansi', 'vt100', 'vt220'):
+        return '16color'
+    return 'truecolor'
+# --8<-- end big terminal color --8<--
 
 
 mm()

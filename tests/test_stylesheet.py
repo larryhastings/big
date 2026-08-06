@@ -96,6 +96,33 @@ def test_stylesheet_opaque_rewrite():
     p3 = StyleSheet({'twice': ('X', 'X and X')})
     assert p3.render(fmt('twice', 'q')) == 'q and q'
 
+def test_best_palette():
+    # best_palette is chosen at import: the uncolored map when we can't
+    # colorize, else the map for the depth ansi_color_depth reports.
+    if not big.can_colorize():
+        expected = big.ansi_uncolored
+    else:
+        expected = {'truecolor': big.ansi_truecolor,
+                    '256color': big.ansi_256,
+                    '16color': big.ansi_16}.get(big.ansi_color_depth(),
+                                                 big.ansi_truecolor)
+    assert big.best_palette is expected
+    assert any(big.best_palette is p for p in
+               (big.ansi_truecolor, big.ansi_256, big.ansi_16, big.ansi_uncolored))
+
+def test_stylesheet_verbatim_role_is_cheap():
+    # a do-nothing role ('T', 'T') paints nothing: classified verbatim,
+    # it renders its text with no added output (and no empty paint pair)
+    sheet = StyleSheet({'plain': ('T', 'T'), 'bold': ('T', '[b]T[/b]')})
+    assert sheet['plain'].verbatim is True
+    assert sheet['bold'].verbatim is False
+    assert sheet.render('⦃plain⦙hello⦄') == 'hello'
+    # nested verbatim roles collapse to the text; painting roles still fire
+    assert sheet.render('⦃plain⦙⦃plain⦙x⦄⦄') == 'x'
+    assert sheet.render('⦃plain⦙⦃bold⦙x⦄⦄') == '[b]x[/b]'
+    # a verbatim role inside a painting one doesn't disturb the paint
+    assert sheet.render('⦃bold⦙⦃plain⦙x⦄⦄') == '[b]x[/b]'
+
 
 def test_stylesheet_default_and_plain_stylesheet():
     assert plain_stylesheet.render(fmt('bold', 'x')) == 'x'

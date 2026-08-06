@@ -37,6 +37,11 @@ from . import builtin
 mm = builtin.ModuleManager()
 export = mm.export
 
+# best_palette (in the ansi-stylesheets snippet below) picks a palette
+# from these at import; imported as free names so a snippet consumer
+# can supply them.
+from .builtin import can_colorize, ansi_color_depth
+
 
 style_delimiters = '⦃⦙⦄'
 export('style_delimiters')
@@ -53,6 +58,13 @@ transforms = {
 export('transforms')
 
 
+# --8<-- start big stylesheet render core --8<--
+# (The render half of the module: the span parser, the codec's
+# runtime members, _Definition, StyleSheet, plain_stylesheet.
+# The authoring helpers ride along until a render-only core is
+# factored.  Snippet consumers supply style_delimiters, an
+# export() shim, and a _multisplit stub--split_styles needs it,
+# nothing else does.)
 def _validate_format(name):
     if not isinstance(name, str):
         raise TypeError(f"format must be str, not {type(name).__name__}")
@@ -349,7 +361,7 @@ class _Definition:
     correct by construction.
     """
     __slots__ = ('args', 'replacement', 'segments',
-                 'undoable', 'before', 'after')
+                 'undoable', 'before', 'after', 'verbatim')
 
     def __init__(self, name, value, delimiters):
         *args, replacement = value
@@ -417,6 +429,10 @@ class _Definition:
                 r = refs[0]
                 self.before = ''.join(flat[:r])
                 self.after = ''.join(flat[r + 1:])
+        # a verbatim role (like ('T', 'T')) paints nothing: it emits its
+        # text and nothing else, so rendering can skip it entirely rather
+        # than push an empty (before, after) pair and emit empties per run.
+        self.verbatim = bool(self.undoable and not self.before and not self.after)
 
 
 @export
@@ -603,6 +619,11 @@ class StyleSheet(dict):
                 f"format {name!r} takes {len(definition.args)} "
                 f"field(s), got {len(fields)}")
         if definition.undoable:
+            if definition.verbatim:
+                # paints nothing: render the text with the paint stack
+                # unchanged, no empty before/after to push and undo.
+                self._render(fields[0], paint, strip, active, emit)
+                return
             emit_paint = paint + ((definition.before,
                                    definition.after),)
             self._render(fields[0], emit_paint, strip, active, emit)
@@ -667,6 +688,10 @@ def strip_styles(text):
 # at 2026-08-06T07:00:23; sha256(palettes.py) = 267c9dc6e0ab2d55d85577a851e51e59a31cb6f945c2529373de23763f5ccfa1
 # Do not hand-edit -- edit palettes.py and regenerate.
 
+# --8<-- end big stylesheet render core --8<--
+
+
+# --8<-- start big ansi stylesheets --8<--
 ansi_truecolor = StyleSheet({
     'bold': ('T', '\x1b[1mT\x1b[22m'),
     'italic': ('T', '\x1b[3mT\x1b[23m'),
@@ -802,6 +827,21 @@ ansi_uncolored = StyleSheet({
     'black': ('T', 'T'),
 })
 export('ansi_uncolored')
+
+
+# best_palette: the stock palette for THIS terminal, chosen once, at
+# import.  If we can't colorize, it's the uncolored map; otherwise it's
+# the deepest map the terminal advertises (see ansi_color_depth).
+if not can_colorize():
+    best_palette = ansi_uncolored
+else:
+    best_palette = {
+        'truecolor': ansi_truecolor,
+        '256color':  ansi_256,
+        '16color':   ansi_16,
+    }.get(ansi_color_depth(), ansi_truecolor)
+export('best_palette')
+# --8<-- end big ansi stylesheets --8<--
 
 
 
