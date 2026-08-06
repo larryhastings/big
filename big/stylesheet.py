@@ -38,8 +38,7 @@ mm = builtin.ModuleManager()
 export = mm.export
 
 # best_palette (in the ansi-stylesheets snippet below) picks a palette
-# from these at import; imported as free names so a snippet consumer
-# can supply them.
+# with these; imported as free names so a snippet consumer can supply them.
 from .builtin import can_colorize, ansi_color_depth
 
 
@@ -829,18 +828,21 @@ ansi_uncolored = StyleSheet({
 export('ansi_uncolored')
 
 
-# best_palette: the stock palette for THIS terminal, chosen once, at
-# import.  If we can't colorize, it's the uncolored map; otherwise it's
-# the deepest map the terminal advertises (see ansi_color_depth).
-if not can_colorize():
-    best_palette = ansi_uncolored
-else:
-    best_palette = {
+@export
+def best_palette(*, file=None):
+    """
+    The stock low-level palette best suited to `file` (default
+    sys.stdout).  If we can't colorize `file`, it's the uncolored map;
+    otherwise it's the deepest map the terminal advertises (see
+    can_colorize and ansi_color_depth).
+    """
+    if not can_colorize(file=file):
+        return ansi_uncolored
+    return {
         'truecolor': ansi_truecolor,
         '256color':  ansi_256,
         '16color':   ansi_16,
     }.get(ansi_color_depth(), ansi_truecolor)
-export('best_palette')
 # --8<-- end big ansi stylesheets --8<--
 
 
