@@ -669,8 +669,10 @@ def strip_styles(text):
         return plain_stylesheet.render(text)
     except ValueError:
         return text
+# --8<-- end big stylesheet render core --8<--
 
 
+# --8<-- start big ansi stylesheets --8<--
 # ---------------------------------------------------------------------
 # Stock low-level ANSI maps: role -> escape sequence.  Merge one under
 # a high-level theme (`theme | ansi_256_color_palette`) so the theme's conceptual
