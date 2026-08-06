@@ -11,7 +11,7 @@
 #            https://www.unicode.org/Public/
 #     Then click on the directory for the version you want,
 #     probably the current version.  As of this writing the
-#     current version is 15.1.0.
+#     current version is 17.0 (but there's a draft of 18.0).
 #
 #     Then click on the "ucdxml" directory.
 #
