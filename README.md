@@ -3147,6 +3147,15 @@ rendering back ends over a shared intermediate representation.
 * For **Markdown or a man page**, `render_document(document, format)`
   renders the raw IR directly.
 
+The structural glyphs `layout_document` draws — the bullet, the quote
+bar, heading rules, alert emoji — are emitted as *glyph roles*
+(`⦃bullet⦄`, `⦃note_emoji⦄`, …), not baked characters.  A `StyleSheet`
+that defines them resolves them: [`markdown_defaults`](#markdown_defaults)
+gives the Unicode glyphs, [`markdown_ascii_glyphs`](#markdown_ascii_glyphs)
+the ASCII ones.  Because they're markup, the wrap-time `raw=` must
+resolve them to measure visible width — that's what
+[`unicode_glyphs`](#unicode_glyphs-ascii_glyphs) is for below.
+
 The full terminal pipeline is:
 
 ```Python
@@ -3158,21 +3167,25 @@ The full terminal pipeline is:
     document = style_document(document)          # bake in ⦃role⦙…⦄ markup
     document = split_styles_document(document)    # per-word spans, for wrapping
     layout   = layout_document(document)          # width-independent layout
-    wrapped  = wrap_words(layout, margin=79, raw=strip_styles)
-    painted  = (markdown_defaults | best_palette()).render(join_styles(wrapped))
-    print(painted)
+    raw      = lambda w: strip_styles(unicode_glyphs(w))   # visible width, past markup + glyphs
+    wrapped  = wrap_words(layout, margin=79, raw=raw)
+    sheet    = markdown_defaults | best_palette()  # resolves the glyph roles too
+    print(sheet.render(join_styles(wrapped)))
 ```
 
-For plain, unstyled output, paint with
-[`plain_stylesheet`](#plain_stylesheet) — it strips the markup back out:
+For plain, unstyled output, resolve the glyphs with
+[`unicode_glyphs`](#unicode_glyphs-ascii_glyphs) (or `ascii_glyphs`) and
+strip the rest with [`strip_styles`](#strip_stylestext):
 
 ```Python
-    from big.stylesheet import plain_stylesheet, join_styles, strip_styles
+    from big.markdown import *
+    from big.stylesheet import join_styles, strip_styles
     from big.text import wrap_words
 
     layout  = layout_document(split_styles_document(style_document(parse(markdown_text))))
-    wrapped = wrap_words(layout, margin=79, raw=strip_styles)
-    print(plain_stylesheet.render(join_styles(wrapped)))
+    raw     = lambda w: strip_styles(unicode_glyphs(w))
+    wrapped = wrap_words(layout, margin=79, raw=raw)
+    print(strip_styles(unicode_glyphs(join_styles(wrapped))))   # ascii_glyphs for ASCII
 ```
 
 **The subset.** Every CommonMark block and inline construct is
@@ -3277,9 +3290,16 @@ measure by their visible width), coalesce with
 
 ```Python
     layout  = layout_document(document)
-    wrapped = wrap_words(layout, margin=79, raw=strip_styles)
+    raw     = lambda w: strip_styles(unicode_glyphs(w))
+    wrapped = wrap_words(layout, margin=79, raw=raw)
     painted = (markdown_defaults | best_palette()).render(join_styles(wrapped))
 ```
+
+The glyphs it draws (bullet, quote bar, rules, alert emoji) are *glyph
+roles* — `⦃bullet⦄`, `⦃note_emoji⦄`, … — resolved by the painting
+`StyleSheet` (`markdown_defaults` defines them), so the wrap-time `raw=`
+resolves them with [`unicode_glyphs`](#unicode_glyphs-ascii_glyphs) to
+measure visible width.
 
 Because a layout is a flat tuple of constants, it can be baked into a
 generated script and wrapped at run time — no parser, no `big.markdown`
@@ -3336,6 +3356,51 @@ do-nothing except `codeblock`, which inherits `code`, and the ten
 alert roles, which default to GitHub-ish colors: `note` blue, `tip`
 green, `important` purple, `warning` orange, `caution` red — each
 `heading_<kind>` being that color over `heading2`.
+
+It also defines the **glyph roles** `layout_document` draws — `bullet`,
+`quote_bar`, `thematic_break`, `heading1_rule`, `heading2_rule`, and
+`note_emoji` … `caution_emoji` — each rendering to its Unicode glyph
+(`•`, `│ `, `─`, `=`, `-`, `ℹ️` …).
+
+</dd></dl>
+
+#### `markdown_ascii_glyphs`
+
+<dl><dd>
+
+A [`StyleSheet`](#stylesheetformats--delimiters-escape) defining the
+same glyph roles as [`markdown_defaults`](#markdown_defaults), but with
+**ASCII** glyphs — `*`, `| `, `-`, `(i)`, `(*)`, `(!)`, `/!\`, `(x)` —
+for a terminal (or a pipe) that can't show the Unicode ones.  It defines
+only the glyph roles; compose it over a palette for the rest, or use it
+via [`ascii_glyphs`](#unicode_glyphs-ascii_glyphs).
+
+</dd></dl>
+
+#### `unicode_glyphs`, `ascii_glyphs`
+
+<dl><dd>
+
+Functions that swap `big.markdown`'s glyph markup for characters —
+`unicode_glyphs('⦃bullet⦄ x')`&nbsp;→&nbsp;`'• x'`, `ascii_glyphs`
+giving `'* x'` — and leave all other markup alone.  Use them when you
+*aren't* rendering against a sheet that defines the glyph roles: as the
+`raw=` callback so glyphs measure by visible width (with `strip_styles`
+on top), and to produce plain text.  They're just
+[`glyphs_from_stylesheet`](#glyphs_from_stylesheetstylesheet) applied to
+`markdown_defaults` and `markdown_ascii_glyphs`.
+
+</dd></dl>
+
+#### `glyphs_from_stylesheet(stylesheet)`
+
+<dl><dd>
+
+Returns a glyph-swap function built from `stylesheet` — it renders each
+glyph role through the sheet once and caches a `.replace` map.  Use it
+to measure glyph widths (as `wrap_words`' `raw=`) against the very sheet
+you'll render with, or to bake a custom glyph set.  The sheet must
+define the glyph roles ([`markdown_defaults`](#markdown_defaults) does).
 
 </dd></dl>
 
@@ -4495,6 +4560,11 @@ whitespace (to wrap it, lay it in columns, …) and get self-contained
 styled words, since a span never straddles a break.  Pure markup in,
 markup out.
 
+A *zero-arg* span (`⦃name⦄`, no field) is treated as a single
+**character**: it has no text of its own, so it rides along with the
+surrounding content rather than being dropped.  (`big.markdown` uses
+zero-arg spans for its glyph roles.)
+
 </dd></dl>
 
 #### `join_styles(text)`
@@ -4506,7 +4576,8 @@ adjacent spans that carry an identical stack and are separated only
 by non-newline whitespace, absorbing that whitespace into the merged
 span.  Used to minimize a backend's output (fewer style toggles)
 after layout.  It never merges across a newline, so each line's
-markup stays balanced and self-contained.
+markup stays balanced and self-contained.  Like `split_styles`, it
+treats a zero-arg span as a character, so glyph markup survives it.
 
 </dd></dl>
 
@@ -11764,7 +11835,11 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   CommonMark subset closely (~85% of the applicable spec test suite; images, raw
   HTML, and entity references are deliberately omitted), plus three extensions:
   GFM strikethrough, definition lists, and GitHub alerts (`> [!NOTE]` and
-  friends).
+  friends).  The structural glyphs it draws (bullet, quote bar, rules,
+  alert emoji) are *glyph roles* (`⦃bullet⦄`, …) resolved by the painting
+  `StyleSheet` — `markdown_defaults` for Unicode, `markdown_ascii_glyphs`
+  for ASCII — or by the `unicode_glyphs` / `ascii_glyphs` /
+  `glyphs_from_stylesheet` swap functions.
 
 * 🤖 **New module: [`big.stylesheet`](#bigstylesheet).**  The inline
   character-style layer: an `⦃role⦙text⦄` markup language and `StyleSheet`, a

@@ -254,15 +254,29 @@ def _parse_markup(s, delimiters):
 
 
 def _collect_style_runs(nodes, names, acc):
-    "Flatten parsed markup to (text_run, tuple_of_enclosing_span_names)."
+    """
+    Flatten parsed markup to (piece, tuple_of_enclosing_span_names).
+    A piece is a str text run, or a zero-arg _Span (a span with no
+    fields) -- treated as a single character, so it survives split and
+    join like ordinary content instead of vanishing (it has no text).
+    """
     for node in nodes:
         if isinstance(node, str):
+            acc.append((node, tuple(names)))
+        elif not node.fields:          # a zero-arg span: one character
             acc.append((node, tuple(names)))
         else:                          # a _Span: descend carrying its name
             names.append(node.name)
             for field in node.fields:
                 _collect_style_runs(field, names, acc)
             names.pop()
+
+
+def _inner_markup(piece):
+    "A collected run as final inner markup: text re-escaped, a zero-arg span verbatim."
+    if isinstance(piece, str):
+        return escape_styles(piece)    # _parse_markup unquoted it
+    return style(piece.name)           # ⦃name⦄, a character, kept as-is
 
 
 @export
@@ -284,6 +298,12 @@ def split_styles(s):
     _collect_style_runs(_parse_markup(s, style_delimiters), [], acc)
     out = []
     for run, names in acc:
+        if not isinstance(run, str):           # a zero-arg span: one verbatim word
+            word = style(run.name)
+            for name in reversed(names):
+                word = style(name, word)
+            out.append(word)
+            continue
         for word, gap in _multisplit(run, keep=True, separate=False, strip=False):
             if word:
                 word = escape_styles(word)     # _parse_markup unquoted it
@@ -312,7 +332,10 @@ def join_styles(s):
     """
     runs = []
     _collect_style_runs(_parse_markup(s, style_delimiters), [], runs)
-    runs = [[text, stack] for text, stack in runs]
+    # normalize each piece to final inner markup up front (escape literal
+    # text, keep a zero-arg span verbatim), so coalescing is plain string
+    # concatenation and a zero-arg span rides along as a character.
+    runs = [[_inner_markup(piece), stack] for piece, stack in runs]
     # promote a spaces/tabs-only plain gap to its neighbors' stack when
     # they match, so the gap joins the two spans instead of splitting them
     for i, run in enumerate(runs):
@@ -332,8 +355,7 @@ def join_styles(s):
             out.append([text, stack])
     pieces = []
     for text, stack in out:
-        text = escape_styles(text)     # _parse_markup unquoted it
-        for name in reversed(stack):   # inner span first
+        for name in reversed(stack):   # inner span first; text is already markup
             text = style(name, text)
         pieces.append(text)
     return ''.join(pieces)

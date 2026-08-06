@@ -63,14 +63,40 @@ from big.stylesheet import escape_styles as _escape
 from big.stylesheet import strip_styles as _strip_styles
 from big.stylesheet import StyleSheet as _StyleSheet
 
-# the glyph that leads each alert's title (✴ is U+2734, a starburst).
-_alert_emoji = {
-    'note':      'ℹ️',
-    'tip':       '💡',
-    'important': '✴',
-    'warning':   '⚠️',
-    'caution':   '🛑',
-}
+# The glyphs layout_document draws -- bullet, quote bar, rules, alert
+# emoji -- are emitted as zero-arg style roles (⦃bullet⦄, ⦃note_emoji⦄,
+# ...), NOT baked characters.  A StyleSheet that defines these roles
+# resolves them: markdown_defaults gives the Unicode glyphs,
+# markdown_ascii_glyphs the ASCII ones.  unicode_glyphs / ascii_glyphs
+# (built from those sheets, below) swap the markup for characters when
+# you aren't rendering against such a sheet.
+_glyph_roles = ('bullet', 'quote_bar', 'thematic_break',
+                'heading1_rule', 'heading2_rule',
+                'note_emoji', 'tip_emoji', 'important_emoji',
+                'warning_emoji', 'caution_emoji')
+
+
+def glyphs_from_stylesheet(stylesheet):
+    """
+    Return a function that replaces big.markdown's glyph markup with
+    whatever `stylesheet` renders each glyph role to.
+
+    Use it to measure glyph widths (as wrap_words' raw=) against the very
+    sheet you'll render with, or to bake a custom glyph set.  The sheet
+    must define the glyph roles (markdown_defaults does).
+    """
+    swaps = {_style_span(role): stylesheet.render(_style_span(role))
+             for role in _glyph_roles}
+    def swap(s):
+        for markup, glyph in swaps.items():
+            s = s.replace(markup, glyph)
+        return s
+    return swap
+
+
+def _visible(markup):
+    "The visible width of glyph/style markup: glyphs resolved, styling stripped."
+    return len(_strip_styles(unicode_glyphs(markup)))
 
 
 #
@@ -1376,7 +1402,8 @@ def split_styles_document(document):
 # is a loud error, not a silent pass-through (no _default here on
 # purpose).  All do-nothing except `codeblock`, which inherits `code`.
 # The low-level attribute/color roles (bold, red, ...) come from a
-# backend map.  Compose UNDER a theme:  markdown_defaults | theme | ansi_256
+# backend map.  Compose UNDER a theme:  markdown_defaults | theme | ansi_256_color_palette
+# --8<-- start big markdown defaults --8<--
 markdown_defaults = _StyleSheet({
     'heading1':   ('T', 'T'),
     'heading2':   ('T', 'T'),
@@ -1405,7 +1432,41 @@ markdown_defaults = _StyleSheet({
     'heading_warning':   ('T', '⦃heading2⦙⦃orange⦙T⦄⦄'),
     'caution':           ('T', '⦃red⦙T⦄'),
     'heading_caution':   ('T', '⦃heading2⦙⦃red⦙T⦄⦄'),
+    # the glyphs layout_document draws, as zero-arg roles (Unicode by
+    # default; ascii_glyphs()/unicode_glyphs() swap them without a sheet)
+    'bullet':          ('•',),
+    'quote_bar':       ('│ ',),
+    'thematic_break':  ('─',),
+    'heading1_rule':   ('=',),
+    'heading2_rule':   ('-',),
+    'note_emoji':      ('ℹ️',),
+    'tip_emoji':       ('💡',),
+    'important_emoji': ('✴',),
+    'warning_emoji':   ('⚠️',),
+    'caution_emoji':   ('🛑',),
 })
+
+# the same glyph roles, in ASCII -- for terminals (or pipes) that can't
+# show the Unicode glyphs.  Only the glyph roles; compose over a palette
+# for the rest, or resolve with ascii_glyphs().
+markdown_ascii_glyphs = _StyleSheet({
+    'bullet':          ('*',),
+    'quote_bar':       ('| ',),
+    'thematic_break':  ('-',),
+    'heading1_rule':   ('=',),
+    'heading2_rule':   ('-',),
+    'note_emoji':      ('(i)',),
+    'tip_emoji':       ('(*)',),
+    'important_emoji': ('(!)',),
+    'warning_emoji':   ('/!\\',),
+    'caution_emoji':   ('(x)',),
+})
+# --8<-- end big markdown defaults --8<--
+
+# the two stock glyph swappers, built from the sheets above (these are
+# big-side helpers, deliberately NOT in the snippet).
+unicode_glyphs = glyphs_from_stylesheet(markdown_defaults)
+ascii_glyphs = glyphs_from_stylesheet(markdown_ascii_glyphs)
 
 
 #
@@ -1483,7 +1544,7 @@ def _layout_block(block, lead, rest, out):
         if block.level > 2:                  # H3..H6: styled text, no rule
             out.extend(words)
             return
-        glyph = _style_span(f'heading{block.level}', '=' if block.level == 1 else '-')
+        glyph = _style_span(f'heading{block.level}', _style_span(f'heading{block.level}_rule'))
         if block.level == 1:                 # H1: a rule above and below
             out.append(('fill next', '', glyph, ''))
             out.append('\n')
@@ -1494,7 +1555,7 @@ def _layout_block(block, lead, rest, out):
         return
     if isinstance(block, ThematicBreak):
         out.append(('indent', lead, rest))
-        out.append(('fill margin', '', _style_span('rule', '─'), ''))
+        out.append(('fill margin', '', _style_span('rule', _style_span('thematic_break')), ''))
         return
     if isinstance(block, CodeBlock):
         out.append(('indent', lead + _CODE_INDENT, rest + _CODE_INDENT))
@@ -1504,12 +1565,12 @@ def _layout_block(block, lead, rest, out):
             out.append(line)                 # a code line is one verbatim word
         return
     if isinstance(block, BlockQuote):
-        bar = _style_span('blockquote', '│ ')
+        bar = _style_span('blockquote', _style_span('quote_bar'))
         _layout_blocks(block.blocks, lead + bar, rest + bar, False, out)
         return
     if isinstance(block, Alert):
-        bar = _style_span(block.kind, '│ ')
-        title = _alert_emoji[block.kind] + ' ' + block.kind.capitalize()
+        bar = _style_span(block.kind, _style_span('quote_bar'))
+        title = _style_span(block.kind + '_emoji') + ' ' + block.kind.capitalize()
         out.append(('indent', lead + bar, rest + bar))
         out.append(_style_span('heading_' + block.kind, title))
         out.append('\n')
@@ -1541,15 +1602,16 @@ def _layout_list(list_node, ordered, lead, rest, out):
         markers = [f'{list_node.start + index}{list_node.delimiter}'
                    for index in range(len(list_node.items))]
     else:
-        markers = ['•'] * len(list_node.items)
-    marker_width = max((len(m) for m in markers), default=0)
+        markers = [_style_span('bullet')] * len(list_node.items)
+    widths = [_visible(marker) for marker in markers]
+    marker_width = max(widths, default=0)
     pad = rest + (' ' * (marker_width + 1))
     separator = '\n' if list_node.tight else '\n\n'
     for index, item in enumerate(list_node.items):
         if index:
             out.append(separator)
         marker = markers[index]
-        align = ' ' * (marker_width - len(marker))
+        align = ' ' * (marker_width - widths[index])
         glyph = _style_span('marker', marker)
         if not item.blocks:                  # empty item: just the marker
             out.append(('indent', lead + align, pad))
@@ -1871,5 +1933,6 @@ __all__ = [
     'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
     # parser + renderers
     'parse', 'style_document', 'split_styles_document', 'layout_document',
-    'render_document', 'markdown_defaults',
+    'render_document', 'markdown_defaults', 'markdown_ascii_glyphs',
+    'unicode_glyphs', 'ascii_glyphs', 'glyphs_from_stylesheet',
 ]

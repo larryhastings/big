@@ -42,26 +42,30 @@ from big.text import wrap_words
 
 # The terminal pipeline: parse -> style -> split -> layout_document ->
 # wrap_words -> join_styles -> a StyleSheet.  These helpers drive it the
-# way callers do; width=0 means "no maximum" (an enormous margin).
+# way callers do; width=0 means "no maximum" (an enormous margin).  The
+# glyphs layout draws are markup now (⦃bullet⦄, ...), so the wrap-time
+# raw= must resolve them (via unicode_glyphs) to measure visible width,
+# and plain output resolves them too.
 _NO_MAX = 2 ** 31
 
-def _pipeline(md, width):
+def _pipeline(md, width, glyphs=unicode_glyphs):
     layout = layout_document(split_styles_document(style_document(parse(md))))
     if not layout:
         return ''
     margin = _NO_MAX if width == 0 else width
-    return join_styles(wrap_words(layout, margin=margin, raw=strip_styles))
+    raw = lambda w: strip_styles(glyphs(w))
+    return join_styles(wrap_words(layout, margin=margin, raw=raw))
 
 def _rstrip(text):
     return '\n'.join(line.rstrip() for line in text.split('\n'))
 
 def markup(md, width=79):
-    "the laid-out span markup, before a StyleSheet paints it"
+    "the laid-out span markup, before glyphs are resolved or a sheet paints it"
     return _rstrip(_pipeline(md, width))
 
-def render(md, width=79):
-    "plain terminal text, with the markup stripped back out"
-    return _rstrip(plain_stylesheet.render(_pipeline(md, width)))
+def render(md, width=79, glyphs=unicode_glyphs):
+    "plain terminal text: glyphs resolved, styling markup stripped out"
+    return _rstrip(strip_styles(glyphs(_pipeline(md, width, glyphs))))
 
 
 #
@@ -636,11 +640,12 @@ def test_styled_wrapping_measures_visible_width():
            render("The quick brown fox jumps\n", 15)
 
 def test_glyphs_wear_their_roles():
-    # stripped to plain, markers and rules are their bare glyphs
+    # resolved to plain (unicode), markers and rules are their glyphs
     assert render("# Hi\n\n- a\n") == "==\nHi\n==\n\n• a"
-    # in the markup, the heading rule and the list marker wear their roles
+    # in the markup, glyphs are their own roles, wrapped in a styling role
     out = markup("# Hi\n\n- a\n")
-    assert '⦃heading1⦙==⦄' in out and '⦃marker⦙•⦄' in out
+    assert '⦃marker⦙⦃bullet⦄⦄' in out                 # bullet under marker
+    assert '⦃heading1⦙⦃heading1_rule⦄' in out          # rule under heading1
 
 def test_structural_roles():
     # code blocks wear `codeblock` (distinct from inline `code`)
@@ -650,9 +655,12 @@ def test_structural_roles():
     # a definition-list term wears `term`
     term = style_document(parse("word\n: a def\n")).blocks[0].entries[0].term
     assert term == Term([Text('⦃term⦙word⦄')])
-    # the quote bar and the thematic-break rule wear their roles
-    assert markup("> hi\n", 20) == "⦃blockquote⦙│ ⦄hi"
-    assert "⦃rule⦙──────⦄" in markup("a\n\n---\n", 6)
+    # the quote bar and the thematic-break rule wear their roles, as glyphs
+    assert markup("> hi\n", 20) == "⦃blockquote⦙⦃quote_bar⦄⦄hi"
+    assert "⦃rule⦙⦃thematic_break⦄" in markup("a\n\n---\n", 6)
+    # and they resolve to their characters
+    assert render("> hi\n", 20) == "│ hi"
+    assert render("a\n\n---\n", 6) == "a\n\n──────"
 
 def test_render_troff():
     # inline: strong -> \fB, inline code -> \fB, hyphens -> \- for man
@@ -703,11 +711,15 @@ def test_alerts():
     assert isinstance(parse("> [!Note]\n> x\n").blocks[0], BlockQuote)
     assert isinstance(parse("> [!warning]\n> hi\n").blocks[0], BlockQuote)
     assert isinstance(parse("> [!FOO]\n> hi\n").blocks[0], BlockQuote)
-    # styled: a heading_<kind> title (emoji + kind) + a per-line <kind> bar
+    # styled: a heading_<kind> title (emoji + kind) + a per-line <kind> bar,
+    # the bar and emoji as glyph roles
     out = markup("> [!TIP]\n> do this\n", 40)
-    assert out == "⦃tip⦙│ ⦄⦃heading_tip⦙💡 Tip⦄\n⦃tip⦙│ ⦄do this"
-    # unstyled stays plain
+    assert out == ("⦃tip⦙⦃quote_bar⦄⦄⦃heading_tip⦙⦃tip_emoji⦄ Tip⦄\n"
+                   "⦃tip⦙⦃quote_bar⦄⦄do this")
+    # resolved to plain
     assert render("> [!TIP]\n> do this\n", 40) == "│ 💡 Tip\n│ do this"
+    # ascii glyphs, if that's what you resolve with
+    assert render("> [!TIP]\n> do this\n", 40, glyphs=ascii_glyphs) == "| (*) Tip\n| do this"
 
 def test_alert_role_defaults():
     sheet = markdown_defaults | StyleSheet({
@@ -742,9 +754,11 @@ def test_style_pipeline_two_layer_theme():
     sheet = low | theme
     md = "# Hi\n\nsome **bold** and `c` and [x](u)\n\n- a\n"
 
-    # the whole pipeline: parse -> style -> split -> layout -> wrap -> join -> paint
+    # the whole pipeline: parse -> style -> split -> layout -> wrap -> join
+    # -> resolve glyphs -> paint (the theme doesn't define glyph roles, so
+    # resolve them to characters first)
     def paint(with_sheet):
-        return with_sheet.render(_pipeline(md, 0))
+        return with_sheet.render(unicode_glyphs(_pipeline(md, 0)))
 
     out = paint(sheet)
     assert '[b][c]Hi[/c][/b]' in out                 # heading: bold + color
@@ -755,6 +769,19 @@ def test_style_pipeline_two_layer_theme():
     # recolors -- because the high-level roles compose onto it
     recolored = paint(sheet | StyleSheet({'header_color': ('T', '[C]T[/C]')}))
     assert '[b][C]Hi[/C][/b]' in recolored and '[C]•[/C] a' in recolored
+
+def test_glyph_swappers():
+    # unicode_glyphs / ascii_glyphs swap glyph markup for characters, and
+    # leave everything else (including other markup) alone
+    assert unicode_glyphs('⦃bullet⦄ ⦃note_emoji⦄ ⦃quote_bar⦄') == '• ℹ️ │ '
+    assert ascii_glyphs('⦃bullet⦄ ⦃note_emoji⦄ ⦃quote_bar⦄') == '* (i) | '
+    assert unicode_glyphs('⦃bold⦙x⦄') == '⦃bold⦙x⦄'
+    # they're just glyphs_from_stylesheet applied to the two stock sheets
+    assert unicode_glyphs('⦃bullet⦄') == markdown_defaults.render('⦃bullet⦄')
+    assert ascii_glyphs('⦃bullet⦄') == markdown_ascii_glyphs.render('⦃bullet⦄')
+    # glyphs_from_stylesheet derives a swapper from any sheet
+    swap = glyphs_from_stylesheet(markdown_ascii_glyphs)
+    assert swap('⦃thematic_break⦄') == '-'
 
 
 def run_tests(run=None):
