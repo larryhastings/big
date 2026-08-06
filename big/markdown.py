@@ -35,16 +35,19 @@ Two halves:
   * style_document(document) bakes `⦃role⦙…⦄` markup into the IR's text;
   * split_styles_document(document) splits each span to word granularity
     (so wrapping can't tear one);
-  * render_terminal(document) lays the IR out as text for a terminal; and
-  * render_troff(document) renders the IR to groff `man`-macro troff.
+  * layout_document(document) lays the IR out as a width-independent
+    "layout" for wrap_words; and
+  * render_document(document, format) renders the IR to GitHub-flavored
+    Markdown, CommonMark, or groff `man`-macro troff.
 
-For the terminal path, join_styles() coalesces the per-line markup and
-a big.template StyleSheet paints it (or plain_stylesheet strips it):
+For the terminal path, wrap_words fits the layout to a width, join_styles
+coalesces the per-line markup, and a big.stylesheet StyleSheet paints it
+(or plain_stylesheet strips it):
 
-    parse -> style_document -> split_styles_document
-          -> render_terminal -> join_styles -> stylesheet.render
+    parse -> style_document -> split_styles_document -> layout_document
+          -> wrap_words -> join_styles -> stylesheet.render
 
-render_troff is a separate back end over the raw parse() IR.
+render_document is a separate family of back ends over the raw parse() IR.
 
 The IR carries what the renderer draws, plus a Raw node so anything
 outside the subset (a table, raw HTML) survives to be degraded
@@ -52,30 +55,13 @@ rather than dropped.  Stdlib-only, and Python 3.6-clean.
 """
 
 import re
-import shutil
 
-from big.text import split_text_with_code as _split_text
-from big.text import wrap_words as _wrap_words
-from big.template import style as _style_span
-from big.template import style_delimiters as _style_delims
-from big.template import plain_stylesheet as _plain_sheet
-from big.template import split_styles as _split_styles
-from big.template import escape_styles as _escape
-from big.template import StyleSheet as _StyleSheet
-
-# strip `⦃role⦙…⦄` markup back to plain text (the raw callback for
-# wrap_words, so styled words measure by their visible width).  Stays
-# fail-soft: unstyled text carrying a literal, unquoted delimiter isn't
-# markup, so measure it as-is rather than letting the loud parser raise.
-def _strip_markup(word):
-    try:
-        return _plain_sheet.render(word)
-    except ValueError:
-        return word
-
-# width=0 asks render_terminal for no maximum; a margin this wide
-# means wrap_words never wraps.
-_NO_MAX_WIDTH = 2 ** 31
+from big.stylesheet import style as _style_span
+from big.stylesheet import style_delimiters as _style_delims
+from big.stylesheet import split_styles as _split_styles
+from big.stylesheet import escape_styles as _escape
+from big.stylesheet import strip_styles as _strip_styles
+from big.stylesheet import StyleSheet as _StyleSheet
 
 # the glyph that leads each alert's title (✴ is U+2734, a starburst).
 _alert_emoji = {
@@ -139,17 +125,6 @@ class Node:
 class Document(Node):
     "The whole parsed document: a list of block nodes."
     __slots__ = ('blocks',)
-    _fields = ('blocks',)
-
-
-class StyledDocument(Document):
-    """
-    A Document that has been through style_document (its text carries
-    role markup).  render_terminal checks for this type -- not the
-    text -- so it knows to style the glyphs it draws (list markers,
-    heading rules, quote bars) even when the prose itself is unstyled.
-    """
-    __slots__ = ()
     _fields = ('blocks',)
 
 
@@ -1275,7 +1250,7 @@ def _parse_paragraph(lines, i, refs):
 # `⦃role⦙…⦄` markup: Strong -> bold, Emph -> italic, Strikethrough ->
 # strikethrough, Code -> code, Link -> link, and a Heading's text is
 # wrapped in heading1..heading6 by level.  The block STRUCTURE is
-# preserved (it's still a Document), so render_terminal can lay it
+# preserved (it's still a Document), so layout_document can lay it
 # out; the generated glyphs it draws (list markers, heading rules)
 # are styled there, not here, since they aren't text of any node.
 #
@@ -1344,7 +1319,7 @@ def _style_block(block):
     if isinstance(block, DefinitionList):
         return DefinitionList([_style_entry(entry) for entry in block.entries])
     if isinstance(block, CodeBlock):
-        # style each line on its own -- render_terminal splits the block
+        # style each line on its own -- layout_document splits the block
         # at newlines to indent it, so a whole-block span would tear.
         # The whole line (its own indentation included) rides in `code`.
         lines = [_style_span('codeblock', _escape(line)) if line else line
@@ -1366,10 +1341,10 @@ def style_document(document):
     Return a copy of `document` with styling markup baked into its
     text -- each inline run wrapped in its role and each heading in
     heading1..heading6.  The result is still an IR; feed it to
-    render_terminal to lay out, then to a StyleSheet to paint (or
+    layout_document to lay out, then to a StyleSheet to paint (or
     to plain_stylesheet to strip the markup back out).
     """
-    return StyledDocument(_style_blocks(document.blocks))
+    return Document(_style_blocks(document.blocks))
 
 
 def _map_style_text(node):
@@ -1388,10 +1363,10 @@ def _map_style_text(node):
 def split_styles_document(document):
     """
     Return a copy of a styled document with every span split to word
-    granularity (see big.template.split_styles) -- built on top of it,
-    applied to each node's text.  This lets render_terminal wrap lines
+    granularity (see big.stylesheet.split_styles) -- built on top of it,
+    applied to each node's text.  This lets wrap_words wrap lines
     without tearing a span; run it after style_document, before
-    render_terminal.  join_styles undoes it on the laid-out text.
+    the layout.  join_styles undoes it on the laid-out text.
     """
     return _map_style_text(document)
 
@@ -1434,39 +1409,154 @@ markdown_defaults = _StyleSheet({
 
 
 #
-# The renderer: IR -> text fitted to a terminal width.
+# The terminal layout: IR -> a "layout" for wrap_words.
 #
-# It lays out the structure -- the wrapping (through big's trio),
-# and the list / blockquote / code geometry -- as plain text.  The
-# structural glyphs (the bullet, the quote bar, the code indent,
-# the thematic-break rule) are permanent layout, present in every
-# mode; only ANSI color and bold are deferred to a later pass.
+# layout_document lays the block structure out as a flat tuple of
+# words and instructions -- markers, quote bars, code indents, and
+# heading/thematic rules become ('indent', ...) prefixes and
+# ('fill ...', ...) rules -- WITHOUT committing to a width.  It's the
+# width-independent half; wrap_words fits it to a terminal later,
+# then join_styles and a StyleSheet paint or strip it:
+#
+#     wrap_words(layout, margin=width, raw=strip_styles)
+#         -> join_styles -> stylesheet.render
+#
+# The structural glyphs it draws always carry their role markup (a
+# marker, a bar, a rule); painting them plain is plain_stylesheet's
+# job, not a mode here.
 #
 
-def render_terminal(document, width=None):
-    """
-    Lay a Document out as text for a terminal, honoring the block
-    geometry (hanging indents, list markers, heading rules, quote
-    bars) and wrapping prose to `width`.
+_CODE_INDENT = '    '
 
-    width=None (the default) uses the current terminal's width, or 79
-    if there's no terminal; width=0 imposes no maximum line width.
 
-    Any `⦃role⦙…⦄` styling markup already in the IR (see style()) is
-    carried through untouched; paint it with a StyleSheet's render(),
-    or strip it with plain_stylesheet.
+def _flow_words(children):
+    "Styled inline nodes -> words, with '\\n' for each hard break."
+    words = []
+    for node in children:
+        if isinstance(node, HardBreak):
+            words.append('\n')
+        elif isinstance(node, Text):
+            words.extend(node.text.split())
+    return words
+
+
+def layout_document(document):
     """
-    if width is None:
-        width = shutil.get_terminal_size((79, 24)).columns
-    elif width == 0:
-        width = _NO_MAX_WIDTH
-    # a StyledDocument (from style_document) means the glyphs
-    # render_terminal generates -- markers, heading rules, quote bars,
-    # the thematic rule -- get their roles too; a plain Document stays
-    # plain, even if its prose happens to contain a literal delimiter.
-    styled = isinstance(document, StyledDocument)
-    lines = _render_blocks(document.blocks, width, styled)
-    return '\n'.join(line.rstrip() for line in lines)
+    Lay a styled, split Document out as a "layout": a flat tuple of
+    words and wrap_words instructions, ready to fit to any width.
+
+    The document must have been through style_document (so its text
+    carries `⦃role⦙…⦄` markup) and split_styles_document (so a line
+    break can't tear a span).  The layout is width-independent -- build
+    it once, then at render time:
+
+        wrap_words(layout, margin=width, raw=strip_styles)
+
+    and pass the result through join_styles and a StyleSheet's render
+    (or plain_stylesheet, to strip the markup back to plain text).
+    """
+    out = []
+    _layout_blocks(document.blocks, '', '', False, out)
+    return tuple(out)
+
+
+def _layout_blocks(blocks, lead, rest, tight, out):
+    # Lay a run of blocks into `out`.  The first block wears `lead` on
+    # its first line (a list marker, say); every other block, and every
+    # continuation line, wears `rest`.  Blocks are separated by a blank
+    # line unless the enclosing list is tight.
+    separator = '\n' if tight else '\n\n'
+    for index, block in enumerate(blocks):
+        if index:
+            out.append(separator)
+        _layout_block(block, lead if (index == 0) else rest, rest, out)
+
+
+def _layout_block(block, lead, rest, out):
+    if isinstance(block, Paragraph):
+        out.append(('indent', lead, rest))
+        out.extend(_flow_words(block.children))
+        return
+    if isinstance(block, Heading):
+        words = _flow_words(block.children)
+        out.append(('indent', lead, rest))
+        if block.level > 2:                  # H3..H6: styled text, no rule
+            out.extend(words)
+            return
+        glyph = _style_span(f'heading{block.level}', '=' if block.level == 1 else '-')
+        if block.level == 1:                 # H1: a rule above and below
+            out.append(('fill next', '', glyph, ''))
+            out.append('\n')
+            out.append(('indent', lead, rest))
+        out.extend(words)
+        out.append('\n')
+        out.append(('fill previous', '', glyph, ''))
+        return
+    if isinstance(block, ThematicBreak):
+        out.append(('indent', lead, rest))
+        out.append(('fill margin', '', _style_span('rule', '─'), ''))
+        return
+    if isinstance(block, CodeBlock):
+        out.append(('indent', lead + _CODE_INDENT, rest + _CODE_INDENT))
+        for index, line in enumerate(block.text.split('\n')):
+            if index:
+                out.append('\n')
+            out.append(line)                 # a code line is one verbatim word
+        return
+    if isinstance(block, BlockQuote):
+        bar = _style_span('blockquote', '│ ')
+        _layout_blocks(block.blocks, lead + bar, rest + bar, False, out)
+        return
+    if isinstance(block, Alert):
+        bar = _style_span(block.kind, '│ ')
+        title = _alert_emoji[block.kind] + ' ' + block.kind.capitalize()
+        out.append(('indent', lead + bar, rest + bar))
+        out.append(_style_span('heading_' + block.kind, title))
+        out.append('\n')
+        _layout_blocks(block.blocks, rest + bar, rest + bar, False, out)
+        return
+    if isinstance(block, BulletList):
+        _layout_list(block, False, lead, rest, out)
+        return
+    if isinstance(block, OrderedList):
+        _layout_list(block, True, lead, rest, out)
+        return
+    if isinstance(block, DefinitionList):
+        _layout_deflist(block, lead, rest, out)
+        return
+    if isinstance(block, Raw):
+        out.append(('indent', lead, rest))
+        for index, line in enumerate(block.text.split('\n')):
+            if index:
+                out.append('\n')
+            out.append(line)
+        return
+
+
+def _layout_list(list_node, ordered, lead, rest, out):
+    # Right-align the markers so their bullets/periods share a column,
+    # then one space; every item's text -- first line and continuations
+    # -- starts at the next column.
+    if ordered:
+        markers = [f'{list_node.start + index}{list_node.delimiter}'
+                   for index in range(len(list_node.items))]
+    else:
+        markers = ['•'] * len(list_node.items)
+    marker_width = max((len(m) for m in markers), default=0)
+    pad = rest + (' ' * (marker_width + 1))
+    separator = '\n' if list_node.tight else '\n\n'
+    for index, item in enumerate(list_node.items):
+        if index:
+            out.append(separator)
+        marker = markers[index]
+        align = ' ' * (marker_width - len(marker))
+        glyph = _style_span('marker', marker)
+        if not item.blocks:                  # empty item: just the marker
+            out.append(('indent', lead + align, pad))
+            out.append(glyph)
+            continue
+        item_lead = lead + align + glyph + ' '
+        _layout_blocks(item.blocks, item_lead, pad, list_node.tight, out)
 
 
 def _flatten(nodes):
@@ -1482,134 +1572,28 @@ def _flatten(nodes):
     return ''.join(out)
 
 
-def _wrap(text, width):
-    "Flatten soft breaks, wrap prose to width, return lines."
-    text = text.replace('\n', ' ')
-    if not text.strip():
-        return []
-    # styled text arrives already word-split (split_styles_document), so
-    # tokenizing at whitespace yields balanced words; `raw` measures the
-    # visible width past the markup.
-    raw = _strip_markup if (_style_delims[0] in text) else None
-    return _wrap_words(_split_text(text, code_indent=0), margin=width,
-                       raw=raw).split('\n')
-
-
-def _render_blocks(blocks, width, styled, tight=False):
-    "Render a run of block nodes; a blank line between them unless tight."
-    out = []
-    for index, block in enumerate(blocks):
-        if index and not tight:
-            out.append('')
-        out.extend(_render_block(block, width, styled))
-    return out
-
-
-def _render_paragraph(children, width):
-    "Wrap a paragraph, honoring hard breaks: each segment wraps alone."
-    lines = []
-    segment = []
-    for node in children:
-        if isinstance(node, HardBreak):
-            lines.extend(_wrap(_flatten(segment), width) or [''])
-            segment = []
-        else:
-            segment.append(node)
-    lines.extend(_wrap(_flatten(segment), width))
-    return lines
-
-
-def _render_block(block, width, styled):
-    if isinstance(block, Paragraph):
-        return _render_paragraph(block.children, width)
-    if isinstance(block, Heading):
-        lines = _wrap(_flatten(block.children), width)
-        if block.level > 2:                  # H3..H6: styled text, no rule
-            return lines
-        # H1 gets a `=` rule above and below, H2 a `-` rule below; the
-        # rule matches the header TEXT width (measured past any markup),
-        # and wears the heading role when the document is styled.
-        rule_width = max((len(_strip_markup(line)) for line in lines), default=0)
-        rule = ('=' if block.level == 1 else '-') * rule_width
-        if styled:
-            rule = _style_span(f'heading{block.level}', rule)
-        return [rule, *lines, rule] if block.level == 1 else [*lines, rule]
-    if isinstance(block, ThematicBreak):
-        rule = '─' * width
-        return [_style_span('rule', rule) if styled else rule]
-    if isinstance(block, CodeBlock):
-        return ['    ' + line for line in block.text.split('\n')]
-    if isinstance(block, BlockQuote):
-        bar = _style_span('blockquote', '│ ') if styled else '│ '
-        return [bar + line for line in _render_blocks(block.blocks, max(1, width - 2), styled)]
-    if isinstance(block, Alert):
-        # a titled callout: a bar on every line (colored by kind), and a
-        # heading_<kind> title line above the body.
-        title = _alert_emoji[block.kind] + ' ' + block.kind.capitalize()
-        inner = _render_blocks(block.blocks, max(1, width - 2), styled)
-        if styled:
-            bar = _style_span(block.kind, '│ ')
-            head = bar + _style_span('heading_' + block.kind, title)
-        else:
-            bar, head = '│ ', '│ ' + title
-        return [head] + [bar + line for line in inner]
-    if isinstance(block, BulletList):
-        return _render_list(block, width, False, styled)
-    if isinstance(block, OrderedList):
-        return _render_list(block, width, True, styled)
-    if isinstance(block, DefinitionList):
-        return _render_deflist(block, width, styled)
-    if isinstance(block, Raw):
-        return block.text.split('\n')
-    return []
-
-
-def _render_list(list_node, width, ordered, styled):
-    # Right-align the markers within this one contiguous list, so the
-    # periods (or bullets) share a column, then one space, then every
-    # item's text -- and every wrapped/continuation line -- shares the
-    # next column.  No raggedness, no marker-width backward-jut.
-    if ordered:
-        markers = [f'{list_node.start + index}{list_node.delimiter}' for index in range(len(list_node.items))]
-    else:
-        markers = ['•'] * len(list_node.items)
-    marker_width = max((len(m) for m in markers), default=0)
-    text_col = marker_width + 1          # widest marker, plus one space
-    pad = ' ' * text_col
-    out = []
-    for index, item in enumerate(list_node.items):
-        marker = markers[index]
-        glyph = _style_span('marker', marker) if styled else marker
-        # right-align on the PLAIN marker width, then style the glyph
-        prefix = (' ' * (marker_width - len(marker))) + glyph + ' '
-        inner = _render_blocks(item.blocks, max(1, width - text_col), styled, list_node.tight)
-        if not inner:
-            item_lines = [prefix.rstrip()]
-        else:
-            item_lines = [(prefix if j == 0 else pad) + line
-                          for j, line in enumerate(inner)]
-        if index and not list_node.tight:
-            out.append('')
-        out.extend(item_lines)
-    return out
-
-
-def _render_deflist(dl, width, styled):
-    out = []
-    for index, entry in enumerate(dl.entries):
-        if index:
-            out.append('')
-        out.extend(_wrap(_flatten(entry.term.children), width))
+def _layout_deflist(dl, lead, rest, out):
+    # A definition list can't be laid out here: its detail column
+    # depends on the runtime width (see deflist.layout.proposal.md), so
+    # it rides into wrap_words structurally, bracketed by 'def start'
+    # and 'def end', one ('term', ...) per entry followed by the words
+    # and blocks of its details.  wrap_words measures the terms, picks
+    # the column, and lays each entry out against the real width.
+    out.append(('indent', lead, rest))
+    out.append(('def start',))
+    for entry in dl.entries:
+        out.append(('term', *_flow_words(entry.term.children)))
+        definitions = []
         for definition in entry.definitions:
-            inner = _render_blocks(definition.blocks, max(1, width - 4), styled)
-            out.extend('    ' + line for line in inner)
-    return out
+            definitions.extend(definition.blocks)
+        _layout_blocks(definitions, '', '', False, out)
+    out.append(('def end',))
 
 
 #
 # The troff renderer: IR -> groff `man` macros, for a man page.
 #
-# A back end alongside render_terminal, but simpler: troff does its own
+# A back end alongside layout_document, but simpler: troff does its own
 # line-filling and font handling, so there's no width math and no
 # StyleSheet -- it walks the (unstyled) parse() IR and emits macros.
 # It produces the man-page BODY (the .SH sections); the caller supplies
@@ -1727,17 +1711,151 @@ def _troff_blocks(blocks):
     return out
 
 
-def render_troff(document):
-    """
-    Render a Document to groff `man`-macro troff -- the BODY of a man
-    page (`.SH`/`.SS` sections, `.TP` for definition lists, `.IP` for
-    lists, `.EX`/`.EE` for code, `\\fB`/`\\fI` for strong/emphasis).
-    The caller prepends the `.TH name section date ...` header.
+#
+# The Markdown back ends: IR -> GitHub-flavored or CommonMark Markdown.
+#
+# One serializer, parameterized by `gfm`.  The flavors differ only
+# where big's extensions have no native form in the target:
+#
+#   strikethrough   gfm: ~~x~~        commonmark: dropped to plain text
+#   alert           gfm: > [!KIND]    commonmark: > **Kind** blockquote
+#   definition list gfm: <dl> HTML    commonmark: **term** + > details
+#
+# Everything else is ordinary CommonMark, which GFM is a superset of.
+#
 
-    Call it on the raw `parse(text)` IR, not on `style_document`
-    output -- it reads the structured inline nodes, not role markup.
+def _md_code_span(text):
+    "Wrap inline code in the shortest backtick run that clears its content."
+    ticks = '`'
+    while ticks in text:
+        ticks += '`'
+    if text and (text[0] == '`' or text[-1] == '`'):
+        return f'{ticks} {text} {ticks}'      # pad, so an edge backtick reads
+    return f'{ticks}{text}{ticks}'
+
+
+def _md_inline(nodes, gfm):
+    "Inline nodes -> a Markdown string."
+    out = []
+    for node in nodes:
+        if isinstance(node, Text):
+            out.append(node.text)
+        elif isinstance(node, Strong):
+            out.append('**' + _md_inline(node.children, gfm) + '**')
+        elif isinstance(node, Emph):
+            out.append('*' + _md_inline(node.children, gfm) + '*')
+        elif isinstance(node, Code):
+            out.append(_md_code_span(node.text))
+        elif isinstance(node, Strikethrough):
+            inner = _md_inline(node.children, gfm)
+            out.append(f'~~{inner}~~' if gfm else inner)   # commonmark: drop it
+        elif isinstance(node, Link):
+            inner = _md_inline(node.children, gfm)
+            if node.title:
+                out.append(f'[{inner}]({node.url} "{node.title}")')
+            else:
+                out.append(f'[{inner}]({node.url})')
+        elif isinstance(node, HardBreak):
+            out.append('  \n')
+    return ''.join(out)
+
+
+def _md_prefix(text, first, rest):
+    "Prefix the first line with `first` and every other line with `rest`."
+    lines = text.split('\n')
+    out = []
+    for index, line in enumerate(lines):
+        prefix = first if (index == 0) else rest
+        # a blank line keeps only the trimmed prefix (e.g. '>' not '> ')
+        out.append((prefix + line) if line else prefix.rstrip())
+    return '\n'.join(out)
+
+
+def _md_blocks(blocks, gfm):
+    "A run of blocks -> Markdown, a blank line between them."
+    return '\n\n'.join(_md_block(block, gfm) for block in blocks)
+
+
+def _md_deflist(dl, gfm):
+    if gfm:
+        # inline HTML, with a blank line after each open tag so the term
+        # and details are still parsed as Markdown ("the blank-line trick").
+        parts = ['<dl>']
+        for entry in dl.entries:
+            parts.append('<dt>\n\n' + _md_inline(entry.term.children, gfm) + '\n\n</dt>')
+            for definition in entry.definitions:
+                parts.append('<dd>\n\n' + _md_blocks(definition.blocks, gfm) + '\n\n</dd>')
+        parts.append('</dl>')
+        return '\n'.join(parts)
+    # CommonMark: a bold term, a hard break, then the details as a blockquote.
+    entries = []
+    for entry in dl.entries:
+        term = '**' + _md_inline(entry.term.children, gfm) + '**'
+        blocks = []
+        for definition in entry.definitions:
+            blocks.extend(definition.blocks)
+        entries.append(term + '  \n' + _md_prefix(_md_blocks(blocks, gfm), '> ', '> '))
+    return '\n\n'.join(entries)
+
+
+def _md_block(block, gfm):
+    if isinstance(block, Heading):
+        return '#' * block.level + ' ' + _md_inline(block.children, gfm)
+    if isinstance(block, Paragraph):
+        return _md_inline(block.children, gfm)
+    if isinstance(block, ThematicBreak):
+        return '---'
+    if isinstance(block, CodeBlock):
+        fence = '```'
+        while fence in block.text:
+            fence += '`'
+        return fence + block.info + '\n' + block.text + '\n' + fence
+    if isinstance(block, BlockQuote):
+        return _md_prefix(_md_blocks(block.blocks, gfm), '> ', '> ')
+    if isinstance(block, Alert):
+        body = _md_blocks(block.blocks, gfm)
+        if gfm:
+            head = f'[!{block.kind.upper()}]\n' + body
+            return _md_prefix(head, '> ', '> ')
+        title = '**' + block.kind.capitalize() + '**\n' + body
+        return _md_prefix(title, '> ', '> ')
+    if isinstance(block, (BulletList, OrderedList)):
+        ordered = isinstance(block, OrderedList)
+        pieces = []
+        for index, item in enumerate(block.items):
+            marker = f'{block.start + index}{block.delimiter} ' if ordered else '- '
+            pieces.append(_md_prefix(_md_blocks(item.blocks, gfm), marker, ' ' * len(marker)))
+        return ('\n' if block.tight else '\n\n').join(pieces)
+    if isinstance(block, DefinitionList):
+        return _md_deflist(block, gfm)
+    if isinstance(block, Raw):
+        return block.text
+    return ''
+
+
+def render_document(document, format):
     """
-    return '\n'.join(_troff_blocks(document.blocks))
+    Render a Document to text in one of three formats (no default):
+
+        'gfm'         GitHub-Flavored Markdown
+        'commonmark'  CommonMark (big's extensions degraded to plain
+                      CommonMark: no strikethrough, alert -> blockquote,
+                      definition list -> bold term + blockquote)
+        'troff'       groff `man`-macro troff, the BODY of a man page
+                      (`.SH`/`.SS`, `.TP`, `.IP`, `.EX`/`.EE`, `\\fB`);
+                      the caller prepends the `.TH ...` header.
+
+    Call it on the raw parse() IR, not on style_document output -- it
+    reads the structured inline nodes, not role markup.
+    """
+    if format == 'gfm':
+        return _md_blocks(document.blocks, True)
+    if format == 'commonmark':
+        return _md_blocks(document.blocks, False)
+    if format == 'troff':
+        return '\n'.join(_troff_blocks(document.blocks))
+    raise ValueError(
+        f"unknown format {format!r}; use 'gfm', 'commonmark', or 'troff'")
 
 
 # The full node vocabulary, for the parser/renderer to import and
@@ -1745,13 +1863,13 @@ def render_troff(document):
 __all__ = [
     'Node',
     # block
-    'Document', 'StyledDocument', 'Heading', 'Paragraph',
+    'Document', 'Heading', 'Paragraph',
     'BulletList', 'OrderedList', 'ListItem',
     'DefinitionList', 'DefinitionEntry', 'Term', 'Definition',
     'CodeBlock', 'BlockQuote', 'Alert', 'ThematicBreak', 'Raw',
     # inline
     'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
-    # parser + renderer
-    'parse', 'style_document', 'split_styles_document', 'render_terminal',
-    'render_troff', 'markdown_defaults',
+    # parser + renderers
+    'parse', 'style_document', 'split_styles_document', 'layout_document',
+    'render_document', 'markdown_defaults',
 ]

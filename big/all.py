@@ -93,6 +93,11 @@ __all__.append('state')
 from .state import *
 __all__.extend(state.__all__)
 
+from . import stylesheet
+__all__.append('stylesheet')
+from .stylesheet import *
+__all__.extend(stylesheet.__all__)
+
 from . import template
 __all__.append('template')
 from .template import *

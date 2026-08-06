@@ -2402,6 +2402,83 @@ def test_wrap_words_raw():
     bstrip = lambda w: w.replace(b'<b>', b'').replace(b'</b>', b'')
     assert big.wrap_words([b'<b>End.</b>', b'Next'], 40, raw=bstrip) == b'<b>End.</b>  Next'
 
+def test_wrap_words_instructions():
+    # a tuple in the stream is an instruction: ('indent', ...) switches
+    # the active prefix context; ('fill ...', initial, fill, trailing)
+    # draws a line.
+    w = big.wrap_words
+
+    # ('indent', first, rest) is the same as the indent= parameter fed
+    # at the front of the stream, and re-arms the first-line prefix
+    # every time it appears.
+    assert (w(['a', 'b', 'c'], 20, indent=('* ', '  '))
+            == w((('indent', '* ', '  '), 'a', 'b', 'c'), 20))
+    tight = (('indent', '* ', '  '), 'Bullet', 'one.', '\n',
+             ('indent', '* ', '  '), 'Bullet', 'two.')
+    assert w(tight, 12) == '* Bullet\n  one.\n* Bullet\n  two.'
+
+    # 'fill previous' fills to the width of the previous line; the fill
+    # string repeats and is clipped, the caps never are.
+    assert w(('abcde', '\n', ('fill previous', '', '[*]', '')), 40) == 'abcde\n[*][*'
+
+    # 'fill margin' fills to the margin, inside the active indent -- so
+    # a rule under a '| ' bar (width 2) leaves margin-2 fill characters.
+    assert w((('indent', '| ', '| '), ('fill margin', '', '-', '')), 10) == '| --------'
+
+    # 'fill next' looks ahead to the following line -- caps make a box.
+    box = (('fill next', '+', '-', '+'), '\n',
+           '|', 'important', 'heading', '|', '\n',
+           ('fill previous', '+', '-', '+'))
+    assert w(box, 80) == ('+-------------------+\n'
+                          '| important heading |\n'
+                          '+-------------------+')
+
+    # initial and trailing are never clipped, even past the target
+    assert w(('ab', '\n', ('fill previous', '<<<', '-', '>>>')), 40) == 'ab\n<<<>>>'
+
+    # an unknown instruction is a loud error
+    try:
+        w((('bogus', 'x'),), 40)
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+
+def test_wrap_words_deflist():
+    w = big.wrap_words
+
+    # the detail-column heuristic (see deflist.layout.proposal.md)
+    from big.text import _deflist_column
+    assert _deflist_column([5, 4, 4], 80) == (7, False)      # fit-everyone
+    assert _deflist_column([23, 10, 8], 80) == (25, False)   # fit-everyone, wider
+    assert _deflist_column([60] * 9 + [58], 80)[1] is True   # too wide -> tall
+
+    dl = lambda *body: (('indent', '', ''), ('def start',)) + body + (('def end',),)
+    entry = lambda term, *words: (('term', term), ('indent', '', ''), *words)
+
+    # compact: short terms share their line, all details at one column
+    compact = dl(*entry('serve', 'Start', 'the', 'server.'),
+                 *entry('stop', 'Stop', 'it.'))
+    assert w(compact, 60) == 'serve  Start the server.\nstop   Stop it.'
+
+    # tall: a narrow ribbon drops the term to its own line, details indented
+    assert w(dl(*entry('serve', 'Go.')), 20) == 'serve\n    Go.'
+
+    # a nested list inside the details lands at the detail column
+    nested = dl(('term', 'x'), ('indent', '• ', '  '), 'a', '\n',
+                ('indent', '• ', '  '), 'b')
+    assert w(nested, 40) == 'x  • a\n   • b'
+
+    # a term too wide for the column drops to its own line; the short
+    # siblings keep sharing theirs (the per-entry fallback).  Enough
+    # short terms that the 80th percentile lands on them, not the outlier.
+    names = ('aa', 'bb', 'cc', 'dd', 'ee', 'ff', 'gg', 'hh')
+    shorts = tuple(x for t in names for x in entry(t, 'short'))
+    long_entry = entry('this-is-a-very-long-term', 'desc')
+    got = w(dl(*shorts, *long_entry), 60).split('\n')
+    assert got[0] == 'aa  short'                     # short term shares
+    assert got[-2] == 'this-is-a-very-long-term'     # wide term on its own line
+    assert got[-1] == '    desc'                      # its details at the column
+
 def test_wrap_words_indent():
     def test(words, expected, margin=79, indent='', tab_width=8):
         got = big.wrap_words(words, margin, indent=indent, tab_width=tab_width)

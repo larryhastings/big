@@ -48,6 +48,7 @@ with test.suite() as run:
         test_scheduler
         test_snip
         test_state
+        test_stylesheet
         test_template
         test_text
         test_time

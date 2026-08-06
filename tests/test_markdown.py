@@ -36,7 +36,32 @@ from big.test import raises
 
 import big.markdown
 from big.markdown import *
-from big.template import StyleSheet, plain_stylesheet, join_styles
+from big.stylesheet import StyleSheet, plain_stylesheet, join_styles, strip_styles
+from big.text import wrap_words
+
+
+# The terminal pipeline: parse -> style -> split -> layout_document ->
+# wrap_words -> join_styles -> a StyleSheet.  These helpers drive it the
+# way callers do; width=0 means "no maximum" (an enormous margin).
+_NO_MAX = 2 ** 31
+
+def _pipeline(md, width):
+    layout = layout_document(split_styles_document(style_document(parse(md))))
+    if not layout:
+        return ''
+    margin = _NO_MAX if width == 0 else width
+    return join_styles(wrap_words(layout, margin=margin, raw=strip_styles))
+
+def _rstrip(text):
+    return '\n'.join(line.rstrip() for line in text.split('\n'))
+
+def markup(md, width=79):
+    "the laid-out span markup, before a StyleSheet paints it"
+    return _rstrip(_pipeline(md, width))
+
+def render(md, width=79):
+    "plain terminal text, with the markup stripped back out"
+    return _rstrip(plain_stylesheet.render(_pipeline(md, width)))
 
 
 #
@@ -152,7 +177,7 @@ def test_ordered_list_delimiter_preserved():
     # `.` and `)` are both kept and rendered as typed
     dot = parse("1. a\n2. b\n").blocks[0]
     assert dot.delimiter == '.'
-    assert render_terminal(parse("1) a\n2) b\n")) == "1) a\n2) b"
+    assert render("1) a\n2) b\n") == "1) a\n2) b"
     # switching the delimiter starts a NEW list (CommonMark)
     blocks = parse("1. a\n2) b\n").blocks
     assert [b.delimiter for b in blocks] == ['.', ')']
@@ -307,8 +332,8 @@ def test_hard_break_nodes():
     assert parse("a\nb\n").blocks[0] == Paragraph([Text('a\nb')])
 
 def test_hard_break_rendering():
-    assert render_terminal(parse("a  \nb\n"), width=40) == "a\nb"       # hard: forced
-    assert render_terminal(parse("a\nb\n"), width=40) == "a b"          # soft: reflowed
+    assert render("a  \nb\n", 40) == "a\nb"       # hard: forced
+    assert render("a\nb\n", 40) == "a b"          # soft: reflowed
 
 def test_backslash_escapes():
     assert parse(r"\*not italic\*" + "\n").blocks[0] == Paragraph([Text('*not italic*')])
@@ -512,48 +537,56 @@ def test_definition_lazy_continuation():
 #
 
 def test_render_paragraph_wraps():
-    assert render_terminal(parse("one two three four five\n"), width=13) == "one two three\nfour five"
+    assert render("one two three four five\n", 13) == "one two three\nfour five"
 
 def test_render_paragraphs_separated():
-    assert render_terminal(parse("a\n\nb\n"), width=20) == "a\n\nb"
+    assert render("a\n\nb\n", 20) == "a\n\nb"
 
 def test_render_bullet_list():
-    assert render_terminal(parse("- a\n- b\n"), width=20) == "• a\n• b"
+    assert render("- a\n- b\n", 20) == "• a\n• b"
 
 def test_render_ordered_from_start():
-    assert render_terminal(parse("3. c\n4. d\n"), width=20) == "3. c\n4. d"
+    assert render("3. c\n4. d\n", 20) == "3. c\n4. d"
 
 def test_render_ordered_right_aligned():
     # markers right-align within the list so the periods share a
     # column and the text shares the next-but-one column
-    assert render_terminal(parse("9. nine\n10. ten\n"), width=20) == " 9. nine\n10. ten"
+    assert render("9. nine\n10. ten\n", 20) == " 9. nine\n10. ten"
 
 def test_render_nested_tight():
-    assert render_terminal(parse("- outer\n  - inner\n"), width=20) == "• outer\n  • inner"
+    assert render("- outer\n  - inner\n", 20) == "• outer\n  • inner"
 
 def test_render_loose_has_blanks():
-    assert render_terminal(parse("- a\n\n- b\n"), width=20) == "• a\n\n• b"
+    assert render("- a\n\n- b\n", 20) == "• a\n\n• b"
 
 def test_render_code_block_indented():
-    assert render_terminal(parse("```\nx = 1\n```\n"), width=20) == "    x = 1"
+    assert render("```\nx = 1\n```\n", 20) == "    x = 1"
 
 def test_render_blockquote_prefixed():
-    assert render_terminal(parse("> hi there\n"), width=20) == "│ hi there"
+    assert render("> hi there\n", 20) == "│ hi there"
 
 def test_render_thematic_break():
-    assert render_terminal(parse("---\n"), width=5) == "─────"
+    assert render("---\n", 5) == "─────"
 
 def test_render_definition_list():
-    assert render_terminal(parse("term\n: def here\n"), width=20) == "term\n    def here"
+    # narrow terminal (thin ribbon) -> tall: term on its own line
+    assert render("term\n: def here\n", 20) == "term\n    def here"
+    # roomy terminal -> compact: the term shares its line with the details,
+    # all aligned at the detail column
+    compact = render("serve\n: Start it.\n\nstop\n: Stop it.\n", 60)
+    assert compact == "serve  Start it.\nstop   Stop it."
+    # a nested bullet list in the details lands at the detail column
+    nested = render("term\n: intro\n\n    - one\n    - two\n", 60)
+    assert nested == "term  intro\n\n      • one\n      • two"
 
 def test_render_hanging_wrap():
     # continuation of a wrapped item hangs under the item's text
-    out = render_terminal(parse("- word word word word\n"), width=12)
+    out = render("- word word word word\n", 12)
     assert out == "• word word\n  word word"
 
 
 #
-# Styling pipeline: parse -> style -> render_terminal -> StyleSheet.render
+# Styling pipeline: parse -> style -> split -> layout -> wrap -> join -> render
 #
 
 def test_style_bakes_role_markup():
@@ -567,7 +600,7 @@ def test_style_bakes_role_markup():
 
 def test_split_styles_document():
     # the IR->IR pass runs split_styles over every node's text, so a
-    # multi-word span becomes per-word (render_terminal won't tear it)
+    # multi-word span becomes per-word (wrapping won't tear it)
     doc = split_styles_document(style_document(parse("**one two three**\n")))
     assert doc.blocks[0] == Paragraph([Text('⦃bold⦙one⦄ ⦃bold⦙two⦄ ⦃bold⦙three⦄')])
     # it's a no-op on an unstyled document
@@ -582,10 +615,10 @@ def test_code_block_styled_per_line():
     # INSIDE the span; only the block-render indent stays plain
     doc = style_document(parse("```\n    x = 1\ny = 2\n```\n"))
     assert doc.blocks[0] == CodeBlock('⦃codeblock⦙    x = 1⦄\n⦃codeblock⦙y = 2⦄', '')
-    out = render_terminal(split_styles_document(doc), width=0)
+    out = markup("```\n    x = 1\ny = 2\n```\n", 0)
     assert out == "    ⦃codeblock⦙    x = 1⦄\n    ⦃codeblock⦙y = 2⦄"
-    # unstyled code stays plain (no markup)
-    assert render_terminal(parse("```\nx = 1\n```\n")) == "    x = 1"
+    # stripped back to plain, the block-render indent survives, the markup doesn't
+    assert render("```\nx = 1\n```\n") == "    x = 1"
 
 def test_stylesheet_delimiters_in_markdown_are_safe():
     # a docstring containing the StyleSheet delimiters must not crash the
@@ -593,25 +626,20 @@ def test_stylesheet_delimiters_in_markdown_are_safe():
     assert style_document(parse("x⦃y\n")).blocks[0] == Paragraph([Text('x⦃⦃y')])
     # and they round-trip back to themselves through the whole pipeline
     src = "use ⦃a⦙b⦄ here and **x ⦄ y**\n"
-    doc = split_styles_document(style_document(parse(src)))
-    painted = plain_stylesheet.render(join_styles(render_terminal(doc, width=0)))
+    painted = render(src, 0)               # never raises on the literal delimiter
     assert '⦃a⦙b⦄' in painted
-    # the unstyled path handles a literal delimiter without raising, too
-    assert painted == render_terminal(parse(src), width=0)
 
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
     # because width is measured past the markup
-    src = "The quick brown fox jumps\n"
-    doc = split_styles_document(style_document(parse(src)))
-    styled = render_terminal(doc, width=15)
-    assert plain_stylesheet.render(styled) == render_terminal(parse(src), width=15)
+    assert render("The **quick** brown fox jumps\n", 15) == \
+           render("The quick brown fox jumps\n", 15)
 
-def test_render_terminal_glyphs_styled_only_when_document_is():
-    # unstyled IR -> no markup anywhere (markers/rules stay plain)
-    assert render_terminal(parse("# Hi\n\n- a\n")) == "==\nHi\n==\n\n• a"
-    # styled IR -> heading rule and list marker wear their roles
-    out = render_terminal(split_styles_document(style_document(parse("# Hi\n\n- a\n"))))
+def test_glyphs_wear_their_roles():
+    # stripped to plain, markers and rules are their bare glyphs
+    assert render("# Hi\n\n- a\n") == "==\nHi\n==\n\n• a"
+    # in the markup, the heading rule and the list marker wear their roles
+    out = markup("# Hi\n\n- a\n")
     assert '⦃heading1⦙==⦄' in out and '⦃marker⦙•⦄' in out
 
 def test_structural_roles():
@@ -622,25 +650,50 @@ def test_structural_roles():
     # a definition-list term wears `term`
     term = style_document(parse("word\n: a def\n")).blocks[0].entries[0].term
     assert term == Term([Text('⦃term⦙word⦄')])
-    # render_terminal styles the quote bar and the thematic-break rule
-    assert render_terminal(style_document(parse("> hi\n")), width=20) == "⦃blockquote⦙│ ⦄hi"
-    r = render_terminal(style_document(parse("a\n\n---\n")), width=6)
-    assert "⦃rule⦙──────⦄" in r
+    # the quote bar and the thematic-break rule wear their roles
+    assert markup("> hi\n", 20) == "⦃blockquote⦙│ ⦄hi"
+    assert "⦃rule⦙──────⦄" in markup("a\n\n---\n", 6)
 
 def test_render_troff():
     # inline: strong -> \fB, inline code -> \fB, hyphens -> \- for man
-    out = render_troff(parse("# NAME\n\nfoozle - a **tool** with `--flag`\n"))
+    out = render_document(parse("# NAME\n\nfoozle - a **tool** with `--flag`\n"), 'troff')
     assert '.SH NAME' in out
     assert '\\fBtool\\fP' in out
     assert '\\fB\\-\\-flag\\fP' in out
     # definition lists become .TP tagged paragraphs (ideal for options)
-    t = render_troff(parse("-v, --verbose\n: Print more.\n"))
+    t = render_document(parse("-v, --verbose\n: Print more.\n"), 'troff')
     assert '.TP' in t and '\\fB\\-v, \\-\\-verbose\\fP' in t and 'Print more.' in t
     # blocks map to man macros
-    assert '.SS' in render_troff(parse("## Sub\n"))
-    assert '.IP \\(bu' in render_troff(parse("- a\n"))
-    assert '.EX' in render_troff(parse("```\ncode\n```\n"))
-    assert '.RS 4' in render_troff(parse("> quoted\n"))
+    assert '.SS' in render_document(parse("## Sub\n"), 'troff')
+    assert '.IP \\(bu' in render_document(parse("- a\n"), 'troff')
+    assert '.EX' in render_document(parse("```\ncode\n```\n"), 'troff')
+    assert '.RS 4' in render_document(parse("> quoted\n"), 'troff')
+
+def test_render_document_gfm():
+    gfm = lambda md: render_document(parse(md), 'gfm')
+    # ordinary CommonMark round-trips
+    assert gfm("# Hi\n\nsome **b** and `c`\n") == "# Hi\n\nsome **b** and `c`"
+    assert gfm("- a\n- b\n") == "- a\n- b"
+    # GFM keeps strikethrough and native alerts
+    assert gfm("~~gone~~\n") == "~~gone~~"
+    assert gfm("> [!WARNING]\n> Careful.\n") == "> [!WARNING]\n> Careful."
+    # definition lists become inline-HTML <dl>, blank-line trick so the
+    # term and details are still parsed as Markdown
+    assert gfm("term\n: A **bold** detail.\n") == (
+        "<dl>\n<dt>\n\nterm\n\n</dt>\n<dd>\n\nA **bold** detail.\n\n</dd>\n</dl>")
+
+def test_render_document_commonmark():
+    cm = lambda md: render_document(parse(md), 'commonmark')
+    # strikethrough has no CommonMark form -> drops to plain text
+    assert cm("~~gone~~\n") == "gone"
+    # an alert degrades to a blockquote with a bold title
+    assert cm("> [!WARNING]\n> Careful.\n") == "> **Warning**\n> Careful."
+    # a definition list degrades to a bold term + blockquoted details
+    assert cm("term\n: The detail.\n") == "**term**  \n> The detail."
+
+def test_render_document_unknown_format():
+    with raises(ValueError):
+        render_document(parse("hi\n"), 'html')
 
 def test_alerts():
     # a [!KIND] first line turns a block quote into an Alert
@@ -651,10 +704,10 @@ def test_alerts():
     assert isinstance(parse("> [!warning]\n> hi\n").blocks[0], BlockQuote)
     assert isinstance(parse("> [!FOO]\n> hi\n").blocks[0], BlockQuote)
     # styled: a heading_<kind> title (emoji + kind) + a per-line <kind> bar
-    out = render_terminal(style_document(parse("> [!TIP]\n> do this\n")), width=40)
+    out = markup("> [!TIP]\n> do this\n", 40)
     assert out == "⦃tip⦙│ ⦄⦃heading_tip⦙💡 Tip⦄\n⦃tip⦙│ ⦄do this"
     # unstyled stays plain
-    assert render_terminal(parse("> [!TIP]\n> do this\n"), width=40) == "│ 💡 Tip\n│ do this"
+    assert render("> [!TIP]\n> do this\n", 40) == "│ 💡 Tip\n│ do this"
 
 def test_alert_role_defaults():
     sheet = markdown_defaults | StyleSheet({
@@ -689,10 +742,9 @@ def test_style_pipeline_two_layer_theme():
     sheet = low | theme
     md = "# Hi\n\nsome **bold** and `c` and [x](u)\n\n- a\n"
 
-    # the whole pipeline: parse -> style -> split -> render -> join -> paint
+    # the whole pipeline: parse -> style -> split -> layout -> wrap -> join -> paint
     def paint(with_sheet):
-        doc = split_styles_document(style_document(parse(md)))
-        return with_sheet.render(join_styles(render_terminal(doc, width=0)))
+        return with_sheet.render(_pipeline(md, 0))
 
     out = paint(sheet)
     assert '[b][c]Hi[/c][/b]' in out                 # heading: bold + color
