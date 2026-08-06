@@ -98,21 +98,21 @@ def test_stylesheet_opaque_rewrite():
 
 def test_best_palette():
     import io
-    # a non-tty file -> can't colorize -> the uncolored map
-    assert big.best_palette(file=io.StringIO()) is big.ansi_uncolored
+    # a non-tty file -> can't colorize -> plain text, no escapes at all
+    assert big.best_palette(file=io.StringIO()) is big.plain_stylesheet
     # best_palette(file=...) matches what can_colorize/ansi_color_depth prescribe
     for f in (io.StringIO(),):
         if not big.can_colorize(file=f):
-            expected = big.ansi_uncolored
+            expected = big.plain_stylesheet
         else:
             expected = {'truecolor': big.ansi_truecolor,
                         '256color': big.ansi_256,
                         '16color': big.ansi_16}.get(big.ansi_color_depth(),
                                                      big.ansi_truecolor)
         assert big.best_palette(file=f) is expected
-    # it's always one of the four stock maps
+    # it's always plain_stylesheet or one of the three colored maps
     assert any(big.best_palette() is p for p in
-               (big.ansi_truecolor, big.ansi_256, big.ansi_16, big.ansi_uncolored))
+               (big.plain_stylesheet, big.ansi_truecolor, big.ansi_256, big.ansi_16))
 
 def test_stylesheet_verbatim_role_is_cheap():
     # a do-nothing role ('T', 'T') paints nothing: classified verbatim,

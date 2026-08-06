@@ -4575,10 +4575,10 @@ so nothing about them is computed at import.
 
 <dl><dd>
 
-Returns the stock low-level map best suited to `file` (default
-`sys.stdout`): [`ansi_uncolored`](#ansi_truecolor-ansi_256-ansi_16-ansi_uncolored)
-when [`big.can_colorize(file=file)`](#can_colorizefilenone) says color
-is unwanted, otherwise the map matching
+Returns the map best suited to `file` (default `sys.stdout`):
+[`plain_stylesheet`](#plain_stylesheet) — fully plain text, no escapes
+at all — when [`big.can_colorize(file=file)`](#can_colorizefilenone)
+says color is unwanted, otherwise the low-level map matching
 [`big.ansi_color_depth()`](#ansi_color_depth) — `ansi_truecolor`,
 `ansi_256`, or `ansi_16`.  Merge a theme *over* it:
 

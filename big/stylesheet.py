@@ -832,12 +832,12 @@ export('ansi_uncolored')
 def best_palette(*, file=None):
     """
     The stock low-level palette best suited to `file` (default
-    sys.stdout).  If we can't colorize `file`, it's the uncolored map;
-    otherwise it's the deepest map the terminal advertises (see
-    can_colorize and ansi_color_depth).
+    sys.stdout).  If we can't colorize `file`, it's plain_stylesheet --
+    fully plain text, no escapes at all; otherwise it's the deepest map
+    the terminal advertises (see can_colorize and ansi_color_depth).
     """
     if not can_colorize(file=file):
-        return ansi_uncolored
+        return plain_stylesheet
     return {
         'truecolor': ansi_truecolor,
         '256color':  ansi_256,
