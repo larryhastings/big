@@ -105,14 +105,27 @@ def test_best_palette():
         if not big.can_colorize(file=f):
             expected = big.plain_stylesheet
         else:
-            expected = {'truecolor': big.ansi_truecolor,
-                        '256color': big.ansi_256,
-                        '16color': big.ansi_16}.get(big.ansi_color_depth(),
-                                                     big.ansi_truecolor)
+            expected = {'truecolor': big.ansi_truecolor_palette,
+                        '256color': big.ansi_256_color_palette,
+                        '16color': big.ansi_16_color_palette}.get(big.ansi_color_depth(),
+                                                     big.ansi_truecolor_palette)
         assert big.best_palette(file=f) is expected
     # it's always plain_stylesheet or one of the three colored maps
     assert any(big.best_palette() is p for p in
-               (big.plain_stylesheet, big.ansi_truecolor, big.ansi_256, big.ansi_16))
+               (big.plain_stylesheet, big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette))
+
+def test_plain_palette():
+    # plain_palette renders everything plain, but enumerates all 30 roles
+    # explicitly -- no _default (so it composes with sheets that forbid one)
+    assert '_default' not in big.plain_palette
+    assert len(big.plain_palette) == 30
+    assert big.plain_palette.render('⦃bold⦙⦃red⦙x⦄⦄') == 'x'
+    # unlike uncolored_palette, even the attributes are no-ops
+    assert big.plain_palette.render('⦃bold⦙x⦄') == 'x'
+    assert big.uncolored_palette.render('⦃bold⦙x⦄') != 'x'
+    # unlike plain_stylesheet, an unknown role raises (no _default catch-all)
+    with raises(KeyError):
+        big.plain_palette.render('⦃nonesuch⦙x⦄')
 
 def test_stylesheet_verbatim_role_is_cheap():
     # a do-nothing role ('T', 'T') paints nothing: classified verbatim,
@@ -197,30 +210,30 @@ def test_ansi_low_level_maps():
     vocab = {'bold', 'italic', 'underline', 'strikethrough', 'white', 'black'}
     for hue in hues:
         vocab |= {hue, 'light_' + hue, 'dark_' + hue}
-    for sheet in (big.ansi_truecolor, big.ansi_256, big.ansi_16, big.ansi_uncolored):
+    for sheet in (big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette, big.uncolored_palette):
         assert vocab <= set(sheet), sorted(vocab - set(sheet))
 
     r = lambda sheet, role: sheet.render('⦃' + role + '⦙x⦄')
     # attributes are identical across every map
-    for sheet in (big.ansi_truecolor, big.ansi_256, big.ansi_16, big.ansi_uncolored):
+    for sheet in (big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette, big.uncolored_palette):
         assert r(sheet, 'bold') == f'{E}[1mx{E}[22m'
         assert r(sheet, 'strikethrough') == f'{E}[9mx{E}[29m'
     # 24-bit uses the master hex verbatim (normal red is BA0000)
-    assert r(big.ansi_truecolor, 'red') == f'{E}[38;2;186;0;0mx{E}[39m'
+    assert r(big.ansi_truecolor_palette, 'red') == f'{E}[38;2;186;0;0mx{E}[39m'
     # 16-color: normal red -> 31, light red -> 91, orange leans bright-red
-    assert r(big.ansi_16, 'red') == f'{E}[31mx{E}[39m'
-    assert r(big.ansi_16, 'light_red') == f'{E}[91mx{E}[39m'
-    assert r(big.ansi_16, 'orange') == f'{E}[91mx{E}[39m'
+    assert r(big.ansi_16_color_palette, 'red') == f'{E}[31mx{E}[39m'
+    assert r(big.ansi_16_color_palette, 'light_red') == f'{E}[91mx{E}[39m'
+    assert r(big.ansi_16_color_palette, 'orange') == f'{E}[91mx{E}[39m'
     # 256: an indexed color, red nearest-matches to 124
-    assert r(big.ansi_256, 'red') == f'{E}[38;5;124mx{E}[39m'
+    assert r(big.ansi_256_color_palette, 'red') == f'{E}[38;5;124mx{E}[39m'
     # uncolored keeps attributes but drops color
-    assert r(big.ansi_uncolored, 'red') == 'x'
-    assert r(big.ansi_uncolored, 'bold') == f'{E}[1mx{E}[22m'
+    assert r(big.uncolored_palette, 'red') == 'x'
+    assert r(big.uncolored_palette, 'bold') == f'{E}[1mx{E}[22m'
 
 def test_ansi_map_composes_under_a_theme():
     # a conceptual role resolves through the theme down to a real escape
     theme = StyleSheet({'heading': ('T', big.style('bold', big.style('light_gray', 'T')))})
-    sheet = big.ansi_truecolor | theme
+    sheet = big.ansi_truecolor_palette | theme
     assert sheet.render(big.style('heading', 'Hi')) == \
         '\x1b[1m\x1b[38;2;179;179;179mHi\x1b[39m\x1b[22m'
 

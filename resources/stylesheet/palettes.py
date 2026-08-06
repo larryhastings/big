@@ -31,10 +31,11 @@ The 26-color vocabulary (red/orange/yellow/green/cyan/blue/purple/gray,
 each in light/dark/normal, plus white/black) plus the four attributes,
 rendered at four color depths:
 
-    ansi_truecolor   24-bit (the master values)
-    ansi_256         xterm-256, nearest-matched from the 24-bit values
-    ansi_16          the 16-color SGR codes, an explicit hand-mapping
-    ansi_uncolored   the attributes only, color dropped
+    ansi_truecolor_palette   24-bit (the master values)
+    ansi_256_color_palette   xterm-256, nearest-matched from the 24-bit values
+    ansi_16_color_palette    the 16-color SGR codes, an explicit hand-mapping
+    uncolored_palette        the attributes only, color dropped
+    plain_palette            every role a no-op, but enumerated (no _default)
 
 big/stylesheet.py carries these HARD-CODED, so nothing is computed at
 import.  This file generates that hard-coded block.  Run it and paste
@@ -142,6 +143,13 @@ def _entries(color, vocab):
     return entries
 
 
+def _plain_entries():
+    "Every role -- attributes and colors -- mapped to a no-op."
+    noop = ('T', 'T')
+    return [(name, noop) for name in _ansi_attributes] + \
+           [(name, noop) for name, _ in _rgb_vocab()]
+
+
 def _emit(name, entries):
     lines = [f'{name} = StyleSheet({{']
     for key, value in entries:
@@ -160,13 +168,15 @@ def main():
     print(f"# at {now}; sha256(palettes.py) = {digest}")
     print(f"# Do not hand-edit -- edit palettes.py and regenerate.")
     print()
-    print(_emit('ansi_truecolor', _entries(_fg24, _rgb_vocab)))
+    print(_emit('ansi_truecolor_palette', _entries(_fg24, _rgb_vocab)))
     print()
-    print(_emit('ansi_256', _entries(_fg256, _rgb_vocab)))
+    print(_emit('ansi_256_color_palette', _entries(_fg256, _rgb_vocab)))
     print()
-    print(_emit('ansi_16', _entries(_fg16, _code16_vocab)))
+    print(_emit('ansi_16_color_palette', _entries(_fg16, _code16_vocab)))
     print()
-    print(_emit('ansi_uncolored', _entries(lambda value: ('T', 'T'), _rgb_vocab)))
+    print(_emit('uncolored_palette', _entries(lambda value: ('T', 'T'), _rgb_vocab)))
+    print()
+    print(_emit('plain_palette', _plain_entries()))
 
 
 if __name__ == "__main__":
