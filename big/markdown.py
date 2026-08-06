@@ -70,6 +70,8 @@ from big.stylesheet import StyleSheet as _StyleSheet
 # markdown_ascii_glyphs the ASCII ones.  unicode_glyphs / ascii_glyphs
 # (built from those sheets, below) swap the markup for characters when
 # you aren't rendering against such a sheet.
+# --8<-- start big glyphs from stylesheet --8<--
+# (a snippet consumer supplies _style_span -- big.stylesheet.style.)
 _glyph_roles = ('bullet', 'quote_bar', 'thematic_break',
                 'heading1_rule', 'heading2_rule',
                 'note_emoji', 'tip_emoji', 'important_emoji',
@@ -92,6 +94,7 @@ def glyphs_from_stylesheet(stylesheet):
             s = s.replace(markup, glyph)
         return s
     return swap
+# --8<-- end big glyphs from stylesheet --8<--
 
 
 def _visible(markup):
