@@ -59,6 +59,16 @@ def _fill(pattern, model):
     return (pattern * (length // len(pattern) + 1))[:length]
 
 
+def _clip(model, text):
+    "Clip `text` to the length of `model`: ⦃clip⦙model⦙text⦄."
+    return text[:len(model)]
+
+
+def _center(model, text):
+    "Center `text` in a field the width of `model`: ⦃center⦙model⦙text⦄."
+    return text.center(len(model))
+
+
 transforms = {
     'upper':  str.upper,
     'lower':  str.lower,
@@ -67,6 +77,8 @@ transforms = {
     'lstrip': str.lstrip,
     'rstrip': str.rstrip,
     'fill':   _fill,
+    'clip':   _clip,
+    'center': _center,
 }
 export('transforms')
 

@@ -5342,16 +5342,10 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             named.  It resets the line counter, so the next line is
             always a "first line".  (Passing indent=X behaves as if
             ('indent', ...) built from X were prepended to 'words'.)
-        ('fill margin',   initial, fill, trailing)
-        ('fill previous', initial, fill, trailing)
-        ('fill next',     initial, fill, trailing)
-            Draw a whole line by filling to a width: the margin, the
-            previous line's width, or the next line's width.  The
-            line is 'initial', then 'fill' repeated and clipped to
-            the remaining width, then 'trailing', all inside the
-            active indent.  'initial' and 'trailing' are never
-            clipped.  This draws rules and boxes; e.g. a heading
-            underlined to its own width is a 'fill previous'.
+        ('def start',) ('term', *words) ('def end',)
+            Bracket a definition list; wrap_words measures the terms,
+            picks a detail column, and lays each entry out compact or
+            tall.
 
     Implicitly supports "code lines" as defined by split_text_with_code.
     (A "code line" just shows up in words as one unbroken word surrounded
@@ -5454,13 +5448,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
     new_line = True
     code_paragraph = False
 
-    # the visible width of the last completed output line (what a
-    # 'fill previous' matches), and a 'fill next' still waiting for the
-    # following line to be laid out so it can match ITS width.
-    last_line_len = 0
-    pending_next = None
-    pending_next_armed = False
-
     def next_tab_stops(col, tabs):
         # the 0-based line offset of the next word, after
         # advancing 'tabs' tab stops from the offset 'col'.
@@ -5470,45 +5457,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
         for _ in range(tabs):
             absolute += tab_width - ((absolute - 1) % tab_width)
         return absolute - left_column
-
-    class _FillNext:
-        # placeholder for a 'fill next' line: its width isn't known
-        # until the following line is laid out, so we emit this and
-        # back-patch its .value at join time.
-        __slots__ = ('value',)
-        def __init__(self):
-            self.value = empty
-
-    def fill_body(initial, fillchar, trailing, target, prefix_w):
-        # a fill line's content, after its indent prefix: initial, then
-        # fillchar repeated to the leftover VISIBLE width and clipped,
-        # then trailing.  initial and trailing are never clipped.
-        body = target - prefix_w - _measure(initial) - _measure(trailing)
-        fill_width = _measure(fillchar) if fillchar else 0
-        if (body > 0) and fill_width:
-            filled = fillchar * (body // fill_width)
-            remainder = body - (body // fill_width) * fill_width
-            if remainder and (len(fillchar) == fill_width):
-                # a plain fillchar can be sliced to finish the last
-                # partial repeat; a styled one just under-fills.
-                filled = filled + fillchar[:remainder]
-        else:
-            filled = empty
-        return initial + filled + trailing
-
-    def complete_line(line_len):
-        # the current output line just ended, this wide: record it (for
-        # 'fill previous'), and arm then resolve a deferred 'fill next'.
-        nonlocal last_line_len, pending_next, pending_next_armed
-        last_line_len = line_len
-        if pending_next is not None:
-            if not pending_next_armed:
-                pending_next_armed = True    # that was the fill line's own line
-            else:
-                placeholder, prefix_w, initial, fillchar, trailing = pending_next
-                placeholder.value = fill_body(initial, fillchar, trailing, line_len, prefix_w)
-                pending_next = None
-                pending_next_armed = False
 
     def render_stream(stream, width):
         # lay a sub-stream out to `width`, returning its lines; an empty
@@ -5597,7 +5545,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 linebreak = b'\n'
                 tab = b'\t'
                 indent_marker = b'indent'
-                fill_markers = (b'fill margin', b'fill previous', b'fill next')
                 def_markers = (b'def start', b'def end', b'term')
             else:
                 empty = lastword = ''
@@ -5607,7 +5554,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 linebreak = '\n'
                 tab = '\t'
                 indent_marker = 'indent'
-                fill_markers = ('fill margin', 'fill previous', 'fill next')
                 def_markers = ('def start', 'def end', 'term')
             indent_type = bytes if isinstance(sample, bytes) else str
             if indent or (code_indent is not None):
@@ -5645,30 +5591,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 new_line = True
                 col = 0
                 continue
-            if instruction in fill_markers:
-                initial, fillchar, trailing = word[1], word[2], word[3]
-                if indents:
-                    index = min(line_number, last_indent)
-                    prefix = indents[index]
-                    prefix_w = widths[index]
-                else:
-                    prefix = empty
-                    prefix_w = 0
-                append(prefix)
-                if instruction == fill_markers[2]:               # fill next
-                    placeholder = _FillNext()
-                    append(placeholder)
-                    pending_next = (placeholder, prefix_w, initial, fillchar, trailing)
-                    pending_next_armed = False
-                    col = 0
-                else:
-                    target = margin if (instruction == fill_markers[0]) else last_line_len
-                    body = fill_body(initial, fillchar, trailing, target, prefix_w)
-                    append(body)
-                    col = prefix_w + _measure(body)
-                lastword = empty
-                new_line = False
-                continue
             if instruction == def_markers[0]:                # 'def start'
                 # collect the whole list (balancing nested lists), then
                 # lay it out against the active indent.
@@ -5694,7 +5616,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                         append(linebreak)
                     append(line)
                 col = _measure(lines[-1]) if lines else 0
-                last_line_len = col
                 lastword = empty
                 new_line = False
                 continue
@@ -5711,7 +5632,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 # place the next word.
                 pending_tabs += 1
                 continue
-            complete_line(col)
             lastword = word
             append(word)
 
@@ -5761,7 +5681,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 # like a space would.
                 target = next_tab_stops(col, tabs)
                 if (target + l) > margin:
-                    complete_line(col)
                     append(linebreak)
                     new_line = True
                     line_number += 1
@@ -5779,7 +5698,6 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
 
                 wrap = (col + len_space + l) > margin
                 if wrap:
-                    complete_line(col)
                     append(linebreak)
                     new_line = True
                     line_number += 1
@@ -5812,10 +5730,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
     if first_word:
         raise ValueError("no words to wrap")
 
-    # resolve any 'fill next' placeholders (an unresolved one -- a fill
-    # next with no following line -- renders as its bare caps).
-    s = empty.join(p.value if (type(p) is _FillNext) else p for p in text)
-    return s
+    return empty.join(text)
 
 
 def split_text_with_code(s, *, code_indent=4, tab_width=8):

@@ -2404,8 +2404,7 @@ def test_wrap_words_raw():
 
 def test_wrap_words_instructions():
     # a tuple in the stream is an instruction: ('indent', ...) switches
-    # the active prefix context; ('fill ...', initial, fill, trailing)
-    # draws a line.
+    # the active prefix context.
     w = big.wrap_words
 
     # ('indent', first, rest) is the same as the indent= parameter fed
@@ -2416,25 +2415,6 @@ def test_wrap_words_instructions():
     tight = (('indent', '* ', '  '), 'Bullet', 'one.', '\n',
              ('indent', '* ', '  '), 'Bullet', 'two.')
     assert w(tight, 12) == '* Bullet\n  one.\n* Bullet\n  two.'
-
-    # 'fill previous' fills to the width of the previous line; the fill
-    # string repeats and is clipped, the caps never are.
-    assert w(('abcde', '\n', ('fill previous', '', '[*]', '')), 40) == 'abcde\n[*][*'
-
-    # 'fill margin' fills to the margin, inside the active indent -- so
-    # a rule under a '| ' bar (width 2) leaves margin-2 fill characters.
-    assert w((('indent', '| ', '| '), ('fill margin', '', '-', '')), 10) == '| --------'
-
-    # 'fill next' looks ahead to the following line -- caps make a box.
-    box = (('fill next', '+', '-', '+'), '\n',
-           '|', 'important', 'heading', '|', '\n',
-           ('fill previous', '+', '-', '+'))
-    assert w(box, 80) == ('+-------------------+\n'
-                          '| important heading |\n'
-                          '+-------------------+')
-
-    # initial and trailing are never clipped, even past the target
-    assert w(('ab', '\n', ('fill previous', '<<<', '-', '>>>')), 40) == 'ab\n<<<>>>'
 
     # an unknown instruction is a loud error
     try:

@@ -75,7 +75,9 @@ from big.stylesheet import StyleSheet as _StyleSheet
 _glyph_roles = ('bullet', 'quote_bar', 'thematic_break',
                 'heading1_rule', 'heading2_rule',
                 'note_emoji', 'tip_emoji', 'important_emoji',
-                'warning_emoji', 'caution_emoji')
+                'warning_emoji', 'caution_emoji',
+                'note_title', 'tip_title', 'important_title',
+                'warning_title', 'caution_title')
 
 
 def glyphs_from_stylesheet(stylesheet):
@@ -1436,10 +1438,12 @@ markdown_defaults = _StyleSheet({
     'caution':           ('T', '⦃red⦙T⦄'),
     'heading_caution':   ('T', '⦃heading2⦙⦃red⦙T⦄⦄'),
     # the glyphs layout_document draws, as zero-arg roles (Unicode by
-    # default; ascii_glyphs()/unicode_glyphs() swap them without a sheet)
+    # default; ascii_glyphs()/unicode_glyphs() swap them without a sheet).
+    # heading{1,2}_rule are the rule characters, for a width-aware renderer
+    # to fill; layout_document itself draws no heading rules.
     'bullet':          ('•',),
     'quote_bar':       ('│ ',),
-    'thematic_break':  ('─',),
+    'thematic_break':  ('─────',),
     'heading1_rule':   ('=',),
     'heading2_rule':   ('-',),
     'note_emoji':      ('ℹ️',),
@@ -1447,6 +1451,12 @@ markdown_defaults = _StyleSheet({
     'important_emoji': ('✴',),
     'warning_emoji':   ('⚠️',),
     'caution_emoji':   ('🛑',),
+    # the alert title words, as roles -- override for another language
+    'note_title':      ('Note',),
+    'tip_title':       ('Tip',),
+    'important_title': ('Important',),
+    'warning_title':   ('Warning',),
+    'caution_title':   ('Caution',),
 })
 
 # the same glyph roles, in ASCII -- for terminals (or pipes) that can't
@@ -1455,7 +1465,7 @@ markdown_defaults = _StyleSheet({
 markdown_ascii_glyphs = _StyleSheet({
     'bullet':          ('*',),
     'quote_bar':       ('| ',),
-    'thematic_break':  ('-',),
+    'thematic_break':  ('-----',),
     'heading1_rule':   ('=',),
     'heading2_rule':   ('-',),
     'note_emoji':      ('(i)',),
@@ -1463,6 +1473,11 @@ markdown_ascii_glyphs = _StyleSheet({
     'important_emoji': ('(!)',),
     'warning_emoji':   ('/!\\',),
     'caution_emoji':   ('(x)',),
+    'note_title':      ('Note',),
+    'tip_title':       ('Tip',),
+    'important_title': ('Important',),
+    'warning_title':   ('Warning',),
+    'caution_title':   ('Caution',),
 })
 # --8<-- end big markdown defaults --8<--
 
@@ -1476,11 +1491,12 @@ ascii_glyphs = glyphs_from_stylesheet(markdown_ascii_glyphs)
 # The terminal layout: IR -> a "layout" for wrap_words.
 #
 # layout_document lays the block structure out as a flat tuple of
-# words and instructions -- markers, quote bars, code indents, and
-# heading/thematic rules become ('indent', ...) prefixes and
-# ('fill ...', ...) rules -- WITHOUT committing to a width.  It's the
-# width-independent half; wrap_words fits it to a terminal later,
-# then join_styles and a StyleSheet paint or strip it:
+# words and instructions -- markers, quote bars, and code indents
+# become ('indent', ...) prefixes -- WITHOUT committing to a width, and
+# hard-coding nothing: every glyph, alert title, and the thematic break
+# is a role resolved by the StyleSheet.  It's the width-independent
+# half; wrap_words fits it to a terminal later, then join_styles and a
+# StyleSheet paint or strip it:
 #
 #     wrap_words(layout, margin=width, raw=strip_styles)
 #         -> join_styles -> stylesheet.render
@@ -1542,23 +1558,16 @@ def _layout_block(block, lead, rest, out):
         out.extend(_flow_words(block.children))
         return
     if isinstance(block, Heading):
-        words = _flow_words(block.children)
+        # every heading is just its styled text (it already wears its
+        # heading{n} role).  A rule under it depends on the line width,
+        # so layout_document draws none; a width-aware renderer can add
+        # one from the heading{n}_rule role.
         out.append(('indent', lead, rest))
-        if block.level > 2:                  # H3..H6: styled text, no rule
-            out.extend(words)
-            return
-        glyph = _style_span(f'heading{block.level}', _style_span(f'heading{block.level}_rule'))
-        if block.level == 1:                 # H1: a rule above and below
-            out.append(('fill next', '', glyph, ''))
-            out.append('\n')
-            out.append(('indent', lead, rest))
-        out.extend(words)
-        out.append('\n')
-        out.append(('fill previous', '', glyph, ''))
+        out.extend(_flow_words(block.children))
         return
     if isinstance(block, ThematicBreak):
         out.append(('indent', lead, rest))
-        out.append(('fill margin', '', _style_span('rule', _style_span('thematic_break')), ''))
+        out.append(_style_span('rule', _style_span('thematic_break')))
         return
     if isinstance(block, CodeBlock):
         out.append(('indent', lead + _CODE_INDENT, rest + _CODE_INDENT))
@@ -1573,7 +1582,7 @@ def _layout_block(block, lead, rest, out):
         return
     if isinstance(block, Alert):
         bar = _style_span(block.kind, _style_span('quote_bar'))
-        title = _style_span(block.kind + '_emoji') + ' ' + block.kind.capitalize()
+        title = _style_span(block.kind + '_emoji') + ' ' + _style_span(block.kind + '_title')
         out.append(('indent', lead + bar, rest + bar))
         out.append(_style_span('heading_' + block.kind, title))
         out.append('\n')

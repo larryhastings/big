@@ -640,12 +640,12 @@ def test_styled_wrapping_measures_visible_width():
            render("The quick brown fox jumps\n", 15)
 
 def test_glyphs_wear_their_roles():
-    # resolved to plain (unicode), markers and rules are their glyphs
-    assert render("# Hi\n\n- a\n") == "==\nHi\n==\n\n• a"
-    # in the markup, glyphs are their own roles, wrapped in a styling role
+    # a heading is just its styled text (no width-dependent rule); the
+    # marker is a glyph role wrapped in the styling role
+    assert render("# Hi\n\n- a\n") == "Hi\n\n• a"
     out = markup("# Hi\n\n- a\n")
+    assert '⦃heading1⦙Hi⦄' in out                      # heading text wears heading1
     assert '⦃marker⦙⦃bullet⦄⦄' in out                 # bullet under marker
-    assert '⦃heading1⦙⦃heading1_rule⦄' in out          # rule under heading1
 
 def test_structural_roles():
     # code blocks wear `codeblock` (distinct from inline `code`)
@@ -655,12 +655,12 @@ def test_structural_roles():
     # a definition-list term wears `term`
     term = style_document(parse("word\n: a def\n")).blocks[0].entries[0].term
     assert term == Term([Text('⦃term⦙word⦄')])
-    # the quote bar and the thematic-break rule wear their roles, as glyphs
+    # the quote bar and the thematic break wear their roles, as glyphs
     assert markup("> hi\n", 20) == "⦃blockquote⦙⦃quote_bar⦄⦄hi"
-    assert "⦃rule⦙⦃thematic_break⦄" in markup("a\n\n---\n", 6)
-    # and they resolve to their characters
+    assert markup("a\n\n---\n", 6) == "a\n\n⦃rule⦙⦃thematic_break⦄⦄"
+    # and they resolve to their characters (the break is a fixed 5-char rule)
     assert render("> hi\n", 20) == "│ hi"
-    assert render("a\n\n---\n", 6) == "a\n\n──────"
+    assert render("a\n\n---\n", 6) == "a\n\n─────"
 
 def test_render_troff():
     # inline: strong -> \fB, inline code -> \fB, hyphens -> \- for man
@@ -714,7 +714,7 @@ def test_alerts():
     # styled: a heading_<kind> title (emoji + kind) + a per-line <kind> bar,
     # the bar and emoji as glyph roles
     out = markup("> [!TIP]\n> do this\n", 40)
-    assert out == ("⦃tip⦙⦃quote_bar⦄⦄⦃heading_tip⦙⦃tip_emoji⦄ Tip⦄\n"
+    assert out == ("⦃tip⦙⦃quote_bar⦄⦄⦃heading_tip⦙⦃tip_emoji⦄ ⦃tip_title⦄⦄\n"
                    "⦃tip⦙⦃quote_bar⦄⦄do this")
     # resolved to plain
     assert render("> [!TIP]\n> do this\n", 40) == "│ 💡 Tip\n│ do this"
@@ -762,7 +762,6 @@ def test_style_pipeline_two_layer_theme():
 
     out = paint(sheet)
     assert '[b][c]Hi[/c][/b]' in out                 # heading: bold + color
-    assert '[b][c]==[/c][/b]' in out                 # rule matches 'Hi' width
     assert '[c]•[/c] a' in out                        # marker: color
     assert 'some [b]bold[/b] and c and [u]x[/u]' in out
     # the payoff: overwrite header_color ONCE, every heading AND marker
@@ -779,9 +778,11 @@ def test_glyph_swappers():
     # they're just glyphs_from_stylesheet applied to the two stock sheets
     assert unicode_glyphs('⦃bullet⦄') == markdown_defaults.render('⦃bullet⦄')
     assert ascii_glyphs('⦃bullet⦄') == markdown_ascii_glyphs.render('⦃bullet⦄')
+    # alert titles are roles too, so they can be localized
+    assert unicode_glyphs('⦃tip_title⦄') == 'Tip'
     # glyphs_from_stylesheet derives a swapper from any sheet
     swap = glyphs_from_stylesheet(markdown_ascii_glyphs)
-    assert swap('⦃thematic_break⦄') == '-'
+    assert swap('⦃thematic_break⦄') == '-----'
 
 
 def run_tests(run=None):

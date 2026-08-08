@@ -3148,8 +3148,9 @@ rendering back ends over a shared intermediate representation.
   renders the raw IR directly.
 
 The structural glyphs `layout_document` draws — the bullet, the quote
-bar, heading rules, alert emoji — are emitted as *glyph roles*
-(`⦃bullet⦄`, `⦃note_emoji⦄`, …), not baked characters.  A `StyleSheet`
+bar, the thematic break, alert emoji and titles — are emitted as *glyph
+roles* (`⦃bullet⦄`, `⦃note_emoji⦄`, `⦃note_title⦄`, …), not baked
+characters, so `layout_document` hard-codes nothing.  A `StyleSheet`
 that defines them resolves them: [`markdown_defaults`](#markdown_defaults)
 gives the Unicode glyphs, [`markdown_ascii_glyphs`](#markdown_ascii_glyphs)
 the ASCII ones.  Because they're markup, the wrap-time `raw=` must
@@ -3244,9 +3245,9 @@ definition terms `term`.  The markup uses
 
 The result is still a `Document`; feed it to `split_styles_document`
 and `layout_document`.  The structural glyphs `layout_document` draws
-(list markers, heading rules, quote and alert bars) always wear their
-roles, so a document made entirely of plain prose still gets styled
-glyphs — painting them plain is [`plain_stylesheet`](#plain_stylesheet)'s
+(list markers, quote and alert bars, the thematic break) always wear
+their roles, so a document made entirely of plain prose still gets
+styled glyphs — painting them plain is [`plain_stylesheet`](#plain_stylesheet)'s
 job.
 
 Literal delimiter characters in the source (`⦃ ⦙ ⦄`) are quoted
@@ -3276,9 +3277,12 @@ Lays a styled, split `Document` out as a *layout* — a flat tuple of
 words and
 [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
 instructions — drawing the block geometry as hanging-indent prefixes
-(list markers, quote and alert bars, the code indent) and fill rules
-(heading rules, thematic breaks).  It is *width-independent*: build it
-once, then fit it to any terminal width later.
+(list markers, quote and alert bars, the code indent).  It hard-codes
+nothing else: glyphs, alert titles, and the thematic break are all
+roles.  It is *width-independent*: build it once, then fit it to any
+terminal width later.  (Headings get no rule underline — that depends
+on the line width; a width-aware renderer can add one from the
+`heading{n}_rule` role.)
 
 Feed it a document that's been through `style_document` and
 `split_styles_document`.  To render, pass the layout to `wrap_words`
@@ -3358,9 +3362,13 @@ green, `important` purple, `warning` orange, `caution` red — each
 `heading_<kind>` being that color over `heading2`.
 
 It also defines the **glyph roles** `layout_document` draws — `bullet`,
-`quote_bar`, `thematic_break`, `heading1_rule`, `heading2_rule`, and
-`note_emoji` … `caution_emoji` — each rendering to its Unicode glyph
-(`•`, `│ `, `─`, `=`, `-`, `ℹ️` …).
+`quote_bar`, `thematic_break` (a fixed five-character rule), the
+`note_emoji` … `caution_emoji` icons, and the `note_title` …
+`caution_title` alert words (`Note`, `Tip`, …) — each rendering to its
+Unicode glyph or English word.  Override any of them — e.g. a
+`tip_title` of `Tipp` — for another language.  (`heading1_rule` /
+`heading2_rule` are the rule *characters*, for a width-aware renderer to
+fill; `layout_document` draws no heading rule itself.)
 
 </dd></dl>
 
@@ -4616,6 +4624,13 @@ A `dict` of stock text transforms, suitable for merging into a
 * `⦃strip⦙text⦄`, `⦃lstrip⦙text⦄`, `⦃rstrip⦙text⦄` — trim whitespace.
 * `⦃fill⦙pattern⦙model⦄` — repeat `pattern` up to the length of `model`,
   then clip: `⦃fill⦙-=-⦙abcdefgh⦄`&nbsp;→&nbsp;`-=--=--=`.
+* `⦃clip⦙model⦙text⦄` — cut `text` to the length of `model`.
+* `⦃center⦙model⦙text⦄` — center `text` in a field the width of `model`:
+  `⦃center⦙abcdefg⦙xyz⦄`&nbsp;→&nbsp;`  xyz  `.
+
+These compose — e.g. a heading rule sized to the text but capped at the
+line width is `⦃clip⦙⦃line⦄⦙⦃fill⦙⦃heading1_rule⦄⦙⦃strip⦙T⦄⦄⦄` (where
+`line` is a role you set to a full-width run for the current width).
 
 </dd></dl>
 
@@ -7052,13 +7067,6 @@ rather than a word.  Its first item names the instruction:
   parameter, and resets the line counter (so the next line is a
   "first line").  Passing `indent=X` behaves as if the matching
   `('indent', ...)` were prepended to `words`.
-* `('fill margin', initial, fill, trailing)`,
-  `('fill previous', ...)`, and `('fill next', ...)` draw a whole
-  line by filling to a width--the margin, the previous line's
-  width, or the next line's width.  The line is `initial`, then
-  `fill` repeated and clipped to the remaining width, then
-  `trailing` (the caps are never clipped), all inside the active
-  indent.  This draws rules and boxes.
 * `('def start',)` ... `('def end',)` bracket a **definition
   list**, with one `('term', *words)` per entry followed by the
   words (and instructions) of its details.  `wrap_words` measures
@@ -11840,11 +11848,12 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   CommonMark subset closely (~85% of the applicable spec test suite; images, raw
   HTML, and entity references are deliberately omitted), plus three extensions:
   GFM strikethrough, definition lists, and GitHub alerts (`> [!NOTE]` and
-  friends).  The structural glyphs it draws (bullet, quote bar, rules,
-  alert emoji) are *glyph roles* (`⦃bullet⦄`, …) resolved by the painting
-  `StyleSheet` — `markdown_defaults` for Unicode, `markdown_ascii_glyphs`
-  for ASCII — or by the `unicode_glyphs` / `ascii_glyphs` /
-  `glyphs_from_stylesheet` swap functions.
+  friends).  The structural glyphs it draws (bullet, quote bar, thematic
+  break, alert emoji and titles) are *glyph roles* (`⦃bullet⦄`,
+  `⦃tip_title⦄`, …) resolved by the painting `StyleSheet` —
+  `markdown_defaults` for Unicode, `markdown_ascii_glyphs` for ASCII — or
+  by the `unicode_glyphs` / `ascii_glyphs` / `glyphs_from_stylesheet` swap
+  functions.  `layout_document` hard-codes nothing.
 
 * 🤖 **New module: [`big.stylesheet`](#bigstylesheet).**  The inline
   character-style layer: an `⦃role⦙text⦄` markup language and `StyleSheet`, a
@@ -11867,8 +11876,7 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
 * 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
   learns layout instructions.**  An element of `words` may now be a tuple that's
   an *instruction* rather than a word: `('indent', …)` switches the active line
-  prefix mid-stream, `('fill margin' | 'fill previous' | 'fill next', …)` draws a
-  rule or box line, and `('def start',)` / `('term', …)` / `('def end',)` mark a
+  prefix mid-stream, and `('def start',)` / `('term', …)` / `('def end',)` mark a
   definition list that `wrap_words` lays out itself (compact or tall, choosing a
   detail column to fit).  These let a whole styled document bake to a flat
   constant and wrap to any width later.
