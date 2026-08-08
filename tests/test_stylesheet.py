@@ -342,6 +342,18 @@ def test_stylesheet_transforms_and_heading_hook():
     assert t2.render(fmt('title', 'the quick brown fox')) == \
         'The Quick Brown Fox'
 
+def test_stylesheet_fill_and_strip_transforms():
+    from big.stylesheet import transforms
+    p = StyleSheet(transforms)
+    # fill: repeat the pattern to the length of the model, clipped
+    assert p.render(fmt('fill', '=', 'string')) == '======'        # len('string') == 6
+    assert p.render(fmt('fill', '-=-', 'abcdefgh')) == '-=--=--='
+    assert p.render(fmt('fill', '', 'abc')) == ''                   # empty pattern
+    # strip / lstrip / rstrip
+    assert p.render(fmt('strip', ' x y ')) == 'x y'
+    assert p.render(fmt('lstrip', ' x y ')) == 'x y '
+    assert p.render(fmt('rstrip', ' x y ')) == ' x y'
+
 
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.stylesheet", module=__name__)

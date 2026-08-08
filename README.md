@@ -4608,9 +4608,14 @@ backend.
 
 <dl><dd>
 
-A `dict` of stock text transforms — `'upper'`, `'lower'`, `'title'` —
-suitable for merging into a `StyleSheet` and used as tags, e.g.
-`⦃upper⦙text⦄`.  Pure text shaping, no paint.
+A `dict` of stock text transforms, suitable for merging into a
+`StyleSheet` and used as tags.  Pure text shaping, no paint:
+
+* `⦃upper⦙text⦄`, `⦃lower⦙text⦄`, `⦃title⦙text⦄` — case (`title` uses
+  big's [`gently_title`](#gently_titles-apostrophesnone-double_quotesnone)).
+* `⦃strip⦙text⦄`, `⦃lstrip⦙text⦄`, `⦃rstrip⦙text⦄` — trim whitespace.
+* `⦃fill⦙pattern⦙model⦄` — repeat `pattern` up to the length of `model`,
+  then clip: `⦃fill⦙-=-⦙abcdefgh⦄`&nbsp;→&nbsp;`-=--=--=`.
 
 </dd></dl>
 

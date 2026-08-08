@@ -49,10 +49,24 @@ export('style_delimiters')
 # tags--'usage': ('T', '⦃heading⦙⦃upper⦙T⦄⦄')--or reference
 # them from hook entries.  Pure text shaping, no paint.
 from .text import gently_title as _gently_title
+
+
+def _fill(pattern, model):
+    "Repeat `pattern` up to the length of `model`, then clip: ⦃fill⦙pattern⦙model⦄."
+    if not pattern:
+        return ''
+    length = len(model)
+    return (pattern * (length // len(pattern) + 1))[:length]
+
+
 transforms = {
-    'upper': str.upper,
-    'lower': str.lower,
-    'title': _gently_title,
+    'upper':  str.upper,
+    'lower':  str.lower,
+    'title':  _gently_title,
+    'strip':  str.strip,
+    'lstrip': str.lstrip,
+    'rstrip': str.rstrip,
+    'fill':   _fill,
 }
 export('transforms')
 
