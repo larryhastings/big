@@ -192,6 +192,10 @@ def test_join_styles():
     # a non-whitespace gap, or a differing stack, is a boundary
     assert big.join_styles('⦃bold⦙a⦄, ⦃bold⦙b⦄') == '⦃bold⦙a⦄, ⦃bold⦙b⦄'
     assert big.join_styles('⦃bold⦙a⦄ ⦃italic⦙b⦄') == '⦃bold⦙a⦄ ⦃italic⦙b⦄'
+    # span_linebreaks=True absorbs the newline too, so a span may straddle it
+    assert big.join_styles('⦃bold⦙a⦄\n⦃bold⦙b⦄', span_linebreaks=True) == '⦃bold⦙a\nb⦄'
+    # still bounded by a differing stack
+    assert big.join_styles('⦃bold⦙a⦄\n⦃italic⦙b⦄', span_linebreaks=True) == '⦃bold⦙a⦄\n⦃italic⦙b⦄'
 
 def test_escape_styles():
     # each delimiter is quoted by a leading open delimiter

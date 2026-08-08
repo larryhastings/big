@@ -345,7 +345,7 @@ def split_styles(s):
 
 
 @export
-def join_styles(s):
+def join_styles(s, span_linebreaks=False):
     """
     Coalesce adjacent spans that carry an identical span stack and are
     separated only by non-newline whitespace, absorbing that
@@ -354,24 +354,29 @@ def join_styles(s):
         '⦃bold⦙This⦄ ⦃bold⦙is⦄' -> '⦃bold⦙This is⦄'
 
     This is the inverse of split_styles, used to minimize a backend's
-    output (fewer style on/off toggles) after layout.  It never merges
-    across a newline, so every line's markup stays balanced and
-    self-contained -- important for per-line consumers like columns.
+    output (fewer style on/off toggles) after layout.  By default it
+    never merges across a newline, so every line's markup stays balanced
+    and self-contained -- important for per-line consumers like columns.
     A separator that isn't pure spaces/tabs (a comma, a newline) is a
-    boundary.  Pure markup in, markup out; works for any backend.
+    boundary.
+
+    Pass span_linebreaks=True to also absorb newlines, so a span may
+    straddle a line break -- fewer toggles still, at the cost of per-line
+    balance.  Pure markup in, markup out; works for any backend.
     """
+    gap_whitespace = ' \t\n' if span_linebreaks else ' \t'
     runs = []
     _collect_style_runs(_parse_markup(s, style_delimiters), [], runs)
     # normalize each piece to final inner markup up front (escape literal
     # text, keep a zero-arg span verbatim), so coalescing is plain string
     # concatenation and a zero-arg span rides along as a character.
     runs = [[_inner_markup(piece), stack] for piece, stack in runs]
-    # promote a spaces/tabs-only plain gap to its neighbors' stack when
+    # promote a whitespace-only plain gap to its neighbors' stack when
     # they match, so the gap joins the two spans instead of splitting them
     for i, run in enumerate(runs):
         text, stack = run
-        if stack or not text or text.strip(' \t'):
-            continue                   # not a pure spaces/tabs plain gap
+        if stack or not text or text.strip(gap_whitespace):
+            continue                   # not a pure whitespace plain gap
         left = runs[i - 1][1] if i > 0 else ()
         right = runs[i + 1][1] if (i + 1) < len(runs) else ()
         if left and (left == right):

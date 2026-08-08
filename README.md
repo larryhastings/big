@@ -3141,7 +3141,7 @@ rendering back ends over a shared intermediate representation.
   "layout".  At render time
   [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
   fits the layout to a width,
-  [`join_styles`](#join_stylestext) coalesces the markup, and a
+  [`join_styles`](#join_stylestext-span_linebreaksfalse) coalesces the markup, and a
   [`StyleSheet`](#stylesheetformats--delimiters-escape) paints it — to
   ANSI, to plain text, to anything.
 * For **Markdown or a man page**, `render_document(document, format)`
@@ -3288,7 +3288,7 @@ Feed it a document that's been through `style_document` and
 `split_styles_document`.  To render, pass the layout to `wrap_words`
 (with `raw=`&nbsp;[`strip_styles`](#strip_stylestext) so styled words
 measure by their visible width), coalesce with
-[`join_styles`](#join_stylestext), and paint with a
+[`join_styles`](#join_stylestext-span_linebreaksfalse), and paint with a
 [`StyleSheet`](#stylesheetformats--delimiters-escape) (or strip with
 [`plain_stylesheet`](#plain_stylesheet)):
 
@@ -4575,7 +4575,7 @@ zero-arg spans for its glyph roles.)
 
 </dd></dl>
 
-#### `join_styles(text)`
+#### `join_styles(text, span_linebreaks=False)`
 
 <dl><dd>
 
@@ -4583,9 +4583,12 @@ The inverse of [`split_styles`](#split_stylestext): coalesces
 adjacent spans that carry an identical stack and are separated only
 by non-newline whitespace, absorbing that whitespace into the merged
 span.  Used to minimize a backend's output (fewer style toggles)
-after layout.  It never merges across a newline, so each line's
-markup stays balanced and self-contained.  Like `split_styles`, it
-treats a zero-arg span as a character, so glyph markup survives it.
+after layout.  By default it never merges across a newline, so each
+line's markup stays balanced and self-contained.  Pass
+`span_linebreaks=True` to absorb newlines too — a span may then straddle
+a line break (fewer toggles still, at the cost of per-line balance).
+Like `split_styles`, it treats a zero-arg span as a character, so glyph
+markup survives it.
 
 </dd></dl>
 
