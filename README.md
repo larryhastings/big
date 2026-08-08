@@ -4579,10 +4579,14 @@ zero-arg spans for its glyph roles.)
 
 <dl><dd>
 
-The inverse of [`split_styles`](#split_stylestext): coalesces
-adjacent spans that carry an identical stack and are separated only
-by non-newline whitespace, absorbing that whitespace into the merged
-span.  Used to minimize a backend's output (fewer style toggles)
+The inverse of [`split_styles`](#split_stylestext): factors out the
+span stack that adjacent runs share, wrapping each shared span once and
+nesting the differences inside it, and absorbs the whitespace between
+them into the shared span.  Adjacent runs with the same full stack
+merge outright — `⦃bold⦙This⦄ ⦃bold⦙is⦄`&nbsp;→&nbsp;`⦃bold⦙This is⦄` —
+and runs that share only an outer prefix keep one toggle of that prefix
+around the rest: `⦃a⦙with⦄ ⦃a⦙⦃code⦙x⦄⦄ ⦃a⦙z⦄`&nbsp;→&nbsp;`⦃a⦙with
+⦃code⦙x⦄ z⦄`.  Used to minimize a backend's output (fewer style toggles)
 after layout.  By default it never merges across a newline, so each
 line's markup stays balanced and self-contained.  Pass
 `span_linebreaks=True` to absorb newlines too — a span may then straddle

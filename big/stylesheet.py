@@ -309,6 +309,41 @@ def _inner_markup(piece):
     return style(piece.name)           # ⦃name⦄, a character, kept as-is
 
 
+def _common_prefix(a, b):
+    "The longest common prefix of two span stacks."
+    out = []
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        out.append(x)
+    return tuple(out)
+
+
+def _join_emit(runs, depth):
+    """
+    Serialize (markup, stack) runs -- all sharing stack[:depth] -- back
+    to markup, factoring the span at `depth` shared by a consecutive run
+    and recursing on the rest.  So '⦃a⦙x⦄⦃a⦙⦃b⦙y⦄⦄' collapses to
+    '⦃a⦙x⦃b⦙y⦄⦄' -- one 'a' toggle, the differing 'b' nested inside.
+    """
+    out = []
+    i = 0
+    n = len(runs)
+    while i < n:
+        text, stack = runs[i]
+        if len(stack) == depth:            # this run's text lives at this level
+            out.append(text)
+            i += 1
+            continue
+        name = stack[depth]                # a nested span: gather its consecutive run
+        j = i + 1
+        while j < n and len(runs[j][1]) > depth and runs[j][1][depth] == name:
+            j += 1
+        out.append(style(name, _join_emit(runs[i:j], depth + 1)))
+        i = j
+    return ''.join(out)
+
+
 @export
 def split_styles(s):
     """
@@ -347,11 +382,12 @@ def split_styles(s):
 @export
 def join_styles(s, span_linebreaks=False):
     """
-    Coalesce adjacent spans that carry an identical span stack and are
-    separated only by non-newline whitespace, absorbing that
-    whitespace into the merged span:
+    Factor out the span stack shared by adjacent runs, wrapping each
+    shared span once and nesting the differences, and absorb the
+    whitespace between them:
 
-        '⦃bold⦙This⦄ ⦃bold⦙is⦄' -> '⦃bold⦙This is⦄'
+        '⦃bold⦙This⦄ ⦃bold⦙is⦄'                    -> '⦃bold⦙This is⦄'
+        '⦃a⦙with⦄ ⦃a⦙⦃code⦙x⦄⦄ ⦃a⦙z⦄'             -> '⦃a⦙with ⦃code⦙x⦄ z⦄'
 
     This is the inverse of split_styles, used to minimize a backend's
     output (fewer style on/off toggles) after layout.  By default it
@@ -368,32 +404,20 @@ def join_styles(s, span_linebreaks=False):
     runs = []
     _collect_style_runs(_parse_markup(s, style_delimiters), [], runs)
     # normalize each piece to final inner markup up front (escape literal
-    # text, keep a zero-arg span verbatim), so coalescing is plain string
-    # concatenation and a zero-arg span rides along as a character.
+    # text, keep a zero-arg span verbatim), so a zero-arg span rides along
+    # as a character.
     runs = [[_inner_markup(piece), stack] for piece, stack in runs]
-    # promote a whitespace-only plain gap to its neighbors' stack when
-    # they match, so the gap joins the two spans instead of splitting them
+    # promote a whitespace-only plain gap to the longest common stack
+    # prefix of its neighbors, so it joins the surrounding group instead
+    # of stranding at the top level and splitting it.
     for i, run in enumerate(runs):
         text, stack = run
         if stack or not text or text.strip(gap_whitespace):
             continue                   # not a pure whitespace plain gap
         left = runs[i - 1][1] if i > 0 else ()
         right = runs[i + 1][1] if (i + 1) < len(runs) else ()
-        if left and (left == right):
-            run[1] = left
-    # coalesce neighbors that now share a stack, then re-wrap each run
-    out = []
-    for text, stack in runs:
-        if out and (out[-1][1] == stack):
-            out[-1][0] += text
-        else:
-            out.append([text, stack])
-    pieces = []
-    for text, stack in out:
-        for name in reversed(stack):   # inner span first; text is already markup
-            text = style(name, text)
-        pieces.append(text)
-    return ''.join(pieces)
+        run[1] = _common_prefix(left, right)
+    return _join_emit(runs, 0)
 
 
 def _iter_arg_refs(segments):

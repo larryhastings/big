@@ -196,6 +196,13 @@ def test_join_styles():
     assert big.join_styles('⦃bold⦙a⦄\n⦃bold⦙b⦄', span_linebreaks=True) == '⦃bold⦙a\nb⦄'
     # still bounded by a differing stack
     assert big.join_styles('⦃bold⦙a⦄\n⦃italic⦙b⦄', span_linebreaks=True) == '⦃bold⦙a⦄\n⦃italic⦙b⦄'
+    # factor out a shared outer span, nesting the differences inside a
+    # single toggle (the gap joins the common prefix, not the top level)
+    assert big.join_styles('⦃heading1⦙with⦄ ⦃heading1⦙⦃code⦙x⦄⦄ ⦃heading1⦙z⦄') == '⦃heading1⦙with ⦃code⦙x⦄ z⦄'
+    # adjacent runs share the outer span but differ within
+    assert big.join_styles('⦃a⦙⦃b⦙x⦄⦄⦃a⦙⦃c⦙y⦄⦄') == '⦃a⦙⦃b⦙x⦄⦃c⦙y⦄⦄'
+    # a zero-argument span rides along as a character
+    assert big.join_styles('⦃marker⦙⦃bullet⦄⦄ a') == '⦃marker⦙⦃bullet⦄⦄ a'
 
 def test_escape_styles():
     # each delimiter is quoted by a leading open delimiter
