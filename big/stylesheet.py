@@ -51,6 +51,9 @@ export('style_delimiters')
 from .text import gently_title as _gently_title
 
 
+# --8<-- start big stylesheet transforms --8<--
+# (a snippet consumer supplies _gently_title -- big.text.gently_title --
+#  and an export() shim.)
 def _fill(pattern, model):
     "Repeat `pattern` up to the length of `model`, then clip: ⦃fill⦙pattern⦙model⦄."
     if not pattern:
@@ -81,6 +84,7 @@ transforms = {
     'center': _center,
 }
 export('transforms')
+# --8<-- end big stylesheet transforms --8<--
 
 
 # --8<-- start big stylesheet render core --8<--
