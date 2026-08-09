@@ -373,10 +373,16 @@ def test_stylesheet_fill_and_strip_transforms():
     assert p.render(fmt('center', 'abcdefg', 'xyz')) == '  xyz  '
     assert p.render(fmt('ljust', 'abcdefg', 'xyz')) == 'xyz    '
     assert p.render(fmt('rjust', 'abcdefg', 'xyz')) == '    xyz'
-    # an optional fill character rides in the middle, keeping text last
+    # an optional fill string rides in the middle, keeping text last
     assert p.render(fmt('center', 'abcdefg', '.', 'xyz')) == '..xyz..'
     assert p.render(fmt('ljust', 'abcdefg', '.', 'xyz')) == 'xyz....'
     assert p.render(fmt('rjust', 'abcdefg', '-', 'xyz')) == '----xyz'
+    # the fill is a string, tiled and clipped to length like fill
+    assert p.render(fmt('center', 'MMMMMMM', '-=-', 'xyz')) == '-=xyz-='
+    assert p.render(fmt('ljust', 'MMMMMMMM', '-=-', 'xyz')) == 'xyz-=--='
+    assert p.render(fmt('rjust', 'MMMMMMMM', '-=-', 'xyz')) == '-=--=xyz'
+    # text at or over the model width comes back unchanged
+    assert p.render(fmt('rjust', 'MM', '-=-', 'xyzzy')) == 'xyzzy'
 
 
 def run_tests(run=None):

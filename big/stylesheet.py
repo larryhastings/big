@@ -54,12 +54,16 @@ from .text import gently_title as _gently_title
 # --8<-- start big stylesheet transforms --8<--
 # (a snippet consumer supplies _gently_title -- big.text.gently_title --
 #  and an export() shim.)
+def _tile(pattern, length):
+    "Repeat `pattern` up to `length` characters, then clip (empty if either is empty)."
+    if length <= 0 or not pattern:
+        return ''
+    return (pattern * (length // len(pattern) + 1))[:length]
+
+
 def _fill(pattern, model):
     "Repeat `pattern` up to the length of `model`, then clip: ⦃fill⦙pattern⦙model⦄."
-    if not pattern:
-        return ''
-    length = len(model)
-    return (pattern * (length // len(pattern) + 1))[:length]
+    return _tile(pattern, len(model))
 
 
 def _clip(model, text):
@@ -68,21 +72,28 @@ def _clip(model, text):
 
 
 def _center(model, *args):
-    "Center `text` in a field the width of `model`: ⦃center⦙model[⦙fill]⦙text⦄."
+    "Center `text` in a field the width of `model`, padding with `fill`: ⦃center⦙model[⦙fill]⦙text⦄."
     *fill, text = args
-    return text.center(len(model), *fill)
+    pattern = fill[0] if fill else ' '
+    margin = len(model) - len(text)
+    if margin <= 0:
+        return text
+    left = margin // 2 + (margin & len(model) & 1)   # str.center's split
+    return _tile(pattern, left) + text + _tile(pattern, margin - left)
 
 
 def _ljust(model, *args):
-    "Left-justify `text` in a field the width of `model`: ⦃ljust⦙model[⦙fill]⦙text⦄."
+    "Left-justify `text` in a field the width of `model`, padding with `fill`: ⦃ljust⦙model[⦙fill]⦙text⦄."
     *fill, text = args
-    return text.ljust(len(model), *fill)
+    pattern = fill[0] if fill else ' '
+    return text + _tile(pattern, len(model) - len(text))
 
 
 def _rjust(model, *args):
-    "Right-justify `text` in a field the width of `model`: ⦃rjust⦙model[⦙fill]⦙text⦄."
+    "Right-justify `text` in a field the width of `model`, padding with `fill`: ⦃rjust⦙model[⦙fill]⦙text⦄."
     *fill, text = args
-    return text.rjust(len(model), *fill)
+    pattern = fill[0] if fill else ' '
+    return _tile(pattern, len(model) - len(text)) + text
 
 
 transforms = {
