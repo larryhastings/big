@@ -369,6 +369,14 @@ def test_stylesheet_fill_and_strip_transforms():
     assert p.render(fmt('clip', 'abcde', 'xyz')) == 'xyz'          # shorter stays
     # fill then clip: a rule sized to the text, capped at the model width
     assert p.render('⦃clip⦙xxxxx⦙⦃fill⦙=⦙⦃strip⦙ heading ⦄⦄⦄') == '====='
+    # center / ljust / rjust: pad text to the width of the model, space by default
+    assert p.render(fmt('center', 'abcdefg', 'xyz')) == '  xyz  '
+    assert p.render(fmt('ljust', 'abcdefg', 'xyz')) == 'xyz    '
+    assert p.render(fmt('rjust', 'abcdefg', 'xyz')) == '    xyz'
+    # an optional fill character rides in the middle, keeping text last
+    assert p.render(fmt('center', 'abcdefg', '.', 'xyz')) == '..xyz..'
+    assert p.render(fmt('ljust', 'abcdefg', '.', 'xyz')) == 'xyz....'
+    assert p.render(fmt('rjust', 'abcdefg', '-', 'xyz')) == '----xyz'
 
 
 def run_tests(run=None):

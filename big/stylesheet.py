@@ -67,9 +67,22 @@ def _clip(model, text):
     return text[:len(model)]
 
 
-def _center(model, text):
-    "Center `text` in a field the width of `model`: ⦃center⦙model⦙text⦄."
-    return text.center(len(model))
+def _center(model, *args):
+    "Center `text` in a field the width of `model`: ⦃center⦙model[⦙fill]⦙text⦄."
+    *fill, text = args
+    return text.center(len(model), *fill)
+
+
+def _ljust(model, *args):
+    "Left-justify `text` in a field the width of `model`: ⦃ljust⦙model[⦙fill]⦙text⦄."
+    *fill, text = args
+    return text.ljust(len(model), *fill)
+
+
+def _rjust(model, *args):
+    "Right-justify `text` in a field the width of `model`: ⦃rjust⦙model[⦙fill]⦙text⦄."
+    *fill, text = args
+    return text.rjust(len(model), *fill)
 
 
 transforms = {
@@ -82,6 +95,8 @@ transforms = {
     'fill':   _fill,
     'clip':   _clip,
     'center': _center,
+    'ljust':  _ljust,
+    'rjust':  _rjust,
 }
 export('transforms')
 # --8<-- end big stylesheet transforms --8<--

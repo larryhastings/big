@@ -4632,8 +4632,12 @@ A `dict` of stock text transforms, suitable for merging into a
 * `⦃fill⦙pattern⦙model⦄` — repeat `pattern` up to the length of `model`,
   then clip: `⦃fill⦙-=-⦙abcdefgh⦄`&nbsp;→&nbsp;`-=--=--=`.
 * `⦃clip⦙model⦙text⦄` — cut `text` to the length of `model`.
-* `⦃center⦙model⦙text⦄` — center `text` in a field the width of `model`:
-  `⦃center⦙abcdefg⦙xyz⦄`&nbsp;→&nbsp;`  xyz  `.
+* `⦃center⦙model[⦙fill]⦙text⦄`, `⦃ljust⦙model[⦙fill]⦙text⦄`,
+  `⦃rjust⦙model[⦙fill]⦙text⦄` — pad `text` to the width of `model`,
+  centered / left- / right-justified: `⦃center⦙abcdefg⦙xyz⦄`&nbsp;→&nbsp;`  xyz  `,
+  `⦃rjust⦙abcdefg⦙xyz⦄`&nbsp;→&nbsp;`    xyz`.  An optional single fill
+  character rides in the *middle* — `⦃rjust⦙abcdefg⦙-⦙xyz⦄`&nbsp;→&nbsp;`----xyz` —
+  so `text` is always the last field and can carry nested markup.
 
 These compose — e.g. a heading rule sized to the text but capped at the
 line width is `⦃clip⦙⦃line⦄⦙⦃fill⦙⦃heading1_rule⦄⦙⦃strip⦙T⦄⦄⦄` (where
