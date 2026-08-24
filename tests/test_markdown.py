@@ -633,6 +633,39 @@ def test_stylesheet_delimiters_in_markdown_are_safe():
     painted = render(src, 0)               # never raises on the literal delimiter
     assert '⦃a⦙b⦄' in painted
 
+def test_styled_text_passes_through_style_document():
+    # a StyledText carries already-valid markup structurally: style_document
+    # does NOT escape it (unlike Text), and the enclosing role still wraps it
+    entry = DefinitionEntry(
+        Term([StyledText('⦃argument⦙<HOST>⦄')]),
+        [Definition([Paragraph([Text('the host to ⦃connect⦄ to')])])])
+    styled = style_document(Document([DefinitionList([entry])]))
+    dl = styled.blocks[0]
+    # the term wears `term` with the pre-styled `argument` nested, unescaped
+    assert dl.entries[0].term.children[0] == Text('⦃term⦙⦃argument⦙<HOST>⦄⦄')
+    assert strip_styles(dl.entries[0].term.children[0].text) == '<HOST>'
+    # ordinary Text alongside it still escapes its literal delimiters
+    prose = dl.entries[0].definitions[0].blocks[0].children[0]
+    assert prose == Text('the host to ⦃⦃connect⦃⦄ to')
+    # the layout node is ('term', …) whose stripped text is <HOST>
+    layout = layout_document(split_styles_document(styled))
+    terms = [t for t in layout if isinstance(t, tuple) and t and t[0] == 'term']
+    assert terms == [('term', '⦃term⦙⦃argument⦙<HOST>⦄⦄')]
+    # malformed markup is refused at the source, naming the node
+    with raises(ValueError):
+        style_document(Document([Paragraph([StyledText('⦃argument⦙oops')])]))
+
+def test_styled_text_degrades_in_render_document():
+    # render_document can't honor style roles; like Raw, it degrades a
+    # StyledText to its stripped text (never dropping it silently)
+    doc = Document([DefinitionList([DefinitionEntry(
+        Term([StyledText('⦃argument⦙<HOST>⦄')]),
+        [Definition([Paragraph([Text('the host to use')])])])])])
+    for fmt in ('gfm', 'commonmark', 'troff'):
+        out = render_document(doc, fmt)
+        assert '<HOST>' in out, (fmt, out)
+        assert '⦃term⦙' not in out and '⦃argument⦙' not in out, (fmt, out)
+
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
     # because width is measured past the markup

@@ -3210,8 +3210,17 @@ equality and a readable `repr`.  Block nodes: `Document`,
 `Term`, `Definition`, `CodeBlock`, `BlockQuote`, `Alert`,
 `ThematicBreak`, and `Raw` (an escape hatch: anything outside the
 subset — a table, raw HTML — is preserved here to be degraded rather
-than dropped).  Inline nodes: `Text`, `Strong`, `Emph`,
-`Strikethrough`, `Code`, `Link`, and `HardBreak`.
+than dropped).  Inline nodes: `Text`, `StyledText`, `Strong`, `Emph`,
+`Strikethrough`, `Code`, `Link`, and `HardBreak`.  A `StyledText`
+holds text that is *already* well-formed `⦃role⦙…⦄` markup: where
+`style_document` escapes a `Text` (a literal `⦃` in a docstring is
+quoted), it passes a `StyledText` through verbatim, so a caller can
+carry a role structurally — e.g. a definition-list term of
+`StyledText('⦃argument⦙<HOST>⦄')` styles to `⦃term⦙⦃argument⦙<HOST>⦄⦄`
+instead of the renderer re-deriving it.  `style_document` validates the
+markup (refusing an unbalanced string at the source) and collapses it
+into a `Text`.  The `render_document` back ends can't honor the roles,
+so — like `Raw` — they degrade a `StyledText` to its stripped text.
 
 </dd></dl>
 

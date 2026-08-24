@@ -59,6 +59,7 @@ import re
 from big.stylesheet import style as _style_span
 from big.stylesheet import style_delimiters as _style_delims
 from big.stylesheet import split_styles as _split_styles
+from big.stylesheet import _parse_markup as _parse_styles
 from big.stylesheet import escape_styles as _escape
 from big.stylesheet import strip_styles as _strip_styles
 from big.stylesheet import StyleSheet as _StyleSheet
@@ -277,6 +278,24 @@ class Raw(Node):
 
 class Text(Node):
     "A run of literal text."
+    __slots__ = ('text',)
+    _fields = ('text',)
+
+
+class StyledText(Node):
+    """
+    A run of text that is ALREADY well-formed ⦃role⦙…⦄ style markup.
+    Where Text is escaped by style_document (a literal ⦃ in a docstring
+    is quoted), StyledText is passed through verbatim -- letting a
+    caller carry a role structurally rather than have the renderer
+    re-derive it.  For example, a definition-list term of
+    StyledText('⦃argument⦙<HOST>⦄') styles to ⦃term⦙⦃argument⦙<HOST>⦄⦄.
+    style_document validates the markup (refusing an unbalanced string
+    at the source) and collapses it into a Text, so the later terminal
+    stages never see it.  The other renderers (render_document's GFM,
+    CommonMark, troff) can't honor the roles, so -- like Raw -- they
+    degrade it to its stripped text.
+    """
     __slots__ = ('text',)
     _fields = ('text',)
 
@@ -1286,12 +1305,24 @@ def _parse_paragraph(lines, i, refs):
 # are styled there, not here, since they aren't text of any node.
 #
 
+def _validate_styled_markup(text):
+    "Refuse a StyledText whose markup isn't well-formed, at the source."
+    try:
+        _parse_styles(text, _style_delims)
+    except ValueError as e:
+        raise ValueError(
+            f'StyledText markup is malformed: {text!r} ({e})') from e
+
+
 def _styled_text(nodes):
     "Inline nodes -> one markup string (bold/italic/strike/code/link)."
     out = []
     for node in nodes:
         if isinstance(node, Text):
             out.append(_escape(node.text))       # literal delimiters -> quoted
+        elif isinstance(node, StyledText):
+            _validate_styled_markup(node.text)   # refuse imbalance, noisily
+            out.append(node.text)                # already valid markup: verbatim
         elif isinstance(node, Strong):
             out.append(_style_span('bold', _styled_text(node.children)))
         elif isinstance(node, Emph):
@@ -1696,6 +1727,8 @@ def _troff_inline(nodes):
     for node in nodes:
         if isinstance(node, Text):
             out.append(_troff_text(node.text))
+        elif isinstance(node, StyledText):
+            out.append(_troff_text(_strip_styles(node.text)))   # roles can't survive troff
         elif isinstance(node, Strong):
             out.append('\\fB' + _troff_inline(node.children) + '\\fP')
         elif isinstance(node, Emph):
@@ -1814,6 +1847,8 @@ def _md_inline(nodes, gfm):
     for node in nodes:
         if isinstance(node, Text):
             out.append(node.text)
+        elif isinstance(node, StyledText):
+            out.append(_strip_styles(node.text))   # roles can't survive Markdown
         elif isinstance(node, Strong):
             out.append('**' + _md_inline(node.children, gfm) + '**')
         elif isinstance(node, Emph):
@@ -1942,7 +1977,7 @@ __all__ = [
     'DefinitionList', 'DefinitionEntry', 'Term', 'Definition',
     'CodeBlock', 'BlockQuote', 'Alert', 'ThematicBreak', 'Raw',
     # inline
-    'Text', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
+    'Text', 'StyledText', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
     # parser + renderers
     'parse', 'style_document', 'split_styles_document', 'layout_document',
     'render_document', 'markdown_defaults', 'markdown_ascii_glyphs',
