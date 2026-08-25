@@ -11845,7 +11845,7 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
 
 # Release history
 
-## next version
+## 0.15
 *under development*
 
 <dl><dd>
