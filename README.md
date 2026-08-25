@@ -11875,7 +11875,14 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `⦃tip_title⦄`, …) resolved by the painting `StyleSheet` —
   `markdown_defaults` for Unicode, `markdown_ascii_glyphs` for ASCII — or
   by the `unicode_glyphs` / `ascii_glyphs` / `glyphs_from_stylesheet` swap
-  functions.  `layout_document` hard-codes nothing.
+  functions.  `layout_document` hard-codes nothing.  Alongside the literal
+  `Text` inline node there's `StyledText`, holding text that is *already*
+  well-formed `⦃role⦙…⦄` markup: `style_document` passes it through verbatim
+  (rather than escaping it, as it does `Text`) so a caller can carry a role
+  structurally — a definition-list term of `StyledText('⦃argument⦙<HOST>⦄')`
+  styles to `⦃term⦙⦃argument⦙<HOST>⦄⦄` — validating the markup and refusing an
+  unbalanced string at the source; the `render_document` back ends degrade it
+  to its stripped text, like `Raw`.
 
 * 🤖 **New module: [`big.stylesheet`](#bigstylesheet).**  The inline
   character-style layer: an `⦃role⦙text⦄` markup language and `StyleSheet`, a
@@ -11886,7 +11893,15 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   maps — `ansi_truecolor_palette`, `ansi_256_color_palette`, `ansi_16_color_palette`,
   `uncolored_palette`, and `plain_palette` — over a 26-color vocabulary plus four
   attributes.  `best_palette` picks the right one for the current terminal.
-  Format and role names may contain underscores (e.g. `dark_purple`).
+  Format and role names may contain underscores (e.g. `dark_purple`).  A stock
+  `transforms` dict supplies text-shaping roles you can merge into a sheet —
+  case (`upper`, `lower`, `title`), whitespace (`strip`, `lstrip`, `rstrip`),
+  and geometry sized to a model string (`fill`, `clip`, and `center` / `ljust` /
+  `rjust`, each taking an optional tiled fill string).  `split_styles` and
+  `join_styles` are inverses: the former splits every span to word granularity
+  for wrapping, the latter factors the shared span-stack prefix back out to
+  minimize a backend's toggles (with `span_linebreaks=True` to merge across a
+  newline too).
 
 * 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
   and [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
