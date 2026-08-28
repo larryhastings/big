@@ -556,11 +556,14 @@ def test_preload():
         saved_path = list(sys.path)
         sys.argv[0] = str(tests_dir / "test_nose.py")
         try:
-            directory = test.preload("olfactory")
-            assert directory == checkout
+            module = test.preload("olfactory")
+            # preload returns the imported module; the checkout is the
+            # parent of the package dir, and it's on sys.path
+            assert module.scent == 'petrichor'
+            assert pathlib.Path(module.__file__).parents[1] == checkout
             assert str(checkout) in sys.path
             import olfactory
-            assert olfactory.scent == 'petrichor'
+            assert olfactory is module
 
             # preloading again doesn't add a second path entry
             test.preload("olfactory")
@@ -569,6 +572,32 @@ def test_preload():
             sys.argv[0] = saved_argv0
             sys.path[:] = saved_path
             sys.modules.pop("olfactory", None)
+
+def test_preload_repl_starts_in_cwd():
+    # in the REPL sys.argv[0] is '', so there's no script to anchor to;
+    # the search must start in the CURRENT directory, not its parent
+    # (Path('').resolve() is already the cwd -- .parent would skip it)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        checkout = pathlib.Path(tmpdir).resolve() / "checkout"
+        package = checkout / "aroma"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("scent = 'ozone'\n")
+
+        saved_argv0 = sys.argv[0]
+        saved_path = list(sys.path)
+        saved_cwd = os.getcwd()
+        sys.argv[0] = ''                       # the REPL
+        os.chdir(checkout)                      # "current directory tree"
+        try:
+            module = test.preload("aroma")
+            assert module.scent == 'ozone'
+            assert pathlib.Path(module.__file__).parents[1] == checkout
+            assert str(checkout) in sys.path
+        finally:
+            os.chdir(saved_cwd)
+            sys.argv[0] = saved_argv0
+            sys.path[:] = saved_path
+            sys.modules.pop("aroma", None)
 
 def test_preload_not_found():
     with tempfile.TemporaryDirectory() as tmpdir:

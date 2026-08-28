@@ -43,10 +43,9 @@ You can test the way you write code, not the way unittest insists:
 A test file looks like this:
 
     import big.test
-    big.test.preload('mypackage')     # local checkout beats installed
     from big.test import raises
 
-    import mypackage
+    mypackage = big.test.preload('mypackage')   # local checkout beats installed
 
     def test_frobnicate():
         got = mypackage.frobnicate('a', 'b')
@@ -118,21 +117,36 @@ expectedFailure = unittest.expectedFailure
 def preload(package):
     """
     Puts the local checkout of `package` on sys.path, so the tests
-    run against the source tree instead of an installed copy.
+    run against the source tree instead of an installed copy, and
+    returns the imported module -- so you can write
+
+        mypackage = big.test.preload('mypackage')
+
+    in place of a preload-then-import pair.
 
     Searches for `package`/__init__.py in the directory containing
     the running script (sys.argv[0]), then in each parent directory.
-    Raises FileNotFoundError if it's not found.  Imports `package`
-    and confirms it came from the checkout.  Returns the directory
-    added to sys.path, as a pathlib.Path.
+    (In the REPL, and anywhere else sys.argv[0] is the empty string,
+    there's no script to anchor to, so the search starts in the
+    current directory.)  Raises FileNotFoundError if it's not found.
+    Imports `package` and confirms it came from the checkout; the
+    directory added to sys.path is the parent of the package
+    directory, recoverable as pathlib.Path(module.__file__).parents[1].
 
     (big's own test suite can't use this to find big--it lives in
     the very package being located--so it bootstraps with its own
     copy of this logic, in tests/bigtestlib.py.  Every *other*
     package is paradox-free.)
     """
-    argv_0 = pathlib.Path(sys.argv[0])
-    directory = starting_dir = argv_0.resolve().parent
+    argv_0 = sys.argv[0]
+    if argv_0:
+        starting_dir = pathlib.Path(argv_0).resolve().parent
+    else:
+        # no script (the REPL, some embeddings): anchor to the cwd,
+        # not its parent -- Path('').resolve() is already the cwd, so
+        # its .parent would wrongly skip the current directory
+        starting_dir = pathlib.Path('.').resolve()
+    directory = starting_dir
     while True:
         init = directory / package / "__init__.py"
         if init.is_file():
@@ -150,7 +164,7 @@ def preload(package):
 
     module = importlib.import_module(package)
     assert module.__file__.startswith(str(directory))
-    return directory
+    return module
 
 
 ##

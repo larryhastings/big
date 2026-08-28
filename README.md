@@ -4948,10 +4948,9 @@ A test file looks like this:
 
 ```Python
 import big.test
-big.test.preload('mypackage')     # local checkout beats installed
 from big.test import raises
 
-import mypackage
+mypackage = big.test.preload('mypackage')   # local checkout beats installed
 
 def test_frobnicate():
     got = mypackage.frobnicate('a', 'b')
@@ -5071,13 +5070,19 @@ When big grows its command-line argument processing module,
 <dl><dd>
 
 Puts the local checkout of `package` on `sys.path`, so the tests
-run against the source tree instead of an installed copy.
+run against the source tree instead of an installed copy, and
+returns the imported module — so you can write
+`mypackage = big.test.preload('mypackage')` in place of a
+preload-then-import pair.
 
 Searches for `package`/`__init__.py` in the directory containing
 the running script (`sys.argv[0]`), then in each parent directory.
-Raises `FileNotFoundError` if it's not found.  Imports `package`
-and confirms it came from the checkout.  Returns the directory
-added to `sys.path`, as a `pathlib.Path`.
+(In the REPL, and anywhere else `sys.argv[0]` is the empty string,
+there's no script to anchor to, so the search starts in the current
+directory.)  Raises `FileNotFoundError` if it's not found.  Imports
+`package` and confirms it came from the checkout.  The directory
+added to `sys.path` is the parent of the package directory,
+recoverable as `pathlib.Path(module.__file__).parents[1]`.
 
 (big's own test suite can't use this to find big--it lives in the
 very package being located--so it bootstraps with its own copy of
