@@ -11948,14 +11948,19 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   escape.**  Code under test that calls `sys.exit()` is scored as an ordinary
   failure; only `KeyboardInterrupt` still propagates and stops the run.
 
-* 🤖 **`big.test`: `preload` is now [`load`](#testloadname), and better.**
-  It returns the imported module (`mypackage = big.test.load('mypackage')`
-  replaces the load-then-import pair), it finds single-file modules
-  (`name.py`) as well as packages, and in the REPL — where `sys.argv[0]` is
-  empty and there's no script to anchor to — it now correctly searches from
+* 🤖 **`big.test`: `preload(package)` is now [`load(name)`](#testloadname),
+  and better.**  The rename tracks two signature changes.  The parameter is
+  now `name`, not `package`, because it accepts a single-file module
+  (`name.py`) as well as a package (`name/__init__.py`).  And the return
+  value is the imported module, not the `pathlib.Path` directory added to
+  `sys.path` — so `mypackage = big.test.load('mypackage')` replaces the
+  load-then-import pair.  (Callers that want the old return value can
+  recover it: `pathlib.Path(module.__file__).parents[1]` for a package,
+  `.parent` for a module.)  Also, in the REPL — where `sys.argv[0]` is empty
+  and there's no script to anchor to — the search now correctly starts in
   the current directory (it used to start one level *up*).  `preload`
-  survives as a deprecated alias, to be removed no sooner than September
-  2027.
+  survives as a deprecated alias that emits a `DeprecationWarning`, to be
+  removed no sooner than September 2027.
 
 </dd></dl>
 
