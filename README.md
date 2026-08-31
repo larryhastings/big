@@ -723,6 +723,8 @@ And here are seven little functions/classes I use all the time:
 
 [`test.finish()`](#testfinish)
 
+[`test.load(name)`](#testloadname)
+
 [`test.main()`](#testmain)
 
 [`test.preload(package)`](#testpreloadpackage)
@@ -4950,7 +4952,7 @@ A test file looks like this:
 import big.test
 from big.test import raises
 
-mypackage = big.test.preload('mypackage')   # local checkout beats installed
+mypackage = big.test.load('mypackage')   # local checkout beats installed
 
 def test_frobnicate():
     got = mypackage.frobnicate('a', 'b')
@@ -4968,7 +4970,7 @@ and a multi-module test driver looks like this:
 
 ```Python
 import big.test
-big.test.preload('mypackage')
+big.test.load('mypackage')
 
 import test_basics, test_parsing
 
@@ -5052,6 +5054,33 @@ Prints the final `OK`/`FAILED` summary from
 status 1.  ([`test.suite`](#testsuite) calls this for you.)
 </dd></dl>
 
+#### `test.load(name)`
+
+<dl><dd>
+
+Puts the local checkout of `name` — a package or a single-file
+module — on `sys.path`, so the tests run against the source tree
+instead of an installed copy, and returns the imported module — so
+you can write `mypackage = big.test.load('mypackage')` in place of
+a load-then-import pair.
+
+Searches for `name`/`__init__.py` or `name`.py in the directory
+containing the running script (`sys.argv[0]`), then in each parent
+directory; the directory nearest the script wins, and within one
+directory a package beats a module of the same name (the import
+runs under Python's own rules).  (In the REPL, and anywhere else
+`sys.argv[0]` is the empty string, there's no script to anchor to,
+so the search starts in the current directory.)  Raises
+`FileNotFoundError` if it's not found.  Imports `name` and confirms
+it came from the checkout.  The directory added to `sys.path` is
+`pathlib.Path(module.__file__).parents[1]` for a package,
+`.parent` for a module.
+
+(big's own test suite can't use this to find big--it lives in the
+very package being located--so it bootstraps with its own copy of
+this logic.  Every *other* package is paradox-free.)
+</dd></dl>
+
 #### `test.main()`
 
 <dl><dd>
@@ -5069,24 +5098,9 @@ When big grows its command-line argument processing module,
 
 <dl><dd>
 
-Puts the local checkout of `package` on `sys.path`, so the tests
-run against the source tree instead of an installed copy, and
-returns the imported module — so you can write
-`mypackage = big.test.preload('mypackage')` in place of a
-preload-then-import pair.
-
-Searches for `package`/`__init__.py` in the directory containing
-the running script (`sys.argv[0]`), then in each parent directory.
-(In the REPL, and anywhere else `sys.argv[0]` is the empty string,
-there's no script to anchor to, so the search starts in the current
-directory.)  Raises `FileNotFoundError` if it's not found.  Imports
-`package` and confirms it came from the checkout.  The directory
-added to `sys.path` is the parent of the package directory,
-recoverable as `pathlib.Path(module.__file__).parents[1]`.
-
-(big's own test suite can't use this to find big--it lives in the
-very package being located--so it bootstraps with its own copy of
-this logic.  Every *other* package is paradox-free.)
+Deprecated alias for [`test.load(name)`](#testloadname), the
+function's name before big 0.15; calling it emits a
+`DeprecationWarning`.  To be removed no sooner than September 2027.
 </dd></dl>
 
 #### `test.raises` and `test.raises_regex`
@@ -11934,6 +11948,15 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   escape.**  Code under test that calls `sys.exit()` is scored as an ordinary
   failure; only `KeyboardInterrupt` still propagates and stops the run.
 
+* 🤖 **`big.test`: `preload` is now [`load`](#testloadname), and better.**
+  It returns the imported module (`mypackage = big.test.load('mypackage')`
+  replaces the load-then-import pair), it finds single-file modules
+  (`name.py`) as well as packages, and in the REPL — where `sys.argv[0]` is
+  empty and there's no script to anchor to — it now correctly searches from
+  the current directory (it used to start one level *up*).  `preload`
+  survives as a deprecated alias, to be removed no sooner than September
+  2027.
+
 </dd></dl>
 
 ## 0.14
@@ -12175,7 +12198,7 @@ and a failing assert still explains itself with the same rich,
 type-aware diff `unittest.assertEqual` produces--big borrows
 unittest's own machinery, reading the operands out of the dead
 frame without re-evaluating anything.  `with raises(ValueError):`
-replaces `assertRaises`; `preload()` puts your local checkout
+replaces `assertRaises`; `load()` puts your local checkout
 ahead of the installed copy; `run()` runs plain functions and
 `unittest.TestCase` classes in one tally; and a multi-module
 driver is a context manager: `with big.test.suite() as run: ...`

@@ -45,7 +45,7 @@ A test file looks like this:
     import big.test
     from big.test import raises
 
-    mypackage = big.test.preload('mypackage')   # local checkout beats installed
+    mypackage = big.test.load('mypackage')   # local checkout beats installed
 
     def test_frobnicate():
         got = mypackage.frobnicate('a', 'b')
@@ -61,7 +61,7 @@ A test file looks like this:
 and a multi-module test driver looks like this:
 
     import big.test
-    big.test.preload('mypackage')
+    big.test.load('mypackage')
 
     import test_basics, test_parsing
 
@@ -101,7 +101,7 @@ import unittest
 
 __all__ = [
     "TestCase", "skip", "skipIf", "skipUnless", "expectedFailure",
-    "raises", "raises_regex", "preload", "run", "suite", "subtest",
+    "raises", "raises_regex", "load", "preload", "run", "suite", "subtest",
     "finish", "main", "stats", "register_type_equality", "explain",
     "ExplainResult",
 ]
@@ -114,24 +114,28 @@ skipUnless = unittest.skipUnless
 expectedFailure = unittest.expectedFailure
 
 
-def preload(package):
+def load(name):
     """
-    Puts the local checkout of `package` on sys.path, so the tests
-    run against the source tree instead of an installed copy, and
-    returns the imported module -- so you can write
+    Puts the local checkout of `name` -- a package or a single-file
+    module -- on sys.path, so the tests run against the source tree
+    instead of an installed copy, and returns the imported module --
+    so you can write
 
-        mypackage = big.test.preload('mypackage')
+        mypackage = big.test.load('mypackage')
 
-    in place of a preload-then-import pair.
+    in place of a load-then-import pair.
 
-    Searches for `package`/__init__.py in the directory containing
-    the running script (sys.argv[0]), then in each parent directory.
-    (In the REPL, and anywhere else sys.argv[0] is the empty string,
-    there's no script to anchor to, so the search starts in the
-    current directory.)  Raises FileNotFoundError if it's not found.
-    Imports `package` and confirms it came from the checkout; the
-    directory added to sys.path is the parent of the package
-    directory, recoverable as pathlib.Path(module.__file__).parents[1].
+    Searches for `name`/__init__.py or `name`.py in the directory
+    containing the running script (sys.argv[0]), then in each parent
+    directory; the directory nearest the script wins, and within one
+    directory a package beats a module of the same name (they're
+    imported with Python's own rules).  (In the REPL, and anywhere
+    else sys.argv[0] is the empty string, there's no script to anchor
+    to, so the search starts in the current directory.)  Raises
+    FileNotFoundError if it's not found.  Imports `name` and confirms
+    it came from the checkout; the directory added to sys.path is
+    pathlib.Path(module.__file__).parents[1] for a package, .parent
+    for a module.
 
     (big's own test suite can't use this to find big--it lives in
     the very package being located--so it bootstraps with its own
@@ -148,23 +152,36 @@ def preload(package):
         starting_dir = pathlib.Path('.').resolve()
     directory = starting_dir
     while True:
-        init = directory / package / "__init__.py"
-        if init.is_file():
+        if ((directory / name / "__init__.py").is_file()
+            or (directory / (name + ".py")).is_file()):
             break
         if directory == directory.parent:
             import errno
             raise FileNotFoundError(
                 errno.ENOENT,
                 f"not found in {starting_dir} or any parent directory",
-                f"{package}/__init__.py")
+                f"{name}/__init__.py (or {name}.py)")
         directory = directory.parent
 
     if str(directory) not in sys.path:
         sys.path.insert(1, str(directory))
 
-    module = importlib.import_module(package)
+    module = importlib.import_module(name)
     assert module.__file__.startswith(str(directory))
     return module
+
+
+def preload(package):
+    """
+    Deprecated alias for load() (renamed in big 0.15).  To be
+    removed no sooner than September 2027.
+    """
+    import warnings
+    warnings.warn(
+        "big.test.preload is deprecated; use big.test.load "
+        "(preload will be removed no sooner than September 2027)",
+        DeprecationWarning, stacklevel=2)
+    return load(package)
 
 
 ##
