@@ -24,7 +24,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import importlib
 import os
+import pathlib
 import re
 import sys
 
@@ -493,6 +495,64 @@ def pure_virtual():
         wrapper.__signature__ = signature(fn)
         return wrapper
     return pure_virtual
+
+
+@export
+def load(name):
+    """
+    Puts the local checkout of `name` -- a package or a single-file
+    module -- on sys.path, so your code runs against the source tree
+    instead of an installed copy, and returns the imported module --
+    so you can write
+
+        mypackage = big.load('mypackage')
+
+    in place of a load-then-import pair.
+
+    Searches for `name`/__init__.py or `name`.py in the directory
+    containing the running script (sys.argv[0]), then in each parent
+    directory; the directory nearest the script wins, and within one
+    directory a package beats a module of the same name (they're
+    imported with Python's own rules).  (In the REPL, and anywhere
+    else sys.argv[0] is the empty string, there's no script to anchor
+    to, so the search starts in the current directory.)  Raises
+    FileNotFoundError if it's not found.  Imports `name` and confirms
+    it came from the checkout; the directory added to sys.path is
+    pathlib.Path(module.__file__).parents[1] for a package, .parent
+    for a module.
+
+    (big's own test suite can't use this to find big--it lives in
+    the very package being located--so it bootstraps with its own
+    copy of this logic, in tests/bigtestlib.py.  Every *other*
+    package is paradox-free.)
+    """
+    argv_0 = sys.argv[0]
+    if argv_0:
+        starting_dir = pathlib.Path(argv_0).resolve().parent
+    else:
+        # no script (the REPL, some embeddings): anchor to the cwd,
+        # not its parent -- Path('').resolve() is already the cwd, so
+        # its .parent would wrongly skip the current directory
+        starting_dir = pathlib.Path('.').resolve()
+    directory = starting_dir
+    while True:
+        if ((directory / name / "__init__.py").is_file()
+            or (directory / (name + ".py")).is_file()):
+            break
+        if directory == directory.parent:
+            import errno
+            raise FileNotFoundError(
+                errno.ENOENT,
+                f"not found in {starting_dir} or any parent directory",
+                f"{name}/__init__.py (or {name}.py)")
+        directory = directory.parent
+
+    if str(directory) not in sys.path:
+        sys.path.insert(1, str(directory))
+
+    module = importlib.import_module(name)
+    assert module.__file__.startswith(str(directory))
+    return module
 
 
 @export

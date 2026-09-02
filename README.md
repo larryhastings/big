@@ -549,6 +549,8 @@ And here are seven little functions/classes I use all the time:
 
 [`literal_eval(s)`](#literal_evals)
 
+[`load(name)`](#loadname)
+
 [`Log(*destinations, **options)`](#logdestinations-options)
 
 [`Log` properties](#log-properties)
@@ -722,8 +724,6 @@ And here are seven little functions/classes I use all the time:
 [`test.ExplainResult`](#testexplainresult)
 
 [`test.finish()`](#testfinish)
-
-[`test.load(name)`](#testloadname)
 
 [`test.main()`](#testmain)
 
@@ -1261,6 +1261,34 @@ position is a promise, and failing loudly (plain `str` has no
 
 In every case the value is character-for-character identical to
 `ast.literal_eval`'s result; only the type and metadata vary.
+</dd></dl>
+
+#### `load(name)`
+
+<dl><dd>
+
+Puts the local checkout of `name` — a package or a single-file
+module — on `sys.path`, so your code runs against the source tree
+instead of an installed copy, and returns the imported module — so
+you can write `mypackage = big.load('mypackage')` in place of a
+load-then-import pair.  Handy for tests and prototypes that should
+exercise the tree you're editing, not whatever's installed.
+
+Searches for `name`/`__init__.py` or `name`.py in the directory
+containing the running script (`sys.argv[0]`), then in each parent
+directory; the directory nearest the script wins, and within one
+directory a package beats a module of the same name (the import
+runs under Python's own rules).  (In the REPL, and anywhere else
+`sys.argv[0]` is the empty string, there's no script to anchor to,
+so the search starts in the current directory.)  Raises
+`FileNotFoundError` if it's not found.  Imports `name` and confirms
+it came from the checkout.  The directory added to `sys.path` is
+`pathlib.Path(module.__file__).parents[1]` for a package,
+`.parent` for a module.
+
+(big's own test suite can't use this to find big--it lives in the
+very package being located--so it bootstraps with its own copy of
+this logic.  Every *other* package is paradox-free.)
 </dd></dl>
 
 #### `ModuleManager()`
@@ -4951,8 +4979,9 @@ A test file looks like this:
 ```Python
 import big.test
 from big.test import raises
+from big.builtin import load
 
-mypackage = big.test.load('mypackage')   # local checkout beats installed
+mypackage = load('mypackage')     # local checkout beats installed
 
 def test_frobnicate():
     got = mypackage.frobnicate('a', 'b')
@@ -4970,7 +4999,8 @@ and a multi-module test driver looks like this:
 
 ```Python
 import big.test
-big.test.load('mypackage')
+from big.builtin import load
+load('mypackage')
 
 import test_basics, test_parsing
 
@@ -5054,33 +5084,6 @@ Prints the final `OK`/`FAILED` summary from
 status 1.  ([`test.suite`](#testsuite) calls this for you.)
 </dd></dl>
 
-#### `test.load(name)`
-
-<dl><dd>
-
-Puts the local checkout of `name` — a package or a single-file
-module — on `sys.path`, so the tests run against the source tree
-instead of an installed copy, and returns the imported module — so
-you can write `mypackage = big.test.load('mypackage')` in place of
-a load-then-import pair.
-
-Searches for `name`/`__init__.py` or `name`.py in the directory
-containing the running script (`sys.argv[0]`), then in each parent
-directory; the directory nearest the script wins, and within one
-directory a package beats a module of the same name (the import
-runs under Python's own rules).  (In the REPL, and anywhere else
-`sys.argv[0]` is the empty string, there's no script to anchor to,
-so the search starts in the current directory.)  Raises
-`FileNotFoundError` if it's not found.  Imports `name` and confirms
-it came from the checkout.  The directory added to `sys.path` is
-`pathlib.Path(module.__file__).parents[1]` for a package,
-`.parent` for a module.
-
-(big's own test suite can't use this to find big--it lives in the
-very package being located--so it bootstraps with its own copy of
-this logic.  Every *other* package is paradox-free.)
-</dd></dl>
-
 #### `test.main()`
 
 <dl><dd>
@@ -5098,9 +5101,10 @@ When big grows its command-line argument processing module,
 
 <dl><dd>
 
-Deprecated alias for [`test.load(name)`](#testloadname), the
-function's name before big 0.15; calling it emits a
-`DeprecationWarning`.  To be removed no sooner than September 2027.
+Deprecated alias for [`load(name)`](#loadname) in `big.builtin`,
+where the function lives (and got its new name) as of big 0.15;
+calling it emits a `DeprecationWarning`.  To be removed no sooner
+than September 2027.
 </dd></dl>
 
 #### `test.raises` and `test.raises_regex`
@@ -11948,12 +11952,14 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   escape.**  Code under test that calls `sys.exit()` is scored as an ordinary
   failure; only `KeyboardInterrupt` still propagates and stops the run.
 
-* 🤖 **`big.test`: `preload(package)` is now [`load(name)`](#testloadname),
-  and better.**  The rename tracks two signature changes.  The parameter is
+* 🤖 **`big.test.preload(package)` is now [`big.builtin.load(name)`](#loadname),
+  and better.**  It moved out of `big.test` — putting your local checkout
+  first is useful to any script, not just tests — and the rename tracks two
+  signature changes.  The parameter is
   now `name`, not `package`, because it accepts a single-file module
   (`name.py`) as well as a package (`name/__init__.py`).  And the return
   value is the imported module, not the `pathlib.Path` directory added to
-  `sys.path` — so `mypackage = big.test.load('mypackage')` replaces the
+  `sys.path` — so `mypackage = big.load('mypackage')` replaces the
   load-then-import pair.  (Callers that want the old return value can
   recover it: `pathlib.Path(module.__file__).parents[1]` for a package,
   `.parent` for a module.)  Also, in the REPL — where `sys.argv[0]` is empty
@@ -12203,8 +12209,9 @@ and a failing assert still explains itself with the same rich,
 type-aware diff `unittest.assertEqual` produces--big borrows
 unittest's own machinery, reading the operands out of the dead
 frame without re-evaluating anything.  `with raises(ValueError):`
-replaces `assertRaises`; `load()` puts your local checkout
-ahead of the installed copy; `run()` runs plain functions and
+replaces `assertRaises`; `big.builtin`'s [`load()`](#loadname)
+puts your local checkout ahead of the installed copy; `run()`
+runs plain functions and
 `unittest.TestCase` classes in one tally; and a multi-module
 driver is a context manager: `with big.test.suite() as run: ...`
 prints the summary and sets the exit code when the block ends.

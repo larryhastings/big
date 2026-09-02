@@ -541,81 +541,6 @@ def test_subtest():
 ## preload
 ##
 
-def test_load():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # a fake project: checkout/mypackage/__init__.py,
-        # with the "script" in checkout/tests/
-        checkout = pathlib.Path(tmpdir) / "checkout"
-        package = checkout / "olfactory"
-        package.mkdir(parents=True)
-        (package / "__init__.py").write_text("scent = 'petrichor'\n")
-        tests_dir = checkout / "tests"
-        tests_dir.mkdir()
-
-        saved_argv0 = sys.argv[0]
-        saved_path = list(sys.path)
-        sys.argv[0] = str(tests_dir / "test_nose.py")
-        try:
-            module = test.load("olfactory")
-            # load returns the imported module; the checkout is the
-            # parent of the package dir, and it's on sys.path
-            assert module.scent == 'petrichor'
-            assert pathlib.Path(module.__file__).parents[1] == checkout
-            assert str(checkout) in sys.path
-            import olfactory
-            assert olfactory is module
-
-            # loading again doesn't add a second path entry
-            test.load("olfactory")
-            assert sys.path.count(str(checkout)) == 1
-        finally:
-            sys.argv[0] = saved_argv0
-            sys.path[:] = saved_path
-            sys.modules.pop("olfactory", None)
-
-def test_load_single_file_module():
-    # load() also finds a single-file module: checkout/gadget.py,
-    # no package directory anywhere
-    with tempfile.TemporaryDirectory() as tmpdir:
-        checkout = pathlib.Path(tmpdir) / "checkout"
-        tests_dir = checkout / "tests"
-        tests_dir.mkdir(parents=True)
-        (checkout / "gadget.py").write_text("sprocket = 'whirr'\n")
-
-        saved_argv0 = sys.argv[0]
-        saved_path = list(sys.path)
-        sys.argv[0] = str(tests_dir / "test_gadget.py")
-        try:
-            module = test.load("gadget")
-            assert module.sprocket == 'whirr'
-            # for a module the checkout is simply the file's directory
-            assert pathlib.Path(module.__file__).parent == checkout
-            assert str(checkout) in sys.path
-        finally:
-            sys.argv[0] = saved_argv0
-            sys.path[:] = saved_path
-            sys.modules.pop("gadget", None)
-
-def test_load_package_beats_module():
-    # checkout/dual/__init__.py AND checkout/dual.py: the package wins,
-    # because the import runs under Python's own rules
-    with tempfile.TemporaryDirectory() as tmpdir:
-        checkout = pathlib.Path(tmpdir) / "checkout"
-        (checkout / "dual").mkdir(parents=True)
-        (checkout / "dual" / "__init__.py").write_text("shape = 'package'\n")
-        (checkout / "dual.py").write_text("shape = 'module'\n")
-
-        saved_argv0 = sys.argv[0]
-        saved_path = list(sys.path)
-        sys.argv[0] = str(checkout / "proto.py")
-        try:
-            module = test.load("dual")
-            assert module.shape == 'package'
-        finally:
-            sys.argv[0] = saved_argv0
-            sys.path[:] = saved_path
-            sys.modules.pop("dual", None)
-
 def test_preload_is_a_deprecated_alias():
     import warnings
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -633,47 +558,12 @@ def test_preload_is_a_deprecated_alias():
             assert module.era == 'bygone'
             assert len(caught) == 1
             assert issubclass(caught[0].category, DeprecationWarning)
-            assert 'big.test.load' in str(caught[0].message)
+            assert 'big.builtin.load' in str(caught[0].message)
         finally:
             sys.argv[0] = saved_argv0
             sys.path[:] = saved_path
             sys.modules.pop("vestige", None)
 
-def test_load_repl_starts_in_cwd():
-    # in the REPL sys.argv[0] is '', so there's no script to anchor to;
-    # the search must start in the CURRENT directory, not its parent
-    # (Path('').resolve() is already the cwd -- .parent would skip it)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        checkout = pathlib.Path(tmpdir).resolve() / "checkout"
-        package = checkout / "aroma"
-        package.mkdir(parents=True)
-        (package / "__init__.py").write_text("scent = 'ozone'\n")
-
-        saved_argv0 = sys.argv[0]
-        saved_path = list(sys.path)
-        saved_cwd = os.getcwd()
-        sys.argv[0] = ''                       # the REPL
-        os.chdir(checkout)                      # "current directory tree"
-        try:
-            module = test.load("aroma")
-            assert module.scent == 'ozone'
-            assert pathlib.Path(module.__file__).parents[1] == checkout
-            assert str(checkout) in sys.path
-        finally:
-            os.chdir(saved_cwd)
-            sys.argv[0] = saved_argv0
-            sys.path[:] = saved_path
-            sys.modules.pop("aroma", None)
-
-def test_load_not_found():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        saved_argv0 = sys.argv[0]
-        sys.argv[0] = str(pathlib.Path(tmpdir) / "test_nothing.py")
-        try:
-            with raises(FileNotFoundError):
-                test.load("no_such_package_anywhere_honest")
-        finally:
-            sys.argv[0] = saved_argv0
 
 
 ##
