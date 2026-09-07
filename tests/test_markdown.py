@@ -598,7 +598,7 @@ def test_style_bakes_role_markup():
     assert style_document(parse("# Hi\n")).blocks[0] == Heading(1, [Text('⦃heading1⦙Hi⦄')])
     para = style_document(parse("a **b** *c* `d` ~~e~~ [f](u)\n")).blocks[0]
     assert para == Paragraph([Text(
-        'a ⦃bold⦙b⦄ ⦃italic⦙c⦄ ⦃code⦙d⦄ ⦃strikethrough⦙e⦄ ⦃link⦙f⦄')])
+        'a ⦃bold⦙b⦄ ⦃italic⦙c⦄ ⦃code⦙d⦄ ⦃strikethrough⦙e⦄ ⦃link⦙u⦙f⦄')])
     # plain_stylesheet strips it all back to the plain text
     assert plain_stylesheet.render(para.children[0].text) == 'a b c d e f'
 
@@ -665,6 +665,30 @@ def test_styled_text_degrades_in_render_document():
         out = render_document(doc, fmt)
         assert '<HOST>' in out, (fmt, out)
         assert '⦃term⦙' not in out and '⦃argument⦙' not in out, (fmt, out)
+
+def test_styled_link_carries_url():
+    # the URL rides as a leading field; the label is the text
+    para = style_document(parse("see [the docs](http://x/y) now\n")).blocks[0]
+    assert para == Paragraph([Text('see ⦃link⦙http://x/y⦙the docs⦄ now')])
+    markup = para.children[0].text
+    # the default sheet shows the label only; plain text is the label
+    assert markdown_defaults.render(markup) == 'see the docs now'
+    assert strip_styles(markup) == 'see the docs now'
+    # a sheet that wants the URL can show it
+    shown = markdown_defaults | StyleSheet({'link': ('URL', 'T', 'T <URL>')})
+    assert shown.render(markup) == 'see the docs <http://x/y> now'
+    # an autolink: the URL is both the destination and the label
+    auto = style_document(parse("<https://x>\n")).blocks[0]
+    assert auto == Paragraph([Text('⦃link⦙https://x⦙https://x⦄')])
+    # a delimiter in a URL is quoted, so it can't break the markup
+    odd = style_document(parse("[t](<a⦙b>)\n")).blocks[0]
+    assert strip_styles(odd.children[0].text) == 't'
+    assert shown.render(odd.children[0].text) == 't <a⦙b>'
+    # through the whole terminal path -- split, wrap, join -- the URL
+    # survives and is shown once for the link, not once per word
+    doc = split_styles_document(style_document(parse("read [the style guide](u) now\n")))
+    wrapped = wrap_words(layout_document(doc), margin=79, raw=strip_styles)
+    assert shown.render(join_styles(wrapped)) == 'read the style guide <u> now'
 
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
@@ -782,7 +806,7 @@ def test_style_pipeline_two_layer_theme():
         'heading1': ('T', '⦃bold⦙⦃header_color⦙T⦄⦄'),
         'marker':   ('T', '⦃header_color⦙T⦄'),
         'code':     ('T', 'T'),
-        'link':     ('T', '⦃underline⦙T⦄'),
+        'link':     ('URL', 'T', '⦃underline⦙T⦄'),   # the URL is luggage
     })
     sheet = low | theme
     md = "# Hi\n\nsome **bold** and `c` and [x](u)\n\n- a\n"

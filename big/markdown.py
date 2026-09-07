@@ -1332,7 +1332,10 @@ def _styled_text(nodes):
         elif isinstance(node, Code):
             out.append(_style_span('code', _escape(node.text)))
         elif isinstance(node, Link):
-            out.append(_style_span('link', _styled_text(node.children)))
+            # the URL rides as a leading field (luggage the default
+            # sheet ignores; a sheet may show it or emit a hyperlink)
+            out.append(_style_span('link', _escape(node.url),
+                                   _styled_text(node.children)))
         elif isinstance(node, HardBreak):
             out.append('\n')     # only reached if a break nests inside a span
     return ''.join(out)
@@ -1449,7 +1452,7 @@ markdown_defaults = _StyleSheet({
     'heading6':   ('T', 'T'),
     'code':       ('T', 'T'),
     'codeblock':  ('T', '⦃code⦙T⦄'),
-    'link':       ('T', 'T'),
+    'link':       ('URL', 'T', 'T'),     # URL is luggage: shown by a sheet that wants it
     'marker':     ('T', 'T'),
     'blockquote': ('T', 'T'),
     'rule':       ('T', 'T'),

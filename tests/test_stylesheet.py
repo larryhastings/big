@@ -436,6 +436,17 @@ def test_split_join_carry_leading_fields():
     assert big.join_styles(pad + 'alpha') == pad + 'alpha'
 
 
+def test_definition_leading_args_may_be_unused():
+    # the LAST arg is the display text and must appear; the args before
+    # it are luggage a replacement may ignore (a link's URL)
+    sheet = StyleSheet({'link': ('URL', 'T', 'T')})
+    assert sheet.render(fmt('link', 'http://x', 'label')) == 'label'
+    with raises(ValueError):
+        StyleSheet({'link': ('URL', 'T', 'URL')})        # display text missing
+    with raises(ValueError):
+        StyleSheet({'bold': ('T', 'plain')})              # the only arg missing
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.stylesheet", module=__name__)
 

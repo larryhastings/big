@@ -493,7 +493,9 @@ class _Definition:
     A validated, precompiled StyleSheet entry.  segments is the
     replacement parsed into markup nodes, with literal text
     further split at arg tokens: str nodes are literals, int
-    nodes are arg indices, _Span nodes recurse.  undoable means
+    nodes are arg indices, _Span nodes recurse.  The last arg is
+    the display text and must appear in the replacement; earlier
+    args are luggage the replacement may ignore.  undoable means
     "pure paint": exactly one arg, used exactly once, in a
     replacement with no nested markup--split into (before, after)
     and painted per text RUN, so nesting and _plain islands are
@@ -550,11 +552,14 @@ class _Definition:
             return result
         self.segments = walk(nodes)
         used = {seg for seg in _iter_arg_refs(self.segments)}
-        for k, a in enumerate(args):
-            if k not in used:
-                raise ValueError(
-                    f"format {name!r}: arg {a!r} never appears "
-                    f"in the replacement")
+        # the LAST arg is the display text and must appear (leaving it
+        # out is always a bug); the args before it are luggage -- a
+        # link's URL -- that a replacement is free to ignore
+        last = len(args) - 1
+        if last >= 0 and last not in used:
+            raise ValueError(
+                f"format {name!r}: arg {args[last]!r} never appears "
+                f"in the replacement")
         # classification: pure paint?
         self.undoable = False
         self.before = self.after = None

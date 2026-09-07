@@ -3279,7 +3279,10 @@ Each inline run is wrapped in its *role* — `Strong`&nbsp;→&nbsp;`bold`,
 `Emph`&nbsp;→&nbsp;`italic`, `Strikethrough`&nbsp;→&nbsp;`strikethrough`,
 `Code`&nbsp;→&nbsp;`code`, `Link`&nbsp;→&nbsp;`link` — and each heading
 in `heading1`…`heading6` by level; code blocks use `codeblock`,
-definition terms `term`.  The markup uses
+definition terms `term`.  A link carries its URL as a leading field
+(`⦃link⦙URL⦙label⦄`): the default sheet shows only the label, and a
+sheet that wants the URL — to print it, or emit a terminal
+hyperlink — defines `link` to use it.  The markup uses
 [`big.stylesheet.style`](#stylename-fields) syntax (`⦃role⦙text⦄`).
 
 The result is still a `Document`; feed it to `split_styles_document`
@@ -3395,8 +3398,10 @@ default for every high-level role `big.markdown` emits.  Compose it
 
 Every role is defined explicitly (there is no `_default`, so an
 *undefined* role raises rather than passing silently).  All are
-do-nothing except `codeblock`, which inherits `code`, and the ten
-alert roles, which default to GitHub-ish colors: `note` blue, `tip`
+do-nothing except `codeblock`, which inherits `code`; `link`, which
+takes the URL as a leading field and shows only the label
+(`('URL', 'T', 'T')`); and the ten alert roles, which default to
+GitHub-ish colors: `note` blue, `tip`
 green, `important` purple, `warning` orange, `caution` red — each
 `heading_<kind>` being that color over `heading2`.
 
@@ -4574,9 +4579,12 @@ character.  Call it on raw text before wrapping it in a span.
 
 Maps format names to definitions; `.render(s)` paints marked-up text
 `s`.  A definition is either a tuple of one or more strings —
-`(*args, replacement)`, where each `arg` is a placeholder that must
-appear in `replacement` — or a `callable(*fields)` returning text
-(the escape hatch).
+`(*args, replacement)`, where each `arg` is a placeholder — or a
+`callable(*fields)` returning text (the escape hatch).  The *last*
+arg is the display text and must appear in `replacement`; any args
+before it are luggage (a link's URL, say) that the replacement may
+ignore: `('URL', 'T', 'T')` shows the label alone, `('URL', 'T',
+'T <URL>')` shows both.
 
 ```Python
     sheet = StyleSheet({
