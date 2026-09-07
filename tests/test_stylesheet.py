@@ -447,14 +447,16 @@ def test_definition_leading_args_may_be_unused():
         StyleSheet({'bold': ('T', 'plain')})              # the only arg missing
 
 
-def test_plain_rendering_applies_transforms():
-    # plain output still SHAPES text -- fill, upper, clip produce visible
-    # characters -- and only drops paint; so strip_styles measures a
-    # fill-of-spaces pad as spaces, not as its model
-    assert plain_stylesheet.render('⦃fill⦙ ⦙abcd⦄') == '    '
-    assert big.strip_styles('⦃fill⦙=⦙⦃bold⦙ab⦄⦄') == '=='
-    assert big.strip_styles('⦃upper⦙⦃bold⦙x⦄⦄') == 'X'
-    assert big.strip_styles('⦃bold⦙x⦄') == 'x'
+def test_strip_styles_is_not_a_renderer():
+    # strip_styles shows every span's LAST field, transforms included --
+    # it strips, it doesn't compute.  That makes it a correct MEASURER
+    # for a fill (the model IS the fill's width) but not a renderer of
+    # markup that carries transforms: render those through a sheet.
+    assert big.strip_styles('⦃fill⦙ ⦙abcd⦄') == 'abcd'
+    assert len(big.strip_styles('⦃fill⦙ ⦙abcd⦄')) == 4
+    assert big.strip_styles('⦃upper⦙x⦄') == 'x'
+    from big.stylesheet import transforms
+    assert (StyleSheet(transforms) | plain_stylesheet).render('⦃fill⦙ ⦙abcd⦄') == '    '
 
 
 def run_tests(run=None):

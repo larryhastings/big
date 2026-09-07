@@ -43,16 +43,18 @@ from big.text import wrap_words
 # The terminal pipeline: parse -> style -> split -> layout_document ->
 # wrap_words -> join_styles -> a StyleSheet.  These helpers drive it the
 # way callers do; width=0 means "no maximum" (an enormous margin).  The
-# glyphs layout draws are markup now (⦃bullet⦄, ...), so the wrap-time
-# raw= must resolve them (via unicode_glyphs) to measure visible width,
-# and plain output resolves them too.
+# glyphs layout draws are markup (⦃bullet⦄, ...), so the wrap-time raw=
+# resolves them through the SAME sheet that will paint, to measure
+# visible width; plain output is that sheet over plain_stylesheet, so
+# glyphs and the list pad (a fill) resolve while paint drops out.
 _NO_MAX = 2 ** 31
 
-def _pipeline(md, width, glyphs=unicode_glyphs):
+def _pipeline(md, width, sheet=markdown_defaults):
     layout = layout_document(split_styles_document(style_document(parse(md))))
     if not layout:
         return ''
     margin = _NO_MAX if width == 0 else width
+    glyphs = glyphs_from_stylesheet(sheet)
     raw = lambda w: strip_styles(glyphs(w))
     return join_styles(wrap_words(layout, margin=margin, raw=raw))
 
@@ -63,9 +65,9 @@ def markup(md, width=79):
     "the laid-out span markup, before glyphs are resolved or a sheet paints it"
     return _rstrip(_pipeline(md, width))
 
-def render(md, width=79, glyphs=unicode_glyphs):
-    "plain terminal text: glyphs resolved, styling markup stripped out"
-    return _rstrip(strip_styles(glyphs(_pipeline(md, width, glyphs))))
+def render(md, width=79, sheet=markdown_defaults):
+    "plain terminal text: rendered through `sheet` with all paint dropped"
+    return _rstrip((sheet | plain_stylesheet).render(_pipeline(md, width, sheet)))
 
 
 #
@@ -718,8 +720,7 @@ def test_list_indent_follows_the_bullet_width():
                               "  delta epsilon\n"
                               "  zeta")
     wide = markdown_defaults | StyleSheet({'bullet': ('-->',)})
-    glyphs = glyphs_from_stylesheet(wide)
-    out = render(md, 18, glyphs=glyphs)
+    out = render(md, 18, sheet=wide)
     assert out == ("--> alpha beta\n"
                    "    gamma delta\n"
                    "    epsilon zeta")
@@ -815,7 +816,8 @@ def test_alerts():
     # resolved to plain
     assert render("> [!TIP]\n> do this\n", 40) == "│ 💡 Tip\n│ do this"
     # ascii glyphs, if that's what you resolve with
-    assert render("> [!TIP]\n> do this\n", 40, glyphs=ascii_glyphs) == "| (*) Tip\n| do this"
+    ascii = markdown_defaults | markdown_ascii_glyphs
+    assert render("> [!TIP]\n> do this\n", 40, sheet=ascii) == "| (*) Tip\n| do this"
 
 def test_alert_role_defaults():
     sheet = markdown_defaults | StyleSheet({

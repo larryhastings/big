@@ -3206,17 +3206,18 @@ The full terminal pipeline is:
 
 For plain, unstyled output, resolve the glyphs with
 [`unicode_glyphs`](#unicode_glyphs-ascii_glyphs) (or `ascii_glyphs`) and
-strip the rest with [`strip_styles`](#strip_stylestext):
+render through a paint-free sheet ([`plain_stylesheet`](#plain_stylesheet) under the defaults, so glyphs and the list pad still resolve):
 
 ```Python
     from big.markdown import *
-    from big.stylesheet import join_styles, strip_styles
+    from big.stylesheet import join_styles, strip_styles, plain_stylesheet
     from big.text import wrap_words
 
     layout  = layout_document(split_styles_document(style_document(parse(markdown_text))))
     raw     = lambda w: strip_styles(unicode_glyphs(w))
     wrapped = wrap_words(layout, margin=79, raw=raw)
-    print(strip_styles(unicode_glyphs(join_styles(wrapped))))   # ascii_glyphs for ASCII
+    sheet   = markdown_defaults | plain_stylesheet     # | markdown_ascii_glyphs first, for ASCII
+    print(sheet.render(join_styles(wrapped)))
 ```
 
 **The subset.** Every CommonMark block and inline construct is
@@ -4688,9 +4689,13 @@ matches — two links to different URLs stay two links.
 <dl><dd>
 
 Strips *all* style markup from `text`, leaving the visible characters —
-`⦃bold⦙hi⦄`&nbsp;→&nbsp;`hi`.  The text transforms still apply, since
-their output *is* visible characters: `⦃fill⦙ ⦙abcd⦄`&nbsp;→&nbsp;four
-spaces, `⦃upper⦙x⦄`&nbsp;→&nbsp;`X`.  It's [`plain_stylesheet`](#plain_stylesheet)`.render`
+`⦃bold⦙hi⦄`&nbsp;→&nbsp;`hi`.  It shows every span's *last* field, the
+[`transforms`](#transforms) included — it strips, it doesn't compute — so
+`⦃fill⦙ ⦙abcd⦄` comes back as `abcd`, the fill's *model*.  That is the
+right width for measuring (a fill is as wide as its model), but it makes
+`strip_styles` the wrong tool for *rendering* markup that carries a
+transform; render that through a sheet, e.g.
+`markdown_defaults | plain_stylesheet`.  It's [`plain_stylesheet`](#plain_stylesheet)`.render`
 under a shorter name, and it's *fail-soft*: text carrying an unquoted
 literal delimiter (not real markup) comes back unchanged rather than
 raising.  This is the callback to hand `wrap_words`/`merge_columns` as
@@ -4702,10 +4707,11 @@ raising.  This is the callback to hand `wrap_words`/`merge_columns` as
 
 <dl><dd>
 
-A `StyleSheet` that strips *all* paint to bare text — every span
-renders as its content, any role — while the [`transforms`](#transforms)
-still shape it (a `fill` still fills, an `upper` still uppercases).
-Handy as a "render to plain text" backend.
+A `StyleSheet` that strips *all* markup to bare text — every span
+renders as its last field, any role.  Merge it *under* a sheet that
+defines your roles (`markdown_defaults | plain_stylesheet`) for a
+"render to plain text" backend that still resolves glyphs and
+transforms.
 
 </dd></dl>
 
@@ -11993,8 +11999,7 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   and geometry sized to a model string (`fill`, `clip`, and `center` / `ljust` /
   `rjust`, each taking an optional tiled fill string).  A transform's fields
   are *visible text* — nested spans resolve, paint is dropped — so `upper` never
-  uppercases an escape code and `fill` never counts one; and `plain_stylesheet`
-  / `strip_styles` still apply the transforms, dropping only paint.
+  uppercases an escape code and `fill` never counts one.
   `split_styles` and `join_styles` are inverses: the former splits every span
   to word granularity for wrapping, the latter factors the shared span-stack
   prefix back out to minimize a backend's toggles (with `span_linebreaks=True`
