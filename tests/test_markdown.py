@@ -32,7 +32,7 @@ parser, and the plain-text renderer.
 import bigtestlib
 bigtestlib.preload_local_big()
 
-from big.test import raises
+from big.test import raises, raises_regex
 
 import big.markdown
 from big.markdown import *
@@ -96,6 +96,25 @@ def test_node_arity_is_checked():
     with raises(TypeError):
         Heading(1, [], 'extra')  # too many
 
+def test_document_kinds():
+    # Document is abstract; parse and style_document each return their kind
+    with raises(TypeError):
+        Document([])
+    raw = parse("some **b**\n")
+    assert type(raw) is MarkdownDocument
+    styled = style_document(raw)
+    assert type(styled) is StyledDocument
+    assert type(split_styles_document(styled)) is StyledDocument
+    # the kinds never compare equal, even with equal blocks
+    assert MarkdownDocument([]) != StyledDocument([])
+    # each stage demands its kind, naming the mistake
+    with raises_regex(TypeError, 'applied twice'):
+        style_document(styled)                   # would have double-escaped
+    with raises_regex(TypeError, 'render_document needs a MarkdownDocument'):
+        render_document(styled, 'gfm')           # would have leaked markup
+    with raises_regex(TypeError, 'call style_document first'):
+        layout_document(raw)                     # would have laid out unstyled text
+
 def test_all_exports_resolve():
     for name in big.markdown.__all__:
         assert hasattr(big.markdown, name), name
@@ -106,66 +125,66 @@ def test_all_exports_resolve():
 #
 
 def test_heading():
-    assert parse("# Title\n") == Document([Heading(1, [Text('Title')])])
-    assert parse("###### Six\n") == Document([Heading(6, [Text('Six')])])
+    assert parse("# Title\n") == MarkdownDocument([Heading(1, [Text('Title')])])
+    assert parse("###### Six\n") == MarkdownDocument([Heading(6, [Text('Six')])])
     # a closing run of hashes is stripped
-    assert parse("## Two ##\n") == Document([Heading(2, [Text('Two')])])
+    assert parse("## Two ##\n") == MarkdownDocument([Heading(2, [Text('Two')])])
 
 def test_setext_headings():
-    assert parse("Big Title\n=========\n") == Document([Heading(1, [Text('Big Title')])])
-    assert parse("Sub Heading\n---\n") == Document([Heading(2, [Text('Sub Heading')])])
+    assert parse("Big Title\n=========\n") == MarkdownDocument([Heading(1, [Text('Big Title')])])
+    assert parse("Sub Heading\n---\n") == MarkdownDocument([Heading(2, [Text('Sub Heading')])])
     # the underline applies to the whole preceding paragraph
-    assert parse("one\ntwo\n===\n") == Document([Heading(1, [Text('one\ntwo')])])
+    assert parse("one\ntwo\n===\n") == MarkdownDocument([Heading(1, [Text('one\ntwo')])])
 
 def test_dashes_context_disambiguates():
     # under a paragraph line -> setext H2
-    assert parse("text\n---\n") == Document([Heading(2, [Text('text')])])
+    assert parse("text\n---\n") == MarkdownDocument([Heading(2, [Text('text')])])
     # after a blank line -> thematic break
-    assert parse("p\n\n---\n") == Document([Paragraph([Text('p')]), ThematicBreak()])
+    assert parse("p\n\n---\n") == MarkdownDocument([Paragraph([Text('p')]), ThematicBreak()])
     # spaced (not a contiguous run) -> thematic break, not setext
-    assert parse("text\n- - -\n") == Document([Paragraph([Text('text')]), ThematicBreak()])
+    assert parse("text\n- - -\n") == MarkdownDocument([Paragraph([Text('text')]), ThematicBreak()])
 
 def test_heading_requires_space_and_at_most_six():
     # no space after the hashes -> not a heading
-    assert parse("#nope\n") == Document([Paragraph([Text('#nope')])])
+    assert parse("#nope\n") == MarkdownDocument([Paragraph([Text('#nope')])])
     # seven hashes -> not a heading
-    assert parse("####### seven\n") == Document([Paragraph([Text('####### seven')])])
+    assert parse("####### seven\n") == MarkdownDocument([Paragraph([Text('####### seven')])])
 
 def test_paragraph_keeps_its_soft_breaks():
     got = parse("Hello world\nsecond line\n")
-    assert got == Document([Paragraph([Text('Hello world\nsecond line')])])
+    assert got == MarkdownDocument([Paragraph([Text('Hello world\nsecond line')])])
 
 def test_thematic_break():
-    assert parse("---\n") == Document([ThematicBreak()])
-    assert parse("***\n") == Document([ThematicBreak()])
-    assert parse("___\n") == Document([ThematicBreak()])
+    assert parse("---\n") == MarkdownDocument([ThematicBreak()])
+    assert parse("***\n") == MarkdownDocument([ThematicBreak()])
+    assert parse("___\n") == MarkdownDocument([ThematicBreak()])
 
 def test_fenced_code():
     got = parse("```python\nx = 1\n  y = 2\n```\n")
-    assert got == Document([CodeBlock('x = 1\n  y = 2', 'python')])
+    assert got == MarkdownDocument([CodeBlock('x = 1\n  y = 2', 'python')])
     # tilde fence, no info string
-    assert parse("~~~\ncode\n~~~\n") == Document([CodeBlock('code', '')])
+    assert parse("~~~\ncode\n~~~\n") == MarkdownDocument([CodeBlock('code', '')])
 
 def test_indented_code():
-    assert parse("    exec foo -v\n") == Document([CodeBlock('exec foo -v', '')])
+    assert parse("    exec foo -v\n") == MarkdownDocument([CodeBlock('exec foo -v', '')])
 
 def test_tabs_expand_to_four_column_stops():
     # a single leading tab reaches column 4 -> indented code block
-    assert parse("\tcode\n") == Document([CodeBlock('code', '')])
+    assert parse("\tcode\n") == MarkdownDocument([CodeBlock('code', '')])
     # after a one-char marker, a tab reaches column 4, so the item's
     # content column is 4 and a tab-indented continuation folds in
-    assert parse("-\tfoo\n\tbar\n") == Document([
+    assert parse("-\tfoo\n\tbar\n") == MarkdownDocument([
         BulletList([ListItem([Paragraph([Text('foo\nbar')])])], True)])
 
 def test_indented_code_does_not_interrupt_paragraph():
     got = parse("ordinary paragraph\n    indented continuation\n")
-    assert got == Document([
+    assert got == MarkdownDocument([
         Paragraph([Text('ordinary paragraph\nindented continuation')]),
     ])
 
 def test_bullet_list_tight():
     got = parse("- one\n- two\n")
-    assert got == Document([BulletList([
+    assert got == MarkdownDocument([BulletList([
         ListItem([Paragraph([Text('one')])]),
         ListItem([Paragraph([Text('two')])]),
     ], True)])
@@ -211,7 +230,7 @@ def test_nested_list():
 
 def test_list_item_with_five_space_marker_gap_starts_with_code():
     got = parse("-     indented code\n")
-    assert got == Document([
+    assert got == MarkdownDocument([
         BulletList([
             ListItem([CodeBlock('indented code', '')]),
         ], True),
@@ -225,7 +244,7 @@ def test_blockquote_contains_blocks():
 
 def test_blockquote_lazy_continuation():
     got = parse("> quoted first line\nlazy second line\n")
-    assert got == Document([
+    assert got == MarkdownDocument([
         BlockQuote([
             Paragraph([Text('quoted first line\nlazy second line')]),
         ]),
@@ -233,7 +252,7 @@ def test_blockquote_lazy_continuation():
 
 def test_definition_list_single():
     got = parse("verbose\n: Controls verbosity.\n")
-    assert got == Document([DefinitionList([
+    assert got == MarkdownDocument([DefinitionList([
         DefinitionEntry(
             Term([Text('verbose')]),
             [Definition([Paragraph([Text('Controls verbosity.')])])]),
@@ -259,13 +278,13 @@ def test_number_at_line_start_is_a_list():
 
 def test_ordered_list_start_other_than_one_does_not_interrupt_paragraph():
     got = parse("ordinary paragraph\n2. still ordinary prose\n")
-    assert got == Document([
+    assert got == MarkdownDocument([
         Paragraph([Text('ordinary paragraph\n2. still ordinary prose')]),
     ])
 
 def test_empty_input():
-    assert parse("") == Document([])
-    assert parse("\n\n\n") == Document([])
+    assert parse("") == MarkdownDocument([])
+    assert parse("\n\n\n") == MarkdownDocument([])
 
 
 #
@@ -433,7 +452,7 @@ def test_reference_link_undefined_stays_literal():
 def test_reference_definition_is_invisible_and_case_insensitive():
     # the `[docs]: ...` line renders nothing; `[Docs]` still resolves
     d = parse("A [Docs] link.\n\n[docs]: http://x\n")
-    assert d == Document([Paragraph([
+    assert d == MarkdownDocument([Paragraph([
         Text('A '), Link([Text('Docs')], 'http://x', ''), Text(' link.')])])
 
 def test_reference_definition_title_styles():
@@ -505,7 +524,7 @@ def test_adjacent_list_of_other_marker_does_not_loosen():
 
 def test_empty_list_items():
     # a bare marker is an EMPTY list item (CommonMark), not prose
-    assert parse("-\n") == Document([
+    assert parse("-\n") == MarkdownDocument([
         BulletList([ListItem([])], True)]), parse("-\n")
     # and between siblings it must not be lazily JOINED into the
     # previous item's paragraph text (the current parser mangles
@@ -607,9 +626,9 @@ def test_split_styles_document():
     # multi-word span becomes per-word (wrapping won't tear it)
     doc = split_styles_document(style_document(parse("**one two three**\n")))
     assert doc.blocks[0] == Paragraph([Text('⦃bold⦙one⦄ ⦃bold⦙two⦄ ⦃bold⦙three⦄')])
-    # it's a no-op on an unstyled document
-    plain = parse("one two three\n")
-    assert split_styles_document(plain) == plain
+    # an unstyled document is refused: this stage needs a StyledDocument
+    with raises(TypeError):
+        split_styles_document(parse("one two three\n"))
     # code is verbatim: never word-split, so its whole line stays one span
     code = split_styles_document(style_document(parse("```\na b c\n```\n")))
     assert code.blocks[0] == CodeBlock('⦃codeblock⦙a b c⦄', '')
@@ -639,7 +658,7 @@ def test_styled_text_passes_through_style_document():
     entry = DefinitionEntry(
         Term([StyledText('⦃argument⦙<HOST>⦄')]),
         [Definition([Paragraph([Text('the host to ⦃connect⦄ to')])])])
-    styled = style_document(Document([DefinitionList([entry])]))
+    styled = style_document(MarkdownDocument([DefinitionList([entry])]))
     dl = styled.blocks[0]
     # the term wears `term` with the pre-styled `argument` nested, unescaped
     assert dl.entries[0].term.children[0] == Text('⦃term⦙⦃argument⦙<HOST>⦄⦄')
@@ -653,12 +672,12 @@ def test_styled_text_passes_through_style_document():
     assert terms == [('term', '⦃term⦙⦃argument⦙<HOST>⦄⦄')]
     # malformed markup is refused at the source, naming the node
     with raises(ValueError):
-        style_document(Document([Paragraph([StyledText('⦃argument⦙oops')])]))
+        style_document(MarkdownDocument([Paragraph([StyledText('⦃argument⦙oops')])]))
 
 def test_styled_text_degrades_in_render_document():
     # render_document can't honor style roles; like Raw, it degrades a
     # StyledText to its stripped text (never dropping it silently)
-    doc = Document([DefinitionList([DefinitionEntry(
+    doc = MarkdownDocument([DefinitionList([DefinitionEntry(
         Term([StyledText('⦃argument⦙<HOST>⦄')]),
         [Definition([Paragraph([Text('the host to use')])])])])])
     for fmt in ('gfm', 'commonmark', 'troff'):

@@ -156,9 +156,46 @@ class Node:
 #
 
 class Document(Node):
-    "The whole parsed document: a list of block nodes."
+    """
+    The whole document: a list of block nodes.  Abstract -- a document
+    is a MarkdownDocument (what parse returns: literal text) or a
+    StyledDocument (what style_document returns: text carrying style
+    markup), and each stage function demands its kind, so styling a
+    document twice or exporting a styled one fails loudly instead of
+    producing plausible garbage.
+    """
     __slots__ = ('blocks',)
     _fields = ('blocks',)
+
+    def __init__(self, *args):
+        if type(self) is Document:
+            raise TypeError(
+                "Document is abstract: build a MarkdownDocument "
+                "(literal text) or a StyledDocument (style markup)")
+        super().__init__(*args)
+
+
+class MarkdownDocument(Document):
+    "A document whose Text holds literal text: parse's output."
+    __slots__ = ()
+
+
+class StyledDocument(Document):
+    "A document whose Text holds style markup: style_document's output."
+    __slots__ = ()
+
+
+def _require(document, kind, stage):
+    "Refuse the wrong kind of document at a stage boundary, naming both."
+    if not isinstance(document, kind):
+        got = type(document).__name__
+        hint = ''
+        if isinstance(document, StyledDocument):
+            hint = ' (already styled: style_document was applied twice?)'
+        elif isinstance(document, MarkdownDocument):
+            hint = ' (not yet styled: call style_document first)'
+        raise TypeError(
+            f"{stage} needs a {kind.__name__}, not a {got}{hint}")
 
 
 class Heading(Node):
@@ -991,7 +1028,7 @@ def parse(text):
         kept.append(line)
         at_block_start = False
         i += 1
-    return Document(_parse_blocks(kept, refs))
+    return MarkdownDocument(_parse_blocks(kept, refs))
 
 
 # Each _parse_<block> helper consumes one block that begins at lines[i]
@@ -1410,7 +1447,8 @@ def style_document(document):
     layout_document to lay out, then to a StyleSheet to paint (or
     to plain_stylesheet to strip the markup back out).
     """
-    return Document(_style_blocks(document.blocks))
+    _require(document, MarkdownDocument, 'style_document')
+    return StyledDocument(_style_blocks(document.blocks))
 
 
 def _map_style_text(node):
@@ -1434,6 +1472,7 @@ def split_styles_document(document):
     without tearing a span; run it after style_document, before
     the layout.  join_styles undoes it on the laid-out text.
     """
+    _require(document, StyledDocument, 'split_styles_document')
     return _map_style_text(document)
 
 
@@ -1576,6 +1615,7 @@ def layout_document(document):
     and pass the result through join_styles and a StyleSheet's render
     (or plain_stylesheet, to strip the markup back to plain text).
     """
+    _require(document, StyledDocument, 'layout_document')
     out = []
     _layout_blocks(document.blocks, '', '', False, out)
     return tuple(out)
@@ -1971,6 +2011,7 @@ def render_document(document, format):
     Call it on the raw parse() IR, not on style_document output -- it
     reads the structured inline nodes, not role markup.
     """
+    _require(document, MarkdownDocument, 'render_document')
     if format == 'gfm':
         return _md_blocks(document.blocks, True)
     if format == 'commonmark':
@@ -1986,7 +2027,7 @@ def render_document(document, format):
 __all__ = [
     'Node',
     # block
-    'Document', 'Heading', 'Paragraph',
+    'Document', 'MarkdownDocument', 'StyledDocument', 'Heading', 'Paragraph',
     'BulletList', 'OrderedList', 'ListItem',
     'DefinitionList', 'DefinitionEntry', 'Term', 'Definition',
     'CodeBlock', 'BlockQuote', 'Alert', 'ThematicBreak', 'Raw',

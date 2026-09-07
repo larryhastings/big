@@ -3234,8 +3234,12 @@ GitHub-Flavored strikethrough (`~~text~~`), definition lists
 `[!IMPORTANT]`, `[!WARNING]`, or `[!CAUTION]` — strictly uppercase).
 
 **The IR.** Every node is a small `__slots__` class with structural
-equality and a readable `repr`.  Block nodes: `Document`,
-`Heading`, `Paragraph`, `BulletList`,
+equality and a readable `repr`.  Block nodes: `Document` — abstract:
+a `MarkdownDocument` (what `parse` returns; its text is literal) or a
+`StyledDocument` (what `style_document` returns; its text carries
+style markup), and each stage function demands its kind, so styling
+twice or exporting a styled tree fails loudly instead of producing
+plausible garbage — then `Heading`, `Paragraph`, `BulletList`,
 `OrderedList`, `ListItem`, `DefinitionList`, `DefinitionEntry`,
 `Term`, `Definition`, `CodeBlock`, `BlockQuote`, `Alert`,
 `ThematicBreak`, and `Raw` (an escape hatch: anything outside the
@@ -3258,12 +3262,13 @@ so — like `Raw` — they degrade a `StyledText` to its stripped text.
 
 <dl><dd>
 
-Parses a Markdown string and returns a `Document` (the root IR node).
+Parses a Markdown string and returns a `MarkdownDocument` (the root
+IR node).
 Never raises; malformed constructs degrade to text.
 
 ```Python
     >>> parse("# Hi\n\nsome **bold** text\n")
-    Document(blocks=[Heading(level=1, children=[Text(text='Hi')]),
+    MarkdownDocument(blocks=[Heading(level=1, children=[Text(text='Hi')]),
       Paragraph(children=[Text(text='some '), Strong(children=[Text(text='bold')]),
       Text(text=' text')])])
 ```
@@ -3274,7 +3279,9 @@ Never raises; malformed constructs degrade to text.
 
 <dl><dd>
 
-Returns a copy of `document` with styling markup baked into its text.
+Takes a `MarkdownDocument` and returns a `StyledDocument`: a copy with
+styling markup baked into its text.  (A `StyledDocument` is refused —
+styling twice would double-escape the markup.)
 Each inline run is wrapped in its *role* — `Strong`&nbsp;→&nbsp;`bold`,
 `Emph`&nbsp;→&nbsp;`italic`, `Strikethrough`&nbsp;→&nbsp;`strikethrough`,
 `Code`&nbsp;→&nbsp;`code`, `Link`&nbsp;→&nbsp;`link` — and each heading
@@ -3326,8 +3333,8 @@ terminal width later.  (Headings get no rule underline — that depends
 on the line width; a width-aware renderer can add one from the
 `heading{n}_rule` role.)
 
-Feed it a document that's been through `style_document` and
-`split_styles_document`.  To render, pass the layout to `wrap_words`
+Feed it a `StyledDocument` that's been through
+`split_styles_document`; a `MarkdownDocument` is refused.  To render, pass the layout to `wrap_words`
 (with `raw=`&nbsp;[`strip_styles`](#strip_stylestext) so styled words
 measure by their visible width), coalesce with
 [`join_styles`](#join_stylestext-span_linebreaksfalse), and paint with a
@@ -3372,8 +3379,10 @@ default):
   inline code the `\fB` / `\fI` font escapes; hyphens are escaped to
   `\-`.  The caller prepends the `.TH name section date …` header.
 
-Call it on the raw `parse()` IR, *not* on `style_document` output — it
-reads the structured inline nodes, not role markup.
+Call it on a `MarkdownDocument` — the raw `parse()` IR — never on
+`style_document` output: it reads the structured inline nodes, not
+role markup, and a `StyledDocument` is refused rather than leaking
+markup into the export.
 
 ```Python
     print(".TH FOOZLE 1")
