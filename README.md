@@ -3204,9 +3204,10 @@ The full terminal pipeline is:
     print(sheet.render(join_styles(wrapped)))
 ```
 
-For plain, unstyled output, resolve the glyphs with
-[`unicode_glyphs`](#unicode_glyphs-ascii_glyphs) (or `ascii_glyphs`) and
-render through a paint-free sheet ([`plain_stylesheet`](#plain_stylesheet) under the defaults, so glyphs and the list pad still resolve):
+For plain, unstyled output, render through a paint-free sheet —
+[`plain_stylesheet`](#plain_stylesheet) under the defaults — so the
+glyphs and the list pad still resolve while every bit of paint drops
+out (merge `markdown_ascii_glyphs` in first for ASCII glyphs):
 
 ```Python
     from big.markdown import *
