@@ -4612,7 +4612,6 @@ A *zero-arg* span (`⦃name⦄`, no field) is treated as a single
 surrounding content rather than being dropped.  (`big.markdown` uses
 zero-arg spans for its glyph roles.)
 
-
 Only a span's *last* field is text; any fields before it are luggage —
 a link's URL, a `fill`'s pattern — carried whole on every word:
 `⦃link⦙URL⦙read more⦄`&nbsp;→&nbsp;`⦃link⦙URL⦙read⦄ ⦃link⦙URL⦙more⦄`.
@@ -4634,8 +4633,10 @@ around the rest: `⦃a⦙with⦄ ⦃a⦙⦃code⦙x⦄⦄ ⦃a⦙z⦄`&nbsp;→&
 ⦃code⦙x⦄ z⦄`.  Used to minimize a backend's output (fewer style toggles)
 after layout.  By default it never merges across a newline, so each
 line's markup stays balanced and self-contained.  Pass
-`span_linebreaks=True` to absorb newlines too — a span may then straddle
-a line break (fewer toggles still, at the cost of per-line balance).
+`span_linebreaks=True` to absorb a single newline too — a span may then
+straddle a line break, so a wrapped heading is still one heading (fewer
+toggles still, at the cost of per-line balance).  A *blank* line is
+always a boundary: two blocks are never fused into one span.
 Like `split_styles`, it treats a zero-arg span as a character, so glyph
 markup survives it.  A span's leading fields are luggage (see
 `split_styles`), and adjacent words merge only when their luggage

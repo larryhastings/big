@@ -446,9 +446,12 @@ def join_styles(s, span_linebreaks=False):
     A separator that isn't pure spaces/tabs (a comma, a newline) is a
     boundary.
 
-    Pass span_linebreaks=True to also absorb newlines, so a span may
-    straddle a line break -- fewer toggles still, at the cost of per-line
-    balance.  Pure markup in, markup out; works for any backend.
+    Pass span_linebreaks=True to also absorb a single newline, so a span
+    may straddle a line break (a wrapped heading is still one heading)
+    -- fewer toggles still, at the cost of per-line balance.  A BLANK
+    line -- two newlines -- is always a boundary: two blocks are never
+    fused into one span.  Pure markup in, markup out; works for any
+    backend.
 
     A span's leading fields are luggage (see split_styles); adjacent
     words merge only when their luggage matches, so two links to
@@ -468,6 +471,8 @@ def join_styles(s, span_linebreaks=False):
         text, stack = run
         if stack or not text or text.strip(gap_whitespace):
             continue                   # not a pure whitespace plain gap
+        if text.count('\n') > 1:
+            continue                   # a blank line: two blocks, never one span
         left = runs[i - 1][1] if i > 0 else ()
         right = runs[i + 1][1] if (i + 1) < len(runs) else ()
         run[1] = _common_prefix(left, right)

@@ -196,6 +196,13 @@ def test_join_styles():
     assert big.join_styles('⦃bold⦙a⦄\n⦃bold⦙b⦄', span_linebreaks=True) == '⦃bold⦙a\nb⦄'
     # still bounded by a differing stack
     assert big.join_styles('⦃bold⦙a⦄\n⦃italic⦙b⦄', span_linebreaks=True) == '⦃bold⦙a⦄\n⦃italic⦙b⦄'
+    # a BLANK line is always a boundary: a wrapped heading (one newline)
+    # rejoins into one heading, two headings (a blank line) stay two --
+    # so a per-block decoration like an underline fires twice, not once
+    wrapped = '⦃heading2⦙First part⦄\n⦃heading2⦙of one⦄'
+    assert big.join_styles(wrapped, span_linebreaks=True) == '⦃heading2⦙First part\nof one⦄'
+    two = '⦃heading2⦙First⦄\n\n⦃heading2⦙Second⦄'
+    assert big.join_styles(two, span_linebreaks=True) == two
     # factor out a shared outer span, nesting the differences inside a
     # single toggle (the gap joins the common prefix, not the top level)
     assert big.join_styles('⦃heading1⦙with⦄ ⦃heading1⦙⦃code⦙x⦄⦄ ⦃heading1⦙z⦄') == '⦃heading1⦙with ⦃code⦙x⦄ z⦄'
