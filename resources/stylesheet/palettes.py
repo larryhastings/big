@@ -27,8 +27,8 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 The source of truth for big.stylesheet's stock ANSI color palettes.
 
-The 26-color vocabulary (red/orange/yellow/green/cyan/blue/purple/gray,
-each in light/dark/normal, plus white/black) plus the four attributes,
+The 29-color vocabulary (red/orange/amber/yellow/green/cyan/blue/purple/
+gray, each in light/dark/normal, plus white/black) plus the four attributes,
 rendered at four color depths:
 
     ansi_truecolor_palette   24-bit (the master values)
@@ -62,6 +62,7 @@ _ansi_attributes = {
 _palette_rgb = {
     'red':    ('850000', 'BA0000', 'E00000'),
     'orange': ('AD3E00', 'C74800', 'FF5C00'),
+    'amber':  ('8B6526', 'B28C42', 'D7AF5F'),
     'yellow': ('A89000', 'E3C000', 'F5DE00'),
     'green':  ('1E7A3C', '2FA65A', '5FD088'),
     'cyan':   ('0E6B78', '1AA0B0', '4FCEDC'),
@@ -75,6 +76,7 @@ _palette_white, _palette_black = 'FFFFFF', '000000'
 _palette_16 = {
     'red':    (31, 31, 91),
     'orange': (91, 91, 93),
+    'amber':  (33, 33, 33),
     'yellow': (33, 33, 93),
     'green':  (32, 32, 92),
     'cyan':   (36, 36, 96),
@@ -106,7 +108,7 @@ def _nearest_256(r, g, b):
 
 
 def _rgb_vocab():
-    "Yield (name, hex) for all 26 colors."
+    "Yield (name, hex) for all 29 colors."
     for hue, (dark, normal, light) in _palette_rgb.items():
         yield hue, normal
         yield 'light_' + hue, light
@@ -116,7 +118,7 @@ def _rgb_vocab():
 
 
 def _code16_vocab():
-    "Yield (name, SGR code) for all 26 colors."
+    "Yield (name, SGR code) for all 29 colors."
     for hue, (dark, normal, light) in _palette_16.items():
         yield hue, normal
         yield 'light_' + hue, light

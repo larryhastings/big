@@ -115,10 +115,10 @@ def test_best_palette():
                (big.plain_stylesheet, big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette))
 
 def test_plain_palette():
-    # plain_palette renders everything plain, but enumerates all 30 roles
+    # plain_palette renders everything plain, but enumerates all 33 roles
     # explicitly -- no _default (so it composes with sheets that forbid one)
     assert '_default' not in big.plain_palette
-    assert len(big.plain_palette) == 30
+    assert len(big.plain_palette) == 33
     assert big.plain_palette.render('⦃bold⦙⦃red⦙x⦄⦄') == 'x'
     # unlike uncolored_palette, even the attributes are no-ops
     assert big.plain_palette.render('⦃bold⦙x⦄') == 'x'
@@ -216,8 +216,8 @@ def test_escape_styles():
 
 def test_ansi_low_level_maps():
     E = '\x1b'
-    # each map defines the 4 attributes + the 26-color vocabulary
-    hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'gray']
+    # each map defines the 4 attributes + the 29-color vocabulary
+    hues = ['red', 'orange', 'amber', 'yellow', 'green', 'cyan', 'blue', 'purple', 'gray']
     vocab = {'bold', 'italic', 'underline', 'strikethrough', 'white', 'black'}
     for hue in hues:
         vocab |= {hue, 'light_' + hue, 'dark_' + hue}
