@@ -5379,6 +5379,12 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
     ORIGINAL word (markup and all) is what gets emitted.  wrap_words
     never slices a word, so a plain-text view is all it needs.
 
+    Widths are measured in code points -- len(raw(word)) -- not
+    terminal cells.  Wide characters (CJK, most emoji), combining
+    marks, and emoji with modifiers occupy a different number of
+    columns than they have code points, so text carrying them may
+    misalign by a column or two.
+
     'indent' is a value used to prefix every line in the wrapped
     paragraphs.  It may be a single string, in which case every line
     gets prefixed with 'indent'.  It may also be a list or tuple of

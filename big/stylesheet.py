@@ -456,6 +456,12 @@ def join_styles(s, span_linebreaks=False):
     A span's leading fields are luggage (see split_styles); adjacent
     words merge only when their luggage matches, so two links to
     different URLs stay two links.
+
+    Split and join assume the roles they handle are PAINT -- the same
+    brushed onto a phrase or onto each of its words -- or block-level
+    (one per block, reassembled here).  A decoration that must fire
+    once per phrase belongs before wrapping, resolved into text:
+    decorate early, paint late.
     """
     gap_whitespace = ' \t\n' if span_linebreaks else ' \t'
     runs = []

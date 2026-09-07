@@ -4545,6 +4545,24 @@ with a low-level sheet mapping `red`&nbsp;→&nbsp;an ANSI escape, and
 subclass, so you compose with `|` and tweak with ordinary item
 assignment.
 
+**Decorate early, paint late.**  Text that will be wrapped gets pulled
+apart into words by [`split_styles`](#split_stylestext) and put back
+together by [`join_styles`](#join_stylestext-span_linebreaksfalse),
+and those two are blind to what a role *means* — they run at bake
+time, before any sheet exists.  So a role that rides through them must
+be **paint**: something that looks the same brushed onto a phrase or
+onto each of its words (bold, a color, an HTML tag).  Anything that
+changes the *visible characters* — brackets around a metavar,
+uppercase, a fill rule — is a **decoration**, and belongs *before*
+wrapping, resolved into ordinary text (`<HOST>` is characters by the
+time it wraps; the `argument` role that colors it is paint).  The one
+sanctioned exception is a *block-level* role like a heading, applied
+once per block: join reassembles a wrapped block into a single span,
+and a blank line always ends one, so the block's decoration fires
+exactly once.  A once-per-phrase decoration *inside* wrapped prose
+(`('T', '[T]')`) is outside this contract — the stylesheet cannot tell
+it from a tag, and will paint it per word.
+
 </dd></dl>
 
 #### `style(name, *fields)`
@@ -7171,6 +7189,13 @@ input it returns `['']`, which `wrap_words` is happy to wrap.)
 
 For more information, see the tutorial on
 [**Word wrapping and formatting.**](#word-wrapping-and-formatting)
+
+Widths are measured in *code points* — `len(raw(word))` — not terminal
+cells.  Wide characters (CJK, most emoji), combining marks, and emoji
+with modifiers occupy a different number of columns than they have
+code points, so text carrying them may misalign by a column or two; a
+cell-width policy is a possible later addition.
+
 </dd></dl>
 
 ## `big.tokens`
@@ -11944,7 +11969,14 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   structurally — a definition-list term of `StyledText('⦃argument⦙<HOST>⦄')`
   styles to `⦃term⦙⦃argument⦙<HOST>⦄⦄` — validating the markup and refusing an
   unbalanced string at the source; the `render_document` back ends degrade it
-  to its stripped text, like `Raw`.
+  to its stripped text, like `Raw`.  `Document` itself is abstract: `parse`
+  returns a `MarkdownDocument` and `style_document` a `StyledDocument`, and
+  each stage function demands its kind, so styling twice or exporting a styled
+  tree fails loudly.  A link carries its URL as a leading field
+  (`⦃link⦙URL⦙label⦄`; the default sheet shows the label alone, a sheet that
+  wants the URL uses it).  A list item's continuation indent is a `fill` sized
+  when painted, so a sheet may give the bullet any width and the text still
+  lines up.
 
 * 🤖 **New module: [`big.stylesheet`](#bigstylesheet).**  The inline
   character-style layer: an `⦃role⦙text⦄` markup language and `StyleSheet`, a
@@ -11959,18 +11991,28 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `transforms` dict supplies text-shaping roles you can merge into a sheet —
   case (`upper`, `lower`, `title`), whitespace (`strip`, `lstrip`, `rstrip`),
   and geometry sized to a model string (`fill`, `clip`, and `center` / `ljust` /
-  `rjust`, each taking an optional tiled fill string).  `split_styles` and
-  `join_styles` are inverses: the former splits every span to word granularity
-  for wrapping, the latter factors the shared span-stack prefix back out to
-  minimize a backend's toggles (with `span_linebreaks=True` to merge across a
-  newline too).
+  `rjust`, each taking an optional tiled fill string).  A transform's fields
+  are *visible text* — nested spans resolve, paint is dropped — so `upper` never
+  uppercases an escape code and `fill` never counts one; and `plain_stylesheet`
+  / `strip_styles` still apply the transforms, dropping only paint.
+  `split_styles` and `join_styles` are inverses: the former splits every span
+  to word granularity for wrapping, the latter factors the shared span-stack
+  prefix back out to minimize a backend's toggles (with `span_linebreaks=True`
+  to merge across a single newline; a blank line is always a boundary).  Only a
+  span's last field is text — earlier fields are luggage that rides whole on
+  every word, and join merges only matching luggage — and, correspondingly, a
+  definition's last arg must appear in its replacement while earlier args may
+  go unused.  The contract that makes this sound is spelled out in the section
+  intro: *decorate early, paint late*.
 
 * 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
   and [`merge_columns`](#merge_columnscolumns-column_separator--overflow_strategyoverflowstrategyraise-overflow_before0-overflow_after0-tab_width8-rawnone)
   gain a `raw` callback.**  It maps a word or line to its plain text, so callers
   whose words carry in-band styling markup wrap by *visible* width while the
   original styled text is what's emitted.  Defaults to the identity, so existing
-  behavior is unchanged.
+  behavior is unchanged.  Widths count code points, not terminal cells (so wide
+  characters and emoji may misalign); a cell-width policy is a possible later
+  addition.
 
 * 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
   learns layout instructions.**  An element of `words` may now be a tuple that's
