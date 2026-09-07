@@ -447,6 +447,16 @@ def test_definition_leading_args_may_be_unused():
         StyleSheet({'bold': ('T', 'plain')})              # the only arg missing
 
 
+def test_plain_rendering_applies_transforms():
+    # plain output still SHAPES text -- fill, upper, clip produce visible
+    # characters -- and only drops paint; so strip_styles measures a
+    # fill-of-spaces pad as spaces, not as its model
+    assert plain_stylesheet.render('⦃fill⦙ ⦙abcd⦄') == '    '
+    assert big.strip_styles('⦃fill⦙=⦙⦃bold⦙ab⦄⦄') == '=='
+    assert big.strip_styles('⦃upper⦙⦃bold⦙x⦄⦄') == 'X'
+    assert big.strip_styles('⦃bold⦙x⦄') == 'x'
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.stylesheet", module=__name__)
 

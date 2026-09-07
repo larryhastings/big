@@ -63,6 +63,7 @@ from big.stylesheet import _parse_markup as _parse_styles
 from big.stylesheet import escape_styles as _escape
 from big.stylesheet import strip_styles as _strip_styles
 from big.stylesheet import StyleSheet as _StyleSheet
+from big.stylesheet import transforms as _transforms
 
 # The glyphs layout_document draws -- bullet, quote bar, rules, alert
 # emoji -- are emitted as zero-arg style roles (⦃bullet⦄, ⦃note_emoji⦄,
@@ -1443,7 +1444,13 @@ def split_styles_document(document):
 # The low-level attribute/color roles (bold, red, ...) come from a
 # backend map.  Compose UNDER a theme:  markdown_defaults | theme | ansi_256_color_palette
 # --8<-- start big markdown defaults --8<--
+# (a snippet consumer supplies _StyleSheet and _transforms --
+#  big.stylesheet.StyleSheet and .transforms.)
 markdown_defaults = _StyleSheet({
+    # the text transforms ride along: layout emits a ⦃fill⦄ pad under
+    # each list item (spaces as wide as its marker, sized when painted),
+    # so any sheet built on these defaults can render it
+    **_transforms,
     'heading1':   ('T', 'T'),
     'heading2':   ('T', 'T'),
     'heading3':   ('T', 'T'),
@@ -1651,7 +1658,11 @@ def _layout_list(list_node, ordered, lead, rest, out):
         markers = [_style_span('bullet')] * len(list_node.items)
     widths = [_visible(marker) for marker in markers]
     marker_width = max(widths, default=0)
-    pad = rest + (' ' * (marker_width + 1))
+    # the continuation pad is "spaces as wide as the widest marker plus
+    # one", sized when PAINTED -- a fill over the marker markup -- so a
+    # sheet may substitute a bullet of any width and stay aligned
+    widest = markers[widths.index(marker_width)] if markers else ''
+    pad = rest + _style_span('fill', ' ', _style_span('marker', widest) + ' ')
     separator = '\n' if list_node.tight else '\n\n'
     for index, item in enumerate(list_node.items):
         if index:

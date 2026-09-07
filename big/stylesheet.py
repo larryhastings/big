@@ -118,8 +118,8 @@ export('transforms')
 # runtime members, _Definition, StyleSheet, plain_stylesheet.
 # The authoring helpers ride along until a render-only core is
 # factored.  Snippet consumers supply style_delimiters, an
-# export() shim, and a _multisplit stub--split_styles needs it,
-# nothing else does.)
+# export() shim, transforms (plain_stylesheet applies them), and a
+# _multisplit stub--split_styles needs it, nothing else does.)
 def _validate_format(name):
     if not isinstance(name, str):
         raise TypeError(f"format must be str, not {type(name).__name__}")
@@ -804,7 +804,11 @@ class StyleSheet(dict):
         return ''.join(out)
 
 
-plain_stylesheet = StyleSheet({'_default': ('T', 'T')})
+# plain rendering still SHAPES text: the transforms (fill, upper, ...)
+# apply, since their output is visible characters -- a fill-of-spaces
+# pad must come out as spaces, a heading rule as dashes.  Only paint
+# is dropped: every other role renders as its display text.
+plain_stylesheet = StyleSheet({**transforms, '_default': ('T', 'T')})
 export('plain_stylesheet')
 
 

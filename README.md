@@ -3397,7 +3397,11 @@ default for every high-level role `big.markdown` emits.  Compose it
 ```
 
 Every role is defined explicitly (there is no `_default`, so an
-*undefined* role raises rather than passing silently).  All are
+*undefined* role raises rather than passing silently).  The
+[`transforms`](#transforms) ride along too: `layout_document` puts a
+`fill` under each list item — spaces as wide as its marker, sized when
+painted — so a sheet built on these defaults can give the bullet any
+width and the item text still lines up.  All are
 do-nothing except `codeblock`, which inherits `code`; `link`, which
 takes the URL as a leading field and shows only the label
 (`('URL', 'T', 'T')`); and the ten alert roles, which default to
@@ -4657,7 +4661,9 @@ matches — two links to different URLs stay two links.
 <dl><dd>
 
 Strips *all* style markup from `text`, leaving the visible characters —
-`⦃bold⦙hi⦄`&nbsp;→&nbsp;`hi`.  It's [`plain_stylesheet`](#plain_stylesheet)`.render`
+`⦃bold⦙hi⦄`&nbsp;→&nbsp;`hi`.  The text transforms still apply, since
+their output *is* visible characters: `⦃fill⦙ ⦙abcd⦄`&nbsp;→&nbsp;four
+spaces, `⦃upper⦙x⦄`&nbsp;→&nbsp;`X`.  It's [`plain_stylesheet`](#plain_stylesheet)`.render`
 under a shorter name, and it's *fail-soft*: text carrying an unquoted
 literal delimiter (not real markup) comes back unchanged rather than
 raising.  This is the callback to hand `wrap_words`/`merge_columns` as
@@ -4669,9 +4675,10 @@ raising.  This is the callback to hand `wrap_words`/`merge_columns` as
 
 <dl><dd>
 
-A `StyleSheet` that strips *all* markup to bare text — every span
-renders as its content, any role.  Handy as a "render to plain text"
-backend.
+A `StyleSheet` that strips *all* paint to bare text — every span
+renders as its content, any role — while the [`transforms`](#transforms)
+still shape it (a `fill` still fills, an `upper` still uppercases).
+Handy as a "render to plain text" backend.
 
 </dd></dl>
 

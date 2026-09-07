@@ -690,6 +690,26 @@ def test_styled_link_carries_url():
     wrapped = wrap_words(layout_document(doc), margin=79, raw=strip_styles)
     assert shown.render(join_styles(wrapped)) == 'read the style guide <u> now'
 
+def test_list_indent_follows_the_bullet_width():
+    # the continuation pad is sized when painted, so a sheet may give the
+    # bullet any width and the item text still lines up under itself --
+    # and, measured through that same sheet, nothing wraps past the margin
+    md = "- alpha beta gamma delta epsilon zeta\n"
+    assert render(md, 18) == ("• alpha beta gamma\n"
+                              "  delta epsilon\n"
+                              "  zeta")
+    wide = markdown_defaults | StyleSheet({'bullet': ('-->',)})
+    glyphs = glyphs_from_stylesheet(wide)
+    out = render(md, 18, glyphs=glyphs)
+    assert out == ("--> alpha beta\n"
+                   "    gamma delta\n"
+                   "    epsilon zeta")
+    assert all(len(line) <= 18 for line in out.split('\n'))
+    # ordered lists are unchanged: markers right-align, text lines up
+    assert render("9. a b c d e f\n10. g\n", 12) == (" 9. a b c d\n"
+                                                   "    e f\n"
+                                                   "10. g")
+
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
     # because width is measured past the markup
