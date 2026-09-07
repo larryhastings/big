@@ -4684,6 +4684,12 @@ These compose — e.g. a heading rule sized to the text but capped at the
 line width is `⦃clip⦙⦃line⦄⦙⦃fill⦙⦃heading1_rule⦄⦙⦃strip⦙T⦄⦄⦄` (where
 `line` is a role you set to a full-width run for the current width).
 
+A transform's fields are *visible text*.  Spans nested inside a field
+still resolve — glyphs, rewrites, other transforms — but paint is
+dropped, so `⦃upper⦙…⦄` never uppercases an escape sequence and
+`fill` never counts one.  A transform's own output is then painted by
+whatever encloses it, like any other run.
+
 </dd></dl>
 
 #### `ansi_truecolor_palette`, `ansi_256_color_palette`, `ansi_16_color_palette`, `uncolored_palette`, `plain_palette`

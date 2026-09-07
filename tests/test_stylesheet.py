@@ -385,6 +385,28 @@ def test_stylesheet_fill_and_strip_transforms():
     assert p.render(fmt('rjust', 'MM', '-=-', 'xyzzy')) == 'xyzzy'
 
 
+def test_transform_fields_are_visible_text():
+    # a transform's fields render with painting OFF: nested spans
+    # resolve to their text and glyphs, but nothing pushes paint, so
+    # str.upper never touches an escape code and fill never counts one
+    from big.stylesheet import transforms
+    p = StyleSheet(transforms) | StyleSheet({
+        'bold': ('T', '\x1b[1mT\x1b[22m'),
+        'heading2_rule': ('-',),
+        'twice': ('X', 'X and X'),
+    })
+    assert p.render(fmt('upper', fmt('bold', 'abc'))) == 'ABC'
+    # the transform's OUTPUT is painted by whatever encloses it
+    assert p.render(fmt('bold', fmt('upper', 'abc'))) == '\x1b[1mABC\x1b[22m'
+    # geometry measures visible text, not escape bytes
+    assert p.render(fmt('fill', '=', fmt('bold', 'ab') + 'cd')) == '===='
+    # glyphs and opaque rewrites still resolve inside a field
+    assert p.render(fmt('fill', fmt('heading2_rule'), 'abcdef')) == '------'
+    assert p.render(fmt('upper', fmt('twice', 'ab'))) == 'AB AND AB'
+    # nested transforms compose
+    assert p.render(fmt('fill', '=', fmt('upper', 'abc'))) == '==='
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.stylesheet", module=__name__)
 

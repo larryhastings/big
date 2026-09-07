@@ -657,7 +657,10 @@ class StyleSheet(dict):
         # paint: tuple of (before, after) pairs of the enclosing
         # undoable spans.  Every text RUN is painted with the full
         # stack--nesting needs no undo, and islands simply paint
-        # with an empty stack.
+        # with an empty stack.  None means painting is OFF: inside a
+        # transform's fields, definitions still resolve (glyphs,
+        # rewrites, nested transforms) but nothing pushes paint, so
+        # the transform sees visible text and never an escape code.
         for node in nodes:
             if isinstance(node, _Hole):
                 self._render(node.nodes, paint, strip,
@@ -701,12 +704,13 @@ class StyleSheet(dict):
             raise ValueError(
                 f"format reference cycle involving {name!r}")
         if callable(definition):
-            # a transform: it receives its fields rendered CLEAN
-            # (no enclosing paint--str.upper on escape codes is
-            # nobody's wish), and its output is ordinary text,
-            # painted like any run at this position.  Never
+            # a transform: it receives its fields as VISIBLE text--
+            # painting off, so nested spans resolve to their text and
+            # glyphs (str.upper on an escape code, or fill counting
+            # its bytes, is nobody's wish)--and its output is ordinary
+            # text, painted like any run at this position.  Never
             # re-parsed.
-            rendered = [self._subrender(f, (), strip, active)
+            rendered = [self._subrender(f, None, strip, active)
                         for f in fields]
             result = definition(*rendered)
             if paint and not strip:
@@ -725,9 +729,10 @@ class StyleSheet(dict):
                 f"format {name!r} takes {len(definition.args)} "
                 f"field(s), got {len(fields)}")
         if definition.undoable:
-            if definition.verbatim:
-                # paints nothing: render the text with the paint stack
-                # unchanged, no empty before/after to push and undo.
+            if definition.verbatim or (paint is None):
+                # paints nothing (a verbatim role, or painting is off):
+                # render the text with the paint stack unchanged, no
+                # before/after to push and undo.
                 self._render(fields[0], paint, strip, active, emit)
                 return
             emit_paint = paint + ((definition.before,
