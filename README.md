@@ -4612,6 +4612,12 @@ A *zero-arg* span (`⦃name⦄`, no field) is treated as a single
 surrounding content rather than being dropped.  (`big.markdown` uses
 zero-arg spans for its glyph roles.)
 
+
+Only a span's *last* field is text; any fields before it are luggage —
+a link's URL, a `fill`'s pattern — carried whole on every word:
+`⦃link⦙URL⦙read more⦄`&nbsp;→&nbsp;`⦃link⦙URL⦙read⦄ ⦃link⦙URL⦙more⦄`.
+So a multi-field span survives splitting, and renders word by word.
+
 </dd></dl>
 
 #### `join_styles(text, span_linebreaks=False)`
@@ -4631,7 +4637,9 @@ line's markup stays balanced and self-contained.  Pass
 `span_linebreaks=True` to absorb newlines too — a span may then straddle
 a line break (fewer toggles still, at the cost of per-line balance).
 Like `split_styles`, it treats a zero-arg span as a character, so glyph
-markup survives it.
+markup survives it.  A span's leading fields are luggage (see
+`split_styles`), and adjacent words merge only when their luggage
+matches — two links to different URLs stay two links.
 
 </dd></dl>
 

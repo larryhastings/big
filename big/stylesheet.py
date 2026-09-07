@@ -309,23 +309,41 @@ def _parse_markup(s, delimiters):
     return root
 
 
-def _collect_style_runs(nodes, names, acc):
+def _markup(nodes):
+    "Parsed nodes back to markup: text re-escaped, spans re-wrapped."
+    out = []
+    for node in nodes:
+        if isinstance(node, str):
+            out.append(escape_styles(node))
+        else:
+            out.append(style(node.name, *(_markup(f) for f in node.fields)))
+    return ''.join(out)
+
+
+def _collect_style_runs(nodes, stack, acc):
     """
-    Flatten parsed markup to (piece, tuple_of_enclosing_span_names).
-    A piece is a str text run, or a zero-arg _Span (a span with no
-    fields) -- treated as a single character, so it survives split and
-    join like ordinary content instead of vanishing (it has no text).
+    Flatten parsed markup to (piece, stack).  A piece is a str text
+    run, or a zero-arg _Span (a span with no fields) -- treated as a
+    single character, so it survives split and join like ordinary
+    content instead of vanishing (it has no text).
+
+    The stack is a tuple of (name, luggage) for the enclosing spans.
+    Only a span's LAST field is text to be split; any fields before
+    it are luggage -- a link's URL, a fill's pattern -- serialized to
+    markup and carried whole on the stack, so every split-off word
+    rebuilds with them intact and join merges only words whose
+    luggage matches.
     """
     for node in nodes:
         if isinstance(node, str):
-            acc.append((node, tuple(names)))
+            acc.append((node, tuple(stack)))
         elif not node.fields:          # a zero-arg span: one character
-            acc.append((node, tuple(names)))
-        else:                          # a _Span: descend carrying its name
-            names.append(node.name)
-            for field in node.fields:
-                _collect_style_runs(field, names, acc)
-            names.pop()
+            acc.append((node, tuple(stack)))
+        else:                          # a _Span: descend its last field
+            luggage = tuple(_markup(f) for f in node.fields[:-1])
+            stack.append((node.name, luggage))
+            _collect_style_runs(node.fields[-1], stack, acc)
+            stack.pop()
 
 
 def _inner_markup(piece):
@@ -361,11 +379,12 @@ def _join_emit(runs, depth):
             out.append(text)
             i += 1
             continue
-        name = stack[depth]                # a nested span: gather its consecutive run
+        span = stack[depth]                # a nested span: gather its consecutive run
         j = i + 1
-        while j < n and len(runs[j][1]) > depth and runs[j][1][depth] == name:
+        while j < n and len(runs[j][1]) > depth and runs[j][1][depth] == span:
             j += 1
-        out.append(style(name, _join_emit(runs[i:j], depth + 1)))
+        name, luggage = span               # same name AND same luggage
+        out.append(style(name, *luggage, _join_emit(runs[i:j], depth + 1)))
         i = j
     return ''.join(out)
 
@@ -384,22 +403,27 @@ def split_styles(s):
     text at whitespace -- to wrap it, lay it in columns, whatever --
     and get self-contained styled words, since a span never straddles
     a break.  Pure markup in, markup out.
+
+    Only a span's LAST field is text; any fields before it are luggage
+    (a link's URL, say) and ride along whole on every word:
+
+        '⦃link⦙URL⦙read more⦄' -> '⦃link⦙URL⦙read⦄ ⦃link⦙URL⦙more⦄'
     """
     acc = []
     _collect_style_runs(_parse_markup(s, style_delimiters), [], acc)
     out = []
-    for run, names in acc:
+    for run, stack in acc:
         if not isinstance(run, str):           # a zero-arg span: one verbatim word
             word = style(run.name)
-            for name in reversed(names):
-                word = style(name, word)
+            for name, luggage in reversed(stack):
+                word = style(name, *luggage, word)
             out.append(word)
             continue
         for word, gap in _multisplit(run, keep=True, separate=False, strip=False):
             if word:
                 word = escape_styles(word)     # _parse_markup unquoted it
-                for name in reversed(names):   # inner span first
-                    word = style(name, word)
+                for name, luggage in reversed(stack):   # inner span first
+                    word = style(name, *luggage, word)
                 out.append(word)
             out.append(gap)
     return ''.join(out)
@@ -425,6 +449,10 @@ def join_styles(s, span_linebreaks=False):
     Pass span_linebreaks=True to also absorb newlines, so a span may
     straddle a line break -- fewer toggles still, at the cost of per-line
     balance.  Pure markup in, markup out; works for any backend.
+
+    A span's leading fields are luggage (see split_styles); adjacent
+    words merge only when their luggage matches, so two links to
+    different URLs stay two links.
     """
     gap_whitespace = ' \t\n' if span_linebreaks else ' \t'
     runs = []

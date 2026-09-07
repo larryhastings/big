@@ -407,6 +407,28 @@ def test_transform_fields_are_visible_text():
     assert p.render(fmt('fill', '=', fmt('upper', 'abc'))) == '==='
 
 
+def test_split_join_carry_leading_fields():
+    # only a span's LAST field is text; fields before it are luggage
+    # that rides whole on every word, so a two-field span survives
+    link = '⦃link⦙https://example.com⦙read more⦄'
+    split = big.split_styles(link)
+    assert split == '⦃link⦙https://example.com⦙read⦄ ⦃link⦙https://example.com⦙more⦄'
+    assert big.join_styles(split) == link
+    # and the split form RENDERS, word by word, through a two-field role
+    sheet = StyleSheet({'link': ('URL', 'TEXT', 'TEXT <URL>')})
+    assert sheet.render(split) == 'read <https://example.com> more <https://example.com>'
+    # join merges only words whose luggage matches: two URLs stay two links
+    two = '⦃link⦙u1⦙a⦄ ⦃link⦙u2⦙b⦄'
+    assert big.join_styles(two) == two
+    # luggage may itself be markup, and survives the round trip
+    fancy = '⦃x⦙⦃bold⦙u⦄⦙a b⦄'
+    assert big.join_styles(big.split_styles(fancy)) == fancy
+    # a fill-of-spaces pad -- ⦃fill⦙ ⦙model⦄, the runtime bullet indent --
+    # passes through join untouched, trailing space in the model included
+    pad = '⦃fill⦙ ⦙⦃marker⦙⦃bullet⦄⦄ ⦄'
+    assert big.join_styles(pad + 'alpha') == pad + 'alpha'
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.stylesheet", module=__name__)
 
