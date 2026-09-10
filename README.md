@@ -3382,10 +3382,12 @@ default):
   block-quoted definition.
 * **`'troff'`** — groff `man`-macro troff, the **body** of a man page.
   Headings become `.SH`/`.SS` sections, definition lists `.TP` tagged
-  paragraphs (ideal for options; a definition list nested inside another
-  indents under its entry via `.RS`/`.RE`), bullet/ordered lists `.IP`, code
+  paragraphs (ideal for options), bullet/ordered lists `.IP`, code
   blocks `.EX`/`.EE`, block quotes `.RS`/`.RE`, and strong / emphasis /
-  inline code the `\fB` / `\fI` font escapes; hyphens are escaped to
+  inline code the `\fB` / `\fI` font escapes; an entry's further blocks —
+  paragraphs, lists, code, a nested definition list — sit under the entry
+  inside `.RS`/`.RE`, and a heading there becomes a bold paragraph (a `.SS`
+  would end the entry); hyphens are escaped to
   `\-`.  The caller prepends the `.TH name section date …` header.
 
 Call it on a `MarkdownDocument` — the raw `parse()` IR — never on
@@ -11992,7 +11994,8 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   when painted, so a sheet may give the bullet any width and the text still
   lines up.  A definition holds any block content — headings and nested
   definition lists included: the terminal lays a nested list out as its own
-  table within the detail column, and troff nests it with `.RS`/`.RE`.
+  table within the detail column, and troff keeps an entry's further blocks
+  under the entry via `.RS`/`.RE` (a heading there becomes a bold paragraph).
 
 * 🤖 **New module: [`big.stylesheet`](#bigstylesheet).**  The inline
   character-style layer: an `⦃role⦙text⦄` markup language and `StyleSheet`, a

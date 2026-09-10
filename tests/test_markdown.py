@@ -804,14 +804,26 @@ def test_render_document_commonmark():
     # a definition list degrades to a bold term + blockquoted details
     assert cm("term\n: The detail.\n") == "**term**  \n> The detail."
 
-def test_render_document_troff_nested_definition_list():
-    # .TP inside .TP doesn't nest on its own; inside .RS/.RE the inner
-    # tags indent under the outer body, and no text is lost
+def test_render_document_troff_definition_bodies():
+    # a body's further blocks sit inside a bare .RS/.RE, at the tag's
+    # body column: a .PP alone would fall back to the tag's column, and
+    # .TP inside .TP doesn't nest on its own.  A nested definition list's
+    # tags indent under the outer body; the paragraph after it stays there
     md = "outer\n: intro\n\n    inner\n    : detail\n\n    after\n"
     assert render_document(parse(md), 'troff') == (
         '.TP\n\\fBouter\\fP\nintro\n'
-        '.RS 4\n.TP\n\\fBinner\\fP\ndetail\n.RE\n'
-        '.PP\nafter')
+        '.RS\n.TP\n\\fBinner\\fP\ndetail\n.PP\nafter\n.RE')
+    # a heading inside a body can't be a .SS (that ends the entry wherever
+    # it sits): it degrades to a bold paragraph, still under the entry
+    md = "term\n: Intro.\n\n    ### Sub\n\n    After.\n"
+    assert render_document(parse(md), 'troff') == (
+        '.TP\n\\fBterm\\fP\nIntro.\n'
+        '.RS\n.PP\n\\fBSub\\fP\n.PP\nAfter.\n.RE')
+    # the same for a list item's further blocks
+    assert render_document(parse("- a\n\n  b\n"), 'troff') == (
+        '.IP \\(bu 3\na\n.RS\n.PP\nb\n.RE')
+    # a top-level heading is still a section
+    assert '.SS Sub' in render_document(parse("## Sub\n"), 'troff')
 
 def test_render_document_unknown_format():
     with raises(ValueError):

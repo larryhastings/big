@@ -1816,18 +1816,29 @@ def _troff_paragraph(children, lead='.PP'):
 
 
 def _troff_item_blocks(blocks):
-    "An item/definition body: first paragraph inline, the rest as blocks."
+    """
+    An item/definition body: the first paragraph inline under the
+    .IP/.TP tag, and any further blocks inside a bare .RS/.RE -- which
+    indents to the PREVAILING indent, the tag's body column -- so they
+    stay under the entry.  Without it a .PP falls back to the tag's
+    column and a .SS escapes the section margin entirely; inside it
+    paragraphs, lists, code, and a nested definition list's .TP tags
+    all sit where they belong.  A heading can't be a .SS (that ends
+    the entry wherever it sits), so it degrades to a bold paragraph.
+    """
     out = []
-    for index, block in enumerate(blocks):
-        if index == 0 and isinstance(block, Paragraph):
-            out.append(_troff_inline(block.children))   # sits under the .IP/.TP
-        elif isinstance(block, DefinitionList):
-            # a nested definition list: .TP inside .TP doesn't nest on its
-            # own, but inside .RS/.RE the inner tags indent under the outer
-            # body -- the man-page idiom for a sub-list of options
-            out.extend(['.RS 4'] + _troff_block(block) + ['.RE'])
-        else:
-            out.extend(_troff_block(block))
+    rest = list(blocks)
+    if rest and isinstance(rest[0], Paragraph):
+        out.append(_troff_inline(rest[0].children))
+        rest = rest[1:]
+    if rest:
+        out.append('.RS')
+        for block in rest:
+            if isinstance(block, Heading):
+                out.extend(['.PP', '\\fB' + _troff_inline(block.children) + '\\fP'])
+            else:
+                out.extend(_troff_block(block))
+        out.append('.RE')
     return out
 
 
