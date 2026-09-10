@@ -4637,7 +4637,11 @@ ignore: `('URL', 'T', 'T')` shows the label alone, `('URL', 'T',
     sheet.render(style('heading', 'Hi'))            # bold + red
 ```
 
-`'_default'`, if present, catches unknown names (it takes one arg,
+A newline inside a replacement continues at the visible column where
+the span began, so a definition that adds a line — a heading's
+underline, `('T', 'T\n⦃fill⦙-⦙T⦄')` — stays aligned under the heading
+even inside an indented layout (a definition list's detail column, a
+list item).  `'_default'`, if present, catches unknown names (it takes one arg,
 the display text); with no `'_default'`, an unknown name raises
 `KeyError`.  `escape` is applied to literal source text at render
 time (e.g. `html.escape` for an HTML backend).  Merging with `|`
@@ -12012,7 +12016,9 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   and geometry sized to a model string (`fill`, `clip`, and `center` / `ljust` /
   `rjust`, each taking an optional tiled fill string).  A transform's fields
   are *visible text* — nested spans resolve, paint is dropped — so `upper` never
-  uppercases an escape code and `fill` never counts one.
+  uppercases an escape code and `fill` never counts one.  A newline inside a
+  replacement continues at the column where its span began, so a heading's
+  underline stays aligned inside an indented layout.
   `split_styles` and `join_styles` are inverses: the former splits every span
   to word granularity for wrapping, the latter factors the shared span-stack
   prefix back out to minimize a backend's toggles (with `span_linebreaks=True`

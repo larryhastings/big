@@ -738,6 +738,42 @@ def test_list_indent_follows_the_bullet_width():
                                                    "    e f\n"
                                                    "10. g")
 
+def test_heading_underline_inside_a_definition_is_indented():
+    # regression: a sheet that underlines a heading (text, newline, rule)
+    # drew the rule flush left when the heading sat inside a definition's
+    # description -- the newline came from the sheet, which never saw the
+    # detail column.  A replacement's newline now continues at the column
+    # the span began at.
+    underlined = markdown_defaults | StyleSheet({
+        'heading3': ('T', 'T\n⦃fill⦙⦃heading2_rule⦄⦙⦃strip⦙T⦄⦄')})
+    md = ("--text <S>\n"
+          ":   Some text.\n"
+          "\n"
+          "    ### Arguments\n"
+          "\n"
+          "    <S>\n"
+          "    :   The string.\n")
+    assert render(md, 50, sheet=underlined) == (
+        "--text <S>  Some text.\n"
+        "\n"
+        "            Arguments\n"
+        "            ---------\n"
+        "\n"
+        "            <S>  The string.")
+    # a heading as the FIRST block of a compact entry shares the term's
+    # line; its rule still lands at the detail column, not under the term
+    assert render("term\n:   ### Head\n\n    body\n", 50, sheet=underlined) == (
+        "term  Head\n"
+        "      ----\n"
+        "\n"
+        "      body")
+    # and inside a list item
+    assert render("- item\n\n  ### Inside\n", 50, sheet=underlined) == (
+        "• item\n"
+        "\n"
+        "  Inside\n"
+        "  ------")
+
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
     # because width is measured past the markup

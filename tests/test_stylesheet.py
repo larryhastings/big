@@ -459,6 +459,21 @@ def test_strip_styles_is_not_a_renderer():
     assert (StyleSheet(transforms) | plain_stylesheet).render('⦃fill⦙ ⦙abcd⦄') == '    '
 
 
+def test_replacement_newline_continues_at_the_span_column():
+    # a replacement that adds a line (a heading's underline) continues
+    # at the visible column where the span began, so the added line
+    # stays aligned inside an indented layout
+    from big.stylesheet import transforms
+    sheet = StyleSheet({**transforms, 'h': ('T', 'T\n⦃fill⦙-⦙T⦄'),
+                        'bold': ('T', '\x1b[1mT\x1b[22m')})
+    assert sheet.render('⦃h⦙Title⦄') == 'Title\n-----'                   # top level: unchanged
+    assert sheet.render('    ⦃h⦙Title⦄') == '    Title\n    -----'       # indented: the rule follows
+    # paint is invisible: only visible text moves the column
+    assert sheet.render('⦃bold⦙xx⦄ ⦃h⦙T⦄') == '\x1b[1mxx\x1b[22m T\n   -'
+    # a newline in the SOURCE resets the column
+    assert sheet.render('abc\n  ⦃h⦙T⦄') == 'abc\n  T\n  -'
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.stylesheet", module=__name__)
 
