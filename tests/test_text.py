@@ -2448,6 +2448,16 @@ def test_wrap_words_deflist():
                 ('indent', '• ', '  '), 'b')
     assert w(nested, 40) == 'x  • a\n   • b'
 
+    # a nested DEFINITION list inside the details is its own table, laid
+    # out within the outer detail column: its terms are not the outer
+    # list's terms (they neither widen the outer column nor become
+    # entries of it), and it picks its own column against the ribbon
+    inner = dl(*entry('a', 'one'), *entry('b', 'two'))
+    outer = dl(('term', 'x'), *inner, *entry('long-outer-term', 'after'))
+    assert w(outer, 60) == ('x                a  one\n'
+                            '                 b  two\n'
+                            'long-outer-term  after')
+
     # a term too wide for the column drops to its own line; the short
     # siblings keep sharing theirs (the per-entry fallback).  Enough
     # short terms that the 80th percentile lands on them, not the outlier.

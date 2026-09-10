@@ -3234,6 +3234,12 @@ GitHub-Flavored strikethrough (`~~text~~`), definition lists
 (a `term` line followed by `: definition` lines), and GitHub
 **alerts** (a block quote whose first line is `[!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]`, or `[!CAUTION]` — strictly uppercase).
+A definition holds any block content, indented four spaces —
+paragraphs, code, lists, headings, even another definition list — as
+in the PHP Markdown Extra / Pandoc dialect the syntax comes from.  The
+terminal renderer lays a nested definition list out as its own table
+inside the outer entry's detail column, picking its own column against
+that narrower width.
 
 **The IR.** Every node is a small `__slots__` class with structural
 equality and a readable `repr`.  Block nodes: `Document` — abstract:
@@ -3376,7 +3382,8 @@ default):
   block-quoted definition.
 * **`'troff'`** — groff `man`-macro troff, the **body** of a man page.
   Headings become `.SH`/`.SS` sections, definition lists `.TP` tagged
-  paragraphs (ideal for options), bullet/ordered lists `.IP`, code
+  paragraphs (ideal for options; a definition list nested inside another
+  indents under its entry via `.RS`/`.RE`), bullet/ordered lists `.IP`, code
   blocks `.EX`/`.EE`, block quotes `.RS`/`.RE`, and strong / emphasis /
   inline code the `\fB` / `\fI` font escapes; hyphens are escaped to
   `\-`.  The caller prepends the `.TH name section date …` header.
@@ -11983,7 +11990,9 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   (`⦃link⦙URL⦙label⦄`; the default sheet shows the label alone, a sheet that
   wants the URL uses it).  A list item's continuation indent is a `fill` sized
   when painted, so a sheet may give the bullet any width and the text still
-  lines up.
+  lines up.  A definition holds any block content — headings and nested
+  definition lists included: the terminal lays a nested list out as its own
+  table within the detail column, and troff nests it with `.RS`/`.RE`.
 
 * 🤖 **New module: [`big.stylesheet`](#bigstylesheet).**  The inline
   character-style layer: an `⦃role⦙text⦄` markup language and `StyleSheet`, a

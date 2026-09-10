@@ -603,6 +603,14 @@ def test_render_definition_list():
     # a nested bullet list in the details lands at the detail column
     nested = render("term\n: intro\n\n    - one\n    - two\n", 60)
     assert nested == "term  intro\n\n      • one\n      • two"
+    # a nested definition list is its own table inside the detail column:
+    # its terms neither widen the outer column nor become outer entries
+    md = "outer\n: intro\n\n    inner\n    : detail\n\n    after\n"
+    assert render(md, 60) == ("outer  intro\n"
+                              "\n"
+                              "       inner  detail\n"
+                              "\n"
+                              "       after")
 
 def test_render_hanging_wrap():
     # continuation of a wrapped item hangs under the item's text
@@ -795,6 +803,15 @@ def test_render_document_commonmark():
     assert cm("> [!WARNING]\n> Careful.\n") == "> **Warning**\n> Careful."
     # a definition list degrades to a bold term + blockquoted details
     assert cm("term\n: The detail.\n") == "**term**  \n> The detail."
+
+def test_render_document_troff_nested_definition_list():
+    # .TP inside .TP doesn't nest on its own; inside .RS/.RE the inner
+    # tags indent under the outer body, and no text is lost
+    md = "outer\n: intro\n\n    inner\n    : detail\n\n    after\n"
+    assert render_document(parse(md), 'troff') == (
+        '.TP\n\\fBouter\\fP\nintro\n'
+        '.RS 4\n.TP\n\\fBinner\\fP\ndetail\n.RE\n'
+        '.PP\nafter')
 
 def test_render_document_unknown_format():
     with raises(ValueError):

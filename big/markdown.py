@@ -1821,6 +1821,11 @@ def _troff_item_blocks(blocks):
     for index, block in enumerate(blocks):
         if index == 0 and isinstance(block, Paragraph):
             out.append(_troff_inline(block.children))   # sits under the .IP/.TP
+        elif isinstance(block, DefinitionList):
+            # a nested definition list: .TP inside .TP doesn't nest on its
+            # own, but inside .RS/.RE the inner tags indent under the outer
+            # body -- the man-page idiom for a sub-list of options
+            out.extend(['.RS 4'] + _troff_block(block) + ['.RE'])
         else:
             out.extend(_troff_block(block))
     return out

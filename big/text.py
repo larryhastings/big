@@ -5484,13 +5484,22 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
         entries = []
         term_words = None
         details = []
+        depth = 0
         for item in items:
-            if (type(item) is tuple) and (item[0] == def_markers[2]):    # 'term'
+            is_marker = type(item) is tuple
+            if is_marker and (item[0] == def_markers[0]):                 # nested 'def start'
+                depth += 1
+            elif is_marker and (item[0] == def_markers[1]):               # nested 'def end'
+                depth -= 1
+            elif is_marker and (item[0] == def_markers[2]) and (depth == 0):   # OUR 'term'
                 if term_words is not None:
                     entries.append((term_words, details))
                 term_words = list(item[1:])
                 details = []
-            elif term_words is not None:
+                continue
+            # a nested list's markers and terms stay inside the details,
+            # where render_stream lays the inner list out recursively
+            if term_words is not None:
                 details.append(item)
         if term_words is not None:
             entries.append((term_words, details))
