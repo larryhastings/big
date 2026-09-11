@@ -214,32 +214,6 @@ def _escape_nodes(nodes, escape):
     return result
 
 
-class _Emitter:
-    """
-    Collects rendered output and tracks the visible column: text
-    advances it (a newline resets it), paint doesn't.  A replacement
-    that introduces a newline continues at the column where its span
-    began, so a decoration that adds a line -- a heading's underline
-    -- stays aligned under the heading inside an indented layout.
-    """
-    __slots__ = ('out', 'column')
-
-    def __init__(self):
-        self.out = []
-        self.column = 0
-
-    def __call__(self, s):                 # paint: invisible
-        self.out.append(s)
-
-    def text(self, s):                     # visible text
-        self.out.append(s)
-        i = s.rfind('\n')
-        self.column = (self.column + len(s)) if (i < 0) else (len(s) - i - 1)
-
-    def result(self):
-        return ''.join(self.out)
-
-
 class _Hole:
     """
     A field spliced into a replacement, as an unrendered node
@@ -719,9 +693,9 @@ class StyleSheet(dict):
         nodes = _parse_markup(s, self.delimiters)
         if self.escape is not None:
             nodes = _escape_nodes(nodes, self.escape)
-        emit = _Emitter()
-        self._render(nodes, (), False, frozenset(), emit)
-        return emit.result()
+        out = []
+        self._render(nodes, (), False, frozenset(), out.append)
+        return ''.join(out)
 
     def _render(self, nodes, paint, strip, active, emit):
         # paint: tuple of (before, after) pairs of the enclosing
@@ -740,11 +714,11 @@ class StyleSheet(dict):
                 if paint and not strip:
                     for b, a in paint:
                         emit(b)
-                    emit.text(node)
+                    emit(node)
                     for b, a in reversed(paint):
                         emit(a)
                 else:
-                    emit.text(node)
+                    emit(node)
                 continue
             self._render_span(node, paint, strip, active, emit)
 
@@ -786,11 +760,11 @@ class StyleSheet(dict):
             if paint and not strip:
                 for b_, a_ in paint:
                     emit(b_)
-                emit.text(result)
+                emit(result)
                 for b_, a_ in reversed(paint):
                     emit(a_)
             else:
-                emit.text(result)
+                emit(result)
             return
         if display_only:
             fields = [fields[-1] if fields else []]
@@ -814,10 +788,6 @@ class StyleSheet(dict):
         # field is painted by whatever surrounds its final
         # position, and the cycle set grows only through
         # definition expansion (fields carry the call site's set)
-        # a newline the REPLACEMENT introduces (a heading's underline on
-        # its own line) continues at the column this span began at, so
-        # the new line stays aligned inside whatever indents the span
-        continuation = '\n' + (' ' * emit.column)
         def substitute(segments):
             nodes = []
             for seg in segments:
@@ -829,15 +799,15 @@ class StyleSheet(dict):
                                 seg.where)
                     nodes.append(sub)
                 else:
-                    nodes.append(seg.replace('\n', continuation))
+                    nodes.append(seg)
             return nodes
         self._render(substitute(definition.segments), paint,
                      strip, active | {name}, emit)
 
     def _subrender(self, nodes, paint, strip, active):
-        emit = _Emitter()
-        self._render(nodes, paint, strip, active, emit)
-        return emit.result()
+        out = []
+        self._render(nodes, paint, strip, active, out.append)
+        return ''.join(out)
 
 
 plain_stylesheet = StyleSheet({'_default': ('T', 'T')})

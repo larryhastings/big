@@ -5282,6 +5282,20 @@ _DEFLIST_TALL_INDENT = 4
 _DEFLIST_MIN_RIBBON = 20
 
 
+def _tile_rule(pattern, pattern_width, width, empty, raw):
+    """
+    `pattern` repeated to `width` or longer, then clipped to `width`
+    when it's plain text (raw leaves it alone).  Markup is never
+    sliced inside, so it may run up to one repetition long.
+    """
+    if not width:
+        return empty
+    tiled = pattern * (-(-width // pattern_width))
+    if raw(pattern) == pattern:
+        tiled = tiled[:width]
+    return tiled
+
+
 def _deflist_column(term_widths, margin):
     """
     Pick the detail column D for a definition list, and whether to
@@ -5346,6 +5360,24 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             Bracket a definition list; wrap_words measures the terms,
             picks a detail column, and lays each entry out compact or
             tall.
+        ('rule', pattern)
+            Draw a rule under the paragraph that just ended: `pattern`
+            repeated to the width of that paragraph's widest line, then
+            clipped to it.  It's placed on the current line, with the
+            line's prefix, so open the line first with '\n'.  A
+            pattern that measures zero wide draws nothing at all.  (A
+            plain-text pattern clips exactly; a pattern raw= changes,
+            markup, is never sliced inside: it repeats whole and may
+            run up to one repetition long.)
+        ('rule next', pattern)
+            The same rule, sized to the NEXT paragraph and placed here,
+            above it, once that paragraph has been laid out.
+        ('if line', then [, else])
+            If the current line has anything on it, `then` is taken as
+            the next word (so '\n' ends the line); otherwise `else`
+            is, if given.  This is how an optional element -- a rule
+            that may draw nothing -- gets a line break only when it
+            drew something.
 
     Implicitly supports "code lines" as defined by split_text_with_code.
     (A "code line" just shows up in words as one unbroken word surrounded
@@ -5444,6 +5476,15 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
     text = []
     append = text.append
     first_word = True
+
+    # the current line's prefix width, the widest line so far of the
+    # paragraph being laid out, the widest line of the paragraph that
+    # last ended (what a 'rule' measures), and 'rule next's awaiting
+    # the paragraph after them
+    prefix_width = 0
+    paragraph_width = 0
+    previous_width = 0
+    pending_rules = []
 
     indents = widths = code_indents = None
     last_indent = 0
@@ -5561,6 +5602,8 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 tab = b'\t'
                 indent_marker = b'indent'
                 def_markers = (b'def start', b'def end', b'term')
+                rule_markers = (b'rule', b'rule next')
+                if_marker = b'if line'
             else:
                 empty = lastword = ''
                 sentence_ending_punctuation = ('.', '?', '!')
@@ -5570,6 +5613,8 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 tab = '\t'
                 indent_marker = 'indent'
                 def_markers = ('def start', 'def end', 'term')
+                rule_markers = ('rule', 'rule next')
+                if_marker = 'if line'
             indent_type = bytes if isinstance(sample, bytes) else str
             if indent or (code_indent is not None):
                 if indent:
@@ -5587,6 +5632,17 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                     code_indents, code_widths = _normalize_indents(
                         code_indent, 'code_indent', margin, tab_width, left_column, indent_type, _measure)
                     last_code_indent = len(code_indents) - 1
+
+        if is_instruction and (word[0] == if_marker):
+            # a conditional word: the current line has content -> the
+            # then-text is the next word; else the else-text, if any
+            if not new_line:
+                word = word[1]
+            elif len(word) > 2:
+                word = word[2]
+            else:
+                continue
+            is_instruction = type(word) is tuple
 
         if is_instruction:
             instruction = word[0]
@@ -5636,6 +5692,51 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 continue
             if instruction in (def_markers[1], def_markers[2]):
                 continue                                     # stray 'def end'/'term'
+            if instruction in rule_markers:
+                pattern = word[1]
+                pattern_width = _measure(pattern)
+                if instruction == rule_markers[1]:           # 'rule next'
+                    # reserve two slots -- the rule, then a line break --
+                    # filled once the paragraph it sizes to has ended (or
+                    # cleared, drawing nothing, if the pattern is empty)
+                    append(empty)
+                    append(empty)
+                    if pattern_width:
+                        # the above-rule sits on a line BEFORE the first
+                        # content line, so it wears the continuation
+                        # prefix (rest), never the marker (lead)
+                        prefix = indents[-1] if indents else empty
+                        pending_rules.append(
+                            (len(text) - 2, prefix, pattern, pattern_width))
+                    lastword = empty
+                    continue
+                # 'rule': size to the paragraph this rule follows (the one
+                # in progress, else the one that just ended) and draw it on
+                # its own line -- it opens one if we aren't at a line start
+                if not pattern_width:
+                    continue                                 # zero wide: nothing at all
+                width = paragraph_width or previous_width
+                # a 'rule next' waiting on this same paragraph resolves now
+                for slot, r_prefix, r_pattern, r_width in pending_rules:
+                    text[slot] = r_prefix + _tile_rule(
+                        r_pattern, r_width, width, empty, _raw)
+                    text[slot + 1] = linebreak
+                pending_rules = []
+                if not new_line:
+                    append(linebreak)
+                    line_number += 1
+                if indents:
+                    prefix = indents[min(line_number, last_indent)]
+                    append(prefix)
+                    col = widths[min(line_number, last_indent)]
+                else:
+                    col = 0
+                append(_tile_rule(pattern, pattern_width, width, empty, _raw))
+                new_line = False
+                lastword = empty
+                previous_width = width
+                paragraph_width = 0
+                continue
             raise ValueError(f"unknown wrap_words instruction {instruction!r}")
 
         rawword = _raw(word)
@@ -5648,6 +5749,16 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 pending_tabs += 1
                 continue
             lastword = word
+            if paragraph_width:
+                # the paragraph just ended: its widest line sizes a
+                # following 'rule', and any 'rule next' waiting on it
+                previous_width = paragraph_width
+                for slot, prefix, pattern, pattern_width in pending_rules:
+                    text[slot] = prefix + _tile_rule(
+                        pattern, pattern_width, paragraph_width, empty, _raw)
+                    text[slot + 1] = linebreak                # rule on its own line
+                pending_rules = []
+                paragraph_width = 0
             append(word)
 
             pending_tabs = 0
@@ -5673,6 +5784,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 col = code_widths[index]
             else:
                 col = 0
+            paragraph_width = max(paragraph_width, len(rawword))
             if tab in word:
                 # a code line's tabs expand at render time, at the
                 # columns where they actually land.
@@ -5729,6 +5841,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 prefix = indents[index]
                 append(prefix)
                 col = widths[index]
+            prefix_width = col
             if tabs:
                 # tabs at the start of a line (only a hand-built
                 # stream gets here): advance from the line's
@@ -5740,10 +5853,18 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
 
         append(word)
         col += l                       # display width, not markup length
+        paragraph_width = max(paragraph_width, col - prefix_width)
         lastword = word
 
     if first_word:
         raise ValueError("no words to wrap")
+
+    # a 'rule next' still waiting at the end sizes to the final paragraph
+    for slot, prefix, pattern, pattern_width in pending_rules:
+        if paragraph_width:
+            text[slot] = prefix + _tile_rule(
+                pattern, pattern_width, paragraph_width, empty, _raw)
+            text[slot + 1] = linebreak
 
     return empty.join(text)
 

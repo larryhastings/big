@@ -75,7 +75,10 @@ from big.stylesheet import transforms as _transforms
 # --8<-- start big glyphs from stylesheet --8<--
 # (a snippet consumer supplies _style_span -- big.stylesheet.style.)
 _glyph_roles = ('bullet', 'quote_bar', 'thematic_break',
-                'heading1_rule', 'heading2_rule',
+                'heading1_rule', 'heading2_rule', 'heading3_rule',
+                'heading4_rule', 'heading5_rule', 'heading6_rule',
+                'heading1_rule_next', 'heading2_rule_next', 'heading3_rule_next',
+                'heading4_rule_next', 'heading5_rule_next', 'heading6_rule_next',
                 'note_emoji', 'tip_emoji', 'important_emoji',
                 'warning_emoji', 'caution_emoji',
                 'note_title', 'tip_title', 'important_title',
@@ -1526,6 +1529,16 @@ markdown_defaults = _StyleSheet({
     'thematic_break':  ('─────',),
     'heading1_rule':   ('=',),
     'heading2_rule':   ('-',),
+    'heading3_rule':   ('',),
+    'heading4_rule':   ('',),
+    'heading5_rule':   ('',),
+    'heading6_rule':   ('',),
+    'heading1_rule_next': ('',),
+    'heading2_rule_next': ('',),
+    'heading3_rule_next': ('',),
+    'heading4_rule_next': ('',),
+    'heading5_rule_next': ('',),
+    'heading6_rule_next': ('',),
     'note_emoji':      ('ℹ️',),
     'tip_emoji':       ('💡',),
     'important_emoji': ('✴',),
@@ -1548,6 +1561,16 @@ markdown_ascii_glyphs = _StyleSheet({
     'thematic_break':  ('-----',),
     'heading1_rule':   ('=',),
     'heading2_rule':   ('-',),
+    'heading3_rule':   ('',),
+    'heading4_rule':   ('',),
+    'heading5_rule':   ('',),
+    'heading6_rule':   ('',),
+    'heading1_rule_next': ('',),
+    'heading2_rule_next': ('',),
+    'heading3_rule_next': ('',),
+    'heading4_rule_next': ('',),
+    'heading5_rule_next': ('',),
+    'heading6_rule_next': ('',),
     'note_emoji':      ('(i)',),
     'tip_emoji':       ('(*)',),
     'important_emoji': ('(!)',),
@@ -1639,12 +1662,19 @@ def _layout_block(block, lead, rest, out):
         out.extend(_flow_words(block.children))
         return
     if isinstance(block, Heading):
-        # every heading is just its styled text (it already wears its
-        # heading{n} role).  A rule under it depends on the line width,
-        # so layout_document draws none; a width-aware renderer can add
-        # one from the heading{n}_rule role.
+        # a heading is its styled text (already wearing its heading{n}
+        # role), bracketed by two rule hooks: heading{n}_rule_next above
+        # it and heading{n}_rule below.  wrap_words sizes each to the
+        # heading's widest wrapped line; a hook whose glyph is empty
+        # draws nothing.  So the sheet decides -- an underline, an
+        # over-and-under, or bare -- and layout_document commits to no
+        # width.
+        level = block.level
         out.append(('indent', lead, rest))
+        out.append(('rule next', _style_span(f'heading{level}_rule_next')))
+        out.append(('if line', '\n'))
         out.extend(_flow_words(block.children))
+        out.append(('rule', _style_span(f'heading{level}_rule')))
         return
     if isinstance(block, ThematicBreak):
         out.append(('indent', lead, rest))

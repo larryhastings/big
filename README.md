@@ -3178,9 +3178,10 @@ rendering back ends over a shared intermediate representation.
   renders the raw IR directly.
 
 The structural glyphs `layout_document` draws — the bullet, the quote
-bar, the thematic break, alert emoji and titles — are emitted as *glyph
-roles* (`⦃bullet⦄`, `⦃note_emoji⦄`, `⦃note_title⦄`, …), not baked
-characters, so `layout_document` hard-codes nothing.  A `StyleSheet`
+bar, the thematic break, alert emoji and titles, and the two heading
+rule hooks — are emitted as *glyph roles* (`⦃bullet⦄`, `⦃note_emoji⦄`,
+`⦃heading2_rule⦄`, …), not baked characters, so `layout_document`
+commits to no width and hard-codes nothing.  A `StyleSheet`
 that defines them resolves them: [`markdown_defaults`](#markdown_defaults)
 gives the Unicode glyphs, [`markdown_ascii_glyphs`](#markdown_ascii_glyphs)
 the ASCII ones.  Because they're markup, the wrap-time `raw=` must
@@ -3434,9 +3435,14 @@ It also defines the **glyph roles** `layout_document` draws — `bullet`,
 `note_emoji` … `caution_emoji` icons, and the `note_title` …
 `caution_title` alert words (`Note`, `Tip`, …) — each rendering to its
 Unicode glyph or English word.  Override any of them — e.g. a
-`tip_title` of `Tipp` — for another language.  (`heading1_rule` /
-`heading2_rule` are the rule *characters*, for a width-aware renderer to
-fill; `layout_document` draws no heading rule itself.)
+`tip_title` of `Tipp` — for another language.  Each heading also has
+two rule hooks — `heading{n}_rule` below it and `heading{n}_rule_next`
+above — whose glyph is the *character* a rule is tiled from;
+`wrap_words` sizes the rule to the heading's widest wrapped line, and
+an empty glyph draws nothing.  By default `heading1_rule` is `=` and
+`heading2_rule` is `-` (setext underlines), the rest empty, so H1 and
+H2 are underlined and H3–H6 bare — a sheet redefines a glyph to change
+or silence a rule, or sets a `_rule_next` glyph for an over-and-under.
 
 </dd></dl>
 
@@ -7194,6 +7200,17 @@ rather than a word.  Its first item names the instruction:
   words (and instructions) of its details.  `wrap_words` measures
   the terms, picks a detail column, and lays each entry out
   compact (term and details sharing a line) or tall.
+* `('rule', pattern)` draws a **rule** under the paragraph that just
+  ended — `pattern` (measured through `raw`) tiled to the width of
+  that paragraph's widest line, then clipped — on its own line, with
+  the line's prefix.  A pattern that measures zero draws nothing.
+  `('rule next', pattern)` is the same, sized to and placed above the
+  *next* paragraph.  (`big.markdown` brackets every heading with these,
+  from its `heading{n}_rule` / `heading{n}_rule_next` glyphs, for an
+  underline that sizes itself and indents with the heading.)
+* `('if line', then [, else])` emits `then` as the next word if the
+  current line has content, else `else` (default nothing) — so an
+  optional element gets a line break only when it drew something.
 
 These let a whole styled document bake to a flat tuple of
 constants and wrap to any width later; `big.markdown`'s
@@ -11982,7 +11999,13 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `⦃tip_title⦄`, …) resolved by the painting `StyleSheet` —
   `markdown_defaults` for Unicode, `markdown_ascii_glyphs` for ASCII — or
   by the `unicode_glyphs` / `ascii_glyphs` / `glyphs_from_stylesheet` swap
-  functions.  `layout_document` hard-codes nothing.  Alongside the literal
+  functions.  `layout_document` hard-codes nothing -- including heading
+  rules: it brackets every heading with two rule hooks (`heading{n}_rule`
+  below, `heading{n}_rule_next` above), and `wrap_words`' new `('rule', …)`
+  / `('rule next', …)` / `('if line', …)` instructions size the rule to the
+  heading's widest wrapped line and indent it with the heading, so a wrapped
+  or nested heading gets one correctly-placed underline (H1/H2 setext by
+  default, H3-H6 bare).  Alongside the literal
   `Text` inline node there's `StyledText`, holding text that is *already*
   well-formed `⦃role⦙…⦄` markup: `style_document` passes it through verbatim
   (rather than escaping it, as it does `Text`) so a caller can carry a role

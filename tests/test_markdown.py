@@ -738,14 +738,11 @@ def test_list_indent_follows_the_bullet_width():
                                                    "    e f\n"
                                                    "10. g")
 
-def test_heading_underline_inside_a_definition_is_indented():
-    # regression: a sheet that underlines a heading (text, newline, rule)
-    # drew the rule flush left when the heading sat inside a definition's
-    # description -- the newline came from the sheet, which never saw the
-    # detail column.  A replacement's newline now continues at the column
-    # the span began at.
-    underlined = markdown_defaults | StyleSheet({
-        'heading3': ('T', 'T\n⦃fill⦙⦃heading2_rule⦄⦙⦃strip⦙T⦄⦄')})
+def test_heading_rule_is_indented_inside_a_block():
+    # a heading's rule is drawn by wrap_words (the heading{n}_rule hook),
+    # so it lands at the heading's own indent -- a definition's detail
+    # column, a list item, a block quote's bar -- never flush left
+    underlined = markdown_defaults | StyleSheet({'heading3_rule': ('-',)})
     md = ("--text <S>\n"
           ":   Some text.\n"
           "\n"
@@ -767,12 +764,39 @@ def test_heading_underline_inside_a_definition_is_indented():
         "      ----\n"
         "\n"
         "      body")
-    # and inside a list item
+    # a list item: rule under the item text, at the continuation indent
     assert render("- item\n\n  ### Inside\n", 50, sheet=underlined) == (
         "• item\n"
         "\n"
         "  Inside\n"
         "  ------")
+    # a block quote: the rule wears the bar, which the old renderer-column
+    # inference could not do
+    assert render("> ### Quoted\n>\n> after\n", 40, sheet=underlined) == (
+        "│ Quoted\n"
+        "│ ------\n"
+        "\n"
+        "│ after")
+
+def test_wrapped_heading_gets_one_rule():
+    # D08: a heading that WRAPS -- in a list, so a fill pad sits between
+    # its lines -- gets ONE rule under the whole block, not one per line
+    sheet = markdown_defaults | StyleSheet({'heading2_rule': ('-',)})
+    out = render("- ## A heading with many words that wraps", 24, sheet=sheet)
+    assert out == ("• A heading with many\n"
+                   "  words that wraps\n"
+                   "  -------------------")
+    rules = [line for line in out.split('\n') if set(line.strip()) == {'-'}]
+    assert len(rules) == 1, out
+    # H1 over-and-under (Appeal's style): both rules, both sized to the
+    # heading's widest line, both at the block's indent
+    over_under = markdown_defaults | StyleSheet(
+        {'heading1_rule': ('=',), 'heading1_rule_next': ('=',)})
+    assert render("- # Boxed heading here that wraps", 20, sheet=over_under) == (
+        "  ==================\n"
+        "• Boxed heading here\n"
+        "  that wraps\n"
+        "  ==================")
 
 def test_styled_wrapping_measures_visible_width():
     # a styled run wraps at the same columns as the unstyled text,
@@ -781,11 +805,13 @@ def test_styled_wrapping_measures_visible_width():
            render("The quick brown fox jumps\n", 15)
 
 def test_glyphs_wear_their_roles():
-    # a heading is just its styled text (no width-dependent rule); the
-    # marker is a glyph role wrapped in the styling role
-    assert render("# Hi\n\n- a\n") == "Hi\n\n• a"
+    # a heading is its styled text with a rule hook on each side; by
+    # default H1/H2 get a setext underline sized to the text, H3-H6 none
+    assert render("# Hi\n\n- a\n") == "Hi\n==\n\n• a"
+    assert render("### Sub\n\n- a\n") == "Sub\n\n• a"       # H3: bare
     out = markup("# Hi\n\n- a\n")
     assert '⦃heading1⦙Hi⦄' in out                      # heading text wears heading1
+    assert '⦃heading1_rule⦄' in out                    # the below-rule hook
     assert '⦃marker⦙⦃bullet⦄⦄' in out                 # bullet under marker
 
 def test_structural_roles():
