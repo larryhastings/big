@@ -778,6 +778,28 @@ def test_heading_rule_is_indented_inside_a_block():
         "\n"
         "│ after")
 
+def test_heading_rule_can_be_painted_without_mis_sizing():
+    # a rule glyph is a BARE character wrapped by the layout in a
+    # per-level paint role (heading{n}_rule_ink) -- like the bullet in
+    # marker -- so a sheet paints the rule via that role and the glyph
+    # alone sets the width.  Painting the glyph itself would make it
+    # measure its escape bytes and tile to the wrong width.
+    from big.stylesheet import ansi_16_color_palette, transforms
+    sheet = (markdown_defaults | StyleSheet(transforms) | ansi_16_color_palette
+             | StyleSheet({'heading1_rule': ('=',),
+                           'heading1_rule_ink': ('T', '⦃blue⦙T⦄')}))
+    glyphs = glyphs_from_stylesheet(sheet)
+    # the wrapped glyph measures its VISIBLE width (1), not its paint
+    assert len(strip_styles(glyphs('⦃heading1_rule_ink⦙⦃heading1_rule⦄⦄'))) == 1
+    layout = layout_document(split_styles_document(style_document(parse("# Boxed heading\n"))))
+    out = sheet.render(join_styles(wrap_words(layout, margin=40,
+                       raw=lambda w: strip_styles(glyphs(w))), span_linebreaks=True))
+    import re
+    plain = re.sub('\x1b' + r'\[[0-9;]*m', '', out)
+    # the rule is as wide as the heading (15), not ceil(15 / escape-width)
+    assert plain == "Boxed heading\n=============", repr(plain)
+    assert '\x1b[34m' in out                    # and it's actually painted blue
+
 def test_wrapped_heading_gets_one_rule():
     # D08: a heading that WRAPS -- in a list, so a fill pad sits between
     # its lines -- gets ONE rule under the whole block, not one per line
@@ -936,6 +958,7 @@ def test_style_pipeline_two_layer_theme():
     # high level: concept -> formatting, resolved recursively
     theme = StyleSheet({
         'heading1': ('T', '⦃bold⦙⦃header_color⦙T⦄⦄'),
+        'heading1_rule_ink': ('T', 'T'),             # the rule hook's paint role
         'marker':   ('T', '⦃header_color⦙T⦄'),
         'code':     ('T', 'T'),
         'link':     ('URL', 'T', '⦃underline⦙T⦄'),   # the URL is luggage

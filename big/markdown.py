@@ -1539,6 +1539,12 @@ markdown_defaults = _StyleSheet({
     'heading4_rule_next': ('',),
     'heading5_rule_next': ('',),
     'heading6_rule_next': ('',),
+    'heading1_rule_ink': ('T', 'T'),
+    'heading2_rule_ink': ('T', 'T'),
+    'heading3_rule_ink': ('T', 'T'),
+    'heading4_rule_ink': ('T', 'T'),
+    'heading5_rule_ink': ('T', 'T'),
+    'heading6_rule_ink': ('T', 'T'),
     'note_emoji':      ('ℹ️',),
     'tip_emoji':       ('💡',),
     'important_emoji': ('✴',),
@@ -1571,6 +1577,12 @@ markdown_ascii_glyphs = _StyleSheet({
     'heading4_rule_next': ('',),
     'heading5_rule_next': ('',),
     'heading6_rule_next': ('',),
+    'heading1_rule_ink': ('T', 'T'),
+    'heading2_rule_ink': ('T', 'T'),
+    'heading3_rule_ink': ('T', 'T'),
+    'heading4_rule_ink': ('T', 'T'),
+    'heading5_rule_ink': ('T', 'T'),
+    'heading6_rule_ink': ('T', 'T'),
     'note_emoji':      ('(i)',),
     'tip_emoji':       ('(*)',),
     'important_emoji': ('(!)',),
@@ -1669,12 +1681,19 @@ def _layout_block(block, lead, rest, out):
         # draws nothing.  So the sheet decides -- an underline, an
         # over-and-under, or bare -- and layout_document commits to no
         # width.
+        # each rule's glyph is a bare character wrapped in a per-level
+        # paint role (heading{n}_rule_ink), exactly as the bullet is a
+        # bare glyph wrapped in `marker`: the ink is a normal role, so it
+        # is stripped for width measurement and painted at render time,
+        # and the glyph alone decides the rule's width.
         level = block.level
+        ink = f'heading{level}_rule_ink'
         out.append(('indent', lead, rest))
-        out.append(('rule next', _style_span(f'heading{level}_rule_next')))
+        out.append(('rule next',
+                    _style_span(ink, _style_span(f'heading{level}_rule_next'))))
         out.append(('if line', '\n'))
         out.extend(_flow_words(block.children))
-        out.append(('rule', _style_span(f'heading{level}_rule')))
+        out.append(('rule', _style_span(ink, _style_span(f'heading{level}_rule'))))
         return
     if isinstance(block, ThematicBreak):
         out.append(('indent', lead, rest))

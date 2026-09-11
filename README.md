@@ -3443,6 +3443,11 @@ an empty glyph draws nothing.  By default `heading1_rule` is `=` and
 `heading2_rule` is `-` (setext underlines), the rest empty, so H1 and
 H2 are underlined and H3–H6 bare — a sheet redefines a glyph to change
 or silence a rule, or sets a `_rule_next` glyph for an over-and-under.
+Each rule glyph is a bare character wrapped in a per-level paint role,
+`heading{n}_rule_ink` (a no-op by default, like `marker` around the
+bullet): a sheet colors a rule through the ink so the glyph itself
+stays width-correct — painting the glyph would make it measure its
+escape bytes and tile wrong.
 
 </dd></dl>
 
@@ -12005,7 +12010,10 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   / `('rule next', …)` / `('if line', …)` instructions size the rule to the
   heading's widest wrapped line and indent it with the heading, so a wrapped
   or nested heading gets one correctly-placed underline (H1/H2 setext by
-  default, H3-H6 bare).  Alongside the literal
+  default, H3-H6 bare).  Each rule glyph is a bare character the layout wraps
+  in a per-level `heading{n}_rule_ink` paint role (as the bullet is wrapped in
+  `marker`), so a sheet colors a rule without the glyph mis-measuring its own
+  escape bytes.  Alongside the literal
   `Text` inline node there's `StyledText`, holding text that is *already*
   well-formed `⦃role⦙…⦄` markup: `style_document` passes it through verbatim
   (rather than escaping it, as it does `Text`) so a caller can carry a role
