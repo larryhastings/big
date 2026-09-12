@@ -115,10 +115,10 @@ def test_best_palette():
                (big.plain_stylesheet, big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette))
 
 def test_plain_palette():
-    # plain_palette renders everything plain, but enumerates all 33 roles
+    # plain_palette renders everything plain, but enumerates all 35 roles
     # explicitly -- no _default (so it composes with sheets that forbid one)
     assert '_default' not in big.plain_palette
-    assert len(big.plain_palette) == 33
+    assert len(big.plain_palette) == 35
     assert big.plain_palette.render('⦃bold⦙⦃red⦙x⦄⦄') == 'x'
     # unlike uncolored_palette, even the attributes are no-ops
     assert big.plain_palette.render('⦃bold⦙x⦄') == 'x'
@@ -223,9 +223,9 @@ def test_escape_styles():
 
 def test_ansi_low_level_maps():
     E = '\x1b'
-    # each map defines the 4 attributes + the 29-color vocabulary
+    # each map defines the 6 attributes + the 29-color vocabulary
     hues = ['red', 'orange', 'amber', 'yellow', 'green', 'cyan', 'blue', 'purple', 'gray']
-    vocab = {'bold', 'italic', 'underline', 'strikethrough', 'white', 'black'}
+    vocab = {'bold', 'dim', 'italic', 'underline', 'inverse', 'strikethrough', 'white', 'black'}
     for hue in hues:
         vocab |= {hue, 'light_' + hue, 'dark_' + hue}
     for sheet in (big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette, big.uncolored_palette):
@@ -236,6 +236,18 @@ def test_ansi_low_level_maps():
     for sheet in (big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette, big.uncolored_palette):
         assert r(sheet, 'bold') == f'{E}[1mx{E}[22m'
         assert r(sheet, 'strikethrough') == f'{E}[9mx{E}[29m'
+        # dim and inverse: the two attributes older and better supported
+        # than italic; both survive the uncolored map (they aren't color)
+        assert r(sheet, 'dim') == f'{E}[2mx{E}[22m'
+        assert r(sheet, 'inverse') == f'{E}[7mx{E}[27m'
+    # plain_palette makes even these no-ops
+    assert r(big.plain_palette, 'dim') == 'x' and r(big.plain_palette, 'inverse') == 'x'
+    # dim's 22 also ends bold, but paint is applied per text run with the
+    # full stack, so dim inside bold never strands the bold
+    both = big.ansi_16_color_palette.render('⦃bold⦙a ⦃dim⦙b⦄ c⦄')
+    assert both == (f'{E}[1ma {E}[22m'
+                    f'{E}[1m{E}[2mb{E}[22m{E}[22m'
+                    f'{E}[1m c{E}[22m'), repr(both)
     # 24-bit uses the master hex verbatim (normal red is BA0000)
     assert r(big.ansi_truecolor_palette, 'red') == f'{E}[38;2;186;0;0mx{E}[39m'
     # 16-color: normal red -> 31, light red -> 91, orange leans bright-red

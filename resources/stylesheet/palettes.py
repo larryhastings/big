@@ -28,7 +28,7 @@ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 The source of truth for big.stylesheet's stock ANSI color palettes.
 
 The 29-color vocabulary (red/orange/amber/yellow/green/cyan/blue/purple/
-gray, each in light/dark/normal, plus white/black) plus the four attributes,
+gray, each in light/dark/normal, plus white/black) plus the six attributes,
 rendered at four color depths:
 
     ansi_truecolor_palette   24-bit (the master values)
@@ -53,8 +53,10 @@ import hashlib
 
 _ansi_attributes = {
     'bold':          ('T', '\x1b[1mT\x1b[22m'),
+    'dim':           ('T', '\x1b[2mT\x1b[22m'),   # 22 also ends bold: fine, paint is per run
     'italic':        ('T', '\x1b[3mT\x1b[23m'),
     'underline':     ('T', '\x1b[4mT\x1b[24m'),
+    'inverse':       ('T', '\x1b[7mT\x1b[27m'),
     'strikethrough': ('T', '\x1b[9mT\x1b[29m'),
 }
 

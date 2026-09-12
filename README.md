@@ -4786,8 +4786,8 @@ high-level theme so the theme's roles reach real escapes:
     sheet = my_theme | ansi_256_color_palette
 ```
 
-Each defines the four attributes — `bold`, `italic`, `underline`,
-`strikethrough` — and the 29-color vocabulary: `red`, `orange`,
+Each defines the six attributes — `bold`, `dim`, `italic`, `underline`,
+`inverse`, `strikethrough` — and the 29-color vocabulary: `red`, `orange`,
 `amber`, `yellow`, `green`, `cyan`, `blue`, `purple`, and `gray`, each
 in `light`/`dark`/normal (`light_red`, `dark_red`, `red`), plus
 `white` and `black`.  The color depth differs: `ansi_truecolor_palette` emits
@@ -4797,7 +4797,7 @@ colors, `uncolored_palette` renders the attributes but drops color
 entirely, and `plain_palette` renders *everything* plain — no escapes
 at all.  `plain_palette` differs from
 [`plain_stylesheet`](#plain_stylesheet) only in that it enumerates all
-33 roles explicitly rather than using `_default`, so it composes with a
+35 roles explicitly rather than using `_default`, so it composes with a
 theme (like [`markdown_defaults`](#markdown_defaults)) that forbids
 `_default` and expects every role defined.
 
@@ -12039,8 +12039,8 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   rewrite it to word granularity and back with `split_styles` and `join_styles`;
   strip it with `strip_styles`; and render it with any of five stock low-level
   maps — `ansi_truecolor_palette`, `ansi_256_color_palette`, `ansi_16_color_palette`,
-  `uncolored_palette`, and `plain_palette` — over a 29-color vocabulary plus four
-  attributes.  `best_palette` picks the right one for the current terminal.
+  `uncolored_palette`, and `plain_palette` — over a 29-color vocabulary plus six
+  attributes (`bold`, `dim`, `italic`, `underline`, `inverse`, `strikethrough`).  `best_palette` picks the right one for the current terminal.
   Format and role names may contain underscores (e.g. `dark_purple`).  A stock
   `transforms` dict supplies text-shaping roles you can merge into a sheet —
   case (`upper`, `lower`, `title`), whitespace (`strip`, `lstrip`, `rstrip`),
