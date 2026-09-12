@@ -548,6 +548,22 @@ def test_definition_gap_is_structural():
     assert dl.entries[0].definitions[0] == Definition([
         Paragraph([Text('first\nsecond')])])
 
+def test_definition_blocks_attach_at_the_content_column():
+    # a FURTHER block (after a blank line) belongs to the definition when
+    # it's indented to the content column -- wherever the text starts
+    # after the colon -- and is a new top-level block otherwise.  So the
+    # "four spaces" of the conventional `:   text` is just that form's
+    # column; `: text` puts it at two.
+    two = parse("term\n: first\n\n  second\n").blocks
+    assert len(two) == 1 and len(two[0].entries[0].definitions[0].blocks) == 2
+    four = parse("term\n:   first\n\n    second\n").blocks
+    assert len(four) == 1 and len(four[0].entries[0].definitions[0].blocks) == 2
+    # short of the column: the paragraph is NOT the definition's
+    short = parse("term\n:   first\n\n  second\n").blocks
+    assert [type(b).__name__ for b in short] == ['DefinitionList', 'Paragraph']
+    bare = parse("term\n:   first\n\nsecond\n").blocks
+    assert [type(b).__name__ for b in bare] == ['DefinitionList', 'Paragraph']
+
 def test_definition_lazy_continuation():
     # like any list item, an unindented continuation line still joins
     # the definition's paragraph lazily.

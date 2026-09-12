@@ -3235,10 +3235,16 @@ GitHub-Flavored strikethrough (`~~text~~`), definition lists
 (a `term` line followed by `: definition` lines), and GitHub
 **alerts** (a block quote whose first line is `[!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]`, or `[!CAUTION]` — strictly uppercase).
-A definition holds any block content, indented four spaces —
-paragraphs, code, lists, headings, even another definition list — as
-in the PHP Markdown Extra / Pandoc dialect the syntax comes from.  The
-terminal renderer lays a nested definition list out as its own table
+A definition holds any block content — paragraphs, code, lists,
+headings, even another definition list — as in the PHP Markdown Extra /
+Pandoc dialect the syntax comes from.  Its first paragraph may wrap onto
+following lines without indenting them (PHP Markdown Extra's "lazy"
+continuation).  Any *further* block belongs to the definition when it is
+indented to the definition's **content column** — the column where the
+text starts after the colon, so two for `: text` and four for the
+conventional `:   text` — and is a new top-level block otherwise, exactly
+as with list items (`:` is a list-family marker under CommonMark §5.2).
+The terminal renderer lays a nested definition list out as its own table
 inside the outer entry's detail column, picking its own column against
 that narrower width.
 
