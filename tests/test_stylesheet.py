@@ -115,10 +115,10 @@ def test_best_palette():
                (big.plain_stylesheet, big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette))
 
 def test_plain_palette():
-    # plain_palette renders everything plain, but enumerates all 35 roles
+    # plain_palette renders everything plain, but enumerates all 36 roles
     # explicitly -- no _default (so it composes with sheets that forbid one)
     assert '_default' not in big.plain_palette
-    assert len(big.plain_palette) == 35
+    assert len(big.plain_palette) == 36
     assert big.plain_palette.render('⦃bold⦙⦃red⦙x⦄⦄') == 'x'
     # unlike uncolored_palette, even the attributes are no-ops
     assert big.plain_palette.render('⦃bold⦙x⦄') == 'x'
@@ -223,9 +223,9 @@ def test_escape_styles():
 
 def test_ansi_low_level_maps():
     E = '\x1b'
-    # each map defines the 6 attributes + the 29-color vocabulary
+    # each map defines the 7 attributes + the 29-color vocabulary
     hues = ['red', 'orange', 'amber', 'yellow', 'green', 'cyan', 'blue', 'purple', 'gray']
-    vocab = {'bold', 'dim', 'italic', 'underline', 'inverse', 'strikethrough', 'white', 'black'}
+    vocab = {'bold', 'dim', 'italic', 'underline', 'overline', 'inverse', 'strikethrough', 'white', 'black'}
     for hue in hues:
         vocab |= {hue, 'light_' + hue, 'dark_' + hue}
     for sheet in (big.ansi_truecolor_palette, big.ansi_256_color_palette, big.ansi_16_color_palette, big.uncolored_palette):
@@ -240,8 +240,11 @@ def test_ansi_low_level_maps():
         # than italic; both survive the uncolored map (they aren't color)
         assert r(sheet, 'dim') == f'{E}[2mx{E}[22m'
         assert r(sheet, 'inverse') == f'{E}[7mx{E}[27m'
+        # overline: standard (ECMA-48), ignored by terminals that lack it
+        assert r(sheet, 'overline') == f'{E}[53mx{E}[55m'
     # plain_palette makes even these no-ops
     assert r(big.plain_palette, 'dim') == 'x' and r(big.plain_palette, 'inverse') == 'x'
+    assert r(big.plain_palette, 'overline') == 'x'
     # dim's 22 also ends bold, but paint is applied per text run with the
     # full stack, so dim inside bold never strands the bold
     both = big.ansi_16_color_palette.render('⦃bold⦙a ⦃dim⦙b⦄ c⦄')
