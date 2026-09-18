@@ -5361,10 +5361,13 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             picks a detail column, and lays each entry out compact or
             tall.
         ('rule', pattern)
-            Draw a rule under the paragraph that just ended: `pattern`
-            repeated to the width of that paragraph's widest line, then
-            clipped to it.  It's placed on the current line, with the
-            line's prefix, so open the line first with '\n'.  A
+            Draw a rule: `pattern` repeated to a width, then clipped to
+            it, on its own line (opened if need be) with the line's
+            prefix.  Attached to text -- right after a paragraph, or
+            after a single '\n' -- it's as wide as that paragraph's
+            widest line: a heading's underline.  On its own -- after a
+            blank line, or first in the stream -- it's as wide as the
+            line that's left past the prefix: a thematic break.  A
             pattern that measures zero wide draws nothing at all.  (A
             plain-text pattern clips exactly; a pattern raw= changes,
             markup, is never sliced inside: it repeats whole and may
@@ -5715,22 +5718,29 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 # its own line -- it opens one if we aren't at a line start
                 if not pattern_width:
                     continue                                 # zero wide: nothing at all
-                width = paragraph_width or previous_width
+                if not new_line:
+                    append(linebreak)
+                    line_number += 1
+                if indents:
+                    index = min(line_number, last_indent)
+                    prefix, prefix_w = indents[index], widths[index]
+                else:
+                    prefix, prefix_w = empty, 0
+                # attached to text (a heading's underline): as wide as
+                # that text.  On its own -- after a blank line, or first
+                # in the stream (a thematic break): as wide as the line
+                # that's left past the prefix.  Markdown itself keeps the
+                # two apart: a rule right under text is a setext heading,
+                # a thematic break always follows a blank line.
+                width = paragraph_width or previous_width or max(1, margin - prefix_w)
                 # a 'rule next' waiting on this same paragraph resolves now
                 for slot, r_prefix, r_pattern, r_width in pending_rules:
                     text[slot] = r_prefix + _tile_rule(
                         r_pattern, r_width, width, empty, _raw)
                     text[slot + 1] = linebreak
                 pending_rules = []
-                if not new_line:
-                    append(linebreak)
-                    line_number += 1
-                if indents:
-                    prefix = indents[min(line_number, last_indent)]
-                    append(prefix)
-                    col = widths[min(line_number, last_indent)]
-                else:
-                    col = 0
+                append(prefix)
+                col = prefix_w
                 append(_tile_rule(pattern, pattern_width, width, empty, _raw))
                 new_line = False
                 lastword = empty
@@ -5766,7 +5776,11 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             col = 0
 
             new_paragraph = len(rawword) > 1
-            if not new_paragraph:
+            if new_paragraph:
+                # a blank line ends the paragraph for good: a rule after
+                # it is on its own, not under that text
+                previous_width = 0
+            else:
                 line_number += 1
             continue
 

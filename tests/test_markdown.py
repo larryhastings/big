@@ -607,7 +607,18 @@ def test_render_blockquote_prefixed():
     assert render("> hi there\n", 20) == "│ hi there"
 
 def test_render_thematic_break():
+    # a thematic break spans the line: its one-character glyph is tiled
+    # by wrap_words to the width that's left past the prefix
     assert render("---\n", 5) == "─────"
+    assert render("---\n", 12) == "────────────"
+    assert render("a\n\n---\n\nb\n", 8) == "a\n\n────────\n\nb"
+    # inside a quote or list it spans the remaining ribbon, not the margin
+    assert render("> ---\n", 8) == "│ ──────"
+    # (`- ---` is itself a thematic break -- spaced dashes -- so the
+    # list case needs a real item with the break as a later block)
+    assert render("- foo\n\n  ---\n", 12) == "• foo\n\n  ──────────"
+    # a heading's rule is still hugged to its text, not the margin
+    assert render("## Hi\n", 12) == "Hi\n--"
 
 def test_render_definition_list():
     # narrow terminal (thin ribbon) -> tall: term on its own line
@@ -862,10 +873,10 @@ def test_structural_roles():
     assert term == Term([Text('⦃term⦙word⦄')])
     # the quote bar and the thematic break wear their roles, as glyphs
     assert markup("> hi\n", 20) == "⦃blockquote⦙⦃quote_bar⦄⦄hi"
-    assert markup("a\n\n---\n", 6) == "a\n\n⦃rule⦙⦃thematic_break⦄⦄"
+    assert markup("a\n\n---\n", 6) == "a\n\n" + "⦃rule⦙" + "⦃thematic_break⦄" * 6 + "⦄"
     # and they resolve to their characters (the break is a fixed 5-char rule)
     assert render("> hi\n", 20) == "│ hi"
-    assert render("a\n\n---\n", 6) == "a\n\n─────"
+    assert render("a\n\n---\n", 6) == "a\n\n──────"
 
 def test_render_troff():
     # inline: strong -> \fB, inline code -> \fB, hyphens -> \- for man
@@ -1010,7 +1021,7 @@ def test_glyph_swappers():
     assert unicode_glyphs('⦃tip_title⦄') == 'Tip'
     # glyphs_from_stylesheet derives a swapper from any sheet
     swap = glyphs_from_stylesheet(markdown_ascii_glyphs)
-    assert swap('⦃thematic_break⦄') == '-----'
+    assert swap('⦃thematic_break⦄') == '-'
 
 
 def run_tests(run=None):

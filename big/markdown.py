@@ -1526,7 +1526,7 @@ markdown_defaults = _StyleSheet({
     # to fill; layout_document itself draws no heading rules.
     'bullet':          ('•',),
     'quote_bar':       ('│ ',),
-    'thematic_break':  ('─────',),
+    'thematic_break':  ('─',),
     'heading1_rule':   ('=',),
     'heading2_rule':   ('-',),
     'heading3_rule':   ('',),
@@ -1564,7 +1564,7 @@ markdown_defaults = _StyleSheet({
 markdown_ascii_glyphs = _StyleSheet({
     'bullet':          ('*',),
     'quote_bar':       ('| ',),
-    'thematic_break':  ('-----',),
+    'thematic_break':  ('-',),
     'heading1_rule':   ('=',),
     'heading2_rule':   ('-',),
     'heading3_rule':   ('',),
@@ -1696,8 +1696,12 @@ def _layout_block(block, lead, rest, out):
         out.append(('rule', _style_span(ink, _style_span(f'heading{level}_rule'))))
         return
     if isinstance(block, ThematicBreak):
+        # a rule on its own: wrap_words fills the line that's left past
+        # the prefix (a thematic break always follows a blank line, so
+        # it's never mistaken for a heading's underline).  The glyph is
+        # one character, tiled; `rule` is its paint role.
         out.append(('indent', lead, rest))
-        out.append(_style_span('rule', _style_span('thematic_break')))
+        out.append(('rule', _style_span('rule', _style_span('thematic_break'))))
         return
     if isinstance(block, CodeBlock):
         out.append(('indent', lead + _CODE_INDENT, rest + _CODE_INDENT))

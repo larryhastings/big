@@ -3437,7 +3437,7 @@ green, `important` purple, `warning` orange, `caution` red — each
 `heading_<kind>` being that color over `heading2`.
 
 It also defines the **glyph roles** `layout_document` draws — `bullet`,
-`quote_bar`, `thematic_break` (a fixed five-character rule), the
+`quote_bar`, `thematic_break` (one character, tiled to the line), the
 `note_emoji` … `caution_emoji` icons, and the `note_title` …
 `caution_title` alert words (`Note`, `Tip`, …) — each rendering to its
 Unicode glyph or English word.  Override any of them — e.g. a
@@ -7211,14 +7211,18 @@ rather than a word.  Its first item names the instruction:
   words (and instructions) of its details.  `wrap_words` measures
   the terms, picks a detail column, and lays each entry out
   compact (term and details sharing a line) or tall.
-* `('rule', pattern)` draws a **rule** under the paragraph that just
-  ended — `pattern` (measured through `raw`) tiled to the width of
-  that paragraph's widest line, then clipped — on its own line, with
-  the line's prefix.  A pattern that measures zero draws nothing.
-  `('rule next', pattern)` is the same, sized to and placed above the
-  *next* paragraph.  (`big.markdown` brackets every heading with these,
-  from its `heading{n}_rule` / `heading{n}_rule_next` glyphs, for an
-  underline that sizes itself and indents with the heading.)
+* `('rule', pattern)` draws a **rule** — `pattern` (measured through
+  `raw`) tiled to a width, then clipped — on its own line, with the
+  line's prefix.  *Attached* to text (right after a paragraph, or after
+  a single `'\n'`) it's as wide as that paragraph's widest line: a
+  heading's underline.  *On its own* (after a blank line, or first in
+  the stream) it's as wide as the line that's left past the prefix: a
+  thematic break.  A pattern that measures zero draws nothing.
+  `('rule next', pattern)` is the attached form sized to and placed
+  above the *next* paragraph.  (`big.markdown` brackets every heading
+  with these, from its `heading{n}_rule` / `heading{n}_rule_next`
+  glyphs, and draws a thematic break as a standalone rule from
+  `thematic_break`.)
 * `('if line', then [, else])` emits `then` as the next word if the
   current line has content, else `else` (default nothing) — so an
   optional element gets a line break only when it drew something.
@@ -12016,7 +12020,9 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   / `('rule next', …)` / `('if line', …)` instructions size the rule to the
   heading's widest wrapped line and indent it with the heading, so a wrapped
   or nested heading gets one correctly-placed underline (H1/H2 setext by
-  default, H3-H6 bare).  Each rule glyph is a bare character the layout wraps
+  default, H3-H6 bare).  A rule on its own -- after a blank line -- is as wide
+  as the line instead, so a thematic break now spans the margin (minus any
+  quote bar or list indent) rather than being a fixed five characters.  Each rule glyph is a bare character the layout wraps
   in a per-level `heading{n}_rule_ink` paint role (as the bullet is wrapped in
   `marker`), so a sheet colors a rule without the glyph mis-measuring its own
   escape bytes.  Alongside the literal
