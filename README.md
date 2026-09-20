@@ -3229,14 +3229,18 @@ character references (`&amp;`).  Within what it implements the parser
 follows CommonMark closely — it passes about 85% of the applicable
 CommonMark spec tests, with the remaining gaps concentrated in a few
 link/URL edge cases — and it is *fail-soft*: it never raises on
-malformed input, it degrades.  Four non-CommonMark extensions are
+malformed input, it degrades (with one deliberate exception, below).
+Four non-CommonMark extensions are
 supported:
 GitHub-Flavored strikethrough (`~~text~~`), definition lists
 (a `term` line followed by `: definition` lines), Pandoc's
 **bracketed spans** (`[text]{.class}` — the class is a style role, so
 `[host]{.argument}` paints `host` in the `argument` role; several
-classes nest; only `.class` attributes are recognized, each a valid
-role name, and anything else leaves the brackets literal), and GitHub
+classes nest, `[x]{.a .b}`; only `.class` attributes are allowed, each
+a valid role name — and since a `{` right after the `]` means the
+author intended a span, a bad attribute block such as `{#id}`,
+`{key=v}` or `{.no-hyphens}` *raises* `ValueError` rather than passing
+through: the parser's one exception to never raising), and GitHub
 **alerts** (a block quote whose first line is `[!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]`, or `[!CAUTION]` — strictly uppercase).
 A definition holds any block content — paragraphs, code, lists,
@@ -3284,7 +3288,9 @@ so — like `Raw` — they degrade a `StyledText` to its stripped text.
 
 Parses a Markdown string and returns a `MarkdownDocument` (the root
 IR node).
-Never raises; malformed constructs degrade to text.
+Never raises on malformed Markdown — it degrades to text — except a
+bracketed span whose attribute block is malformed, which raises
+`ValueError` (see the extensions above).
 
 ```Python
     >>> parse("# Hi\n\nsome **bold** text\n")
@@ -12017,7 +12023,8 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   GFM strikethrough, definition lists, GitHub alerts (`> [!NOTE]` and
   friends), and Pandoc's bracketed spans (`[text]{.class}`, a `Span` node whose
   classes are style roles: `[host]{.argument}` styles to `⦃argument⦙host⦄`;
-  the GFM, CommonMark, and troff back ends degrade it to its content).  The structural glyphs it draws (bullet, quote bar, thematic
+  a malformed attribute block raises rather than passing through; the GFM,
+  CommonMark, and troff back ends degrade it to its content).  The structural glyphs it draws (bullet, quote bar, thematic
   break, alert emoji and titles) are *glyph roles* (`⦃bullet⦄`,
   `⦃tip_title⦄`, …) resolved by the painting `StyleSheet` —
   `markdown_defaults` for Unicode, `markdown_ascii_glyphs` for ASCII — or

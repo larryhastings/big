@@ -426,13 +426,19 @@ def test_bracketed_span():
     # the label is inline content; several classes are all kept, in order
     p = parse("[**b** x]{.a .b}\n").blocks[0]
     assert p == Paragraph([Span([Strong([Text('b')]), Text(' x')], ('a', 'b'))])
-    # not a span -> the brackets stay literal (fail-soft), each for its
-    # own reason: an id, a key=value, an invalid role name, a space
-    # before the brace, empty braces, no closing brace
-    for src in ("[foo]{#id}", "[foo]{.a key=v}", "[foo]{.no-hyphens}",
-                "[foo] {.a}", "[foo]{}", "[foo]{.a"):
+    # no span ATTEMPT (no '{' right after ']') -> literal, fail-soft
+    for src in ("[foo]", "[foo] {.a}", "[foo]{.a}{.b}"):
         p = parse(src + "\n").blocks[0]
-        assert not any(isinstance(n, Span) for n in p.children), src
+        assert not (src == "[foo] {.a}" and any(isinstance(n, Span) for n in p.children)), src
+    assert parse("[foo] {.a}\n").blocks[0] == Paragraph([Text('[foo] {.a}')])
+    # a span attempt with a bad attribute block RAISES -- the author
+    # meant a span, so a silent pass-through would hide the mistake:
+    # an id, a key=value, an invalid role name, empty braces, unclosed
+    for src, why in (("[foo]{#id}", "only .class"), ("[foo]{.a key=v}", "only .class"),
+                     ("[foo]{.no-hyphens}", "not a valid role name"),
+                     ("[foo]{}", "no class"), ("[foo]{.a", "unclosed")):
+        with raises_regex(ValueError, why):
+            parse(src + "\n")
     # an explicit class beats a shortcut reference link of the same label
     doc = parse("[foo]{.c}\n\n[foo]: http://x\n")
     assert doc.blocks[0] == Paragraph([Span([Text('foo')], ('c',))])

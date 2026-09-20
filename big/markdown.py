@@ -349,8 +349,10 @@ class Span(Node):
     style_document renders `[foo]{.argument}` as ⦃argument⦙foo⦄
     (several classes nest, outermost first).  The other renderers
     can't carry a class, so they degrade a Span to its content.
-    Only `.class` attributes are recognized, each a valid role name;
-    anything else leaves the brackets literal.
+    Only `.class` attributes are allowed, each a valid role name; once
+    a '{' directly follows the ']' the author meant a span, so any
+    other attribute block raises ValueError rather than passing through
+    -- the parser's one deliberate exception to "never raise".
     """
     __slots__ = ('children', 'classes')
     _fields = ('children', 'classes')
@@ -783,28 +785,38 @@ _class_name_re = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 def _try_span(text, i):
     """
     Parse a bracketed span `[text]{.class ...}` at text[i]=='['.
-    Returns (label, classes, end) or None.  The '{' must directly
-    follow the ']'; the braces hold one or more `.class` tokens and
+    Returns (label, classes, end), or None when this isn't a span at
+    all: the '{' must directly follow the ']'.  Once it does, the
+    author meant a span, so a bad attribute block is an error, not
+    literal text -- the parser's one deliberate exception to "never
+    raise".  The braces must hold one or more `.class` tokens and
     nothing else, each a valid style-role name (alphanumeric or
-    underscore, not starting with a digit) -- so `{#id}`, `{key=v}`
-    and `{.no-hyphens}` all leave the brackets literal.
+    underscore, not starting with a digit): `{#id}`, `{key=v}`,
+    `{.no-hyphens}`, `{}` and an unclosed `{` all raise ValueError.
     """
     close = _match_bracket(text, i)
     if close < 0 or close + 1 >= len(text) or text[close + 1] != '{':
         return None
     end = text.find('}', close + 2)
     if end < 0:
-        return None
+        raise ValueError(
+            f"bracketed span {text[i:close + 2]!r}...: unclosed attribute block")
+    where = text[i:end + 1]
     classes = []
     for token in text[close + 2:end].split():
         if not token.startswith('.'):
-            return None
+            raise ValueError(
+                f"bracketed span {where!r}: only .class attributes are "
+                f"supported, not {token!r}")
         name = token[1:]
         if not _class_name_re.fullmatch(name):
-            return None
+            raise ValueError(
+                f"bracketed span {where!r}: {name!r} is not a valid role "
+                f"name (letters, digits and underscore, not starting with "
+                f"a digit)")
         classes.append(name)
     if not classes:
-        return None
+        raise ValueError(f"bracketed span {where!r}: no class in the attribute block")
     return text[i + 1:close], tuple(classes), end + 1
 
 
