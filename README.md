@@ -3229,10 +3229,14 @@ character references (`&amp;`).  Within what it implements the parser
 follows CommonMark closely — it passes about 85% of the applicable
 CommonMark spec tests, with the remaining gaps concentrated in a few
 link/URL edge cases — and it is *fail-soft*: it never raises on
-malformed input, it degrades.  Three non-CommonMark extensions are
+malformed input, it degrades.  Four non-CommonMark extensions are
 supported:
 GitHub-Flavored strikethrough (`~~text~~`), definition lists
-(a `term` line followed by `: definition` lines), and GitHub
+(a `term` line followed by `: definition` lines), Pandoc's
+**bracketed spans** (`[text]{.class}` — the class is a style role, so
+`[host]{.argument}` paints `host` in the `argument` role; several
+classes nest; only `.class` attributes are recognized, each a valid
+role name, and anything else leaves the brackets literal), and GitHub
 **alerts** (a block quote whose first line is `[!NOTE]`, `[!TIP]`,
 `[!IMPORTANT]`, `[!WARNING]`, or `[!CAUTION]` — strictly uppercase).
 A definition holds any block content — paragraphs, code, lists,
@@ -3260,7 +3264,8 @@ plausible garbage — then `Heading`, `Paragraph`, `BulletList`,
 `ThematicBreak`, and `Raw` (an escape hatch: anything outside the
 subset — a table, raw HTML — is preserved here to be degraded rather
 than dropped).  Inline nodes: `Text`, `StyledText`, `Strong`, `Emph`,
-`Strikethrough`, `Code`, `Link`, and `HardBreak`.  A `StyledText`
+`Strikethrough`, `Code`, `Link`, `Span` (a bracketed span: `children`
+plus a tuple of `classes`), and `HardBreak`.  A `StyledText`
 holds text that is *already* well-formed `⦃role⦙…⦄` markup: where
 `style_document` escapes a `Text` (a literal `⦃` in a docstring is
 quoted), it passes a `StyledText` through verbatim, so a caller can
@@ -3299,7 +3304,8 @@ styling markup baked into its text.  (A `StyledDocument` is refused —
 styling twice would double-escape the markup.)
 Each inline run is wrapped in its *role* — `Strong`&nbsp;→&nbsp;`bold`,
 `Emph`&nbsp;→&nbsp;`italic`, `Strikethrough`&nbsp;→&nbsp;`strikethrough`,
-`Code`&nbsp;→&nbsp;`code`, `Link`&nbsp;→&nbsp;`link` — and each heading
+`Code`&nbsp;→&nbsp;`code`, `Link`&nbsp;→&nbsp;`link`, a `Span`&nbsp;→&nbsp;each
+of its classes (nested, outermost first) — and each heading
 in `heading1`…`heading6` by level; code blocks use `codeblock`,
 definition terms `term`.  A link carries its URL as a leading field
 (`⦃link⦙URL⦙label⦄`): the default sheet shows only the label, and a
@@ -3384,9 +3390,9 @@ default):
 
 * **`'gfm'`** — GitHub-Flavored Markdown.
 * **`'commonmark'`** — CommonMark, with big's extensions degraded to
-  plain CommonMark: strikethrough dropped to text, an alert to a
-  bold-titled block quote, a definition list to a bold term over a
-  block-quoted definition.
+  plain CommonMark: strikethrough dropped to text, a bracketed span to
+  its content, an alert to a bold-titled block quote, a definition list
+  to a bold term over a block-quoted definition.
 * **`'troff'`** — groff `man`-macro troff, the **body** of a man page.
   Headings become `.SH`/`.SS` sections, definition lists `.TP` tagged
   paragraphs (ideal for options), bullet/ordered lists `.IP`, code
@@ -12007,9 +12013,11 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `render_document(document, format)` renders the raw IR to GitHub-Flavored
   Markdown, CommonMark, or groff `man`-macro troff.  The parser covers its
   CommonMark subset closely (~85% of the applicable spec test suite; images, raw
-  HTML, and entity references are deliberately omitted), plus three extensions:
-  GFM strikethrough, definition lists, and GitHub alerts (`> [!NOTE]` and
-  friends).  The structural glyphs it draws (bullet, quote bar, thematic
+  HTML, and entity references are deliberately omitted), plus four extensions:
+  GFM strikethrough, definition lists, GitHub alerts (`> [!NOTE]` and
+  friends), and Pandoc's bracketed spans (`[text]{.class}`, a `Span` node whose
+  classes are style roles: `[host]{.argument}` styles to `⦃argument⦙host⦄`;
+  the GFM, CommonMark, and troff back ends degrade it to its content).  The structural glyphs it draws (bullet, quote bar, thematic
   break, alert emoji and titles) are *glyph roles* (`⦃bullet⦄`,
   `⦃tip_title⦄`, …) resolved by the painting `StyleSheet` —
   `markdown_defaults` for Unicode, `markdown_ascii_glyphs` for ASCII — or

@@ -418,6 +418,42 @@ def test_inline_link_label_with_balanced_brackets():
     p = parse(r"[a \[b c](u)" + "\n").blocks[0]
     assert p == Paragraph([Link([Text('a [b c')], 'u', '')]), p
 
+def test_bracketed_span():
+    # Pandoc's bracketed_spans: [text]{.class} is a Span whose classes
+    # are style roles
+    p = parse("see [foo]{.argument} now\n").blocks[0]
+    assert p == Paragraph([Text('see '), Span([Text('foo')], ('argument',)), Text(' now')])
+    # the label is inline content; several classes are all kept, in order
+    p = parse("[**b** x]{.a .b}\n").blocks[0]
+    assert p == Paragraph([Span([Strong([Text('b')]), Text(' x')], ('a', 'b'))])
+    # not a span -> the brackets stay literal (fail-soft), each for its
+    # own reason: an id, a key=value, an invalid role name, a space
+    # before the brace, empty braces, no closing brace
+    for src in ("[foo]{#id}", "[foo]{.a key=v}", "[foo]{.no-hyphens}",
+                "[foo] {.a}", "[foo]{}", "[foo]{.a"):
+        p = parse(src + "\n").blocks[0]
+        assert not any(isinstance(n, Span) for n in p.children), src
+    # an explicit class beats a shortcut reference link of the same label
+    doc = parse("[foo]{.c}\n\n[foo]: http://x\n")
+    assert doc.blocks[0] == Paragraph([Span([Text('foo')], ('c',))])
+    # a link is still a link
+    assert isinstance(parse("[foo](http://x)\n").blocks[0].children[0], Link)
+
+def test_bracketed_span_renders():
+    # style_document: the class is the role; classes nest outermost first
+    assert style_document(parse("[foo]{.argument}\n")).blocks[0] == \
+        Paragraph([Text('⦃argument⦙foo⦄')])
+    assert style_document(parse("[x]{.a .b}\n")).blocks[0] == \
+        Paragraph([Text('⦃a⦙⦃b⦙x⦄⦄')])
+    # through the terminal pipeline, a sheet that defines the role paints it
+    sheet = markdown_defaults | StyleSheet({'argument': ('T', '<T>')})
+    assert render("use [host]{.argument} here\n", 40, sheet=sheet) == "use <host> here"
+    # the other renderers can't carry a class: the content survives, bare
+    doc = parse("a [b]{.c} d\n")
+    assert render_document(doc, 'gfm') == "a b d"
+    assert render_document(doc, 'commonmark') == "a b d"
+    assert render_document(doc, 'troff') == ".PP\na b d"
+
 def test_autolinks():
     # a URI autolink: the URL is both destination and visible text
     p = parse("see <https://x.io/a?b=1> ok\n").blocks[0]

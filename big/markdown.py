@@ -341,6 +341,21 @@ class StyledText(Node):
     _fields = ('text',)
 
 
+class Span(Node):
+    """
+    A bracketed span with classes, `[text]{.class}` (Pandoc's
+    bracketed_spans extension): `children` is inline, `classes` a
+    tuple of one or more class names.  A class is a style role, so
+    style_document renders `[foo]{.argument}` as ⦃argument⦙foo⦄
+    (several classes nest, outermost first).  The other renderers
+    can't carry a class, so they degrade a Span to its content.
+    Only `.class` attributes are recognized, each a valid role name;
+    anything else leaves the brackets literal.
+    """
+    __slots__ = ('children', 'classes')
+    _fields = ('children', 'classes')
+
+
 class Strong(Node):
     "Strong emphasis (`**...**`); `children` is inline."
     __slots__ = ('children',)
@@ -700,6 +715,13 @@ def _inline(text, refs):
                 items.append(['node', Link(_inline(label, refs), dest, title)])
                 i = end
                 continue
+            span = _try_span(text, i)
+            if span:
+                flush()
+                label, classes, end = span
+                items.append(['node', Span(_inline(label, refs), classes)])
+                i = end
+                continue
             ref = _try_ref_link(text, i, refs)
             if ref:
                 flush()
@@ -753,6 +775,37 @@ def _inline(text, refs):
     flush()
     _pair_emphasis(items)
     return _items_to_nodes(items)
+
+
+_class_name_re = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+
+
+def _try_span(text, i):
+    """
+    Parse a bracketed span `[text]{.class ...}` at text[i]=='['.
+    Returns (label, classes, end) or None.  The '{' must directly
+    follow the ']'; the braces hold one or more `.class` tokens and
+    nothing else, each a valid style-role name (alphanumeric or
+    underscore, not starting with a digit) -- so `{#id}`, `{key=v}`
+    and `{.no-hyphens}` all leave the brackets literal.
+    """
+    close = _match_bracket(text, i)
+    if close < 0 or close + 1 >= len(text) or text[close + 1] != '{':
+        return None
+    end = text.find('}', close + 2)
+    if end < 0:
+        return None
+    classes = []
+    for token in text[close + 2:end].split():
+        if not token.startswith('.'):
+            return None
+        name = token[1:]
+        if not _class_name_re.fullmatch(name):
+            return None
+        classes.append(name)
+    if not classes:
+        return None
+    return text[i + 1:close], tuple(classes), end + 1
 
 
 def _match_bracket(text, i):
@@ -1370,6 +1423,12 @@ def _styled_text(nodes):
             out.append(_style_span('italic', _styled_text(node.children)))
         elif isinstance(node, Strikethrough):
             out.append(_style_span('strikethrough', _styled_text(node.children)))
+        elif isinstance(node, Span):
+            # each class is a role; several nest, outermost first
+            inner = _styled_text(node.children)
+            for name in reversed(node.classes):
+                inner = _style_span(name, inner)
+            out.append(inner)
         elif isinstance(node, Code):
             out.append(_style_span('code', _escape(node.text)))
         elif isinstance(node, Link):
@@ -1777,7 +1836,7 @@ def _flatten(nodes):
     for node in nodes:
         if isinstance(node, (Text, Code)):
             out.append(node.text)
-        elif isinstance(node, (Strong, Emph, Strikethrough, Link)):
+        elif isinstance(node, (Strong, Emph, Strikethrough, Link, Span)):
             out.append(_flatten(node.children))
         elif isinstance(node, HardBreak):
             out.append(' ')       # collapses to a space outside a paragraph
@@ -1844,6 +1903,8 @@ def _troff_inline(nodes):
             out.append('\\fB' + _troff_text(node.text) + '\\fP')
         elif isinstance(node, Strikethrough):
             out.append(_troff_inline(node.children))   # no troff strike
+        elif isinstance(node, Span):
+            out.append(_troff_inline(node.children))   # a class can't ride to troff
         elif isinstance(node, Link):
             text = _troff_inline(node.children)
             if node.url and node.url != _flatten(node.children):
@@ -1981,6 +2042,8 @@ def _md_inline(nodes, gfm):
         elif isinstance(node, Strikethrough):
             inner = _md_inline(node.children, gfm)
             out.append(f'~~{inner}~~' if gfm else inner)   # commonmark: drop it
+        elif isinstance(node, Span):
+            out.append(_md_inline(node.children, gfm))    # neither dialect has classes
         elif isinstance(node, Link):
             inner = _md_inline(node.children, gfm)
             if node.title:
@@ -2101,7 +2164,8 @@ __all__ = [
     'DefinitionList', 'DefinitionEntry', 'Term', 'Definition',
     'CodeBlock', 'BlockQuote', 'Alert', 'ThematicBreak', 'Raw',
     # inline
-    'Text', 'StyledText', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'HardBreak',
+    'Text', 'StyledText', 'Strong', 'Emph', 'Strikethrough', 'Code', 'Link', 'Span',
+    'HardBreak',
     # parser + renderers
     'parse', 'style_document', 'split_styles_document', 'layout_document',
     'render_document', 'markdown_defaults', 'markdown_ascii_glyphs',
