@@ -2335,11 +2335,11 @@ def test_wrap_words():
         assert got == to_bytes(expected)
 
     test(
-        "hello there. how are you? i am fine! so there's that.".split(),
-        "hello there.  how are you?  i am fine!  so there's that.")
+        "hello there. How are you? i am fine! so there's that.".split(),
+        "hello there.  How are you?  i am fine!  so there's that.")
     test(
-        "hello there. how are you? i am fine! so there's that.".split(),
-        "hello there.  how\nare you?  i am fine!\nso there's that.",
+        "hello there. How are you? i am fine! so there's that.".split(),
+        "hello there.  How\nare you?  i am fine!\nso there's that.",
         20)
     test(
         ["these are all long lines that must be by themselves.",
@@ -2362,6 +2362,34 @@ def test_wrap_words():
     # ...and the pipeline's actual empty case wraps fine.
     assert big.wrap_words(big.split_text_with_code('')) == ''
 
+def test_wrap_words_sentence_spacing_heuristics():
+    w = lambda text: big.wrap_words(text.split(), 79)
+    # a sentence end gets two spaces; '?' and '!' always end one
+    assert w("It was lit. This worked.") == "It was lit.  This worked."
+    assert w("Really? Yes! Fine.") == "Really?  Yes!  Fine."
+    # lowercase lookahead: a '.' before a lowercase word is an abbreviation
+    assert w("It was lit. a problem.") == "It was lit. a problem."
+    assert w("Use it, e.g. the flag.") == "Use it, e.g. the flag."
+    # a known abbreviation, even before a capital (the case lookahead misses)
+    assert w("Use it, e.g. Python does.") == "Use it, e.g. Python does."
+    assert w("Ask Dr. Smith about it.") == "Ask Dr. Smith about it."
+    assert w("Ask (Dr. Smith) about it.") == "Ask (Dr. Smith) about it."   # an opener is looked past
+    # a lone initial
+    assert w("By J. R. R. Tolkien. Then") == "By J. R. R. Tolkien.  Then"
+    # a '.' inside a closing quote or bracket still ends the sentence
+    assert w("He said 'stop.' Then left.") == "He said 'stop.'  Then left."
+    assert w("(See above.) Then left.") == "(See above.)  Then left."
+    # etc. is NOT in the set -- it ends sentences all the time -- and
+    # relies on the lookahead when it doesn't
+    assert w("Apples, etc. Then we left.") == "Apples, etc.  Then we left."
+    assert w("Apples, etc. and more.") == "Apples, etc. and more."
+    # the deliberate trade: a lowercase identifier opening a sentence
+    assert w("See foo. bar() does more.") == "See foo. bar() does more."
+    # bytes take the same path
+    assert big.wrap_words(b"Use it, e.g. Python does.".split(), 79) == b"Use it, e.g. Python does."
+    assert big.wrap_words(b"It was lit. This worked.".split(), 79) == b"It was lit.  This worked."
+    assert big.wrap_words(b"He said 'stop.' Then".split(), 79) == b"He said 'stop.'  Then"
+
 def test_wrap_words_two_spaces_false():
     # Regression test.  The two_spaces parameter used to be
     # clobbered by a local variable, so two_spaces=False was
@@ -2377,15 +2405,17 @@ def test_wrap_words_two_spaces_false():
     # over-counted by one after sentence-enders, so lines wrapped
     # early.  Only visible at a tight margin, so also pin the
     # wrap decision right at the margin's edge:
-    # 'aa. bb' is exactly 6 columns--it fits iff two_spaces=False.
-    got = big.wrap_words(['aa.', 'bb'], 6, two_spaces=False)
-    assert got == "aa. bb"
-    got = big.wrap_words([b'aa.', b'bb'], 6, two_spaces=False)
-    assert got == b"aa. bb"
+    # 'aa. Bb' is exactly 6 columns--it fits iff two_spaces=False.
+    # (Capitalized: a lowercase word after a '.' reads as an
+    # abbreviation and gets one space whatever the flag says.)
+    got = big.wrap_words(['aa.', 'Bb'], 6, two_spaces=False)
+    assert got == "aa. Bb"
+    got = big.wrap_words([b'aa.', b'Bb'], 6, two_spaces=False)
+    assert got == b"aa. Bb"
     # ...and the two_spaces=True twin wraps, proving the flag,
     # not the punctuation, decides.
-    got = big.wrap_words(['aa.', 'bb'], 6, two_spaces=True)
-    assert got == "aa.\nbb"
+    got = big.wrap_words(['aa.', 'Bb'], 6, two_spaces=True)
+    assert got == "aa.\nBb"
 
 def test_wrap_words_raw():
     # 'raw' lets styled words wrap by their PLAIN width while the

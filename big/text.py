@@ -5319,6 +5319,39 @@ def _deflist_column(term_widths, margin):
     return column, tall
 
 
+# the abbreviations two_spaces never treats as a sentence end, whatever
+# follows them.  Deliberately small: these essentially never END a
+# sentence.  (`etc.` is left out -- it ends sentences all the time -- and
+# relies on the lowercase lookahead when it doesn't.)
+_sentence_abbreviations = frozenset(
+    ('e.g.', 'i.e.', 'vs.', 'cf.', 'mr.', 'mrs.', 'ms.', 'dr.', 'st.'))
+_sentence_abbreviations_bytes = frozenset(a.encode() for a in _sentence_abbreviations)
+
+
+def _sentence_end(prev, nxt, punctuation, period, closers, openers, abbreviations):
+    """
+    Does `prev`, the word before a gap, end a sentence -- so that
+    two_spaces puts two spaces before `nxt`?  A trailing closer
+    ("'stop.'") doesn't hide the punctuation.  '?' and '!' always end
+    one.  A '.' doesn't when the word is a known abbreviation (e.g.),
+    a lone initial (J.), or the next word starts in lowercase
+    (lit. a) -- sentences start with a capital.
+    """
+    prev = prev.rstrip(closers)
+    if not prev.endswith(punctuation):
+        return False
+    if not prev.endswith(period):
+        return True
+    core = prev.lstrip(openers)
+    if core.lower() in abbreviations:
+        return False
+    if len(core) == 2 and core[:1].isupper():
+        return False
+    if nxt[:1].islower():
+        return False
+    return True
+
+
 def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, tab_width=8, two_spaces=True, raw=None):
     """
     Combines 'words' into lines and returns the result as a string.
@@ -5400,9 +5433,13 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
     characters, not eight.  'margin' is unaffected: it's the width
     of the block wrap_words produces, wherever you put it.
 
-    If 'two_spaces' is true, elements from 'words' that end in
-    sentence-ending punctuation ('.', '?', and '!') will be followed
-    by two spaces, not one.
+    If 'two_spaces' is true, a word that ends a sentence is followed
+    by two spaces, not one.  Ending in '?' or '!' always counts, as
+    does a '.' -- even inside a closing quote or bracket ("'stop.'")
+    -- unless the word is a known abbreviation (e.g., i.e., vs., cf.,
+    Mr., Mrs., Ms., Dr., St.), a lone initial (J.), or the next word
+    starts in lowercase (sentences start with a capital, so "lit. a"
+    is an abbreviation and "lit. The" a sentence end).
 
     'raw' is an optional callback mapping a word to its PLAIN TEXT,
     for callers whose words carry in-band styling markup (so the
@@ -5599,6 +5636,8 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             if isinstance(sample, bytes):
                 empty = lastword = b''
                 sentence_ending_punctuation = (b'.', b'?', b'!')
+                period, closers, openers = b'.', b'\'")]', b'(["\''
+                abbreviations = _sentence_abbreviations_bytes
                 space1 = b' '
                 space2 = b'  '
                 linebreak = b'\n'
@@ -5610,6 +5649,8 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             else:
                 empty = lastword = ''
                 sentence_ending_punctuation = ('.', '?', '!')
+                period, closers, openers = '.', '\'")]', '(["\''
+                abbreviations = _sentence_abbreviations
                 space1 = ' '
                 space2 = '  '
                 linebreak = '\n'
@@ -5830,7 +5871,9 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                     append(space1 * (target - col))
                     col = target
             elif col:
-                if two_spaces and _raw(lastword).endswith(sentence_ending_punctuation):
+                if two_spaces and _sentence_end(
+                        _raw(lastword), rawword, sentence_ending_punctuation,
+                        period, closers, openers, abbreviations):
                     space = space2
                     len_space = 2
                 else:

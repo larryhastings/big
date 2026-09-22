@@ -7159,9 +7159,17 @@ starts at column 5 reaches its first tab stop after four
 characters, not eight.  `margin` is unaffected: it's the width
 of the block `wrap_words` produces, wherever you put it.
 
-If `two_spaces` is true, elements from `words` that end in
-sentence-ending punctuation (`'.'`, `'?'`, and `'!'`)
-will be followed by two spaces, not one.
+If `two_spaces` is true, a word that ends a sentence is followed by
+two spaces, not one.  Ending in `?` or `!` always counts, as does a
+`.` — even inside a closing quote or bracket (`'stop.'`) — *unless*
+the word is a known abbreviation (`e.g.`, `i.e.`, `vs.`, `cf.`,
+`Mr.`, `Mrs.`, `Ms.`, `Dr.`, `St.`), a lone initial (`J.`), or the
+next word starts in lowercase: sentences start with a capital, so
+`lit. a` is an abbreviation and `lit. The` a sentence end.  (`etc.`
+is deliberately not in the set — it ends sentences constantly — and
+relies on the lookahead when it doesn't.  The one deliberate trade:
+a lowercase identifier opening a sentence, `foo. bar()`, reads as an
+abbreviation.)
 
 `raw` is an optional callback mapping a word to its *plain text*,
 for callers whose words carry in-band styling markup (so the emitted
@@ -12097,6 +12105,14 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   behavior is unchanged.  Widths count code points, not terminal cells (so wide
   characters and emoji may misalign); a cell-width policy is a possible later
   addition.
+
+* 🤖 **`big.text`: `wrap_words`' `two_spaces` tells abbreviations from sentence
+  ends.**  It used to double-space after *any* word ending in `.`, so `e.g.`,
+  `Dr.`, and every initial in `J. R. R.` got sentence spacing.  Now a `.`
+  followed by a lowercase word, a known abbreviation (`e.g.`, `i.e.`, `vs.`,
+  `cf.`, `Mr.`, `Mrs.`, `Ms.`, `Dr.`, `St.`), or a lone initial gets one space;
+  and a `.` inside a closing quote or bracket (`'stop.'`), which used to get
+  *no* sentence spacing, now does.
 
 * 🤖 **`big.text`: [`wrap_words`](#wrap_wordswords-margin79--code_indentnone-indent-left_column1-tab_width8-two_spacestrue-rawnone)
   learns layout instructions.**  An element of `words` may now be a tuple that's
