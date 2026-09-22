@@ -7163,7 +7163,7 @@ If `two_spaces` is true, a word that ends a sentence is followed by
 two spaces, not one.  Ending in `?` or `!` always counts, as does a
 `.` — even inside a closing quote or bracket (`'stop.'`) — *unless*
 the word is a known abbreviation (`e.g.`, `i.e.`, `vs.`, `cf.`,
-`Mr.`, `Mrs.`, `Ms.`, `Dr.`, `St.`), a lone initial (`J.`), or the
+`Mr.`, `Mrs.`, `Ms.`, `Dr.`, `St.`, `Rev.`), a lone initial (`J.`), or the
 next word starts in lowercase: sentences start with a capital, so
 `lit. a` is an abbreviation and `lit. The` a sentence end.  (`etc.`
 is deliberately not in the set — it ends sentences constantly — and
@@ -12110,7 +12110,7 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   ends.**  It used to double-space after *any* word ending in `.`, so `e.g.`,
   `Dr.`, and every initial in `J. R. R.` got sentence spacing.  Now a `.`
   followed by a lowercase word, a known abbreviation (`e.g.`, `i.e.`, `vs.`,
-  `cf.`, `Mr.`, `Mrs.`, `Ms.`, `Dr.`, `St.`), or a lone initial gets one space;
+  `cf.`, `Mr.`, `Mrs.`, `Ms.`, `Dr.`, `St.`, `Rev.`), or a lone initial gets one space;
   and a `.` inside a closing quote or bracket (`'stop.'`), which used to get
   *no* sentence spacing, now does.
 

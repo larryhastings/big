@@ -2373,6 +2373,7 @@ def test_wrap_words_sentence_spacing_heuristics():
     # a known abbreviation, even before a capital (the case lookahead misses)
     assert w("Use it, e.g. Python does.") == "Use it, e.g. Python does."
     assert w("Ask Dr. Smith about it.") == "Ask Dr. Smith about it."
+    assert w("Ask Rev. Smith about it.") == "Ask Rev. Smith about it."
     assert w("Ask (Dr. Smith) about it.") == "Ask (Dr. Smith) about it."   # an opener is looked past
     # a lone initial
     assert w("By J. R. R. Tolkien. Then") == "By J. R. R. Tolkien.  Then"

@@ -5324,7 +5324,7 @@ def _deflist_column(term_widths, margin):
 # sentence.  (`etc.` is left out -- it ends sentences all the time -- and
 # relies on the lowercase lookahead when it doesn't.)
 _sentence_abbreviations = frozenset(
-    ('e.g.', 'i.e.', 'vs.', 'cf.', 'mr.', 'mrs.', 'ms.', 'dr.', 'st.'))
+    ('e.g.', 'i.e.', 'vs.', 'cf.', 'mr.', 'mrs.', 'ms.', 'dr.', 'st.', 'rev.'))
 _sentence_abbreviations_bytes = frozenset(a.encode() for a in _sentence_abbreviations)
 
 
@@ -5437,7 +5437,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
     by two spaces, not one.  Ending in '?' or '!' always counts, as
     does a '.' -- even inside a closing quote or bracket ("'stop.'")
     -- unless the word is a known abbreviation (e.g., i.e., vs., cf.,
-    Mr., Mrs., Ms., Dr., St.), a lone initial (J.), or the next word
+    Mr., Mrs., Ms., Dr., St., Rev.), a lone initial (J.), or the next word
     starts in lowercase (sentences start with a capital, so "lit. a"
     is an abbreviation and "lit. The" a sentence end).
 
