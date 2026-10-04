@@ -661,6 +661,9 @@ def test_render_thematic_break():
     assert render("- foo\n\n  ---\n", 12) == "• foo\n\n  ──────────"
     # a heading's rule is still hugged to its text, not the margin
     assert render("## Hi\n", 12) == "Hi\n--"
+    # Tight lists need no blank line to identify a full-width divider.
+    assert render("- a\n  ***\n", 20) == "• a\n  " + "─" * 18
+    assert render("> - a\n>   ***\n", 20) == "│ • a\n│   " + "─" * 16
 
 def test_render_definition_list():
     # narrow terminal (thin ribbon) -> tall: term on its own line

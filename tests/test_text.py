@@ -7530,6 +7530,26 @@ def test_regression__separators_to_re_unhashable_iterables():
     expected_bytes = big.text._separators_to_re((b',', b';'), True)
     assert direct_bytes == expected_bytes
 
+def test_wrap_words_explicit_rule_widths():
+    cases = (
+        (['Hi', ('rule', '-')], 'Hi\n----------'),
+        (['Hi', '\n', ('rule', '-')], 'Hi\n----------'),
+        (['Hi', ('rule previous', '-')], 'Hi\n--'),
+        (['Hi', '\n', ('rule previous', '-')], 'Hi\n--'),
+        ([('rule previous', '-')], ''),
+        ([('rule next', '='), 'Hi', ('rule previous', '-')], '==\nHi\n--'),
+        ([('rule next', '='), 'Hi', ('rule', '-')], '==\nHi\n----------'),
+        (['Hi', ('rule previous', '')], 'Hi'),
+        ([('indent', '> '), 'Hi', ('rule', '-')], '> Hi\n> --------'),
+        ([('indent', '> '), 'Hi', ('rule previous', '-')], '> Hi\n> --'),
+    )
+    for words, expected in cases:
+        assert big.text.wrap_words(words, margin=10) == expected
+        byte_words = [tuple(x.encode() for x in word) if isinstance(word, tuple)
+                      else word.encode() for word in words]
+        assert big.text.wrap_words(byte_words, margin=10) == expected.encode()
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.text", module=__name__)
 

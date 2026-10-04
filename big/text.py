@@ -5396,15 +5396,16 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
         ('rule', pattern)
             Draw a rule: `pattern` repeated to a width, then clipped to
             it, on its own line (opened if need be) with the line's
-            prefix.  Attached to text -- right after a paragraph, or
-            after a single '\n' -- it's as wide as that paragraph's
-            widest line: a heading's underline.  On its own -- after a
-            blank line, or first in the stream -- it's as wide as the
-            line that's left past the prefix: a thematic break.  A
+            prefix. It always fills the width left past that prefix,
+            regardless of preceding text or whitespace. A
             pattern that measures zero wide draws nothing at all.  (A
             plain-text pattern clips exactly; a pattern raw= changes,
             markup, is never sliced inside: it repeats whole and may
             run up to one repetition long.)
+        ('rule previous', pattern)
+            Draw a rule sized to the preceding paragraph's widest
+            wrapped line (the current paragraph, or the one just ended
+            by a single newline). With no preceding paragraph, draw nothing.
         ('rule next', pattern)
             The same rule, sized to the NEXT paragraph and placed here,
             above it, once that paragraph has been laid out.
@@ -5519,7 +5520,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
 
     # the current line's prefix width, the widest line so far of the
     # paragraph being laid out, the widest line of the paragraph that
-    # last ended (what a 'rule' measures), and 'rule next's awaiting
+    # last ended (what a 'rule previous' measures), and 'rule next's awaiting
     # the paragraph after them
     prefix_width = 0
     paragraph_width = 0
@@ -5644,7 +5645,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 tab = b'\t'
                 indent_marker = b'indent'
                 def_markers = (b'def start', b'def end', b'term')
-                rule_markers = (b'rule', b'rule next')
+                rule_markers = (b'rule', b'rule next', b'rule previous')
                 if_marker = b'if line'
             else:
                 empty = lastword = ''
@@ -5657,7 +5658,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 tab = '\t'
                 indent_marker = 'indent'
                 def_markers = ('def start', 'def end', 'term')
-                rule_markers = ('rule', 'rule next')
+                rule_markers = ('rule', 'rule next', 'rule previous')
                 if_marker = 'if line'
             indent_type = bytes if isinstance(sample, bytes) else str
             if indent or (code_indent is not None):
@@ -5754,11 +5755,13 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                             (len(text) - 2, prefix, pattern, pattern_width))
                     lastword = empty
                     continue
-                # 'rule': size to the paragraph this rule follows (the one
-                # in progress, else the one that just ended) and draw it on
-                # its own line -- it opens one if we aren't at a line start
+                # Both remaining verbs draw here. Only 'rule previous'
+                # measures text; plain 'rule' fills the available line.
                 if not pattern_width:
                     continue                                 # zero wide: nothing at all
+                text_width = paragraph_width or previous_width
+                if instruction == rule_markers[2] and not text_width:
+                    continue
                 if not new_line:
                     append(linebreak)
                     line_number += 1
@@ -5767,17 +5770,12 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                     prefix, prefix_w = indents[index], widths[index]
                 else:
                     prefix, prefix_w = empty, 0
-                # attached to text (a heading's underline): as wide as
-                # that text.  On its own -- after a blank line, or first
-                # in the stream (a thematic break): as wide as the line
-                # that's left past the prefix.  Markdown itself keeps the
-                # two apart: a rule right under text is a setext heading,
-                # a thematic break always follows a blank line.
-                width = paragraph_width or previous_width or max(1, margin - prefix_w)
+                width = (text_width if instruction == rule_markers[2]
+                         else max(1, margin - prefix_w))
                 # a 'rule next' waiting on this same paragraph resolves now
                 for slot, r_prefix, r_pattern, r_width in pending_rules:
                     text[slot] = r_prefix + _tile_rule(
-                        r_pattern, r_width, width, empty, _raw)
+                        r_pattern, r_width, text_width, empty, _raw)
                     text[slot + 1] = linebreak
                 pending_rules = []
                 append(prefix)
@@ -5785,7 +5783,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
                 append(_tile_rule(pattern, pattern_width, width, empty, _raw))
                 new_line = False
                 lastword = empty
-                previous_width = width
+                previous_width = text_width
                 paragraph_width = 0
                 continue
             raise ValueError(f"unknown wrap_words instruction {instruction!r}")
@@ -5802,7 +5800,7 @@ def wrap_words(words, margin=79, *, code_indent=None, indent='', left_column=1, 
             lastword = word
             if paragraph_width:
                 # the paragraph just ended: its widest line sizes a
-                # following 'rule', and any 'rule next' waiting on it
+                # following 'rule previous', and any 'rule next' waiting on it
                 previous_width = paragraph_width
                 for slot, prefix, pattern, pattern_width in pending_rules:
                     text[slot] = prefix + _tile_rule(

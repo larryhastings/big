@@ -1764,12 +1764,11 @@ def _layout_block(block, lead, rest, out):
                     _style_span(ink, _style_span(f'heading{level}_rule_next'))))
         out.append(('if line', '\n'))
         out.extend(_flow_words(block.children))
-        out.append(('rule', _style_span(ink, _style_span(f'heading{level}_rule'))))
+        out.append(('rule previous', _style_span(ink, _style_span(f'heading{level}_rule'))))
         return
     if isinstance(block, ThematicBreak):
-        # a rule on its own: wrap_words fills the line that's left past
-        # the prefix (a thematic break always follows a blank line, so
-        # it's never mistaken for a heading's underline).  The glyph is
+        # A plain rule fills the line left past the prefix, even in a
+        # tight list with no intervening blank line. The glyph is
         # one character, tiled; `rule` is its paint role.
         out.append(('indent', lead, rest))
         out.append(('rule', _style_span('rule', _style_span('thematic_break'))))

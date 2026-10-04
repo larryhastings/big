@@ -7233,13 +7233,14 @@ rather than a word.  Its first item names the instruction:
   compact (term and details sharing a line) or tall.
 * `('rule', pattern)` draws a **rule** — `pattern` (measured through
   `raw`) tiled to a width, then clipped — on its own line, with the
-  line's prefix.  *Attached* to text (right after a paragraph, or after
-  a single `'\n'`) it's as wide as that paragraph's widest line: a
-  heading's underline.  *On its own* (after a blank line, or first in
-  the stream) it's as wide as the line that's left past the prefix: a
-  thematic break.  A pattern that measures zero draws nothing.
-  `('rule next', pattern)` is the attached form sized to and placed
-  above the *next* paragraph.  (`big.markdown` brackets every heading
+  line's prefix. It always fills the width left past the prefix,
+  regardless of preceding text or whitespace: a thematic break.
+  A pattern that measures zero draws nothing.
+  `('rule previous', pattern)` instead matches the preceding paragraph's
+  widest line: a heading's underline. It draws nothing if there is no
+  preceding paragraph (including after a blank line).
+  `('rule next', pattern)` is sized to and placed
+  above the *next* paragraph. (`big.markdown` brackets every heading
   with these, from its `heading{n}_rule` / `heading{n}_rule_next`
   glyphs, and draws a thematic break as a standalone rule from
   `thematic_break`.)
@@ -12039,12 +12040,12 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   by the `unicode_glyphs` / `ascii_glyphs` / `glyphs_from_stylesheet` swap
   functions.  `layout_document` hard-codes nothing -- including heading
   rules: it brackets every heading with two rule hooks (`heading{n}_rule`
-  below, `heading{n}_rule_next` above), and `wrap_words`' new `('rule', …)`
+  below, `heading{n}_rule_next` above), and `wrap_words`' `('rule previous', …)`
   / `('rule next', …)` / `('if line', …)` instructions size the rule to the
   heading's widest wrapped line and indent it with the heading, so a wrapped
   or nested heading gets one correctly-placed underline (H1/H2 setext by
-  default, H3-H6 bare).  A rule on its own -- after a blank line -- is as wide
-  as the line instead, so a thematic break now spans the margin (minus any
+  default, H3-H6 bare). A plain `('rule', …)` always fills the available
+  line instead, so a thematic break spans the margin (minus any
   quote bar or list indent) rather than being a fixed five characters.  Each rule glyph is a bare character the layout wraps
   in a per-level `heading{n}_rule_ink` paint role (as the bullet is wrapped in
   `marker`), so a sheet colors a rule without the glyph mis-measuring its own
