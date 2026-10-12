@@ -1339,6 +1339,26 @@ def test_is_import_only_helper():
     assert not _is_import_only("def f(:")
 
 
+def test_iterator_context_snippet_dependencies():
+    from pathlib import Path
+    import big.itertools as itertools_module
+
+    source = Path(itertools_module.__file__).read_text(encoding='utf-8')
+    for name in ('big iterator context', 'big iterator context and filter'):
+        snippet = big.extract_snippets(source, name)
+        namespace = {}
+        exec(snippet, namespace)
+        pairs = list(namespace['iterator_context'](['a', 'b']))
+        assert [value for context, value in pairs] == ['a', 'b']
+        assert pairs[0][0].length == 2
+        assert pairs[0][0].countdown == 1
+        if name == 'big iterator context':
+            assert 'iterator_filter' not in namespace
+            assert 'operator' not in namespace
+        else:
+            assert list(namespace['iterator_filter']([1, 2], reject_value=1)) == [2]
+
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.snip", module=__name__)
 

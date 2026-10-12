@@ -133,9 +133,8 @@ class PushbackIterator:
         return f"<{self.__class__.__name__} i={self.i} stack={self.stack}>"
 
 
-# --8<-- start big iterator context and filter --8<--
+# --8<-- start big iterator context --8<--
 # --8<-- requires big license --8<--
-# --8<-- requires big import operator --8<--
 
 
 class IteratorContext:
@@ -271,6 +270,13 @@ def iterator_context(iterator, start=0):
         ctx = IteratorContext(iterator, start, index, is_first, True, current, next, sentinel)
         yield (ctx, next)
 
+
+# --8<-- end big iterator context --8<--
+
+# --8<-- start big iterator context and filter --8<--
+# --8<-- requires big license --8<--
+# --8<-- requires big iterator context --8<--
+# --8<-- requires big import operator --8<--
 
 undefined = None
 
