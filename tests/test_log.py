@@ -4811,6 +4811,33 @@ def test_log_as_destination_cycles_and_bool():
                for d in outer.destinations)
     a.close(); b.close(); inner.close(); outer.close()
 
+def test_log_as_destination_shutdown_order():
+    # at process exit a forwarder must close BEFORE the log it forwards
+    # to, or its worker is stopped with forwards still queued.  the
+    # central atexit handler closes in topological order, so BOTH
+    # construction orders deliver every message -- even the one where
+    # the outer was registered first (atexit's own LIFO would be wrong).
+    import re, big.log as L
+    def run(outer_first):
+        saved = list(L._live_cores)
+        L._live_cores.clear()
+        try:
+            abuf, bbuf = io.StringIO(), io.StringIO()
+            if outer_first:
+                A = big.Log(abuf, name='A'); B = big.Log(bbuf, name='B')
+            else:
+                B = big.Log(bbuf, name='B'); A = big.Log(abuf, name='A')
+            A.destinations = [A.destinations[0], B]
+            for i in range(30):
+                A.log(f"line {i}")
+            L._atexit_close_all()
+            return len([l for l in re.sub(r'\x1b\[[0-9;]*m', '', bbuf.getvalue()).split('\n')
+                        if 'line ' in l])
+        finally:
+            L._live_cores[:] = saved
+    assert run(outer_first=True) == 30      # the order atexit's LIFO gets wrong
+    assert run(outer_first=False) == 30
+
 def test_clock_convert():
     Clock = big.log.Clock
     c1, c2 = Clock(), Clock()              # distinct instances, same callable

@@ -2781,7 +2781,10 @@ destination, draws none.
 
 Unlike [`Buffer`](#bufferdestinationnone), it does *not* own the inner
 log's lifecycle: the inner is independently owned, with its own
-`close()` and `atexit`.  Closing the outer flushes what it forwarded
+`close()` and `atexit`.  At process exit the logs close in dependency
+order -- a forwarder before everything it forwards to -- so a message
+forwarded late is never stranded by a shut-down inner, whatever order
+the logs were built in.  Closing the outer flushes what it forwarded
 and closes any nesting it opened in the inner, but never closes the
 inner.  A `flush()` chains downstream.  Routing is checked for cycles:
 a log can't be its own destination, nor close a loop through other
@@ -12224,8 +12227,10 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   *symbolic message* and re-renders it in its own style, to its own output,
   with its own banners and nesting.  That's how you build a screen/file/both
   graph -- `both = Log(screen, file)` -- without the banners colliding or the
-  text being rendered twice.  Routing is cycle-checked, and the inner's
-  lifecycle stays its own (closing the outer never closes the inner).
+  text being rendered twice.  Routing is cycle-checked, the inner's lifecycle
+  stays its own (closing the outer never closes the inner), and a single
+  process-exit handler closes the logs in dependency order (a forwarder before
+  its inners) so late-forwarded messages are never stranded at shutdown.
 
 * 🤖 **`big.log`: `Log` gains a `format_transformer`.**  A callable,
   `transform(values) -> values`, that every `TextFormatter` runs on every

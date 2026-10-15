@@ -44,6 +44,7 @@ import weakref
 from . import template as big_template
 
 from .boundinnerclass import BoundInnerClass, BOUNDINNERCLASS_OUTER_SLOTS
+from .graph import TopologicalSorter
 from .builtin import ModuleManager
 from .file import translate_filename_to_exfat
 from .time import timestamp_human
@@ -2388,6 +2389,61 @@ class Job:
         self.exception = None
 
 
+# Process shutdown closes every live Log.  When one Log forwards to
+# another (a LogAsDestination), the forwarder must close FIRST, so its
+# worker drains its queue -- forwarding its pending messages onto the
+# inner's still-live queue -- before the inner's thread is stopped.
+# atexit's own order is last-registered-first, which is wrong whenever
+# a Log was constructed (or wired) before the one it forwards to.  So
+# we register ONE atexit handler and close the cores in topological
+# order ourselves: a forwarder before everything it forwards to.
+_live_cores = []
+_atexit_installed = False
+
+def _register_core_atexit(core):
+    global _atexit_installed
+    _live_cores.append(core)
+    if not _atexit_installed:
+        atexit.register(_atexit_close_all)
+        _atexit_installed = True
+
+def _atexit_close_all():
+    # build the dependency graph from the live routing tables: a core
+    # that routes to a LogAsDestination must precede that LAD's inner
+    # core.  edges model "inner depends on outer", so static_order
+    # yields each outer before its inners; isolated cores keep
+    # newest-first order (today's LIFO) by inserting in reverse.
+    cores = [c for c in _live_cores if not c.exited]
+    live = set(cores)
+    ts = TopologicalSorter()
+    for core in reversed(cores):
+        ts.add(core)
+    for core in cores:
+        try:
+            with core.configuration_lock:
+                children = [child
+                            for siblings in core.routes.values()
+                            for child in siblings
+                            if isinstance(child, LogAsDestination)]
+            for lad in children:
+                inner = lad._inner._core
+                if inner in live:
+                    ts.add(inner, core)      # inner closes after outer
+        except Exception:
+            pass
+    try:
+        order = list(ts.static_order())
+    except Exception:
+        # a cycle can't happen (route() forbids it); if something
+        # else goes wrong, fall back to reverse-registration order
+        order = list(reversed(cores))
+    for core in order:
+        try:
+            core.atexit()
+        except Exception:
+            pass
+
+
 class Core:
     __slots__ = (
         '__weakref__',
@@ -2469,7 +2525,7 @@ class Core:
         # surfaced to users via LogDestination.owner
         self.owner = None
 
-        atexit.register(self.atexit)
+        _register_core_atexit(self)
 
         self.thread = None
         self._start_thread()
