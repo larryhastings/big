@@ -939,6 +939,44 @@ def ascii_format_dict(*, closed=False):
     return format_dict_to_ascii(_t_style_format_dict())
 
 
+def _apply_format_transformer(core, values):
+    """
+    Run the owning Log's format_transformer over `values`, the dict
+    a TextFormatter is about to format its templates from.  The
+    transformer is the log's, not a formatter's, so a fault gets
+    the same ladder as a formatter or destination--fix, retry up to
+    `retries`, then drop--except that dropping it means detaching
+    it from the log, not unrouting anything.  Each attempt gets a
+    fresh copy of the values, so a retry never sees a half-mutated
+    dict.  A transformer that returns anything but a dict has
+    faulted.
+    """
+    owner = core.owner
+    transformer = None if owner is None else owner._format_transformer
+    if transformer is None:
+        return values
+    attempts = 0
+    while True:
+        try:
+            result = transformer(dict(values))
+            if not isinstance(result, dict):
+                raise TypeError(
+                    f"format_transformer must return a dict, not {type(result).__name__}")
+            return result
+        except Exception as fault:
+            if attempts < core.retries:
+                attempts += 1
+                try:
+                    if core.fix(transformer, fault):
+                        continue
+                except Exception as e:
+                    core.poisoned = e
+                    owner._format_transformer = None
+                    return values
+            owner._format_transformer = None
+            return values
+
+
 @export
 class TextFormatter(LogFormatter):
     # owns formats dict, prefix, nesting stack, indentation
@@ -1097,14 +1135,18 @@ class TextFormatter(LogFormatter):
     def render(self, message):
         prepared = message.prepared[self.key]
         prefix_renderer, template_renderer = self.get_renderers(prepared)
-        priority = self.message_to_priority(message, prepared)
-        # the current nesting indent rides along after the prefix
-        priority['prefix'] = prefix_renderer(priority) + prepared.fstate.indent
+        values = self.message_to_priority(message, prepared)
         lines = list(prepared.args)
         if prepared.kwargs:
             lines.extend(f'{name}={value}' for name, value in prepared.kwargs.items())
-        message_text = '\n'.join(lines)
-        s = template_renderer(message=message_text, **priority)
+        values['message'] = '\n'.join(lines)
+        # the log's format_transformer, if any, sees every value the
+        # templates will be formatted from--before the prefix is
+        # rendered, so a value it adds works in a prefix template too
+        values = _apply_format_transformer(self.core, values)
+        # the current nesting indent rides along after the prefix
+        values['prefix'] = prefix_renderer(values) + prepared.fstate.indent
+        s = template_renderer(**values)
         if prepared.fstate.format_dict.get('verbatim'):
             # a verbatim format skips the cleanup below: no rstrip,
             # no appended newline.  write()'s 'preformatted' format
@@ -3747,8 +3789,9 @@ def default_fix(o, fault):
     The default fix callback: declines to fix anything.
 
     A Log's fix callback is called as fix(involved, exception)
-    whenever a formatter or destination raises: "involved" is the
-    offending object, "exception" is what it raised.  Return true
+    whenever a formatter or destination--or the log's
+    format_transformer--raises: "involved" is the offending object,
+    "exception" is what it raised.  Return true
     to retry the failed operation (up to Log's retries count);
     return false and the object is immediately dropped from the
     log's routing.
@@ -3805,7 +3848,7 @@ class Log(LogBase):
     the log has no destinations.
     """
 
-    __slots__ = ('_all_destinations', '_buffered', '_formatter', '_paused_on_reset', '_sink_formatter')
+    __slots__ = ('_all_destinations', '_buffered', '_format_transformer', '_formatter', '_paused_on_reset', '_sink_formatter')
 
     _InertContextManager = _InertContextManager
     _ExitContextManager = Child
@@ -3817,6 +3860,7 @@ class Log(LogBase):
         buffered=False,
         clock=Clock,
         fix=default_fix,
+        format_transformer=None,
         formatter=None,
         name='Log',
         paused=False,
@@ -3839,6 +3883,8 @@ class Log(LogBase):
 
         if not callable(fix):
             raise TypeError('fix must be callable')
+        if (format_transformer is not None) and not callable(format_transformer):
+            raise TypeError('format_transformer must be callable')
 
         if threading is not None:
             # deprecated alias for "threaded"
@@ -3882,10 +3928,31 @@ class Log(LogBase):
         super().__init__(name, core, session, paused)
 
         self._formatter = formatter
+        self._format_transformer = format_transformer
         self._sink_formatter = None
         self._all_destinations = []
 
         self._route(formatter, destinations)
+
+    @property
+    def format_transformer(self):
+        """
+        A callable, or None: transform(values) -> values, run on
+        every message by every TextFormatter, over the dict the
+        templates are formatted from (elapsed, thread, timestamp,
+        name, message, ...).  It's context-free--it isn't told which
+        message it's transforming--so it adds generic values, and the
+        templates decide where they appear.  Runs on the worker
+        thread.  A fault goes through fix() and retries, and then the
+        transformer is detached (the log carries on without it).
+        """
+        return self._format_transformer
+
+    @format_transformer.setter
+    def format_transformer(self, value):
+        if (value is not None) and not callable(value):
+            raise TypeError('format_transformer must be callable')
+        self._format_transformer = value
 
     @property
     def formatter(self):

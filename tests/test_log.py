@@ -4660,6 +4660,94 @@ def test_core_log_skips_missing_formatter_key():
     core.log(GhostMessage())     # ghost key not in formatters_by_key -> skip
     log.close()
 
+def test_format_transformer():
+    # a per-log callable, transform(values) -> values, run on every
+    # message over the dict the templates are formatted from.  it's
+    # context-free (it isn't told which message it's transforming), so
+    # it adds generic values; the templates decide where they appear--
+    # a banner, or even the per-line prefix, which is rendered after
+    seen = []
+    def transformer(d):
+        seen.append(sorted(d))
+        d['logfile'] = '/tmp/x.log'
+        d['elapsed_text'] = f"{d['elapsed']:.0f}s!"
+        return d
+    buf = io.StringIO()
+    fmt = big.TextFormatter(prefix='[{elapsed_text}] ', formats={
+        'start': {'template': '{prefix}START {message} -> {logfile}\n'},
+        'end':   {'template': '{prefix}END {message} after {elapsed_text}\n'},
+    })
+    log = big.Log(buf, formatter=fmt, format_transformer=transformer, threaded=False)
+    log.log("hi")
+    log.close()
+    out = buf.getvalue()
+    assert out == "[0s!] START Log -> /tmp/x.log\n[0s!] hi\n[0s!] END Log after 0s!\n", repr(out)
+    # context-free: no 'format', no 'log'--just the template values
+    assert seen[0] == ['elapsed', 'indent', 'message', 'name', 'thread', 'timestamp'], seen[0]
+    # settable, and validated
+    log.format_transformer = None
+    assert log.format_transformer is None
+    with raises(TypeError):
+        log.format_transformer = 42
+    with raises(TypeError):
+        big.Log(buf, format_transformer='nope')
+
+def test_format_transformer_faults():
+    # a raising transformer goes through the fault ladder with the
+    # TRANSFORMER as the offending object--fix() is asked, may retry,
+    # and the drop detaches it from the log; no formatter or
+    # destination is blamed, and the message still logs
+    calls = []
+    def bad(d):
+        raise RuntimeError("nope")
+    def fix(o, fault):
+        calls.append((o, type(fault).__name__))
+        return False
+    buf = io.StringIO()
+    log = big.Log(buf, format_transformer=bad, fix=fix, threaded=False)
+    log.log("still logs")
+    assert calls == [(bad, 'RuntimeError')]
+    assert log.format_transformer is None          # detached
+    assert log.destinations                          # nothing unrouted
+    assert 'still logs' in buf.getvalue()
+    log.close()
+    # returning anything but a dict is the same fault
+    calls = []
+    log = big.Log(io.StringIO(), format_transformer=lambda d: None, fix=fix, threaded=False)
+    log.log("x")
+    assert calls[0][1] == 'TypeError' and log.format_transformer is None
+    log.close()
+    # fix() returning true retries (up to `retries`); a transformer
+    # that recovers stays attached
+    n = [0]
+    def flaky(d):
+        n[0] += 1
+        if n[0] == 1:
+            raise RuntimeError("first time only")
+        return d
+    log = big.Log(io.StringIO(), format_transformer=flaky, fix=lambda o, f: True, threaded=False)
+    log.log("x")
+    log.close()
+    assert log.format_transformer is flaky
+    # each attempt gets a fresh copy: a half-mutated dict never leaks
+    # into the retry
+    attempts = [0]
+    def half(d):
+        attempts[0] += 1
+        if attempts[0] == 1:
+            d['junk'] = 1                    # mutate...
+            raise RuntimeError("...then fail")
+        assert 'junk' not in d               # the retry sees a fresh copy
+        d['junk'] = 2
+        return d
+    buf = io.StringIO()
+    log = big.Log(buf, formatter=big.TextFormatter(formats={'start': None, 'end': None, 'log': {'template': '{message} junk={junk}\n'}}),
+                  format_transformer=half, fix=lambda o, f: True, threaded=False)
+    log.log("m")
+    log.close()
+    assert buf.getvalue() == "m junk=2\n", repr(buf.getvalue())
+    assert log.format_transformer is half       # recovered, so still attached
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.log", module=__name__)
 

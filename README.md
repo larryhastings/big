@@ -565,6 +565,8 @@ And here are seven little functions/classes I use all the time:
 
 [`Log.flush(wait=True)`](#logflushwaittrue)
 
+[`Log.format_transformer`](#logformat_transformer)
+
 [`Log.log(*args, format=Optional('log'), flush=False, **kwargs)`](#loglogargs-formatoptionallog-flushfalse-kwargs)
 
 [`Log.map_destination(o)`](#logmap_destinationo)
@@ -2350,12 +2352,13 @@ and converts the result to integer nanoseconds.
 The default "fix" callback used by [`Log`](#logdestinations-options).
 Does nothing, and returns `None`--meaning "I didn't fix it".
 
-When a `LogFormatter` or `LogDestination` raises an exception, `Log` calls
-the log's `fix` callback, passing in the offending object and the
-exception.  If `fix` returns a true value, the failed operation is
+When a `LogFormatter` or `LogDestination` -- or the log's
+[`format_transformer`](#logformat_transformer) -- raises an exception,
+`Log` calls the log's `fix` callback, passing in the offending object
+and the exception.  If `fix` returns a true value, the failed operation is
 retried (up to `retries` times).  If the fault can't be fixed, the
-offending object is removed from the log's routing, and the log
-carries on without it.
+offending object is removed from the log's routing (a transformer is
+detached), and the log carries on without it.
 
 The drop itself is silent, on purpose: the log exists to serve *your*
 logging, never its own--it will never inject a message you didn't
@@ -2405,6 +2408,9 @@ Keyword-only options:
   automatically).
 * `fix` (default [`default_fix`](#default_fixo-fault)) -- the
   fault-repair callback; see `default_fix`.
+* `format_transformer` (default `None`) -- a callable,
+  `transform(values) -> values`; see
+  [`Log.format_transformer`](#logformat_transformer).
 * `formatter` -- an explicit `LogFormatter`; default is
   `TextFormatter()`.  All formatter configuration--`formats`,
   `prefix`, `width`, `indent`--lives on the formatter: construct
@@ -2565,6 +2571,42 @@ currently attached to, or `None`.
 
 (Destinations routed to other formatters via
 [`route()`](#logrouteparent-children) are not affected.)
+</dd></dl>
+
+#### `Log.format_transformer`
+
+<dl><dd>
+
+A callable, or `None` (the default): `transform(values) -> values`.
+Settable.  Every `TextFormatter` runs it on *every* message, over the
+dict its templates are formatted from -- `elapsed`, `thread`,
+`timestamp`, `name`, `message`, and so on -- just before rendering.
+It is deliberately context-free: it isn't told which message it's
+transforming.  So it adds *generic* values, and the templates decide
+where they appear:
+
+```Python
+def transform(values):
+    values['logfile'] = tmp.path                       # exists by render time
+    values['elapsed_text'] = pretty(values['elapsed'])
+    return values
+
+log = Log(tmp := TmpFile(), format_transformer=transform,
+          formatter=TextFormatter(formats={
+              'start': {'template': '{prefix}╔{double*}\n{prefix}║ {message} start at {timestamp}, logging to {logfile}\n{prefix}╚{double*}\n'},
+              'end':   {'template': '{prefix}╔{double*}\n{prefix}║ {message} finish at {timestamp}, elapsed {elapsed_text}\n{prefix}╚{double*}\n'},
+          }))
+```
+
+Because it runs before the prefix is rendered, a value it adds works
+in a prefix template too.  Add keys rather than overwriting existing
+ones -- replacing the numeric `elapsed` with a string would break every
+line's prefix.  It runs on the log's worker thread.  A fault (an
+exception, or returning anything but a dict) goes through
+[`fix`](#default_fixo-fault) with the transformer as the offending
+object, is retried up to `retries` times, and then the transformer is
+*detached* -- the log carries on without it.  Each attempt gets a fresh
+copy of the values.
 </dd></dl>
 
 #### `Log.reset()`
@@ -12129,6 +12171,15 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `FORCE_COLOR`, `TERM`, the tty test — on 3.12 and earlier).  `ansi_color_depth()`
   guesses the terminal's color depth (`truecolor`, `256color`, or `16color`)
   from `COLORTERM` and `TERM`.
+
+* 🤖 **`big.log`: `Log` gains a `format_transformer`.**  A callable,
+  `transform(values) -> values`, that every `TextFormatter` runs on every
+  message over the dict its templates are formatted from, just before
+  rendering.  It's context-free -- it adds generic values (a log file's path,
+  a prettified elapsed time) and the templates decide where they appear -- so
+  the start and end banners can carry your own dynamic content without
+  reimplementing them.  A fault goes through `fix` with the transformer as the
+  offending object, then detaches it.
 
 * 🤖 **`big.test`: an uncaught `SystemExit` is now a failure, not a fatal
   escape.**  Code under test that calls `sys.exit()` is scored as an ordinary
