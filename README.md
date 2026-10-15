@@ -234,6 +234,8 @@ And here are seven little functions/classes I use all the time:
 
 [`Callable(callable)`](#callablecallable)
 
+[`LogAsDestination(log)`](#logasdestinationlog)
+
 [`ClassRegistry()`](#classregistry)
 
 [`Clock`](#clock)
@@ -2393,7 +2395,9 @@ The log object.  Messages logged to it are formatted by a
 [`LogFormatter`](#logformatterformat_dict-types--namenone) and routed to
 one or more [`LogDestination`](#logdestinationtypestrue) objects.
 
-`destinations` may be `LogDestination` objects, or any value
+`destinations` may be `LogDestination` objects, another `Log` (so one
+log can be a destination of another -- see
+[`LogAsDestination`](#logasdestinationlog)), or any value
 [`map_destination`](#logmap_destinationo) understands: `print`,
 a callable, a list, a path (`str`, `bytes`, or `pathlib.Path`),
 a text file object, [`TMPFILE`](#tmpfile), or `None`.
@@ -2644,8 +2648,9 @@ Destinations that want `SinkEvent`s (like
 
 Static method.  Maps a value to a
 [`LogDestination`](#logdestinationtypestrue):
-`LogDestination` objects pass through; `print` maps to
-[`Print`](#print); callables map to
+`LogDestination` objects pass through; a `Log` maps to a
+[`LogAsDestination`](#logasdestinationlog) (so one log can feed
+another); `print` maps to [`Print`](#print); callables map to
 [`Callable`](#callablecallable); lists map to [`List`](#listlist);
 `str`/`bytes`/`pathlib.Path` map to
 [`File`](#filepath-initial_modeat--bufferingtrue-encodingnone-subsequent_modenone);
@@ -2676,6 +2681,13 @@ text file objects map to [`FileHandle`](#filehandlehandle--autoflushfalse);
 #### `Clock`
 
 <dl><dd>
+
+(Among its methods: `convert(clock, time)` reinterprets a `time` read
+from another `Clock` as this one would read it -- unchanged when the
+two share an underlying callable, re-stamped otherwise.  A
+[`LogAsDestination`](#logasdestinationlog) uses it so a forwarded
+message keeps its timestamp across logs that share a clock.)
+
 
 The default clock class for [`Log`](#logdestinations-options).
 Captures `initial` (monotonic nanoseconds) and `epoch` (wall time)
@@ -2742,6 +2754,40 @@ events.
 <dl><dd>
 
 A destination wrapping a callable; calls it once per rendered message.
+</dd></dl>
+
+#### `LogAsDestination(log)`
+
+<dl><dd>
+
+A destination that forwards to another `Log` -- so one log can be a
+destination of another.  You rarely name it directly; passing a `Log`
+where a destination is expected maps to one.  It's how you build a
+"screen / file / both" graph:
+
+```Python
+    screen = Log(print)                  # its own banners, to the screen
+    file   = Log('run.log')              # its own banners, to the file
+    both   = Log(screen, file)           # fans every message to both
+```
+
+Log to `both` for both outputs, to `screen` for screen-only.  Each
+message is handed to the inner log as the *symbolic message*, not as
+rendered text, so the inner re-renders it in its own style, at its own
+timestamp, with its own nesting -- an `enter()` on `both` opens a real
+nested block in each inner log.  Each inner log draws its own start and
+end banners (they're never forwarded); `both`, having no non-log
+destination, draws none.
+
+Unlike [`Buffer`](#bufferdestinationnone), it does *not* own the inner
+log's lifecycle: the inner is independently owned, with its own
+`close()` and `atexit`.  Closing the outer flushes what it forwarded
+and closes any nesting it opened in the inner, but never closes the
+inner.  A `flush()` chains downstream.  Routing is checked for cycles:
+a log can't be its own destination, nor close a loop through other
+logs.  Two sources into one log is allowed but is the user's to keep
+sane -- interleaved `enter()`/`exit()` from both, in particular, share
+the inner's one nesting stack.
 </dd></dl>
 
 #### `File(path, initial_mode="at", *, buffering=True, encoding=None, subsequent_mode=None)`
@@ -12171,6 +12217,15 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   `FORCE_COLOR`, `TERM`, the tty test — on 3.12 and earlier).  `ansi_color_depth()`
   guesses the terminal's color depth (`truecolor`, `256color`, or `16color`)
   from `COLORTERM` and `TERM`.
+
+* 🤖 **`big.log`: a `Log` can be a destination of another `Log`.**  Passing a
+  `Log` where a destination is expected wraps it in a
+  [`LogAsDestination`](#logasdestinationlog): the inner log receives each
+  *symbolic message* and re-renders it in its own style, to its own output,
+  with its own banners and nesting.  That's how you build a screen/file/both
+  graph -- `both = Log(screen, file)` -- without the banners colliding or the
+  text being rendered twice.  Routing is cycle-checked, and the inner's
+  lifecycle stays its own (closing the outer never closes the inner).
 
 * 🤖 **`big.log`: `Log` gains a `format_transformer`.**  A callable,
   `transform(values) -> values`, that every `TextFormatter` runs on every

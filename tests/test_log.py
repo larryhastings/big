@@ -4748,6 +4748,81 @@ def test_format_transformer_faults():
     assert buf.getvalue() == "m junk=2\n", repr(buf.getvalue())
     assert log.format_transformer is half       # recovered, so still attached
 
+def test_log_as_destination_dag():
+    # the screen/file/both DAG: `both` fans every message to a `screen`
+    # log and a `file` log; each renders in its own style, to its own
+    # output, with its OWN start/end banners, and `both`'s banners go
+    # nowhere (it has no non-Log destination).  one prefix per line,
+    # not two: the inner gets the symbolic message, not rendered text.
+    import re
+    sgr = re.compile(r'\x1b\[[0-9;]*m')
+    sbuf, fbuf = io.StringIO(), io.StringIO()
+    ls = big.Log(sbuf, name='screen', threaded=False)
+    lf = big.Log(fbuf, name='file',   threaded=False)
+    lb = big.Log(ls, lf, name='both', threaded=False)
+    lb.log("from both")
+    ls.log("screen only")
+    lb.close(); ls.close(); lf.close()
+    screen = sgr.sub('', sbuf.getvalue())
+    file = sgr.sub('', fbuf.getvalue())
+    # each live log drew its own banners; `both` drew none anywhere
+    assert 'screen start at' in screen and 'screen finish at' in screen
+    assert 'file start at' in file and 'file finish at' in file
+    assert 'both start' not in screen and 'both start' not in file
+    # the forwarded message reached both; the direct one only screen
+    assert 'from both' in screen and 'from both' in file
+    assert 'screen only' in screen and 'screen only' not in file
+    # one prefix, not a rendered line re-rendered (no doubled timestamp)
+    line = [l for l in screen.split('\n') if 'from both' in l][0]
+    assert line.count('MainThread') == 1, repr(line)
+
+def test_log_as_destination_nesting():
+    # enter/exit forward as REAL nesting: the inner draws its own
+    # enter/exit banners and indents the block
+    import re
+    fbuf = io.StringIO()
+    lf = big.Log(fbuf, name='file', threaded=False)
+    lb = big.Log(lf, name='both', threaded=False)
+    with lb.enter("phase"):
+        lb.log("inside")
+    lb.log("after")
+    lb.close(); lf.close()
+    out = re.sub(r'\x1b\[[0-9;]*m', '', fbuf.getvalue())
+    assert 'enter' in out and 'phase' in out and 'exit' in out
+    inside = [l for l in out.split('\n') if 'inside' in l][0]
+    after = [l for l in out.split('\n') if l.endswith('after')][0]
+    # 'inside' is indented under the block; 'after' is back out
+    assert inside.index('inside') > after.index('after'), (inside, after)
+
+def test_log_as_destination_cycles_and_bool():
+    a = big.Log(io.StringIO(), name='a', threaded=False)
+    b = big.Log(a, name='b', threaded=False)         # b -> a
+    with raises(ValueError):
+        a.destinations = [b]                          # a -> b -> a: a cycle
+    with raises(ValueError):
+        c = big.Log(io.StringIO(), name='c', threaded=False)
+        c.destinations = [c]                          # a Log can't be itself
+    # a log whose only destination is another (live) log is truthy,
+    # and lists the Log destination
+    inner = big.Log(io.StringIO(), threaded=False)
+    outer = big.Log(inner, threaded=False)
+    assert bool(outer)
+    assert any(isinstance(d, big.LogAsDestination) and d.inner is inner
+               for d in outer.destinations)
+    a.close(); b.close(); inner.close(); outer.close()
+
+def test_clock_convert():
+    Clock = big.log.Clock
+    c1, c2 = Clock(), Clock()              # distinct instances, same callable
+    t = c1()
+    assert c2.convert(c1, t) == t          # same timebase -> kept
+    assert c2.convert(None, t) == t        # no source clock -> kept
+    class Weird(Clock):
+        def __init__(self):
+            super().__init__()
+            self.clock = lambda: 999       # a different underlying callable
+    assert Weird().convert(c1, t) != t     # different timebase -> re-stamped
+
 def run_tests(run=None):
     (run or bigtestlib.run)(name="big.log", module=__name__)
 

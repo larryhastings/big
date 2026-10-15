@@ -1933,6 +1933,101 @@ class Buffer(LogDestination):
 
 
 @export
+class LogAsDestination(LogDestination):
+    """
+    A LogDestination that forwards to another Log -- so one Log can
+    be a destination of another.  Build the screen/file/both DAG with
+    it: a `both` log whose destinations are a `screen` log and a
+    `file` log fans every message to both, and each of those renders
+    it in its own style, to its own output, with its own banners.
+
+    Unlike Buffer, this does NOT own the inner log's lifecycle: the
+    inner is independently owned (you log to it directly, it has its
+    own atexit).  So register/start/end/unregister manage only this
+    adapter's own state; ending it (because the OUTER closed) flushes
+    what's been forwarded and closes any nesting this adapter opened
+    in the inner, but never closes the inner itself.
+
+    A LogAsDestination is fed the symbolic Message, not rendered text
+    (that's what lets the inner re-render in its own style), via
+    forward() rather than write().  The inner produces its OWN root
+    start/end banners, so those are never forwarded; enter/exit are
+    forwarded as real nesting, and everything else is re-logged.
+    """
+    def __init__(self, log):
+        super().__init__(types=True)
+        self._inner = log
+        self._open = []          # Child handles opened by forwarded enters
+
+    @property
+    def inner(self):
+        return self._inner
+
+    def __eq__(self, other):
+        return isinstance(other, LogAsDestination) and (other._inner is self._inner)
+
+    def __hash__(self):
+        return hash(LogAsDestination) ^ id(self._inner)
+
+    def __bool__(self):
+        # a LAD is a live destination while its inner log is live
+        return bool(self._inner)
+
+    def __repr__(self):
+        return f'<LogAsDestination -> {self._inner!r}>'
+
+    def forward(self, message):
+        # re-log the symbolic message into the inner.  runs on the
+        # OUTER's worker thread, which is just "logging from another
+        # thread"--the supported case.  root banners are the inner's
+        # own dominion (the fan-out never sends us 'start'/'end');
+        # enter/exit drive real nesting; the rest is re-logged, at
+        # the inner's current forwarded depth.
+        inner = self._inner
+        fmt = message.format
+        if fmt == 'enter':
+            name = message.args[0] if message.args else ''
+            self._open.append(inner.enter(name, **message.kwargs))
+            return
+        if fmt == 'exit':
+            if self._open:
+                self._open.pop().close()
+            return
+        outer_clock = self._session.clock if self._session else None
+        time = inner._clock.convert(outer_clock, message.time)
+        inner._log(time, fmt, False, message.args, message.kwargs)
+
+    def end(self):
+        # the outer closed: close our forwarded nesting and flush,
+        # but leave the inner open--it's independently owned.
+        while self._open:
+            self._open.pop().close()
+        self.flush()
+        super().end()
+
+    def flush(self):
+        # chain the flush downstream, but never block: we're on the
+        # outer's worker thread, and the inner has its own.
+        self._inner.flush(wait=False)
+
+    # write() is never called on a LAD (the fan-out calls forward);
+    # if something does, treat it as a preformatted line.
+    def write(self, o):
+        self._inner.write(o)
+
+
+def _logs_reachable_from(log, seen):
+    "Every Log `log` forwards to, transitively (following LADs)."
+    for d in log._all_destinations:
+        if isinstance(d, LogAsDestination):
+            inner = d._inner
+            if inner not in seen:
+                seen.add(inner)
+                _logs_reachable_from(inner, seen)
+    return seen
+
+
+@export
 class TmpFile(File):
     """
     A LogDestination that writes to a timestamped temporary file.
@@ -3002,12 +3097,12 @@ class Core:
             if formatter is None:
                 continue
             if self.routes.get(formatter.key, ()):
-                add(self._render_and_fanout, formatter, message, involved=formatter)
+                add(self._render_and_fanout, formatter, message, message, involved=formatter)
         if s:
             self.dirty = True
             s()
 
-    def _render_and_fanout(self, node, value):
+    def _render_and_fanout(self, node, value, message):
         # the routing tree is data; this method is its interpreter.
         # render, then create the downstream jobs NOW, carrying the
         # concrete rendering as an argument.  jobs are created on
@@ -3031,7 +3126,13 @@ class Core:
         jobs = []
         for child in children:
             if isinstance(child, LogFormatter):
-                jobs.append(Job(self._render_and_fanout, (child, rendered), involved=child))
+                jobs.append(Job(self._render_and_fanout, (child, rendered, message), involved=child))
+            elif isinstance(child, LogAsDestination):
+                # a Log destination takes the SYMBOLIC message (to
+                # re-render in its own style), and never the root
+                # banners--those are each log's own dominion.
+                if message.format not in ('start', 'end'):
+                    jobs.append(Job(child.forward, (message,)))
             else:
                 jobs.append(Job(child.write, (rendered,)))
         self.queue.prepend(jobs, priority=True)
@@ -3769,6 +3870,18 @@ class Clock:
         epoch = self.epoch + seconds
         return timestamp_human(epoch)
 
+    def convert(self, clock, time):
+        """
+        A `time` read from Clock `clock`, as this clock would read
+        it.  When the two share the same underlying callable (every
+        default-clock log does), the reading is absolute and needs
+        no conversion; otherwise the timebases differ and we take a
+        fresh reading from this clock.
+        """
+        if (clock is None) or (clock.clock is self.clock):
+            return time
+        return self()
+
 
 class _CustomClock(Clock):
     '''
@@ -4040,6 +4153,15 @@ class Log(LogBase):
             for other in mapped[i + 1:]:
                 if d == other:
                     raise ValueError(f'duplicate destination {d!r}')
+        for d in mapped:
+            if isinstance(d, LogAsDestination):
+                inner = d._inner
+                if inner is self:
+                    raise ValueError("a Log can't be its own destination")
+                if self in _logs_reachable_from(inner, {inner}):
+                    raise ValueError(
+                        f"routing {inner!r} here would make a cycle: it already "
+                        f"forwards (directly or transitively) to {self!r}")
 
         # the actual reconfiguration runs on the executor, so it
         # serializes with in-flight message jobs
@@ -4112,6 +4234,18 @@ class Log(LogBase):
         # this formatter's rendered output, and may get children
         # of their own via a later route() call.
         nodes = [child if isinstance(child, LogFormatter) else self.map_destination(child) for child in children]
+
+        # a Log-as-destination must not close a loop: the inner must
+        # not already forward (transitively) back to this log.
+        for node in nodes:
+            if isinstance(node, LogAsDestination):
+                inner = node._inner
+                if inner is self:
+                    raise ValueError("a Log can't be its own destination")
+                if self in _logs_reachable_from(inner, {inner}):
+                    raise ValueError(
+                        f"routing {inner!r} here would make a cycle: it already "
+                        f"forwards (directly or transitively) to {self!r}")
 
         # confirm that each child can handle all types returned by
         # parent.render.  destinations that want SinkEvents instead
@@ -4206,6 +4340,8 @@ class Log(LogBase):
 
         if isinstance(o, LogDestination):
             return o
+        if isinstance(o, Log):
+            return LogAsDestination(o)
         if o is builtins.print:
             return Print()
         if callable(o):
