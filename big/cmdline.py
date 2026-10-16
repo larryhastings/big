@@ -127,6 +127,18 @@ class _OptionalMeta(type):
     def __getitem__(cls, T):
         return cls(T)
 
+def _convert(converter, value, *, command=None):
+    if isinstance(converter, optional):
+        converter = converter.T
+
+    if value is None:
+        return converter()
+
+    try:
+        return converter(value)
+    except (ValueError, TypeError):
+        name = getattr(converter, '__name__', 'value')
+        raise UsageError(f"invalid value {value!r} (not a valid {name})", command=command) from None
 
 class optional(metaclass=_OptionalMeta):
     """
@@ -151,15 +163,7 @@ class optional(metaclass=_OptionalMeta):
         self.T = T
 
     def __call__(self, value=None):
-        if value is None:
-            return self.T()
-        try:
-            return self.T(value)
-        except (ValueError, TypeError):
-            # a conversion failure is the USER's error, not a
-            # crash (the greedy oparg ate the wrong token)
-            name = getattr(self.T, '__name__', 'value')
-            raise UsageError(f"invalid value {value!r} (not a valid {name})") from None
+        return _convert(self.T, value)
 
 # --8<-- end cmdline optional --8<--
 
@@ -314,16 +318,16 @@ class Command:
                         kw[name] = not default
                     else:
                         if equals:
-                            args = (oparg,)
+                            value = oparg
                         elif processor:
                             oparg = processor.pop()
-                            args = (oparg,)
+                            value = oparg
                         elif isinstance(converter, optional):
-                            args = ()
+                            value = None
                         else:
                             raise UsageError(f"missing oparg for option {option}", command=self)
 
-                        kw[name] = converter(*args)
+                        kw[name] = _convert(converter, value, command=self)
                     continue
 
                 if option.startswith('--'):
@@ -407,7 +411,7 @@ class Command:
                 processor.push(arg)
                 break
 
-            value = converter(arg)
+            value = _convert(converter, arg, command=self)
             a.append(value)
 
         assert len(a) <= self.maximum_arguments

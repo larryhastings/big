@@ -1467,10 +1467,54 @@ def test_option_no_strings_unmaps():
     assert calls[-1] == (True, False)
     for argv in (['c', '--quiet'], ['c', '-q']):
         try:
-            quiet_run(app, list(argv))
+            quiet_run(app, argv)
             raise AssertionError(f'{argv} must be unmapped')
         except UsageError:
             pass
+
+def test_conversion_failures_raise_UsageError():
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    app = cmdline.App()
+    @app.command()
+    def c(a:int):
+        pass
+
+    try:
+        quiet_run(app, ['c', 'xyz'])
+        raise AssertionError("should have failed to convert 'xyz' to an int")
+    except UsageError as e:
+        assert str(e).startswith("invalid value 'xyz'")
+
+
+    app = cmdline.App()
+    @app.command()
+    def c(*, option:int):
+        pass
+
+    try:
+        quiet_run(app, ['c', '--option', 'xyz'])
+        raise AssertionError("should have failed to convert 'xyz' to an int")
+    except UsageError as e:
+        assert str(e).startswith("invalid value 'xyz'")
+
+
+    app = cmdline.App()
+    @app.command()
+    def c(*args:int):
+        pass
+
+    try:
+        quiet_run(app, ['c', 'xyz'])
+        raise AssertionError("should have failed to convert 'xyz' to an int")
+    except UsageError as e:
+        assert str(e).startswith("invalid value 'xyz'")
+
+
 
 
 def run_tests(run=None):
