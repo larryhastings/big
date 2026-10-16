@@ -36,6 +36,7 @@ with test.suite() as run:
         test_bigtestlib
         test_boundinnerclass
         test_builtin
+        test_cmdline
         test_deprecated
         test_exports
         test_file

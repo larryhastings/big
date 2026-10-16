@@ -36,7 +36,7 @@ run fine without them.)
 **big** is 100% pure Python code--no C extension
 needed, no compilation step.
 
-The current version is [0.14.](#014)
+The current version is [0.15.](#015)
 
 *Think big!*
 
@@ -12107,6 +12107,10 @@ The word wrap trio itself--[`wrap_words`](#wrap_wordswords-margin79--code_indent
   second, and does *not* insert the count for you at the front of the string.
   (Because you might want to write the count out in English, using `int_to_words`
   for example!)
+
+* **New module: [`big.cmdline`](#bigcmdline).** A simple but capable command-line
+  argument parser.  Like a baby version of my [Appeal](https://github.com/larryhastings/appeal/)
+  library.  big itself uses it for its module main functions.
 
 * 🤖 **New module: [`big.markdown`](#bigmarkdown).**  A parser for a subset of
   standards-compliant CommonMark, plus rendering back ends over a shared
