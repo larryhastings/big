@@ -294,8 +294,6 @@ class Command:
     def __call__(self, processor):
         self._introspect()
 
-        ignore_options = False
-
         a = []
         kw = {}
         arguments = list(self.arguments)
@@ -306,9 +304,9 @@ class Command:
         while keep_going and processor:
             arg = processor.pop()
 
-            if (not ignore_options) and arg.startswith('-') and (arg != '-'):
+            if (not processor.ignore_options) and arg.startswith('-') and (arg != '-'):
                 if arg == '--':
-                    ignore_options = True
+                    processor.ignore_options = True
                     continue
 
                 option, equals, oparg = arg.partition('=')
@@ -727,6 +725,7 @@ class App:
                 if command is None:
                     raise UsageError(f"unknown command '{name}'")
 
+                processor.ignore_options = False # resets at every command boundary
                 result = command(processor)
 
                 if processor.peek().startswith('-') and (not processor.ignore_options):

@@ -185,6 +185,57 @@ def test_menagerie_double_dash():
     assert calls[-1] == ('-x', 'B')
 
 
+def test_double_dash_lasts_until_the_next_command_word():
+    # the Appeal rule: `--` ends option recognition for the command
+    # being parsed, and the next command word turns it back on.
+    # The preprecommand and the user's precommand share the region
+    # before the word, so a `--` seen there carries across both of
+    # them--but not into the command.
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    calls = []
+    app = cmdline.App()
+    @app.precommand()
+    def g(host):
+        calls.append(('g', host))
+    @app.command()
+    def c(*, verbose=False):
+        calls.append(('c', verbose))
+
+    # -q is g's operand because of --; -v is c's option again
+    quiet_run(app, ['--', '-q', 'c', '-v'])
+    assert calls == [('g', '-q'), ('c', True)], calls
+
+    # a dangling dash-word after -- is not an option, so the
+    # diagnosis is "unknown command", not "unknown option"
+    del calls[:]
+    try:
+        quiet_run(app, ['--', '-q', '-c'])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert 'command' in str(e) and 'option' not in str(e), str(e)
+
+    # -- inside a command is local to it: with repeat, the next
+    # command word sees options again
+    calls = []
+    app = cmdline.App(repeat=True)
+    @app.command()
+    def a(*rest):
+        calls.append(('a', rest))
+    @app.command()
+    def b(*, verbose=False):
+        calls.append(('b', verbose))
+    quiet_run(app, ['a', '--', '-x', 'b', '-v'])
+    assert calls == [('a', ('-x', 'b', '-v'))], calls   # *rest is greedy
+    del calls[:]
+    quiet_run(app, ['b', '--', 'b', '-v'])
+    assert calls == [('b', False), ('b', True)], calls
+
+
 def test_flags_store_not_default():
     # presence stores `not default`, idempotently
     def quiet_run(app, argv):
