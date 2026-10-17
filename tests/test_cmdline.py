@@ -720,25 +720,25 @@ def test_usage_error_carries_usage():
         assert '-z' in e.usage or '--zebra' in e.usage, e.usage
 
 
-def test_default_and_global_command_set_twice():
+def test_default_and_precommand_set_twice():
     # both are set-once; the second registration is the
     # programmer's mistake
     app = cmdline.App()
-    @app.default_command()
+    @app.default()
     def d():
         pass
     try:
-        @app.default_command()
+        @app.default()
         def d2():
             pass
         assert False, 'expected ConfigurationError'
     except ConfigurationError:
         pass
-    @app.global_command()
+    @app.precommand()
     def g():
         pass
     try:
-        @app.global_command()
+        @app.precommand()
         def g2():
             pass
         assert False, 'expected ConfigurationError'
@@ -746,7 +746,7 @@ def test_default_and_global_command_set_twice():
         pass
 
 
-def test_default_command():
+def test_default():
     # CURRENTLY FAILS three ways: the decorator returns an
     # undefined name, the "can't set twice" guard is pre-armed by
     # __init__, and run([]) calls a Command with no args.
@@ -758,14 +758,14 @@ def test_default_command():
 
     app = cmdline.App()
     calls = []
-    @app.default_command()
+    @app.default()
     def dee():
         calls.append('default')
     quiet_run(app, [])
     assert calls == ['default']
 
 
-def test_global_command():
+def test_precommand():
     # CURRENTLY FAILS: the decorator returns an undefined name.
     def quiet_run(app, argv):
         out = io.StringIO()
@@ -775,7 +775,7 @@ def test_global_command():
 
     app = cmdline.App()
     calls = []
-    @app.global_command()
+    @app.precommand()
     def g(*, debug=False):
         calls.append(('g', debug))
     @app.command()
@@ -817,9 +817,9 @@ def test_repeat():
 # ----------------------------------------------------------------
 
 def test_version_option_and_command():
-    # CURRENTLY FAILS: precommand() references undefined `self`.
-    # -V/--version print the version and exit 0 (metadata, the
+    # --version prints the version and exit 0 (metadata, the
     # Appeal ruling); the `version` command word prints it too.
+    # (-V is not stock: -h, --help, and --version are the standard.)
     def quiet_run_exit(app, argv):
         # like quiet_run, but catches SystemExit (help/version);
         # returns (exit_code, stdout), exit_code None if no exit.
@@ -836,7 +836,7 @@ def test_version_option_and_command():
     @app.command()
     def c():
         pass
-    for argv in (['-V'], ['--version']):
+    for argv in (['--version'],):
         code, out = quiet_run_exit(app, argv)
         assert code is not None, f'expected SystemExit for {argv}'
         assert (code or 0) == 0, (argv, code)
@@ -846,8 +846,6 @@ def test_version_option_and_command():
 
 
 def test_help_option_and_command():
-    # CURRENTLY FAILS: bare -h has a str converter (help=None ->
-    # str) and IndexErrors; and precommand's `self` NameError.
     def quiet_run_exit(app, argv):
         # like quiet_run, but catches SystemExit (help/version);
         # returns (exit_code, stdout), exit_code None if no exit.
@@ -874,11 +872,8 @@ def test_help_option_and_command():
 
 
 def test_help_and_version_yield_to_user_options():
-    # the default mappings map -h/-V only if the global command
-    # didn't claim them.  CURRENTLY FAILS: the "defined" check
-    # reads the global Command's options before introspection has
-    # populated them, so it always thinks the strings are free
-    # (and global_command() is broken anyway).
+    # the default mappings map -h only if the user's precommand
+    # didn't claim it (and the user's -V is simply the user's).
     def quiet_run_exit(app, argv):
         # like quiet_run, but catches SystemExit (help/version);
         # returns (exit_code, stdout), exit_code None if no exit.
@@ -893,7 +888,7 @@ def test_help_and_version_yield_to_user_options():
 
     app = cmdline.App(version='9.9')
     calls = []
-    @app.global_command()
+    @app.precommand()
     def g(*, hostname='', Verbose=False):
         calls.append((hostname, Verbose))
     @app.command()
@@ -908,9 +903,6 @@ def test_help_and_version_yield_to_user_options():
 
 
 def test_stock_commands_have_proper_names():
-    # CURRENTLY FAILS: the registered help/version Commands keep
-    # name '_help_command'/'_version_command', which leaks into
-    # the summary listing.
     def quiet_run_exit(app, argv):
         # like quiet_run, but catches SystemExit (help/version);
         # returns (exit_code, stdout), exit_code None if no exit.
@@ -1023,8 +1015,6 @@ def test_version_is_the_string():
 
 def test_no_version_means_no_version_mappings():
     # ruling: version tokens map only if app.version is not None.
-    # (The old `if app.version:` tested a bound method--always
-    # truthy--so -V mapped on versionless apps and printed None.)
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -1036,12 +1026,12 @@ def test_no_version_means_no_version_mappings():
     def c():
         pass
     try:
-        quiet_run(app, ['-V'])
-        raise AssertionError('-V mapped despite no version=')
+        quiet_run(app, ['--version'])
+        raise AssertionError('--version mapped despite no version=')
     except UsageError:
         pass
     except SystemExit:
-        raise AssertionError('-V mapped despite no version=')
+        raise AssertionError('--version mapped despite no version=')
     try:
         quiet_run(app, ['version'])
         raise AssertionError('version command despite no version=')
@@ -1131,15 +1121,11 @@ def test_help_topic_prints_command_page():
     assert '--reverse' in by_word, by_word
 
 
-def test_default_mappings_is_a_factory():
-    # ruling: module-scope default_mappings(*options) returns the
-    # policy closure.  Six tokens; empty means all.
-    try:
-        policy = cmdline.default_mappings()
-    except Exception:
-        raise AssertionError('default_mappings() is not yet a factory')
-    assert callable(policy)
-    # the constructor default is equivalent to passing it
+def test_default_global_mappings_is_the_stock_policy():
+    # the stock policy is a plain module-scope function of the app,
+    # mirroring Appeal's default_global_mappings: four map_* calls
+    # plus map_default.  Passing it explicitly is the constructor's
+    # default spelling.
     def quiet_run_exit(app, argv):
         out = io.StringIO()
         code = None
@@ -1150,103 +1136,202 @@ def test_default_mappings_is_a_factory():
                 code = e.code
         return code, out.getvalue()
 
+    assert callable(cmdline.default_global_mappings)
     app = cmdline.App(version='1.0',
-                     default_mappings=cmdline.default_mappings())
+                     default_mappings=cmdline.default_global_mappings)
     @app.command()
     def c():
+        "Does c."
+    code, out = quiet_run_exit(app, ['--version'])
+    assert code is not None and '1.0' in out, (code, out)
+    _, out = quiet_run_exit(app, ['help'])
+    assert 'Does c.' in out, out
+
+
+def test_map_help_options_custom_strings():
+    # a user policy picks its own help strings; the stock ones
+    # are then NOT mapped
+    def quiet_run_exit(app, argv):
+        out = io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out):
+            try:
+                app.process(list(argv))
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue()
+
+    def policy(app):
+        app.map_help_options('-H', '--halp')
+    app = cmdline.App(default_mappings=policy)
+    @app.command()
+    def c():
+        "Does c."
+    for argv in (['-H'], ['--halp']):
+        code, out = quiet_run_exit(app, argv)
+        assert (code or 0) == 0 and 'Does c.' in out, (argv, code, out)
+    try:
+        quiet_run_exit(app, ['-h'])
+        raise AssertionError('-h mapped but was not requested')
+    except UsageError:
         pass
-    code, out = quiet_run_exit(app, ['-V'])
-    assert code is not None and '1.0' in out
 
 
-def test_default_mappings_selective():
-    # only the listed tokens map: help stuff without version stuff,
-    # even though version= is set
+def test_map_version_options_requires_a_version():
+    # map_version_options is a no-op on a versionless app (parity
+    # with Appeal: --version only where there's a version string)
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             result = app.process(list(argv))
         return result, out.getvalue()
 
+    def policy(app):
+        app.map_version_options()
+        app.map_version_command()
+    app = cmdline.App(default_mappings=policy)
+    @app.command()
+    def c():
+        pass
+    for argv in (['--version'], ['version']):
+        try:
+            quiet_run(app, argv)
+            raise AssertionError(f'{argv} mapped despite no version=')
+        except UsageError:
+            pass
+        except SystemExit:
+            raise AssertionError(f'{argv} mapped despite no version=')
+
+
+def test_map_help_command_custom_word():
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    def policy(app):
+        app.map_help_command('halp')
+    app = cmdline.App(default_mappings=policy)
+    @app.command()
+    def c():
+        "Does c."
+    _, out = quiet_run(app, ['halp'])
+    assert 'Does c.' in out, out
     try:
-        policy = cmdline.default_mappings('-h', '--help', 'help')
-    except Exception:
-        raise AssertionError('default_mappings() is not yet a factory')
+        quiet_run(app, ['help'])
+        raise AssertionError('help mapped but was not requested')
+    except UsageError:
+        pass
+
+
+def test_user_policy_selects():
+    # help stuff without version stuff, even though version= is set
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    def policy(app):
+        app.map_help_options()
+        app.map_help_command()
     app = cmdline.App(version='1.0', default_mappings=policy)
     @app.command()
     def c():
         pass
-    try:
-        quiet_run(app, ['-V'])
-        raise AssertionError('-V mapped but was not requested')
-    except UsageError:
+    for argv in (['--version'], ['version']):
+        try:
+            quiet_run(app, argv)
+            raise AssertionError(f'{argv} mapped but was not requested')
+        except UsageError:
+            pass
+        except SystemExit:
+            raise AssertionError(f'{argv} mapped but was not requested')
+
+
+def test_map_methods_yield_to_user_registrations():
+    # map_help_command never overwrites a user's `help` command,
+    # and map_default never overwrites a user's default
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    calls = []
+    app = cmdline.App()
+    @app.command('help')
+    def my_help():
+        calls.append('help')
+    @app.default()
+    def my_default():
+        calls.append('default')
+    quiet_run(app, ['help'])
+    quiet_run(app, [])
+    assert calls == ['help', 'default'], calls
+
+
+def test_map_default_and_the_bare_line():
+    # with no default and no mappings, a bare line does nothing
+    # and returns 0; map_default installs the stock default (the
+    # listing, returning 1); a user's @app.default() runs instead.
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    app = cmdline.App(default_mappings=None)
+    @app.command()
+    def c():
+        "Does c."
+    result, out = quiet_run(app, [])
+    assert result == 0, result
+    assert out == '', out
+
+    def policy(app):
+        app.map_default()
+    app = cmdline.App(default_mappings=policy)
+    @app.command()
+    def c():
+        "Does c."
+    result, out = quiet_run(app, [])
+    assert result == 1, result
+    assert 'Does c.' in out, out
+
+    calls = []
+    app = cmdline.App()
+    @app.command()
+    def c():
         pass
-    except SystemExit:
-        raise AssertionError('-V mapped but was not requested')
-    try:
-        quiet_run(app, ['version'])
-        raise AssertionError('version command was not requested')
-    except UsageError:
-        pass
+    @app.default()
+    def d():
+        calls.append('d')
+    result, out = quiet_run(app, [])
+    assert calls == ['d'] and out == '', (calls, out)
 
 
-def test_default_mappings_tuples():
-    # ruling: the token menu ships as two module-scope tuples
-    assert cmdline.default_mappings_help == ('-h', '--help', 'help')
-    assert cmdline.default_mappings_version == ('-V', '--version', 'version')
-
-
-def test_default_mappings_validates_tokens():
-    # unknown tokens refuse by name at FACTORY time (catches typos
-    # like '-v'), and passing the factory itself to the constructor
-    # gets a nice error instead of silence
-    try:
-        cmdline.default_mappings('-v')
-        raise AssertionError("token '-v' must refuse (did you mean -V?)")
-    except ConfigurationError:
-        pass
-    except AssertionError:
-        raise
-    except Exception:
-        raise AssertionError('wrong exception type for a bad token')
-    # the pass-the-factory-bare mistake
-    app = cmdline.App(default_mappings=cmdline.default_mappings)
+def test_map_options_validate_strings():
+    # map_* refuses malformed option strings by name, at mapping
+    # time (which is the first process() call)
+    app = cmdline.App(default_mappings=lambda app: app.map_help_options('help'))
     @app.command()
     def c():
         pass
     try:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            app.process(['c'])
-        raise AssertionError('bare factory must refuse loudly')
+        app.process(['c'])
+        raise AssertionError("'help' is not an option string")
     except ConfigurationError:
         pass
-
-
-def test_default_mappings_order_insensitive():
-    # ruling: tokens are a set of requests; the listing keeps v1's
-    # order (version before help) no matter the call spelling
-    def quiet_run_exit(app, argv):
-        out = io.StringIO()
-        code = None
-        with contextlib.redirect_stdout(out):
-            try:
-                app.process(list(argv))
-            except SystemExit as e:
-                code = e.code
-        return code, out.getvalue()
-
-    for tokens in (('help', 'version'), ('version', 'help')):
+    for bad in ('-', '-ab', '--x', '-?'):
         try:
-            policy = cmdline.default_mappings(*tokens)
-        except Exception:
-            raise AssertionError('default_mappings() is not yet a factory')
-        app = cmdline.App(version='1.0', default_mappings=policy)
-        @app.command()
-        def c():
+            cmdline.validate_option_string(bad)
+            raise AssertionError(f'{bad!r} must refuse')
+        except ConfigurationError:
             pass
-        _, out = quiet_run_exit(app, ['help'])
-        assert out.index('version') < out.index('help'), (tokens, out)
+    for good in ('-h', '-V', '--help', '--version'):
+        assert cmdline.validate_option_string(good) == good
 
 
 def test_default_mappings_none_banishes():
@@ -1262,7 +1347,7 @@ def test_default_mappings_none_banishes():
     @app.command()
     def c():
         pass
-    for argv in (['help'], ['version'], ['-h'], ['-V']):
+    for argv in (['help'], ['version'], ['-h'], ['--version']):
         try:
             quiet_run(app, list(argv))
             raise AssertionError(f'{argv} mapped despite banishment')

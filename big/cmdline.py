@@ -427,6 +427,17 @@ class Command:
 
 
 @export
+def validate_option_string(s):
+    "'-X' (one alphanumeric) or '--xx' (at least four chars)."
+    ok = (isinstance(s, str)
+          and s.startswith('-')
+          and (((len(s) == 2) and s[1].isalnum())
+               or ((len(s) >= 4) and s.startswith('--'))))
+    if not ok:
+        raise ConfigurationError(f"{s!r} is not a legal option string")
+    return s
+
+@export
 def default_options(app, fn, name):
     assert name
     if name.startswith('_'):
@@ -449,69 +460,20 @@ def default_options(app, fn, name):
     app.option(name, long_option)(fn)
 
 
-default_mappings_help = ('-h', '--help', 'help')
-export('default_mappings_help')
-
-default_mappings_version = ('-V', '--version', 'version')
-export('default_mappings_version')
-
 
 @export
-def default_mappings(*options):
-    default_options_set = set(default_mappings_help + default_mappings_version)
-    options_set = set(options) if options else default_options_set
-
-    unsupported = options_set - default_options_set
-    if unsupported:
-        s = ' '.join(str(s) for s in sorted(unsupported))
-        raise ConfigurationError('unsupported default mappings: {s}')
-
-
-    def default_mappings(app):
-        global_command = app._global_command
-        if global_command:
-            global_command._introspect()
-            defined = global_command.options.__contains__
-        else:
-            defined = lambda name: False
-
-        defaults = [
-            (('-h', '--help'),    'help',    False),
-            (('-V', '--version'), 'Version',  True),
-            ]
-
-        for options, name, is_version in defaults:
-            added = []
-            for option in options:
-                if is_version and (not app.version):
-                    continue
-                if (option in options_set) and (not defined(option)):
-                    added.append(option)
-
-            app.option(name, *added)(app.precommand)
-            app._precommand = app._fn_to_command(app.precommand)
-
-        for name, command, is_version in (
-            ('version', app.print_version, True),
-            ('help', app.help, False),
-            ):
-            if is_version:
-                if not app.version:
-                    continue
-            if (name in options_set) and (name not in app.commands):
-                c = app._fn_to_command(command)
-                app.commands[name] = c
-
-        if not app._default_command:
-            app._default_command = app.help
-
-    return default_mappings
+def default_global_mappings(app):
+    app.map_help_options()
+    app.map_version_options()
+    app.map_help_command()
+    app.map_version_command()
+    app.map_default()
 
 @export
 class App:
     def __init__(self, name=None, *,
             default_options=default_options,
-            default_mappings=default_mappings(),
+            default_mappings=default_global_mappings,
             doc='',
             repeat=False,
             version=None):
@@ -526,9 +488,12 @@ class App:
         self.commands = {}
         self._called_default_mappings = False
 
-        self._default_command = None
+        self._preprecommand = self._fn_to_command(self.preprecommand)
+        self.option('help')(self.preprecommand)
+        self.option('version')(self.preprecommand)
+
         self._precommand = None
-        self._global_command = None
+        self._default = None
 
     default_help_template = textwrap.dedent("""
         Usage: {usage}
@@ -539,6 +504,40 @@ class App:
             {commands}
         """.lstrip('\n').rstrip())
 
+    def _map_default_options(self, options, name):
+        c = self._precommand
+        if c:
+            c._introspect()
+
+        for option in options:
+            if c and (option in c.options):
+                continue
+            validate_option_string(option)
+            self.option(name, option)(self.preprecommand)
+
+    def map_help_options(self, *options):
+        self._map_default_options(options or ('-h', '--help'), 'help')
+
+    def map_version_options(self, *options):
+        if self.version is None:
+            return
+        self._map_default_options(options or ('--version',), 'version')
+
+    def map_version_command(self, name='version'):
+        if (self.version is None) or (not self.commands) or (name in self.commands):
+            return
+        self.commands[name] = self._fn_to_command(self.print_version)
+
+    def map_help_command(self, name='help'):
+        if (not self.commands) or (name in self.commands):
+            return
+        self.commands[name] = self._fn_to_command(self.help)
+
+    def map_default(self):
+        if self._default is None:
+            self._default = self._fn_to_command(self._default_help)
+
+
     def _command_summary(self):
         template = self.default_help_template
         map = {}
@@ -546,12 +545,12 @@ class App:
         doc = self.doc
 
         usage = [os.path.basename(sys.argv[0])]
-        global_command = self._global_command
-        if global_command:
-            global_options = global_command.usage().strip().partition(' ')[2]
-            if global_options:
-                usage.append(global_options)
-            d = global_command.callable.__doc__
+        precommand = self._precommand
+        if precommand:
+            precommand_options = precommand.usage().strip().partition(' ')[2]
+            if precommand_options:
+                usage.append(precommand_options)
+            d = precommand.callable.__doc__
             if (not doc) and d:
                 doc = d
 
@@ -589,10 +588,10 @@ class App:
 
     def _usage(self, command=None):
             usages = []
+            if self._preprecommand:
+                usages.append(self._preprecommand.usage())
             if self._precommand:
                 usages.append(self._precommand.usage())
-            if self._global_command:
-                usages.append(self._global_command.usage())
             if command is not None:
                 usages.append(command.usage())
             return " ".join(usages)
@@ -624,31 +623,34 @@ class App:
             print()
             print(doc)
 
+    def _default_help(self):
+        self.help()
+        return 1
+
     def print_version(self):
         print(self.version)
 
-    def default_command(self):
-        def default_command(fn):
-            if self._default_command:
-                raise ConfigurationError("can't set default_command twice")
-            self._default_command = self._fn_to_command(fn)
+    def default(self):
+        def default(fn):
+            if self._default:
+                raise ConfigurationError("can't set default twice")
+            self._default = self._fn_to_command(fn)
             return fn
-        return default_command
+        return default
 
-    def global_command(self):
-        def global_command(fn):
-            if self._global_command:
-                raise ConfigurationError("can't set global_command twice")
-            self._global_command = self._fn_to_command(fn)
+    def precommand(self):
+        def precommand(fn):
+            if self._precommand:
+                raise ConfigurationError("can't set precommand twice")
+            self._precommand = self._fn_to_command(fn)
             return fn
-        return global_command
+        return precommand
 
-    def precommand(self, *, help:optional[str]=None, Version=False):
+    def preprecommand(self, *, help:optional[str]=None, version=False):
         if help is not None:
             self.help(help)
             sys.exit(0)
-        if Version:
-            print(f"Version={Version}")
+        if version:
             self.print_version()
             sys.exit(0)
 
@@ -695,15 +697,17 @@ class App:
 
         try:
             if not processor:
-                return self._default_command(processor)
+                if self._default is None:
+                    return 0
+                return self._default(processor)
 
             result = 0
 
-            if self._precommand:
-                self._precommand(processor)
+            if self._preprecommand:
+                self._preprecommand(processor)
 
-            if self._global_command:
-                result = self._global_command(processor)
+            if self._precommand:
+                result = self._precommand(processor)
 
             command = None
             while processor:
