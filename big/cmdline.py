@@ -4,11 +4,11 @@
 #########################################################
 ###
 ###  For people who don't want a dependency on Appeal,
-###  maybe I should write a mini-Appeal and put it in big,
+###  here's a mini-Appeal just for big.
 ###  just the same way that big has a mini-Tidy in the
 ###  big.template module.
 ###
-###  You'd get:
+###  You get:
 ###
 ###  * long options with automatic short options
 ###  * options support bool or a single str (converted)
@@ -26,25 +26,6 @@
 ###  * maybe explicit override for short and long options
 ###  * help and version are automatic, can be overriden
 ###
-###
-###     -abcVALUE        bundled shorts; first oparg-taker ends the bundle, rest is its oparg
-###     -cVALUE          same rule, bundle of one
-###     * -c=VALUE         = stripped; -c==VALUE passes a value starting with =
-###     * -c VALUE         next argv component, unconditionally (even if it starts with -)
-###     * --option=VALUE   = splits at the FIRST =; --option=a=b passes a=b
-###     * --option VALUE   next argv component, unconditionally
-###     --               ends option parsing
-###
-###     foo(*, x) should map -x but not --x
-###
-### appeal should use this approach for default_mappings and default_options
-###
-###
-### decorate usage arguments and opargs like appeal
-###
-### outdent docstring
-###
-### implement repeat
 
 
 import inspect
@@ -85,7 +66,6 @@ class ConfigurationError(CommandLineError):
     pass
 
 
-@export
 class Processor:
     def __init__(self, args):
         self.args = list(args)
@@ -140,6 +120,7 @@ def _convert(converter, value, *, command=None):
         name = getattr(converter, '__name__', 'value')
         raise UsageError(f"invalid value {value!r} (not a valid {name})", command=command) from None
 
+@export
 class optional(metaclass=_OptionalMeta):
     """
     Marks an option's oparg as *optional*, like "make -j [jobs]".
@@ -168,7 +149,6 @@ class optional(metaclass=_OptionalMeta):
 # --8<-- end cmdline optional --8<--
 
 
-@export
 class Command:
     POSITIONAL_ONLY = inspect.Parameter.POSITIONAL_ONLY
     POSITIONAL_OR_KEYWORD = inspect.Parameter.POSITIONAL_OR_KEYWORD
@@ -430,7 +410,6 @@ class Command:
         return self.callable(*a, **kw)
 
 
-@export
 def validate_option_string(s):
     "'-X' (one alphanumeric) or '--xx' (at least four chars)."
     ok = (isinstance(s, str)
@@ -571,6 +550,11 @@ class App:
                 module = sys.modules[module_name]
                 doc = module.__doc__
 
+        if doc is None:
+            doc = ''
+
+        doc = doc.rstrip()
+
         map['doc'] = doc
 
         usage.append("<command> ...")
@@ -582,13 +566,43 @@ class App:
             summary = c.__doc__.strip().split('\n')[0]
             pairs.append((name, summary))
 
-        # figure out indent of {commands} line, if present
+        # figure out indent of {commands} line, if present.
+        # also, suppress {doc} and trailing newlines if doc is empty.
+        # also, suppress Commands: and {commands} and trailing newlines if there are no commands.
         indent = '    '
-        for line in template.splitlines():
+        lines = []
+        append = lines.append
+        ignoring_blank_lines = False
+
+        for line in template.splitlines(True):
+            stripped = line.strip()
+
+            if stripped:
+                ignoring_blank_lines = False
+            elif ignoring_blank_lines:
+                continue
+
+            if stripped == '{doc}':
+                if not doc:
+                    ignoring_blank_lines = True
+                    continue
+
+            if stripped == 'Commands:':
+                if not self.commands:
+                    ignoring_blank_lines = True
+                    continue
+
             before, marker, after = line.partition("{commands}")
             if marker:
+                if not self.commands:
+                    ignoring_blank_lines = True
+                    continue
                 indent = before
-                break
+
+            append(line)
+
+        template = ''.join(lines)
+
         map['commands'] = format_definition_list(pairs, indent=indent).lstrip()
         print(template.format_map(map))
 
@@ -634,6 +648,7 @@ class App:
         return 1
 
     def print_version(self):
+        "Prints the version."
         print(self.version)
 
     def default(self):

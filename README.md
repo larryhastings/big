@@ -174,6 +174,8 @@ And here are seven little functions/classes I use all the time:
 
 [`big.builtin`](#bigbuiltin)
 
+[`big.cmdline`](#bigcmdline)
+
 [`big.deprecated`](#bigdeprecated)
 
 [`big.file`](#bigfile)
@@ -1391,6 +1393,364 @@ and `False` if it can't.
 
 Returns `True` if `o` can be converted into an `int`,
 and `False` if it can't.
+</dd></dl>
+
+
+## `big.cmdline`
+
+<dl><dd>
+
+A small command-line argument parser, a mini version of my
+[Appeal](https://github.com/larryhastings/appeal/) library,
+the same way `big.template` is a mini version of my Tidy
+template language.  It's for programs that want Appeal's
+approach without taking on the dependency.
+
+The approach: you write ordinary Python functions, and
+`big.cmdline` turns their signatures into a command line.
+Positional parameters become arguments, keyword-only
+parameters become options, and the annotation (or the
+default) tells `big.cmdline` how to convert the string the
+user typed.  The API is a subset of Appeal's, spelled
+identically, so a program that outgrows `big.cmdline` can
+switch `App` for `Appeal` and keep going.
+
+```Python
+import big.cmdline as cmdline
+
+app = cmdline.App('frob', version='1.0')
+
+@app.command()
+def add(a: int, b: int, *, verbose=False):
+    "Adds two numbers."
+    if verbose:
+        print(f"{a} + {b} =", end=' ')
+    print(a + b)
+
+app.main()
+```
+
+```
+$ frob add 2 3
+5
+$ frob add -v 2 3
+2 + 3 = 5
+$ frob add 2
+error: add requires 2 arguments, not 1 arguments
+usage: frob [-h|--help [str]] [--version] add [-v|--verbose] a b
+$ frob help
+Usage: frob <command> ...
+
+Commands:
+    add      Adds two numbers.
+    help     Shows a help overview, or help on a specific topic.
+    version  Prints the version.
+$ frob help add
+add [-v|--verbose] a b
+
+Adds two numbers.
+```
+
+**What it handles**
+
+* Commands: the first word on the line names a function
+  decorated with `@app.command()`.  Commands are a flat
+  dispatch; there are no subcommands.
+* Arguments: a command's positional parameters, filled in
+  order.  A parameter with a default is an optional argument.
+  `*args` accepts any number of trailing arguments.
+* Options: a command's keyword-only parameters.  A parameter
+  named `verbose` gets `-v` and `--verbose`; a one-letter
+  parameter gets only the short option.  A `bool` parameter
+  is a flag, which stores the opposite of its default.  Any
+  other parameter takes one *oparg*, the value after the option.
+* Converters: the annotation, if any, else the type of the
+  default, else `str`.  A converter is any callable that
+  takes one string, so `a: int`, `path: pathlib.Path`, and
+  `when: MyDateType` all work.  Conversion is one level deep:
+  `big.cmdline` never introspects the converter itself.
+  (That's what Appeal does.)
+* Automatic `-h`, `--help`, `--version`, and `help` and
+  `version` commands, each only where it fits and only where
+  you haven't claimed the string yourself.
+* A *precommand*, your own function whose options and
+  arguments come before the command word.
+* Usage errors, with a usage line, rendered to `stderr`.
+
+**Option spellings**
+
+`big.cmdline` follows the `getopt` conventions.  For an
+option `-c`/`--count` that takes an oparg:
+
+| spelling | meaning |
+|---|---|
+| `-c VALUE`, `--count VALUE` | the next argument is the oparg, unconditionally, even if it starts with `-` |
+| `-cVALUE` | the rest of the argument is the oparg |
+| `-c=VALUE`, `--count=VALUE` | the text after the first `=` is the oparg; `--count=a=b` passes `a=b` |
+| `-abc` | bundled short flags; `-abcVALUE` bundles flags `a` and `b` with `-c VALUE` |
+| `--` | ends option recognition until the next command word |
+| `-` | an ordinary argument, by convention "standard input" |
+| `-5` | an ordinary argument, if it parses as a number and not as options |
+
+A failed conversion is the user's mistake and raises
+`UsageError`; a program that's mis-configured, say by mapping
+the same option twice, raises `ConfigurationError`.
+
+</dd></dl>
+
+#### `App(name=None, *, default_options=default_options, default_mappings=default_global_mappings, doc='', repeat=False, version=None)`
+
+<dl><dd>
+
+A command-line program.
+
+* `name` is the program's name, used in usage lines.
+  If `None`, it's the basename of `sys.argv[0]`.
+* `default_options` is a policy function that maps a
+  keyword-only parameter to its option strings.  The default
+  maps `-v` and `--verbose` for a parameter named `verbose`.
+  Pass your own function with the same signature,
+  `fn(app, callable, name)`, to change the rule.
+* `default_mappings` is a policy function that installs the
+  stock behaviors: the help and version options and commands,
+  and the default behavior for an empty command line.  The
+  default is [`default_global_mappings`](#default_global_mappingsapp).
+  Pass your own function of `app` calling the `map_*` methods
+  you want, or `None` for no stock behaviors at all.
+* `doc` is the program's description, shown in the help
+  listing.  If empty, `big.cmdline` uses the precommand's
+  docstring, or the docstring of the module your commands
+  came from.
+* `repeat`, if true, lets the user run several commands on one
+  line, one after another: `frob add 1 2 add 3 4`.
+* `version` is the program's version string, or `None`.
+  The version option and command only exist when it's set.
+
+</dd></dl>
+
+#### `App.command(name=None)`
+
+<dl><dd>
+
+A decorator registering a function as a command.  `name` is
+the command word; if `None`, it's the function's name.
+`@app.command('mv')` is the way to name a command something
+you can't name a Python function.
+
+The function's positional parameters are the command's
+arguments and its keyword-only parameters are its options.
+The command's first docstring line is its summary in the
+help listing, and the whole docstring is its help page.
+
+</dd></dl>
+
+#### `App.option(name, *options, annotation=None)`
+
+<dl><dd>
+
+A decorator overriding the option strings for the keyword-only
+parameter `name` of the decorated function.  The default policy
+isn't consulted for that parameter.  `@app.option('verbose', '-V', '--loud')`
+maps those two strings instead of `-v` and `--verbose`;
+`@app.option('verbose')` with no strings maps nothing, so the
+parameter is only ever its default.
+
+`annotation`, if not `None`, is the converter to use, overriding
+the parameter's own annotation.
+
+</dd></dl>
+
+#### `App.precommand()`
+
+<dl><dd>
+
+A decorator registering the *precommand*: a function whose
+options and arguments the user gives *before* the command word.
+This is where program-wide options live:
+
+```Python
+@app.precommand()
+def global_options(*, config='~/.frobrc', verbose=False):
+    ...
+```
+
+```
+$ frob --config x.rc add 1 2
+```
+
+There is at most one precommand.  Its return value, if truthy,
+ends processing before any command runs, and becomes the exit code.
+
+</dd></dl>
+
+#### `App.default()`
+
+<dl><dd>
+
+A decorator registering the function run when the command line
+is empty.  There is at most one.  If you don't set one and the
+stock mappings are in effect, an empty command line prints the
+help listing and exits 1; with `default_mappings=None`, it does
+nothing and exits 0.
+
+</dd></dl>
+
+#### `App.process(args=None)`
+
+<dl><dd>
+
+Parses and runs the command line `args`, a list of strings.
+If `None`, uses `sys.argv[1:]`.
+
+Returns the return value of the last command run.  Raises
+`UsageError` for the user's mistakes and `ConfigurationError`
+for yours.  `process` never prints usage and never exits;
+it's for tests, embedders, and wrappers.
+
+</dd></dl>
+
+#### `App.main(args=None)`
+
+<dl><dd>
+
+`process` plus politeness.  Calls `process(args)`, and uses
+its return value as the exit code.  A `UsageError` is caught
+and rendered to `stderr` as an `error:` line and a `usage:` line,
+exit code 2.  A `ConfigurationError` is your bug, and propagates.
+Never returns.
+
+</dd></dl>
+
+#### `App.help(topic='')`
+
+<dl><dd>
+
+The stock `help` command.  With no `topic`, prints the help
+listing: a usage line, the program's description, and a table of
+commands with their summaries.  With a `topic`, prints that
+command's page: its usage line and its docstring.
+
+</dd></dl>
+
+#### `App.print_version()`
+
+<dl><dd>
+
+The stock `version` command.  Prints `app.version`.
+
+</dd></dl>
+
+#### `App.map_help_options(*options)`, `App.map_version_options(*options)`, `App.map_help_command(name='help')`, `App.map_version_command(name='version')`, `App.map_default()`
+
+<dl><dd>
+
+The stock mappings, one method each, for use from a
+`default_mappings` policy function.  Each applies only where
+it fits, and only where nothing of yours is already there:
+
+* `map_help_options` maps the help option.  `-h` and `--help`
+  by default, or exactly the strings given.  Strings your
+  precommand already uses are skipped.
+* `map_version_options` maps the version option, `--version`
+  by default.  Does nothing if `app.version` is `None`.
+* `map_help_command` registers [`App.help`](#apphelptopic) as
+  the command `name`, if there's no command by that name.
+* `map_version_command` registers
+  [`App.print_version`](#appprint_version) as the command
+  `name`.  Does nothing if `app.version` is `None`.
+* `map_default` makes the empty command line print the help
+  listing and return 1, if you haven't set a default.
+
+</dd></dl>
+
+#### `default_global_mappings(app)`
+
+<dl><dd>
+
+The default `default_mappings` policy.  This is the whole body;
+copy and edit it:
+
+```Python
+def default_global_mappings(app):
+    app.map_help_options()
+    app.map_version_options()
+    app.map_help_command()
+    app.map_version_command()
+    app.map_default()
+```
+
+</dd></dl>
+
+#### `default_options(app, callable, name)`
+
+<dl><dd>
+
+The default `default_options` policy.  For a keyword-only
+parameter `name` of `callable`, maps the short option `-` plus
+the first letter of `name`, if that short option is still free,
+and the long option `--` plus `name` lowercased with underscores
+turned into dashes.  A one-letter parameter whose short option is
+taken is a `ConfigurationError`.  Parameters starting with `_`
+are never mapped.
+
+</dd></dl>
+
+#### `optional[T]`
+
+<dl><dd>
+
+Marks an option's oparg as *optional*, like `make -j [jobs]`.
+Annotate the parameter with `optional[T]`, where `T` is the
+converter:
+
+```Python
+@app.command()
+def build(*, jobs: optional[int] = None):
+    ...
+```
+
+| command line | `jobs` |
+|---|---|
+| `build` | `None`, the default |
+| `build -j` | `0`, from calling `int()` with no argument |
+| `build -j 4`, `build -j4`, `build --jobs=4` | `4` |
+
+Note that the oparg is greedy: `build -j clean` tries to convert
+`clean` to an `int`, and fails.  Put a bare `-j` last, or use an
+attached spelling.
+
+</dd></dl>
+
+#### `CommandLineError(s, *, command=None)`
+
+<dl><dd>
+
+The base class of `big.cmdline`'s exceptions.  `command` is the
+`Command` object being parsed when the error was raised, if any.
+
+</dd></dl>
+
+#### `UsageError(s, *, command=None, usage='')`
+
+<dl><dd>
+
+The user made a mistake on the command line: an unknown command
+or option, too few or too many arguments, a value that wouldn't
+convert.  `usage` is the usage line for the part of the command
+line that failed; [`App.process`](#appprocessargsnone) fills it in,
+and [`App.main`](#appmainargsnone) prints it.
+
+</dd></dl>
+
+#### `ConfigurationError(s, *, command=None)`
+
+<dl><dd>
+
+The programmer made a mistake setting up the `App`: mapping the
+same option string twice, naming a parameter that doesn't exist,
+registering two defaults.  Raised when the mistake is made, and
+never caught by `main`.
+
 </dd></dl>
 
 

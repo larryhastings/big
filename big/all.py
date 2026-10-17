@@ -49,6 +49,11 @@ from . import deprecated
 __all__.append('deprecated')
 # we DON'T splat all the symbols from deprecated into big.all!
 
+from . import cmdline
+__all__.append('cmdline')
+from .cmdline import *
+__all__.extend(cmdline.__all__)
+
 from . import file
 __all__.append('file')
 from .file import *
