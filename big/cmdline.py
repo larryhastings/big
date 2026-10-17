@@ -270,19 +270,25 @@ class Command:
                         converter = list(converters)[0]
                         if converter is not bool:
                             rendered.append(' ')
-                            if isinstance(converter, optional):
+                            is_optional = isinstance(converter, optional)
+                            if is_optional:
                                 converter = converter.T
+                                rendered.append('[')
                             rendered.append(converter.__name__)
+                            if is_optional:
+                                rendered.append(']')
                     else:
                         rendered.append(' value')
                     rendered.append(']')
                     options.append(''.join(rendered))
-        usage = self.name
+        usage = []
+        if self.name:
+            usage.append(self.name)
         if options:
-            usage += ' ' + ' '.join(options)
+            usage.extend(options)
         if arguments:
-            usage += ' ' + ''.join(arguments) + ''.join(trailing)
-        return usage
+            usage.append(''.join(arguments) + ''.join(trailing))
+        return ' '.join(usage)
 
 
     def __call__(self, processor):
@@ -477,7 +483,8 @@ class App:
             doc='',
             repeat=False,
             version=None):
-        self.name = name
+        default_name = os.path.basename(sys.argv[0])
+        self.name = name or default_name
         self.default_mappings = default_mappings
         self.default_options = default_options
         self.doc = doc
@@ -489,6 +496,7 @@ class App:
         self._called_default_mappings = False
 
         self._preprecommand = self._fn_to_command(self.preprecommand)
+        self._preprecommand.name = ''
         self.option('help')(self.preprecommand)
         self.option('version')(self.preprecommand)
 
@@ -544,7 +552,7 @@ class App:
 
         doc = self.doc
 
-        usage = [os.path.basename(sys.argv[0])]
+        usage = [os.path.basename(self.name)]
         precommand = self._precommand
         if precommand:
             precommand_options = precommand.usage().strip().partition(' ')[2]
@@ -587,13 +595,13 @@ class App:
         print(template.format_map(map))
 
     def _usage(self, command=None):
-            usages = []
-            if self._preprecommand:
-                usages.append(self._preprecommand.usage())
-            if self._precommand:
-                usages.append(self._precommand.usage())
-            if command is not None:
-                usages.append(command.usage())
+            usages = [self.name]
+            for o in (self._preprecommand, self._precommand, command):
+                if o is None:
+                    continue
+                usage = o.usage()
+                if usage:
+                    usages.append(usage)
             return " ".join(usages)
 
     def help(self, topic=''):
@@ -643,6 +651,7 @@ class App:
             if self._precommand:
                 raise ConfigurationError("can't set precommand twice")
             self._precommand = self._fn_to_command(fn)
+            self._precommand.name = ''
             return fn
         return precommand
 

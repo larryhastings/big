@@ -23,7 +23,7 @@ bigtestlib.preload_local_big()
 
 import contextlib
 import io
-import os
+import os.path
 import subprocess
 import sys
 
@@ -720,6 +720,73 @@ def test_usage_error_carries_usage():
         assert '-z' in e.usage or '--zebra' in e.usage, e.usage
 
 
+def test_usage_leads_with_the_program_name():
+    # the usage line that rides on a UsageError (and that main()
+    # prints) starts with the program name--App('tool'), else
+    # basename(sys.argv[0])--never with the name of the internal
+    # method that happens to hold the stock options.
+    app = cmdline.App('tool')
+    @app.command()
+    def c(a, *, zebra=False):
+        pass
+    try:
+        app.process(['c'])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert e.usage.startswith('tool '), e.usage
+        assert 'preprecommand' not in e.usage, e.usage
+        assert ' c ' in e.usage, e.usage
+
+    saved = sys.argv
+    try:
+        sys.argv = ['/opt/bin/frob.py']
+        app = cmdline.App()
+        @app.command()
+        def c(a):
+            pass
+        try:
+            app.process(['c'])
+            raise AssertionError('expected UsageError')
+        except UsageError as e:
+            assert e.usage.startswith('frob.py '), e.usage
+    finally:
+        sys.argv = saved
+
+
+def test_usage_renders_an_optional_oparg_in_brackets():
+    # a required oparg renders bare (-f str); an optional[T]
+    # oparg renders bracketed (-j [int]), the make -j spelling.
+    # The stock help option is optional[str], so it shows up on
+    # every usage line.
+    app = cmdline.App('tool')
+    @app.command()
+    def c(*, jobs: cmdline.optional[int] = 1, file=''):
+        pass
+    u = app.commands['c'].usage()
+    assert '[int]' in u, u
+    assert '[str]' not in u and ' str' in u, u
+    try:
+        app.process(['c', 'extra'])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert '[-h|--help [str]]' in e.usage, e.usage
+
+
+def test_listing_leads_with_the_program_name():
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    app = cmdline.App('tool')
+    @app.command()
+    def c():
+        "Does c."
+    _, out = quiet_run(app, ['help'])
+    assert 'Usage: tool ' in out, out
+
+
 def test_default_and_precommand_set_twice():
     # both are set-once; the second registration is the
     # programmer's mistake
@@ -1399,7 +1466,7 @@ def test_app_name_positional():
     # spelled and stored like Appeal's
     app = cmdline.App('tool')
     assert app.name == 'tool'
-    assert cmdline.App().name is None
+    assert cmdline.App().name == os.path.basename(sys.argv[0])
 
 
 def test_node_callable():
