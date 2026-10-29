@@ -289,9 +289,15 @@ class Command:
                     processor.ignore_options = True
                     continue
 
-                option, equals, oparg = arg.partition('=')
-                if option == '-':
+                if arg == '-':
                     raise UsageError(f"invalid option {arg}", command=self)
+
+                if arg.startswith('--'):
+                    option, equals, oparg = arg.partition('=')
+                else:
+                    option = arg
+                    equals = oparg = ''
+
                 bundle = self.options.get(option)
                 if bundle:
                     # it's an option!
@@ -347,14 +353,9 @@ class Command:
                         name, converter, default = bundle
                         inserted.append(short_option)
                         if converter is not bool:
-                            if equals:
-                                if short_options:
-                                    o = short_options[0]
-                                    raise UsageError(f'unrecognized option -{o}', command=self)
-                            else:
-                                short_options.reverse()
-                                oparg = ''.join(short_options)
-                                short_options.clear()
+                            short_options.reverse()
+                            oparg = ''.join(short_options)
+                            short_options.clear()
                             inserted.append(oparg)
 
                     if inserted:
@@ -519,8 +520,8 @@ class App:
         self.commands[name] = self._fn_to_command(self.help)
 
     def map_default(self):
-        if self._default is None:
-            self._default = self._fn_to_command(self._default_help)
+        if self.commands and (self._default is None):
+            self._default = self._fn_to_command(self._default_default)
 
 
     def _command_summary(self):
@@ -643,9 +644,8 @@ class App:
             print()
             print(doc)
 
-    def _default_help(self):
-        self.help()
-        return 1
+    def _default_default(self):
+        raise UsageError('no command specified')
 
     def print_version(self):
         "Prints the version."
@@ -718,11 +718,6 @@ class App:
                 self.default_mappings(self)
 
         try:
-            if not processor:
-                if self._default is None:
-                    return 0
-                return self._default(processor)
-
             result = 0
 
             if self._preprecommand:
@@ -730,6 +725,11 @@ class App:
 
             if self._precommand:
                 result = self._precommand(processor)
+
+            if not processor:
+                if self._default is None:
+                    return result
+                return self._default(processor)
 
             command = None
             while processor:

@@ -2,20 +2,10 @@
 #
 # tests/test_cmdline.py
 # Tests for big's cmdline, the artisanal mini-Appeal.
-# Codename: "arglet"
-#
-# These tests specify the SEMANTICS--the header comment's option
-# menagerie, the annotation/default converter rules, the exception
-# taxonomy (UsageError for the user's mistakes, ConfigurationError
-# for the programmer's), and the precommand/default_mappings
-# design--not the current implementation.  Tests marked
-# "CURRENTLY FAILS" encode known bugs; they should start red and
-# go green as cmdline grows up.  (TDD: the human writes the code,
-# the tests hold the line.)
 #
 # Style note: every test is standalone--helpers like quiet_run and
 # setup are copied into each test as local functions--so you can
-# paste an individual test into its own file and run it in
+# hoist an individual test into its own file and run it in
 # isolation with little ceremony.
 
 import bigtestlib
@@ -27,14 +17,6 @@ import os.path
 import subprocess
 import sys
 
-
-# importing cmdline currently runs its module-level test drive and
-# then app.main(), which sys.exit()s--and Python evicts a module
-# whose import raised, so a plain import leaves nothing behind.
-# Exec the source ourselves and keep whatever got defined; when
-# the demo drive moves under `if __name__ == '__main__':` this
-# degenerates to an ordinary full import.  test_import_is_quiet
-# pins the real fix.
 import types
 import big.cmdline as cmdline
 
@@ -44,11 +26,7 @@ ConfigurationError = cmdline.ConfigurationError
 
 
 
-# ----------------------------------------------------------------
-# the option menagerie (the header's spec)
-# ----------------------------------------------------------------
-
-def test_menagerie_equals_spellings():
+def test_equals_spellings():
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -63,15 +41,23 @@ def test_menagerie_equals_spellings():
             calls.append(dict(x=x, y=y, color=color, indent=indent))
         return app, calls
 
+    # getopt-pure (the Appeal ruling of 2026-08-27): = is a
+    # separator for LONG options only.  For a short option the rest
+    # of the token binds verbatim, = and all.
     app, calls = setup()
-    quiet_run(app, ['testo', '-y=STEVE'])       # = stripped
-    assert calls[-1]['y'] == 'STEVE'
-    quiet_run(app, ['testo', '-y==STEVE'])      # value starts with =
+    quiet_run(app, ['testo', '-y=STEVE'])       # oparg is '=STEVE'
     assert calls[-1]['y'] == '=STEVE'
+    quiet_run(app, ['testo', '-yNAME=1'])       # think -DNAME=1
+    assert calls[-1]['y'] == 'NAME=1'
     quiet_run(app, ['testo', '--color=a=b'])    # split at FIRST =
     assert calls[-1]['color'] == 'a=b'
     quiet_run(app, ['testo', '--color='])       # empty value passes
     assert calls[-1]['color'] == ''
+    try:
+        quiet_run(app, ['testo', '-i=5'])       # int('=5') fails
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert '=5' in str(e), str(e)
 
 
 def test_menagerie_next_component_unconditionally():
@@ -120,9 +106,6 @@ def test_menagerie_concatenation_and_bundles():
 
 
 def test_menagerie_bundle_with_equals():
-    # CURRENTLY FAILS (the acknowledged goof): the bundling path
-    # re-splits option[1:] and drops the partitioned = value.
-    # -xy=FOO means -x, then -y=FOO.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -138,12 +121,12 @@ def test_menagerie_bundle_with_equals():
         return app, calls
 
     app, calls = setup()
-    quiet_run(app, ['testo', '-xy=FOO'])
+    quiet_run(app, ['testo', '-xy=FOO'])        # y binds '=FOO' verbatim
     assert calls[-1]['x'] is True
-    assert calls[-1]['y'] == 'FOO'
+    assert calls[-1]['y'] == '=FOO'
 
 
-def test_menagerie_bundle_equals_oparg_taker_must_be_last():
+def test_menagerie_bundle_oparg_taker_ends_the_bundle():
     # in "-yx=FOO", the = value belongs to the bundle's oparg-taker
     # --but 'y' takes the oparg and 'x' is still in the bundle
     # after it.  There's no sensible reading; UsageError.
@@ -161,12 +144,12 @@ def test_menagerie_bundle_equals_oparg_taker_must_be_last():
             calls.append(dict(x=x, y=y, color=color, indent=indent))
         return app, calls
 
+    # the first oparg-taker in a bundle takes the REST of the token,
+    # so -yx=FOO is y='x=FOO' and x is untouched--not an error
     app, calls = setup()
-    try:
-        quiet_run(app, ['testo', '-yx=FOO'])
-        assert False, 'expected UsageError'
-    except UsageError:
-        pass
+    quiet_run(app, ['testo', '-yx=FOO'])
+    assert calls[-1]['y'] == 'x=FOO'
+    assert calls[-1]['x'] is False
 
 
 def test_menagerie_double_dash():
@@ -258,7 +241,6 @@ def test_flags_store_not_default():
 def test_bool_refuses_equals():
     # your design: no --flag=true zoo in cmdline.  But the user
     # typed it, so it's a UsageError, not a bare ValueError.
-    # CURRENTLY FAILS: raises ValueError.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -321,7 +303,6 @@ def test_positional_counts():
 
 
 def test_too_few_arguments_is_usage_error():
-    # CURRENTLY FAILS: raises ValueError, not UsageError.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -340,10 +321,6 @@ def test_too_few_arguments_is_usage_error():
 
 
 def test_leftover_arguments_are_an_error():
-    # CURRENTLY FAILS: extra operands are re-inserted and then
-    # silently dropped (repeat=False) or misdispatched as command
-    # words (repeat=True).  v1 Appeal's "leftover cmdline
-    # arguments!" is the semantic to keep.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -362,8 +339,6 @@ def test_leftover_arguments_are_an_error():
 
 
 def test_var_positional():
-    # CURRENTLY FAILS: the header promises "args works"; today
-    # VAR_POSITIONAL raises ConfigurationError('unhandled kind').
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -419,9 +394,6 @@ def test_var_keyword_is_a_configuration_error():
 
 
 def test_stdin_dash_is_an_operand():
-    # CURRENTLY FAILS: '-' is appended raw without consuming a
-    # positional slot, so the NEXT operand gets THIS position's
-    # converter (desync).
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -442,8 +414,6 @@ def test_stdin_dash_is_an_operand():
 # ----------------------------------------------------------------
 
 def test_unknown_long_option_is_a_usage_error():
-    # CURRENTLY FAILS: an unknown --long re-inserts, breaks, and
-    # is silently dropped.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -467,8 +437,6 @@ def test_unknown_long_option_is_a_usage_error():
 
 
 def test_unknown_short_option_is_a_usage_error():
-    # CURRENTLY FAILS: same silent drop; and an unknown short
-    # MID-bundle raises bare ValueError.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -493,7 +461,6 @@ def test_unknown_short_option_is_a_usage_error():
 
 
 def test_missing_oparg_is_a_usage_error():
-    # CURRENTLY FAILS: args.pop(0) on an empty list -> IndexError.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -524,9 +491,6 @@ def test_negative_numbers_are_operands():
     # with underscores and non-ASCII rejected.  float() likes it:
     # operand.  float() doesn't: UsageError, right away, never
     # the bundle walk.
-    # CURRENTLY FAILS: '-5' isn't a declared option, so the bundle
-    # walk gives up and ends option parsing--and the leftover-drop
-    # bug eats it.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -572,8 +536,6 @@ def test_negative_numbers_are_operands():
 
 
 def test_dash_equals_junk_does_not_vanish():
-    # CURRENTLY FAILS: '-=x' partitions to option '-', the empty
-    # bundle walk inserts nothing, and the token just disappears.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -690,7 +652,7 @@ def test_explicit_option_and_converter():
 
 def test_registration_errors_are_configuration_errors():
     # programmer mistakes are ConfigurationError, never bare
-    # ValueError/KeyError.  CURRENTLY FAILS on all three counts.
+    # ValueError/KeyError.
     app = cmdline.App()
     def c(*, x=False):
         pass
@@ -865,9 +827,6 @@ def test_default_and_precommand_set_twice():
 
 
 def test_default():
-    # CURRENTLY FAILS three ways: the decorator returns an
-    # undefined name, the "can't set twice" guard is pre-armed by
-    # __init__, and run([]) calls a Command with no args.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -884,7 +843,6 @@ def test_default():
 
 
 def test_precommand():
-    # CURRENTLY FAILS: the decorator returns an undefined name.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -1392,8 +1350,9 @@ def test_map_methods_yield_to_user_registrations():
 
 def test_map_default_and_the_bare_line():
     # with no default and no mappings, a bare line does nothing
-    # and returns 0; map_default installs the stock default (the
-    # listing, returning 1); a user's @app.default() runs instead.
+    # and returns 0; map_default installs the stock default (a
+    # "no command specified" UsageError, ruled 2026-10-17); a
+    # user's @app.default() runs instead.
     def quiet_run(app, argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -1414,9 +1373,11 @@ def test_map_default_and_the_bare_line():
     @app.command()
     def c():
         "Does c."
-    result, out = quiet_run(app, [])
-    assert result == 1, result
-    assert 'Does c.' in out, out
+    try:
+        quiet_run(app, [])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert str(e) == 'no command specified', str(e)
 
     calls = []
     app = cmdline.App()
@@ -1718,6 +1679,211 @@ def test_conversion_failures_raise_UsageError():
         assert str(e).startswith("invalid value 'xyz'")
 
 
+
+
+# ----------------------------------------------------------------
+# the bare command line, Appeal-style (todo item 1)
+# ----------------------------------------------------------------
+
+def test_bare_line_is_a_usage_error_with_a_hint():
+    # parity with Appeal: the stock default raises "no command
+    # specified"; main() renders error, blank line, usage with
+    # <command> ..., and a hint pointing at the help command.
+    def quiet_main(app, argv):
+        out, err = io.StringIO(), io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out), \
+             contextlib.redirect_stderr(err):
+            try:
+                app.main(list(argv))
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue()
+
+    app = cmdline.App('tool')
+    @app.command()
+    def add(a, b):
+        pass
+    code, out, err = quiet_main(app, [])
+    assert code == 2, code
+    assert out == '', out
+    assert err.startswith('error: no command specified\n\nusage: tool '), err
+    lines = err.splitlines()
+    assert lines[2].endswith(' <command> ...'), lines[2]
+    assert lines[3] == "(run 'tool help' for a list of commands)", lines[3]
+    assert len(lines) == 4, err
+
+    # process() raises the structured object, no printing
+    try:
+        app.process([])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert str(e) == 'no command specified', str(e)
+        assert e.command is None
+        assert e.usage.endswith(' <command> ...'), e.usage
+
+
+def test_hint_falls_back_to_the_help_option():
+    # no `help` command: the hint names --help; no --help: -h;
+    # nothing mapped: no hint line at all
+    def quiet_main(app, argv):
+        out, err = io.StringIO(), io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out), \
+             contextlib.redirect_stderr(err):
+            try:
+                app.main(list(argv))
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue()
+
+    def build(policy):
+        app = cmdline.App('tool', default_mappings=policy)
+        @app.command()
+        def add(a, b):
+            pass
+        return app
+
+    def long_only(app):
+        app.map_help_options()
+        app.map_default()
+    _, _, err = quiet_main(build(long_only), [])
+    assert err.splitlines()[-1] == "(run 'tool --help' for a list of commands)", err
+
+    def short_only(app):
+        app.map_help_options('-h')
+        app.map_default()
+    _, _, err = quiet_main(build(short_only), [])
+    assert err.splitlines()[-1] == "(run 'tool -h' for a list of commands)", err
+
+    def nothing(app):
+        app.map_default()
+    _, _, err = quiet_main(build(nothing), [])
+    assert err.splitlines()[-1].startswith('usage: tool'), err
+    assert 'run ' not in err, err
+
+
+def test_hint_rides_on_every_command_less_error():
+    # the hint belongs to errors about the line as a whole (no
+    # command, unknown command), not to errors inside a command
+    def quiet_main(app, argv):
+        out, err = io.StringIO(), io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out), \
+             contextlib.redirect_stderr(err):
+            try:
+                app.main(list(argv))
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue()
+
+    app = cmdline.App('tool')
+    @app.command()
+    def add(a, b):
+        pass
+    _, _, err = quiet_main(app, ['zork'])
+    assert "unknown command 'zork'" in err, err
+    assert err.splitlines()[-1] == "(run 'tool help' for a list of commands)", err
+    _, _, err = quiet_main(app, ['add', '1'])
+    assert 'requires' in err, err
+    assert 'for a list of commands' not in err, err
+    assert err.splitlines()[-1].startswith('usage: tool '), err
+    assert ' add ' in err and '<command>' not in err, err
+
+
+def test_no_commands_program_hints_at_full_usage():
+    # a program with no commands never has a listing to point at;
+    # the hint offers the help option "for full usage" instead
+    def quiet_main(app, argv):
+        out, err = io.StringIO(), io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out), \
+             contextlib.redirect_stderr(err):
+            try:
+                app.main(list(argv))
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue()
+
+    app = cmdline.App('tsort')
+    @app.precommand()
+    def tsort(file='-', *, reverse=False):
+        pass
+    code, _, err = quiet_main(app, ['a', 'b'])     # one operand too many
+    assert code == 2, (code, err)
+    assert '<command>' not in err, err
+    # no commands means no dispatch: the leftover is "extra
+    # arguments", never a bogus "unknown command"
+    assert 'extra arguments' in err and 'unknown command' not in err, err
+    assert err.splitlines()[-1] == "(run 'tsort --help' for full usage)", err
+
+
+def test_no_commands_program_refuses_a_default():
+    # ruled 2026-10-29: the default is what runs in place of a
+    # command word; with no commands it would just be a second body
+    # after the precommand.  Loud subset refusal, at the first
+    # process() (when the commands are known), pointing at the fix.
+    app = cmdline.App('tsort')
+    @app.precommand()
+    def tsort(file='-'):
+        pass
+    @app.default()
+    def oops():
+        pass
+    try:
+        app.process([])
+        raise AssertionError('expected ConfigurationError')
+    except ConfigurationError as e:
+        assert 'precommand' in str(e), str(e)
+
+
+def test_precommand_runs_on_a_bare_line():
+    # Appeal: the precommand is called even when nothing was given
+    # for it, BEFORE the default is consulted.  So a no-commands
+    # program with a precommand simply runs on a bare line.
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    calls = []
+    app = cmdline.App('tsort')
+    @app.precommand()
+    def tsort(file='-', *, reverse=False):
+        calls.append((file, reverse))
+    result, out = quiet_run(app, [])
+    assert calls == [('-', False)], calls
+    assert result == 0 and out == '', (result, out)
+
+    # with commands, the precommand still runs first, then the
+    # stock default raises
+    calls = []
+    app = cmdline.App('tool')
+    @app.precommand()
+    def g(*, verbose=False):
+        calls.append(verbose)
+    @app.command()
+    def add(a, b):
+        pass
+    try:
+        quiet_run(app, ['-v'])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert str(e) == 'no command specified', str(e)
+    assert calls == [True], calls
+
+    # default_mappings=None: a bare line is still a quiet 0
+    calls = []
+    app = cmdline.App('tool', default_mappings=None)
+    @app.precommand()
+    def g(*, verbose=False):
+        calls.append(verbose)
+    @app.command()
+    def add(a, b):
+        pass
+    result, out = quiet_run(app, [])
+    assert result == 0 and out == '' and calls == [False], (result, out, calls)
 
 
 def run_tests(run=None):
