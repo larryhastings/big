@@ -609,13 +609,42 @@ class App:
 
     def _usage(self, command=None):
             usages = [self.name]
-            for o in (self._preprecommand, self._precommand, command):
+            commands = [self._preprecommand, self._precommand]
+            if command:
+                commands.append(command)
+            for o in commands:
                 if o is None:
                     continue
                 usage = o.usage()
                 if usage:
                     usages.append(usage)
+            if (not command) and self.commands:
+                usages.append('<command> ...')
             return " ".join(usages)
+
+    def _help_hint(self, command):
+        if command:
+            return ''
+
+        help = None
+        if 'help' in self.commands:
+            help = f'help'
+        elif self._precommand:
+            options = self._precommand.options
+            if '--help' in options:
+                help = '--help'
+            elif '-h' in options:
+                help = '-h'
+
+        if not help:
+            return ''
+
+        if self.commands:
+            suffix = "for a list of commands"
+        else:
+            suffix = "for full usage"
+
+        return f"(run '{self.name} {help}' {suffix})"
 
     def help(self, topic=''):
         """
@@ -732,25 +761,26 @@ class App:
                 return self._default(processor)
 
             command = None
-            while processor:
-                name = processor.pop()
-                if name.startswith('-') and (not processor.ignore_options):
-                    raise UsageError(f"unknown option '{name}'")
-                command = self.commands.get(name)
-                if command is None:
-                    raise UsageError(f"unknown command '{name}'")
+            if self.commands:
+                while processor:
+                    name = processor.pop()
+                    if name.startswith('-') and (not processor.ignore_options):
+                        raise UsageError(f"unknown option '{name}'")
+                    command = self.commands.get(name)
+                    if command is None:
+                        raise UsageError(f"unknown command '{name}'")
 
-                processor.ignore_options = False # resets at every command boundary
-                result = command(processor)
+                    processor.ignore_options = False # resets at every command boundary
+                    result = command(processor)
 
-                if processor.peek().startswith('-') and (not processor.ignore_options):
-                    option = processor.pop()
-                    raise UsageError(f"unknown option '{option}'", command=command)
-                if result:
-                    return result
-                if not self.repeat:
-                    break
-                command = None
+                    if processor.peek().startswith('-') and (not processor.ignore_options):
+                        option = processor.pop()
+                        raise UsageError(f"unknown option '{option}'", command=command)
+                    if result:
+                        return result
+                    if not self.repeat:
+                        break
+                    command = None
 
             if processor:
                 quoted = shlex_join(processor.args)
@@ -772,9 +802,12 @@ class App:
             sys.exit(self.process(args))
 
         except UsageError as ue:
-            print("error:", str(ue), file=sys.stderr)
             assert ue.usage
+            print("error:", str(ue), file=sys.stderr)
             print("usage:", ue.usage, file=sys.stderr)
+            hint = self._help_hint(ue.command)
+            if hint:
+                print(hint, file=sys.stderr)
             sys.exit(2)
 
 
