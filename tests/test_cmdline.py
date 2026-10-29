@@ -1854,7 +1854,7 @@ def test_precommand_runs_on_a_bare_line():
         calls.append((file, reverse))
     result, out = quiet_run(app, [])
     assert calls == [('-', False)], calls
-    assert result == 0 and out == '', (result, out)
+    assert (not result) and out == '', (result, out)   # the precommand's own return
 
     # with commands, the precommand still runs first, then the
     # stock default raises
@@ -1884,6 +1884,128 @@ def test_precommand_runs_on_a_bare_line():
         pass
     result, out = quiet_run(app, [])
     assert result == 0 and out == '' and calls == [False], (result, out, calls)
+
+
+# ----------------------------------------------------------------
+# optional opargs observe dashes (ruled 2026-10-20, rule A)
+# ----------------------------------------------------------------
+
+def test_optional_oparg_observes_dashes():
+    # a REQUIRED oparg takes the next token unconditionally.  An
+    # OPTIONAL oparg looks at the next token like a positional
+    # would: an option-looking token or -- means the oparg is
+    # absent.  Mirrors Appeal's make corpus.
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    calls = []
+    app = cmdline.App()
+    @app.command()
+    def make(*targets, jobs: cmdline.optional[int] = None, verbose=False):
+        calls.append((targets, jobs, verbose))
+
+    for argv, expected in (
+            (['make', '-j', '5'],         ((), 5, False)),
+            (['make', '-j', '-5'],        ((), -5, False)),      # negative number
+            (['make', '-j5'],             ((), 5, False)),       # attached
+            (['make', '-j'],              ((), 0, False)),       # bare at the end
+            (['make', '-j', '-v'],        ((), 0, True)),        # bare, then a known flag
+            (['make', '-j', '-x'],        None),                 # bare, then an unknown option
+            (['make', '-j', '--', '5'],   (('5',), 0, False)),   # -- ends the run; 5 is a target
+            (['make', '-vj', '5'],        ((), 5, True)),        # last in a bundle, then greedy
+            (['make', 'all', '-j', '2'],  (('all',), 2, False)),
+            ):
+        del calls[:]
+        if expected is None:
+            try:
+                quiet_run(app, argv)
+                raise AssertionError(f'{argv}: expected UsageError')
+            except UsageError:
+                continue
+        quiet_run(app, argv)
+        assert calls[-1] == expected, (argv, calls[-1])
+
+    # never a silent reinterpretation: the greedy grab of a
+    # non-option token fails loudly, it does not fall back to bare
+    try:
+        quiet_run(app, ['make', '-j', 'clean'])
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert 'clean' in str(e), str(e)
+    try:
+        quiet_run(app, ['make', '-j', '-'])       # '-' is a value; int('-') fails
+        raise AssertionError('expected UsageError')
+    except UsageError as e:
+        assert "'-'" in str(e), str(e)
+
+
+def test_optional_str_oparg_takes_dash_and_attached_dash_values():
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    calls = []
+    app = cmdline.App()
+    @app.command()
+    def c(*, log: cmdline.optional[str] = None):
+        calls.append(log)
+    quiet_run(app, ['c', '-l', '-'])          # lone dash is a value
+    assert calls[-1] == '-', calls
+    quiet_run(app, ['c', '-l-x'])             # attached binds verbatim: the only
+    assert calls[-1] == '-x', calls           # way to give a dash-leading value
+    quiet_run(app, ['c', '--log=-x'])
+    assert calls[-1] == '-x', calls
+    quiet_run(app, ['c', '-l'])
+    assert calls[-1] == '', calls
+
+
+def test_required_oparg_ignores_dashes():
+    # the POSIX half of the rule: a required oparg is the next
+    # token no matter what it looks like
+    def quiet_run(app, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = app.process(list(argv))
+        return result, out.getvalue()
+
+    calls = []
+    app = cmdline.App()
+    @app.command()
+    def c(*, file='', verbose=False):
+        calls.append((file, verbose))
+    quiet_run(app, ['c', '-f', '-v'])
+    assert calls[-1] == ('-v', False), calls
+    quiet_run(app, ['c', '-f', '--'])
+    assert calls[-1] == ('--', False), calls
+    quiet_run(app, ['c', '-f', '-5'])
+    assert calls[-1] == ('-5', False), calls
+
+
+def test_help_option_yields_to_a_following_option():
+    # -h --version: help's optional topic sees an option, so the
+    # topic is absent and the listing prints (help exits first)
+    def quiet_run_exit(app, argv):
+        out = io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out):
+            try:
+                app.process(list(argv))
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue()
+
+    app = cmdline.App('tool', version='1.0')
+    @app.command()
+    def encabulate():
+        "Prefabulates the amulite."
+    code, out = quiet_run_exit(app, ['-h', '--version'])
+    assert (code or 0) == 0, code
+    assert 'encabulate' in out and '1.0' not in out, out
 
 
 def run_tests(run=None):

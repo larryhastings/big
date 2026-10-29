@@ -270,6 +270,104 @@ class Command:
             usage.append(''.join(arguments) + ''.join(trailing))
         return ' '.join(usage)
 
+    def _parse_arg(self, arg):
+        # attempts to parse arg as a command-line entry at this point.
+        #
+        # Returns a 3-tuple:
+        #     (dispostion, options)
+        # disposition is a str identifying what it parsed into.
+        # options is a list of 3-tuples of (option, oparg, bundle).
+        #    option will always be a str.  oparg is a str if we parsed
+        #    an oparg paired with this option, otherwise None.
+        #    bundle will be the usual bundle stored in options
+        #    (itself a 3-tuple of (name, converter, default).)
+        # except where noted, options will be empty.
+        #
+        # possible values of disposition:
+        #   'argument' - arg must be a positional argument.
+        #     (doesn't start with a dash, or is literally just '-'.)
+        #   'options' - arg is recognized as one or more valid
+        #     options for the current command.  options will not
+        #     be empty.
+        #   'float' - arg parses as a negative floating point literal.
+        #     this is only returned if it flunked options.
+        #   'doubledash' - arg is '--'
+        #   'invalid' - arg cannot be valid (e.g. starts with '---')
+        #   'unrecognized' - appears to be one or more options,
+        #     doesn't parse as float, but options don't map perfectly
+        #     for the current command.
+
+        disposition = None
+        options = []
+        oparg = None
+
+        if not arg.startswith('-'):
+            disposition = 'argument'
+        elif arg.startswith('---'):
+            disposition = 'invalid'
+        elif arg.startswith('--'):
+            if arg == '--':
+                disposition = 'doubledash'
+            else:
+                option, equals, specified_oparg = arg.partition('=')
+                if not equals:
+                    specified_oparg = None
+                bundle = self.options.get(option)
+                if not bundle:
+                    disposition = 'unrecognized'
+                else:
+                    name, converter, default = bundle
+                    # if they specified an oparg, this can only match
+                    # if the option takes an oparg
+                    is_bool = converter is bool
+                    if (specified_oparg is not None) and is_bool:
+                        raise UsageError(f"can't use = syntax with boolean option {option}", command=self)
+                    else:
+                        disposition = 'options'
+                        oparg = specified_oparg
+                        blob = (option, oparg, bundle)
+                        options.append(blob)
+        else:
+            # it starts with a single dash.
+
+            if arg == '-':
+                disposition = 'argument'
+            else:
+                # if it maps perfectly into options, it's options.
+                letters = list(arg)
+                letters.reverse()
+                letters.pop() # remove '-'
+
+                while letters:
+                    option = "-" + letters.pop()
+                    bundle = self.options.get(option)
+                    if not bundle:
+                        options.clear()
+                        break
+
+                    name, converter, default = bundle
+                    if converter is not bool:
+                        letters.reverse()
+                        oparg = ''.join(letters) or None
+                        letters.clear()
+
+                    blob = (option, oparg, bundle)
+                    options.append(blob)
+
+                if options:
+                    disposition = 'options'
+                elif ('_' in arg) or (not arg.isascii()):
+                    disposition = 'unrecognized'
+                else:
+                    try:
+                        float(arg)
+                        disposition = 'float'
+                    except ValueError:
+                        disposition = 'unrecognized'
+
+        return (disposition, options)
+
+
 
     def __call__(self, processor):
         self._introspect()
@@ -284,122 +382,57 @@ class Command:
         while keep_going and processor:
             arg = processor.pop()
 
-            if (not processor.ignore_options) and arg.startswith('-') and (arg != '-'):
-                if arg == '--':
+            if processor.ignore_options:
+                disposition = 'argument'
+            else:
+                disposition, options = self._parse_arg(arg)
+
+                if disposition == 'doubledash':
                     processor.ignore_options = True
                     continue
-
-                if arg == '-':
-                    raise UsageError(f"invalid option {arg}", command=self)
-
-                if arg.startswith('--'):
-                    option, equals, oparg = arg.partition('=')
-                else:
-                    option = arg
-                    equals = oparg = ''
-
-                bundle = self.options.get(option)
-                if bundle:
-                    # it's an option!
-                    name, converter, default = bundle
-                    if converter is bool:
-                        if equals:
-                            raise UsageError(f"can't use = syntax with boolean option {option}", command=self)
-                        kw[name] = not default
-                    else:
-                        if equals:
-                            value = oparg
-                        elif processor:
-                            oparg = processor.pop()
-                            value = oparg
-                        elif isinstance(converter, optional):
-                            value = None
-                        else:
-                            raise UsageError(f"missing oparg for option {option}", command=self)
-
-                        kw[name] = _convert(converter, value, command=self)
-                    continue
-
-                if option.startswith('--'):
-                    # not for us, maybe it's for the next guy
-                    processor.push(option)
-                    break
-
-                # option doesn't start with '--',
-                # but it does start with '-':
-
-                if not option[1].isdigit():
-                    # do we have grouped single options?
-                    #   -abc
-                    # maybe with a concatenated value?
-                    #   -abcVALUE
-                    #
-                    # rewrite into separate options, with possible trailing oparg:
-                    # "-abc"      -> ["-a", "-b", "-c"]
-                    # "-abcVALUE" -> ["-a", "-b", "-c", "VALUE"]
-                    short_options = list(option)
-                    short_options.reverse()
-                    short_options.pop() # remove '-'
-                    inserted = []
-                    while short_options:
-                        short_option = "-" + short_options.pop()
-                        bundle = self.options.get(short_option)
-                        if not bundle:
-                            # not for us, maybe it's for the next guy
-                            processor.push(option)
-                            keep_going = False
-                            inserted.clear()
-                            break
+                if disposition == 'invalid':
+                    raise UsageError(f'unrecognized command-line argument {arg!r}', command=self)
+                if disposition == 'options':
+                    for option, oparg, bundle in options:
                         name, converter, default = bundle
-                        inserted.append(short_option)
-                        if converter is not bool:
-                            short_options.reverse()
-                            oparg = ''.join(short_options)
-                            short_options.clear()
-                            inserted.append(oparg)
+                        if converter is bool:
+                            kw[name] = not default
+                        else:
+                            if oparg is None:
+                                if isinstance(converter, optional):
+                                    if processor:
+                                        peek_disposition, _ = self._parse_arg(processor.peek())
+                                        if peek_disposition in ('argument', 'float'):
+                                            oparg = processor.pop()
+                                elif processor:
+                                    oparg = processor.pop()
+                                else:
+                                    raise UsageError(f"missing oparg for option {option}", command=self)
 
-                    if inserted:
-                        processor.insert(inserted)
+                            kw[name] = _convert(converter, oparg, command=self)
                     continue
 
-                # if the first character after the - is a digit 0-9,
-                # it might be a numeric short option, or an int/float.
-                #
-                # here's how cmdline handles a command-line argument
-                # that COULD be an option, which starts with a single
-                # dash followed by a digit 0-9:
-                #
-                #    * if the argument is PERFECTLY parsed as an
-                #      option, then it's an option.  if you have
-                #      -2 and -3 both defined, but not -4, -23 is
-                #      parsed as an option, but -24 fails this test.
-                #    * if float() parses the string without raising,
-                #      it's an argument.
-                #    * otherwise, we raise a UsageError assuming that
-                #      it's a malformed option.
-                #
-                # since we got here, we've already failed looking up
-                # the option.  so only float is acceptable now.
-                try:
-                    float(option)
-                    if ('_' in option) or (not option.isascii()):
-                        raise ValueError('x')
-                except ValueError:
-                    raise UsageError(f"unrecognized option {option}", command=self)
+            if disposition == 'float':
+                disposition = 'argument'
 
-            # conventional argument
-            if arguments:
-                name, converter = arguments.pop()
-            elif self.var_positional:
-                converter = self.var_positional
-            else:
+            if disposition == 'argument':
+                if len(a) >= self.maximum_arguments:
+                    disposition = 'unrecognized'
+                else:
+                    if arguments:
+                        name, converter = arguments.pop()
+                    else:
+                        assert self.var_positional
+                        converter = self.var_positional
+                    value = _convert(converter, arg, command=self)
+                    a.append(value)
+                    continue
+
+            if disposition == 'unrecognized':
+                # not for us, maybe it's for the next guy
                 processor.push(arg)
                 break
 
-            value = _convert(converter, arg, command=self)
-            a.append(value)
-
-        assert len(a) <= self.maximum_arguments
         if not (self.minimum_arguments <= len(a)):
             if self.maximum_arguments is not math.inf:
                 if self.minimum_arguments == self.maximum_arguments:
