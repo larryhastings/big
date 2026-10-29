@@ -626,12 +626,18 @@ class App:
         if command:
             return ''
 
-        help_callable = self.help
+        help_command = self._fn_to_command(self.help)
 
         help = None
-        if self.commands.get('help', None) == help_callable:
+        if self.commands.get('help', None) == help_command:
             help = f'help'
-        elif self._preprecommand is not None:
+        elif self.commands:
+            for k, v in self.commands.items():
+                if v == help_command:
+                    help = k
+                    break
+
+        if (not help) and (self._preprecommand is not None):
             preprecommand_options = self._preprecommand.options
             for option in ('--help', '-h'):
                 if option in preprecommand_options:
