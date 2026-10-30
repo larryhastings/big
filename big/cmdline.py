@@ -563,7 +563,7 @@ class App:
 
         doc = self.doc
 
-        usage = [os.path.basename(self.name)]
+        usage = [self.name]
         precommand = self._precommand
         if precommand:
             precommand_options = precommand.usage().strip().partition(' ')[2]
@@ -782,6 +782,9 @@ class App:
             args = sys.argv[1:]
         processor = Processor(args)
 
+        if (not self.commands) and (self._default is not None):
+            raise ConfigurationError('can only set a default command if you have commands')
+
         if not self._called_default_mappings:
             self._called_default_mappings = True
             if self.default_mappings:
@@ -845,6 +848,7 @@ class App:
         except UsageError as ue:
             assert ue.usage
             print("error:", str(ue), file=sys.stderr)
+            print("", file=sys.stderr)
             print("usage:", ue.usage, file=sys.stderr)
             hint = self._help_hint(ue.command)
             if hint:

@@ -17,7 +17,6 @@ import os.path
 import subprocess
 import sys
 
-import types
 import big.cmdline as cmdline
 
 
@@ -835,6 +834,9 @@ def test_default():
 
     app = cmdline.App()
     calls = []
+    @app.command()
+    def c():
+        calls.append('c')
     @app.default()
     def dee():
         calls.append('default')
@@ -1834,7 +1836,7 @@ def test_no_commands_program_refuses_a_default():
         app.process([])
         raise AssertionError('expected ConfigurationError')
     except ConfigurationError as e:
-        assert 'precommand' in str(e), str(e)
+        assert 'default command' in str(e), str(e)
 
 
 def test_precommand_runs_on_a_bare_line():
@@ -1883,7 +1885,7 @@ def test_precommand_runs_on_a_bare_line():
     def add(a, b):
         pass
     result, out = quiet_run(app, [])
-    assert result == 0 and out == '' and calls == [False], (result, out, calls)
+    assert (not result) and out == '' and calls == [False], (result, out, calls)
 
 
 # ----------------------------------------------------------------
